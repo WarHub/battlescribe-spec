@@ -1213,6 +1213,136 @@ public class EngineAccessor {
      * <p>So the only carriers are {@code getValidationErrorIds()}, which is where the spec-side ids
      * genuinely live, and failing that the message text. Both are used below.
      */
+    /**
+     * Resolves {@code entryId/constraintId} by reading the message against the LOADED DATA, when
+     * {@code getValidationErrorIds()} offered nothing.
+     *
+     * <p>This is a port of {@code BattleScribeEngine.ResolveEntryFromMessage}, and deliberately so:
+     * it is the same question about the same Java model, and the in-process adapter is the
+     * reference every spec's `from` was written against. Reimplementing the rule differently here
+     * would make the two BattleScribe engines disagree by accident rather than agree by
+     * construction.
+     *
+     * <p>Message matching is a poor way to recover provenance and it is the only one available.
+     * BattleScribe attaches no constraint to a validation error — the object it does attach is the
+     * roster element the error hangs on — and `getValidationErrorIds()` comes back empty on every
+     * element for these errors, measured with {@code BS_UI_VALIDATION_TRACE=1}. So the rendered
+     * text is the sole carrier, and the entry NAME plus the constraint's own type and value are
+     * what it carries.
+     */
+    private ValidationRef resolveRefFromMessage(String message) {
+        if (message == null) {
+            return null;
+        }
+
+        // Order matters: the most specific owner first. A message names its container as well as
+        // its subject — "Troops cannot have any selections of Hidden Unit" holds both a category
+        // name and an entry name — and the entry is the one the spec asserts.
+        for (String className : CONSTRAINT_OWNER_CLASSES) {
+            ValidationRef ref = message.contains("(hidden)")
+                    ? matchHiddenOwner(findClass(className), message)
+                    : matchConstraintOwner(findClass(className), message);
+            if (ref != null) {
+                return ref;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Owners a constraint can hang on, most specific first.
+     *
+     * <p>{@code ForceEntry} is here because a force-count constraint ("must have 1 more forces
+     * from Patrol") belongs to the force entry, not to any selection — leaving it out left that
+     * whole family of errors with no {@code from} at all.
+     */
+    private static final String[] CONSTRAINT_OWNER_CLASSES = {
+        "net.battlescribe.model.data.SelectionEntry",
+        "net.battlescribe.model.data.SelectionEntryGroup",
+        "net.battlescribe.model.data.EntryLink",
+        "net.battlescribe.model.data.ForceEntry",
+    };
+
+    /**
+     * The entry a hidden-entry error is ABOUT, which is not the one it is reported on.
+     *
+     * <p>BattleScribe renders "Troops cannot have any selections of Hidden Unit (hidden)" on the
+     * category. Taking the reported owner names the container; the spec asserts the entry that is
+     * hidden, so it is read out of the message like any other.
+     */
+    private ValidationRef matchHiddenOwner(Class<?> ownerClass, String message) {
+        if (ownerClass == null) {
+            return null;
+        }
+        for (Object owner : collectInstances(ownerClass)) {
+            String name = callGetter(owner, "getName");
+            String ownerId = callGetter(owner, "getId");
+            if (name != null && !name.isEmpty() && ownerId != null && message.contains(name)) {
+                return new ValidationRef(ownerId, "hidden");
+            }
+        }
+        return null;
+    }
+
+    /** The best (entry, constraint) pair among instances of {@code ownerClass}, or null. */
+    private ValidationRef matchConstraintOwner(Class<?> ownerClass, String message) {
+        if (ownerClass == null) {
+            return null;
+        }
+
+        ValidationRef fallback = null;
+        for (Object owner : collectInstances(ownerClass)) {
+            String name = callGetter(owner, "getName");
+            if (name == null || name.isEmpty() || !message.contains(name)) {
+                continue;
+            }
+            String ownerId = callGetter(owner, "getId");
+            if (ownerId == null) {
+                continue;
+            }
+
+            for (Object constraint : toJavaList(callListGetter(owner, "getConstraints"))) {
+                String type = callGetter(constraint, "getType");
+                if (!messageMatchesConstraintKind(message, type)) {
+                    continue;
+                }
+                String constraintId = callGetter(constraint, "getId");
+                if (constraintId == null) {
+                    continue;
+                }
+                // The value disambiguates two constraints of the same kind on one entry, so a
+                // value match wins outright; otherwise keep the first kind match and keep looking.
+                int value = (int) parseDouble(callGetter(constraint, "getValue"));
+                if (message.contains("maximum " + value) || message.contains("minimum " + value)) {
+                    return new ValidationRef(ownerId, constraintId);
+                }
+                if (fallback == null) {
+                    fallback = new ValidationRef(ownerId, constraintId);
+                }
+            }
+        }
+        return fallback;
+    }
+
+    /** Whether the message's phrasing is the one BattleScribe renders for this constraint type. */
+    private boolean messageMatchesConstraintKind(String message, String type) {
+        if ("min".equals(type)) {
+            return message.contains("must have") || message.contains("must spend");
+        }
+        if ("max".equals(type)) {
+            return message.contains("too many") || message.contains("too much");
+        }
+        return false;
+    }
+
+    private double parseDouble(String value) {
+        try {
+            return value == null ? 0 : Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private ValidationRef resolveValidationRef(
             Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
         String lowerMessage = message != null ? message.toLowerCase(Locale.ROOT) : null;
@@ -1231,12 +1361,20 @@ public class EngineAccessor {
             }
             String entryName = getEntryName(candidateEntryId);
             if (containsIgnoreCase(message, entryName)) {
-                return new ValidationRef(candidateEntryId, pickConstraintId(entry.getValue(), lowerMessage));
+                return new ValidationRef(
+                        candidateEntryId,
+                        pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage));
             }
         }
 
-        // Hidden error: "(hidden)" in message → entryId from errorIdMap or ownerEntryId
+        // Hidden error: "(hidden)" in message → the entry the message NAMES, then errorIdMap.
         if (lowerMessage != null && lowerMessage.contains("(hidden)")) {
+            // Read the message first. errorIdMap's keys here are the error's OWNER — the category
+            // that refused the selection — and the spec asserts the entry that is hidden.
+            ValidationRef named = resolveRefFromMessage(message);
+            if (named != null) {
+                return named;
+            }
             for (Map.Entry<String, List<String>> entry : errorIdMap.entrySet()) {
                 if (!"costLimits".equals(entry.getKey())) {
                     return new ValidationRef(entry.getKey(), "hidden");
@@ -1261,6 +1399,14 @@ public class EngineAccessor {
                     return new ValidationRef("costLimits", costTypeId);
                 }
             }
+        }
+
+        // Last resort, and for most constraint errors the ONLY one: read the message against the
+        // loaded data. Everything above needs an id from `getValidationErrorIds()`, which comes
+        // back empty on every element for those errors.
+        ValidationRef fromMessage = resolveRefFromMessage(message);
+        if (fromMessage != null) {
+            return fromMessage;
         }
 
         return new ValidationRef(null, null);
@@ -1292,14 +1438,53 @@ public class EngineAccessor {
         return null;
     }
 
-    private String pickConstraintId(List<String> constraintIds, String lowerMessage) {
+    /**
+     * Which of an entry's constraints raised this error.
+     *
+     * <p>An entry can carry several of the same kind — a per-link maximum and a shared maximum,
+     * say — and taking the first is a coin toss between them. The rendered VALUE is what tells them
+     * apart, so a constraint whose value the message quotes wins; the first is only a fallback for
+     * when nothing distinguishes them.
+     */
+    private String pickConstraintId(String entryId, List<String> constraintIds, String lowerMessage) {
         if (constraintIds == null || constraintIds.isEmpty()) {
             return null;
         }
         if (lowerMessage != null && lowerMessage.contains("(hidden)")) {
             return "hidden";
         }
+        if (lowerMessage != null && constraintIds.size() > 1) {
+            for (Map.Entry<String, Integer> candidate : constraintValuesOf(entryId).entrySet()) {
+                if (!constraintIds.contains(candidate.getKey())) {
+                    continue;
+                }
+                int value = candidate.getValue();
+                if (lowerMessage.contains("maximum " + value) || lowerMessage.contains("minimum " + value)) {
+                    return candidate.getKey();
+                }
+            }
+        }
         return constraintIds.get(0);
+    }
+
+    /** An entry's own constraints as id -> declared value. */
+    private Map<String, Integer> constraintValuesOf(String entryId) {
+        Map<String, Integer> values = new HashMap<String, Integer>();
+        try {
+            Object entry = findEntryById(entryId);
+            if (entry == null) {
+                return values;
+            }
+            for (Object constraint : toJavaList(callListGetter(entry, "getConstraints"))) {
+                String id = callGetter(constraint, "getId");
+                if (id != null) {
+                    values.put(id, (int) parseDouble(callGetter(constraint, "getValue")));
+                }
+            }
+        } catch (Exception e) {
+            // A lookup failure just means no tiebreak is available.
+        }
+        return values;
     }
 
     private boolean containsIgnoreCase(String message, String candidate) {
@@ -1443,6 +1628,90 @@ public class EngineAccessor {
             // fall back to toString
         }
         return error.toString();
+    }
+
+    /**
+     * Every instance of {@code targetClass} reachable from the engine and the current roster.
+     *
+     * <p>Same traversal as {@link #findObjectById}, collecting rather than stopping at the first
+     * match, and with the same 10k visit ceiling — the object graph has cycles and a data file can
+     * be large, so an unbounded walk is a hang rather than an answer.
+     */
+    private List<Object> collectInstances(Class<?> targetClass) {
+        List<Object> found = new ArrayList<Object>();
+        if (targetClass == null) {
+            return found;
+        }
+
+        Object roster;
+        try {
+            roster = getCurrentRoster();
+        } catch (Exception e) {
+            roster = null;
+        }
+
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        ArrayDeque<Object> pending = new ArrayDeque<Object>();
+        for (Object root : new Object[] { engineInstance, roster }) {
+            if (root != null) {
+                pending.add(root);
+            }
+        }
+
+        while (!pending.isEmpty() && visited.size() <= 10000) {
+            Object current = pending.removeFirst();
+            if (current == null || isLeafValue(current) || !visited.add(current)) {
+                continue;
+            }
+
+            if (targetClass.isInstance(current)) {
+                found.add(current);
+            }
+
+            if (current instanceof Iterable) {
+                for (Object item : (Iterable<?>) current) {
+                    if (item != null) pending.addLast(item);
+                }
+                continue;
+            }
+            if (current instanceof Map) {
+                for (Object item : ((Map<?, ?>) current).values()) {
+                    if (item != null) pending.addLast(item);
+                }
+                continue;
+            }
+            if (current.getClass().isArray()) {
+                int len = Array.getLength(current);
+                for (int i = 0; i < len; i++) {
+                    Object item = Array.get(current, i);
+                    if (item != null) pending.addLast(item);
+                }
+                continue;
+            }
+            if (!shouldTraverseObject(current.getClass())) {
+                continue;
+            }
+
+            Class<?> c = current.getClass();
+            while (c != null && c != Object.class) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) {
+                        continue;
+                    }
+                    try {
+                        f.setAccessible(true);
+                        Object value = f.get(current);
+                        if (value != null && !isLeafValue(value)) {
+                            pending.addLast(value);
+                        }
+                    } catch (Exception e) {
+                        // ignore inaccessible fields
+                    }
+                }
+                c = c.getSuperclass();
+            }
+        }
+        return found;
     }
 
     private Object findObjectById(Class<?> targetClass, String id, Object... roots) throws Exception {
