@@ -482,6 +482,11 @@ public class EngineAccessor {
         Object ruleList = callListGetter(force, "getRules");
         result.add("rules", serializeRuleList(ruleList));
 
+        // Forces carry profiles just as selections do — a force entry can declare them directly.
+        // Omitting them here reported every force as having none, which reads as "BattleScribe
+        // does not attach profiles to forces" rather than as this serializer never asking.
+        result.add("profiles", serializeProfileList(callListGetter(force, "getProfiles")));
+
         Object catList = callListGetter(force, "getCategories");
         result.add("categories", serializeCategoryList(catList));
 
