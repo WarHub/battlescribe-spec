@@ -294,8 +294,12 @@ public static class NrUiActions
         // CSS selector; use [id='uid'] instead which has no such restriction.
         // In multi-force rosters every bookForce has its own .unitList; without scoping we
         // would always click force[0]'s entry list.
-        var idLocator = page.Locator($"[id='{forceUid}'] .unitList .unit-wrap[data-spec-entry-id='{entryId}']");
-        var nameLocator = page.Locator($"[id='{forceUid}'] .unitList .unit-wrap").Filter(new() { HasText = entryName }).First;
+        // `:not([data-nrui-force-row])` keeps both lookups off the child-force picker rows, which
+        // share this markup and sit in the same .bookForce (see TagUnitListEntriesAsync).
+        var idLocator = page.Locator(
+            $"[id='{forceUid}'] .unitList .unit-wrap:not([data-nrui-force-row])[data-spec-entry-id='{entryId}']");
+        var nameLocator = page.Locator($"[id='{forceUid}'] .unitList .unit-wrap:not([data-nrui-force-row])")
+            .Filter(new() { HasText = entryName }).First;
 
         ILocator entryRow;
         if (await idLocator.CountAsync() > 0)
@@ -313,7 +317,15 @@ public static class NrUiActions
         if (isVisible)
         {
             await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 10_000 });
-            return await WaitForNewSelectionUidAsync(page, before);
+            var selectionUid = await WaitForNewSelectionUidAsync(page, before);
+
+            // A click that produced no selection means the row was not a catalogue entry. Returning
+            // null here let that surface two steps later as a wrong ASSERTION instead of an error —
+            // which is how "clicked the child-force picker" was reported as "expected 1 child forces
+            // but got 2". Fail where the mistake happened.
+            return selectionUid ?? throw new InvalidOperationException(
+                $"NR UI: clicked the '+' for entry '{entryId}' in force '{forceUid}' but no new "
+                + "selection appeared — the click landed on something that is not a catalogue entry row.");
         }
 
         // Hidden entries are not accessible via NR UI — throw
@@ -908,7 +920,22 @@ public static class NrUiActions
                     const sys = sysStore._selectedSystem;
                     if (!sys) return;
 
-                    const unitWraps = [...document.querySelectorAll('.unitList .unit-wrap')];
+                    // CATALOGUE entry rows only. A force's `.childForces .unitList` renders the
+                    // available CHILD FORCE TYPES using the same `.unit-wrap` markup, and it sits
+                    // ABOVE the entry list inside the same `.bookForce`. Swept in, a force row became
+                    // `unmatchedWraps[0]`, the positional second pass below stamped it with a real
+                    // entry's id, and selectEntry then clicked ITS "+" — adding a duplicate child
+                    // force instead of the entry. Measured on scope/scope-include-child-forces and
+                    // scope-include-child-forces-nested ("expected 1 child forces but got 2"), and
+                    // only when a modifier renames the entry, because an exact name match otherwise
+                    // wins before the positional pass is reached.
+                    for (const w of document.querySelectorAll('.childForces .unitList .unit-wrap')) {
+                        // Marked as well as filtered, so the NAME fallback in SelectEntryByNameAsync
+                        // cannot land on one either — a force type and an entry may share a name.
+                        w.setAttribute('data-nrui-force-row', '1');
+                    }
+                    const unitWraps = [...document.querySelectorAll('.unitList .unit-wrap')]
+                        .filter(w => !w.closest('.childForces'));
                     if (unitWraps.length === 0) return;
 
                     // Use only playable books (active force's catalogues) to avoid
