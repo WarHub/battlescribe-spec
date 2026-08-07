@@ -55,6 +55,12 @@ public sealed class BsRosterUiConformanceTests : ConformanceTestBase
 
     protected override string EngineName => "battlescribe-ui";
 
+    /// <summary>
+    /// This drives BattleScribe, so it inherits what specs say about <c>battlescribe</c> unless
+    /// they name <c>battlescribe-ui</c> specifically — see <see cref="BaseEngineName"/>.
+    /// </summary>
+    protected override string BaseEngineName => "battlescribe";
+
     protected override IRosterEngine? GetEngine()
     {
         if (!_fixture.Available)
