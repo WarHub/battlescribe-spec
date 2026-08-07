@@ -80,6 +80,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private BsRosterApp? _app;
     private AgentClient? _client;
     private ProtocolGameSystem? _gameSystem;
+
+    /// <summary>
+    /// The loaded game system's identity, set by BOTH setup paths — the file-based one has no
+    /// <see cref="ProtocolGameSystem"/> to read it from.
+    /// </summary>
+    private string? _gameSystemId;
+    private string? _gameSystemName;
     private string? _specId;
     private bool _engineLocated;
     private bool _disposed;
@@ -116,7 +123,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             ["forceEntryId"] = forceEntryId,
             ["catalogueId"] = catalogueId,
-        }, isFirstForce: true, forceEntryId: forceEntryId, gameSystemName: _gameSystem?.Name));
+        }, isFirstForce: true, forceEntryId: forceEntryId, gameSystemName: _gameSystemName));
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
         => RunAsync(() => CallActionAsync<ActionOutputs>("rosterAddChildForceAction", new JsonObject
@@ -228,95 +235,193 @@ public sealed class BsUiRosterEngine : IRosterEngine
         GC.SuppressFinalize(this);
     }
 
-    private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+        => RunAsync(() => SetupFromFilesAsync(files));
+
+    /// <summary>
+    /// Sets the engine up from raw BattleScribe XML — a <c>dataSource</c> spec's real data files —
+    /// rather than from Protocol objects.
+    /// </summary>
+    /// <remarks>
+    /// The app lifecycle is identical to <see cref="SetupAsync"/>; only where the data and the
+    /// game system's identity come from differs. Identity is read off the <c>.gst</c> root, and the
+    /// entry-name index that labels edit-panel controls is read out of the same XML — without it
+    /// every control on this path would be addressed by its raw id.
+    /// <para>
+    /// No Protocol objects means no <c>CostTypes</c>, so the New Roster dialog's cost-limit spinner
+    /// is left alone here. Real data carries its own limits and a spec on this path asks about the
+    /// roster it loaded, not about a default we would have to invent.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> SetupFromFilesAsync(
+        IReadOnlyList<(string FileName, string Content)> files)
     {
         ThrowIfDisposed();
         await CleanupAsync();
+        ResetSetupState();
 
-        _gameSystem = gameSystem;
+        // Inside the guard for the same reason as the generated path, and with one more of its own:
+        // these files come off DISK, so `XDocument.Parse` here is reading data this engine did not
+        // produce and cannot assume is well-formed.
+        return await GuardSetupAsync(async () =>
+        {
+            var gameSystemFile = files.FirstOrDefault(
+                f => f.FileName.EndsWith(".gst", StringComparison.OrdinalIgnoreCase));
+            if (gameSystemFile.Content is null)
+            {
+                return ["SetupFromFiles: no .gst game system file among the supplied files."];
+            }
+
+            var root = System.Xml.Linq.XDocument.Parse(gameSystemFile.Content).Root;
+            _gameSystemId = (string?)root?.Attribute("id");
+            _gameSystemName = (string?)root?.Attribute("name");
+            if (string.IsNullOrEmpty(_gameSystemId) || string.IsNullOrEmpty(_gameSystemName))
+            {
+                return [$"SetupFromFiles: '{gameSystemFile.FileName}' has no id/name on its root element."];
+            }
+
+            IndexDefinitionsFromXml(files);
+            await StartOrReuseAsync(files);
+            return [];
+        });
+    }
+
+    private void ResetSetupState()
+    {
         _engineLocated = false;
         _pendingCostLimits.Clear();
         _entryNamesById.Clear();
         _groupEntryIds.Clear();
         _costNamesById.Clear();
+        _gameSystem = null;
+        _gameSystemId = null;
+        _gameSystemName = null;
+    }
 
-        IndexDefinitions(gameSystem, catalogues);
+    private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+    {
+        ThrowIfDisposed();
+        await CleanupAsync();
+        ResetSetupState();
 
+        return await GuardSetupAsync(async () =>
+        {
+            _gameSystem = gameSystem;
+            _gameSystemId = gameSystem.Id;
+            _gameSystemName = gameSystem.Name;
+
+            IndexDefinitions(gameSystem, catalogues);
+
+            await StartOrReuseAsync(BuildXmlFiles(gameSystem, catalogues));
+            return [];
+        });
+    }
+
+    /// <summary>
+    /// Warm-reuses the running BattleScribe instance or cold-starts one, with
+    /// <paramref name="files"/> staged either way.
+    /// </summary>
+    /// <remarks>
+    /// Throws on failure rather than returning errors: <see cref="GuardSetupAsync"/> is the one
+    /// place that turns a setup-phase failure into returned errors, and it covers the whole phase
+    /// including the data generation that runs before this.
+    /// </remarks>
+    private async Task StartOrReuseAsync(
+        IReadOnlyList<(string FileName, string Content)> files)
+    {
+        // Warm start: reuse running app if available
+        if (KeepAlive && _app is not null && _client is not null)
+        {
+            try
+            {
+                // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
+                // undrivable instances reusable and every action against them then failed.
+                await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
+                Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
+
+                // No roster-close step here. There used to be a call to
+                // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
+                // is set false a few lines above, and that method's first act is a state read
+                // which short-circuits on exactly that flag and returns an EMPTY roster — so it
+                // always saw zero forces and returned before touching the app.
+                //
+                // Warm-start roster closing is really handled on the Java side, by
+                // RosterActions.waitForNewRosterWindowDismissingContinuePrompt, which answers
+                // BattleScribe's "Continue? Roster has not been saved" prompt with NO.
+                //
+                // If this is ever reinstated here it MUST end in a throw, never a return: a
+                // close that silently fails leaves the previous spec's roster open, and
+                // CallActionAsync then skips rosterCreateRosterAction because forces already
+                // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
+                // asserting only on its own selection would pass on polluted data.
+
+                // Restage data files for the new run.
+                // NOTE: The app's loaded game data is from the previous startup.
+                // Warm start is only reliable for re-running the same game system.
+                await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+
+                return;
+            }
+            catch
+            {
+                Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
+                // Fall through to cold start
+                ConnectedClient.Dispose();
+                _client = null;
+                await _app.DisposeAsync();
+                _app = null;
+            }
+        }
+
+        _app = new BsRosterApp(
+            _options.JavaPath,
+            _options.RosterEditorJarPath,
+            _options.AgentJarPath,
+            _options.IsolatedHomePath);
+
+        await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+
+        await _app.StartAsync();
+        _client = await _app.ConnectAsync();
+        _ = await ConnectedClient.PingAsync();
+
+        if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: WindowWaitMs))
+        {
+            throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
+        }
+
+        await HandleStartupDialogsAsync();
+    }
+
+    /// <summary>
+    /// Runs a setup phase so that ANY failure in it is reported the way <c>Setup</c> promises —
+    /// returned errors, with the app torn down — instead of an exception escaping the engine.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>force: true</c> — a setup-phase failure leaves no usable app (it may have died mid-start,
+    /// or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
+    /// force, <c>CleanupAsync</c> would no-op (KeepAlive defaults to true and <c>_poisoned</c> is
+    /// only set by action-phase failures), <c>_app</c> would be silently overwritten by the next
+    /// cold-start attempt, and the orphaned JVM process would leak.
+    /// </para>
+    /// <para>
+    /// This wraps the WHOLE phase rather than app startup alone, and that is the point. It used to
+    /// guard only <see cref="StartOrReuseAsync"/>, while entry indexing and XML generation ran
+    /// ahead of it — so a spec whose data the generator rejects threw out of <c>Setup</c> instead
+    /// of failing as a reported setup error, and skipped the teardown entirely. The gamedata engine
+    /// generates inside its handler and never had the gap; these two were given the same fix and
+    /// drifted on where the boundary sat.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> GuardSetupAsync(Func<Task<IReadOnlyList<string>>> setup)
+    {
         try
         {
-            // Warm start: reuse running app if available
-            if (KeepAlive && _app is not null && _client is not null)
-            {
-                try
-                {
-                    // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
-                    // undrivable instances reusable and every action against them then failed.
-                    await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
-                    Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
-
-                    // No roster-close step here. There used to be a call to
-                    // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
-                    // is set false a few lines above, and that method's first act is a state read
-                    // which short-circuits on exactly that flag and returns an EMPTY roster — so it
-                    // always saw zero forces and returned before touching the app.
-                    //
-                    // Warm-start roster closing is really handled on the Java side, by
-                    // RosterActions.waitForNewRosterWindowDismissingContinuePrompt, which answers
-                    // BattleScribe's "Continue? Roster has not been saved" prompt with NO.
-                    //
-                    // If this is ever reinstated here it MUST end in a throw, never a return: a
-                    // close that silently fails leaves the previous spec's roster open, and
-                    // CallActionAsync then skips rosterCreateRosterAction because forces already
-                    // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
-                    // asserting only on its own selection would pass on polluted data.
-
-                    // Restage data files for the new run.
-                    // NOTE: The app's loaded game data is from the previous startup.
-                    // Warm start is only reliable for re-running the same game system.
-                    var warmFiles = BuildXmlFiles(gameSystem, catalogues);
-                    await StageDataFilesAsync(_app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
-
-                    return [];
-                }
-                catch
-                {
-                    Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
-                    // Fall through to cold start
-                    ConnectedClient.Dispose();
-                    _client = null;
-                    await _app.DisposeAsync();
-                    _app = null;
-                }
-            }
-
-            _app = new BsRosterApp(
-                _options.JavaPath,
-                _options.RosterEditorJarPath,
-                _options.AgentJarPath,
-                _options.IsolatedHomePath);
-
-            var files = BuildXmlFiles(gameSystem, catalogues);
-            await StageDataFilesAsync(_app.DataDirectoryPath, gameSystem, catalogues, files);
-
-            await _app.StartAsync();
-            _client = await _app.ConnectAsync();
-            _ = await ConnectedClient.PingAsync();
-
-            if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: WindowWaitMs))
-            {
-                throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
-            }
-
-            await HandleStartupDialogsAsync();
-            return [];
+            return await setup();
         }
         catch (Exception ex)
         {
-            // force: true — a setup-phase failure leaves no usable app (it may have died mid-start,
-            // or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
-            // force, CleanupAsync would no-op (KeepAlive defaults to true and _poisoned is only set by
-            // action-phase failures), _app would be silently overwritten by the next cold-start attempt,
-            // and the orphaned JVM process would leak.
             await CleanupAsync(force: true);
             return [ex.Message];
         }
@@ -440,7 +545,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private async Task<RosterState> ReadRosterStateOrEmptyAsync()
     {
-        if (_client is null || _gameSystem is null)
+        if (_client is null || _gameSystemId is null)
         {
             return EmptyRosterState();
         }
@@ -485,7 +590,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private RosterState EmptyRosterState()
     {
-        if (_gameSystem is null)
+        if (_gameSystemId is null)
         {
             return new RosterState("", "", [], [], []);
         }
@@ -497,12 +602,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
         return new RosterState(
             rosterName,
-            _gameSystem.Id,
+            _gameSystemId,
             [],
             [],
             [],
             CostLimits: costLimits,
-            GameSystemName: _gameSystem.Name);
+            GameSystemName: _gameSystemName);
     }
 
     /// <summary>
@@ -673,10 +778,72 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     private static Task StageDataFilesAsync(
         string dataDirectoryPath,
-        ProtocolGameSystem gameSystem,
-        IReadOnlyList<ProtocolCatalogue> catalogues,
+        string gameSystemId,
         IReadOnlyList<(string FileName, string Content)> files)
-        => BsUiDataStaging.StageDataFilesAsync(dataDirectoryPath, gameSystem, catalogues, files);
+        => BsUiDataStaging.StageDataFilesAsync(dataDirectoryPath, gameSystemId, files);
+
+    /// <summary>
+    /// Builds the entry-name and group-id indexes by reading the staged XML, for the file-based
+    /// setup path that has no Protocol objects to walk.
+    /// </summary>
+    /// <remarks>
+    /// Element names, not ids, are what the edit panel labels its controls with — so without this
+    /// every <c>selectChildEntry</c> on a <c>dataSource</c> spec would address controls by raw id
+    /// and find nothing. Group ids are collected for the same reason they are on the other path:
+    /// a group names a heading, never a control.
+    /// </remarks>
+    private void IndexDefinitionsFromXml(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        foreach (var (fileName, content) in files)
+        {
+            // Data files only. A dataSource hands over whatever the repository holds — READMEs,
+            // .gitignore, licence text — and parsing those as XML fails at line 1 with a message
+            // about the root element that says nothing about which file it came from.
+            if (!fileName.EndsWith(".gst", StringComparison.OrdinalIgnoreCase)
+                && !fileName.EndsWith(".cat", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var root = System.Xml.Linq.XDocument.Parse(content).Root;
+            if (root is null)
+            {
+                continue;
+            }
+
+            foreach (var element in root.Descendants())
+            {
+                var id = (string?)element.Attribute("id");
+                if (string.IsNullOrEmpty(id))
+                {
+                    continue;
+                }
+
+                switch (element.Name.LocalName)
+                {
+                    case "selectionEntry":
+                    case "entryLink":
+                        _entryNamesById[id] = (string?)element.Attribute("name") ?? id;
+                        // An entryLink targeting a group is a group as far as labels go.
+                        if ((string?)element.Attribute("type") == "selectionEntryGroup")
+                        {
+                            _groupEntryIds.Add(id);
+                        }
+
+                        break;
+
+                    case "selectionEntryGroup":
+                        _entryNamesById[id] = (string?)element.Attribute("name") ?? id;
+                        _groupEntryIds.Add(id);
+                        break;
+
+                    case "costType":
+                        _costNamesById[id] = (string?)element.Attribute("name") ?? id;
+                        break;
+                }
+            }
+        }
+    }
 
     private static IReadOnlyList<(string FileName, string Content)> BuildXmlFiles(
         ProtocolGameSystem gameSystem,
@@ -1091,7 +1258,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private void EnsureSetup()
     {
         ThrowIfDisposed();
-        if (_gameSystem is null || _client is null)
+        if (_gameSystemId is null || _client is null)
         {
             throw new InvalidOperationException("Engine has not been set up.");
         }
@@ -1146,7 +1313,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 {
                     ["forceEntryId"] = forceEntryId,
                     ["catalogueId"] = parameters["catalogueId"]?.GetValue<string>(),
-                    ["gameSystemName"] = gameSystemName ?? _gameSystem!.Name,
+                    ["gameSystemName"] = gameSystemName ?? _gameSystemName!,
                     ["rosterName"] = _specId,
                 };
                 if (ResolveNewRosterCostLimit() is { } costLimit)
