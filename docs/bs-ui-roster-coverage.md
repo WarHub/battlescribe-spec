@@ -11,8 +11,8 @@ what it turned into.
 | | first measurement | now |
 |---|---:|---:|
 | Specs selected | 367 | 367 |
-| **Passed** | **284 (77%)** | **348 (95%)** |
-| Failed | 83 | 19 |
+| **Passed** | **284 (77%)** | **353 (96%)** |
+| Failed | 83 | 14 |
 | Wall-clock | 29m02s | ~15m |
 
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
@@ -40,7 +40,7 @@ work:
 | B | 6 | 6 | 0 | BattleScribe deletes the staged `.cat` as corrupt |
 | J | 8 | 8 | 0 | cost mismatches — float drift and lane inheritance |
 | K | 9 | 8 | 1 | value mismatches, mostly lane inheritance |
-| D | 4 | 0 | 4 | no validation error produced at all |
+| D | 4 | 2 + 2 declared | 0 | no validation error produced at all |
 | G | 4 | 0 | 4 | edit-panel control not found by label |
 | C | 2 | 0 | 2 | `CategoryLink must have an ID` |
 | F | 2 | 0 | 2 | `SetupFromFiles` unimplemented (`dataSource` specs) |
@@ -142,21 +142,25 @@ Two diagnostic switches are kept, both off by default and both justified by a bu
 `BS_UI_VALIDATION_TRACE=1` prints every validation error with each id source that could name it, and
 `BS_UI_TREE_TRACE=1` dumps both roster trees around a `selectEntry`.
 
-## The 19 that remain
+## The 14 that remain
 
-Each has a named cause. **None is declared `engines: {battlescribe-ui: fail}`**, deliberately: a
-cause is not a verdict, and declaring specs to get a green job would be inventing declarations
-rather than earning them — the exact defect `docs/nr-ui-roster-coverage.md` records for that lane's
-own history.
+Each has a named cause. **Three specs are declared `engines: {battlescribe-ui: fail}`** — the cost
+limits, where the measurement that fixed two of the four explained the other three. The remaining 14
+are NOT declared, deliberately: a cause is not a verdict, and declaring specs to get a green job
+would be inventing declarations rather than earning them — the exact defect
+`docs/nr-ui-roster-coverage.md` records for that lane's own history.
+
+Where a declaration was earned, it also records what was NOT checked. The cost-limit three say the
+Edit Roster dialog has not been examined for per-cost-type limit fields, so they describe a measured
+limit of one route rather than claiming a limit no route can lift.
 
 | | count | what is known |
 |---|---:|---|
-| D | 4 | No cost-limit error is produced. A `costType`'s `defaultCostLimit` reaches the generated data correctly (`defaultCostLimit="0"` is emitted), so the open question is whether it reaches the ROSTER: the New Roster dialog's spinner is only set when a spec calls `setCostLimit`, and cost limits are never read back from BattleScribe — `GetRosterState` echoes what the spec set. Untested either way. |
 | G | 4 | An edit-panel control is addressed by its label text, and the label is absent or differs. `entry-id-link-to-group-with-links` looks for the composite `el-relics-group::el-relic::sse-relic` where the panel renders a name — the same class as the composite-id bug already fixed for tree lookups. |
 | E | 3 | Entry-link constraint attribution. `constraint-shared-flag` carries two maxima on one shared entry told apart only by the `shared` flag, which the rendered message does not mention. |
 | C | 2 | BattleScribe's own validator rejects a `categoryLink` with no id — its runtime rule, stricter than the XSD, which requires only `targetId`. Synthesising ids would change generated XML for **43** specs to fix 2, so it wants measuring before it is done, not after. |
 | F | 2 | `SetupFromFilesAsync` is unimplemented. The same gap `real-world/wh40k-10e-*` has on `newrecruit-ui`, where it is declared a driver gap so that implementing it is reported. |
-| K | 1 | `catalogue/catalogue-category-entries` — no catalogue-tree item for the entry; NR's equivalent is a confirmed UI limitation. |
+| K | 3 | `catalogue/catalogue-category-entries` — no catalogue-tree item for the entry; NR's equivalent is a confirmed UI limitation. `cost/cost-type-hidden` reports `hidden: false` for a cost the game system marks hidden. `selection/collective-per-model-operations` loses its cost types after a deselect. |
 
 The rule that replaces an allow-list, unchanged: **a failing spec carries its reason, or it is not
-failing on purpose.** Until all 19 are fixed or declared, the lane stays out of `ci.yml` (#355).
+failing on purpose.** Until all 14 are fixed or declared, the lane stays out of `ci.yml` (#355).
