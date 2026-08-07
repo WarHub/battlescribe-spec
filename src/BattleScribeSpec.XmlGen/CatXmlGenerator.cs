@@ -710,7 +710,11 @@ public static class CatXmlGenerator
 
     private static ConditionNode MapCondition(ProtocolCondition spec)
     {
-        var childId = string.IsNullOrWhiteSpace(spec.ChildId) ? null : spec.ChildId;
+        // Empty, never null: `childId` is `use="required"` on QueryFilteredBase in Catalogue.xsd,
+        // so omitting it produces a file BattleScribe rejects outright — "File was corrupted and
+        // has been deleted" — taking the whole catalogue with it. Empty is how the format spells
+        // "no child filter"; absent is not expressible.
+        var childId = string.IsNullOrWhiteSpace(spec.ChildId) ? string.Empty : spec.ChildId;
         return Condition(
             comment: null,
             field: spec.Field,
@@ -743,7 +747,11 @@ public static class CatXmlGenerator
 
     private static RepeatNode MapRepeat(ProtocolRepeat spec)
     {
-        var childId = string.IsNullOrWhiteSpace(spec.ChildId) ? null : spec.ChildId;
+        // Empty, never null: `childId` is `use="required"` on QueryFilteredBase in Catalogue.xsd,
+        // so omitting it produces a file BattleScribe rejects outright — "File was corrupted and
+        // has been deleted" — taking the whole catalogue with it. Empty is how the format spells
+        // "no child filter"; absent is not expressible.
+        var childId = string.IsNullOrWhiteSpace(spec.ChildId) ? string.Empty : spec.ChildId;
         return Repeat(
             comment: null,
             field: spec.Field,
