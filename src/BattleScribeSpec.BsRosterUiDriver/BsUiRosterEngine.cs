@@ -629,6 +629,44 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
     }
 
+    /// <summary>
+    /// The value to put in the New Roster dialog's cost-limit spinner, or null to leave it alone.
+    /// </summary>
+    /// <remarks>
+    /// A spec's own <c>setCostLimit</c> wins. Failing that, the game system's
+    /// <c>defaultCostLimit</c> is used — and it has to be, because <b>BattleScribe applies that
+    /// default only to a roster created through the engine, not to one created through this
+    /// dialog</b>. Leaving the spinner untouched produced a roster with NO cost limit at all
+    /// (`costLimits: []` read straight back off the model), so a spec whose whole subject is a
+    /// default limit saw no violation to report and failed asking where its error went.
+    /// <para>
+    /// One cost type only, in both cases: the dialog has a single spinner, so there is no way to
+    /// express a per-type limit here and guessing which type it meant would be worse than leaving
+    /// it unset. A multi-type system falls through to whatever BattleScribe does on its own.
+    /// </para>
+    /// </remarks>
+    private int? ResolveNewRosterCostLimit()
+    {
+        if (_pendingCostLimits.Count == 1)
+        {
+            return (int)_pendingCostLimits.Values.First();
+        }
+
+        if (_pendingCostLimits.Count == 0 && _gameSystem?.CostTypes is { } costTypes)
+        {
+            var defaults = costTypes.Where(c => c.DefaultCostLimit is >= 0).ToList();
+            // Integral only. The spinner is a Spinner<Integer>, so a fractional default cannot be
+            // entered — and truncating one is worse than not setting it: 0.5 becomes 0, and every
+            // selection is then over a limit the game system never declared.
+            if (defaults.Count == 1 && defaults[0].DefaultCostLimit!.Value % 1 == 0)
+            {
+                return (int)defaults[0].DefaultCostLimit!.Value;
+            }
+        }
+
+        return null;
+    }
+
     private static Task StageDataFilesAsync(
         string dataDirectoryPath,
         ProtocolGameSystem gameSystem,
@@ -1061,10 +1099,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
                     ["gameSystemName"] = gameSystemName ?? _gameSystem!.Name,
                     ["rosterName"] = _specId,
                 };
-                // Apply pending cost limit if any
-                if (_pendingCostLimits.Count == 1)
+                if (ResolveNewRosterCostLimit() is { } costLimit)
                 {
-                    parameters["costLimit"] = (int)_pendingCostLimits.Values.First();
+                    parameters["costLimit"] = costLimit;
                 }
             }
         }
