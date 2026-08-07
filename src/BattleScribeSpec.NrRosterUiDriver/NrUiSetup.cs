@@ -57,6 +57,13 @@ public static class NrUiSetup
         // Retried rather than waited out. Losing a race to another navigation is fixed by asserting
         // the route again, not by more patience — and only when the page really has drifted, so a
         // genuine failure still fails on its first attempt instead of three times as slowly.
+        // A note on the numbers below: every Timeout here is a CEILING, not a cost. These waits
+        // return the moment their condition holds — measured at ~17-30ms locally — so a generous
+        // bound is free in the common case and only decides how long a genuinely stuck run takes to
+        // report. They were first set to 5-10s, which passed a 363-spec lane twice locally and then
+        // failed two specs on a Linux/headless CI runner with "Setup failed: Timeout 10000ms
+        // exceeded". That is the wrong trade: a ceiling tight enough to fail a slow-but-correct run
+        // buys nothing, because nothing is waiting for it when things are healthy.
         var addMoreGames = page.GetByText("Add more games").First;
         var addFromFolder = page.GetByText("Add From Folder").First;
 
@@ -69,9 +76,9 @@ public static class NrUiSetup
                     await page.WaitForFunctionAsync(
                         "() => location.pathname.includes('MySystems')",
                         null,
-                        new() { Timeout = 10_000 });
+                        new() { Timeout = 30_000 });
                     await addMoreGames.WaitForAsync(
-                        new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+                        new() { State = WaitForSelectorState.Visible, Timeout = 20_000 });
                     await WaitForTransitionsAsync(page);
                 });
 
@@ -125,7 +132,7 @@ public static class NrUiSetup
             }
             """,
             systemId,
-            new() { Timeout = 10_000 }));
+            new() { Timeout = 30_000 }));
 
         // Close the "Add More Games" popup that's still open.
         //
@@ -673,7 +680,7 @@ public static class NrUiSetup
         // reported a 5s timeout whose message blamed reflow — a cause it had never checked.
         try
         {
-            await locator.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
+            await locator.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 20_000 });
         }
         catch (TimeoutException)
         {
