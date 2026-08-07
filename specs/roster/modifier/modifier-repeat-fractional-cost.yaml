@@ -86,6 +86,16 @@ steps:
                 - typeId: pts
                   value: 0.3
       engines:
+        # BattleScribe's repeat arithmetic is double too; only the in-process adapter converts to
+        # decimal on the way out, and this driver reads the double off the Java model.
+        battlescribe-ui:
+          forces:
+            - selections:
+                - name: Squad
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 0.30000000000000004
         # Floating-point deviation in NR's repeat arithmetic.
         newrecruit:
           forces:

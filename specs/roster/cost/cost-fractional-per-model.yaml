@@ -93,6 +93,24 @@ steps:
                     - typeId: pts
                       value: 0.3
       engines:
+        # The per-engine override this spec's own description says a floating-point engine needs.
+        # BattleScribe computes 0.1*3 in double like everyone else; only the in-process adapter
+        # converts to decimal on the way out, and this driver reads the double off the Java model.
+        battlescribe-ui:
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Clean Model
+                      number: 3
+                      costs:
+                        - typeId: pts
+                          value: 1.5
+                    - name: Drift Model
+                      number: 3
+                      costs:
+                        - typeId: pts
+                          value: 0.30000000000000004
         # Floating-point deviation: NR reports 0.1*3 as 0.30000000000000004.
         newrecruit:
           forces:
