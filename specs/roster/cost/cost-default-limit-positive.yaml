@@ -3,6 +3,16 @@ category: cost
 description: Positive defaultCostLimit enforced — only cost exceeding the limit triggers error
 tags: [cost, defaultCostLimit]
 
+# BattleScribe's New Roster dialog carries ONE integer spinner, so it can express exactly one
+# integral cost limit — and this game system declares three cost types each with a default of 100.
+# A roster built through that dialog gets no limit for the other two, and BattleScribe applies a
+# costType default only to a roster created through its ENGINE, not through this dialog (measured:
+# the roster reads back `costLimits: []`). The store-direct engine gets all three.
+# `fail` rather than `skip` so the spec still RUNS: the Edit Roster dialog has not been examined for
+# per-cost-type limit fields, and if a driver ever sets them there this is reported as a pass.
+engines:
+  battlescribe-ui: fail
+
 setup:
   gameSystem:
     costTypes:

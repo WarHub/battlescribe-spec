@@ -5,8 +5,16 @@ tags: [cost, costType, validation-errors]
 
 # NR's UI does not surface a violation of a HIDDEN cost limit, so the expected validation error never
 # appears. The store-direct engine reports it.
+# Same shape on BattleScribe's desktop UI, for a different reason: its New Roster dialog carries ONE
+# integer spinner, and the limit this spec needs is on the HIDDEN `cp` cost type while `pts` is the
+# visible one. A roster built through that dialog gets no `cp` limit, so there is no violation to
+# surface. BattleScribe applies a costType default only to a roster created through its ENGINE, not
+# through this dialog (measured: the roster reads back `costLimits: []`).
+# `fail` rather than `skip` so the spec still RUNS — the Edit Roster dialog has not been examined
+# for per-cost-type limit fields, and if a driver ever sets them there this is reported as a pass.
 engines:
   newrecruit-ui: fail
+  battlescribe-ui: fail
 
 setup:
   gameSystem:
