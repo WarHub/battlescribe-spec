@@ -286,7 +286,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                     Console.Error.WriteLine("[bs-gamedata-ui] Warm start: reusing existing BattleScribe instance.");
                     var warmFiles = BuildXmlFiles(gameSystem, catalogues);
                     await BsUiDataStaging.StageDataFilesAsync(
-                        _app.DataDirectoryPath, gameSystem, catalogues, warmFiles);
+                        _app.DataDirectoryPath, gameSystem.Id, warmFiles);
                     await LoadStagedFilesAsync(gameSystem, warmFiles);
                     Console.Error.WriteLine("[bs-gamedata-ui] Warm start: loaded new game data into existing instance.");
                     return [];
@@ -312,7 +312,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
             var files = BuildXmlFiles(gameSystem, catalogues);
             await BsUiDataStaging.StageDataFilesAsync(
-                _app.DataDirectoryPath, gameSystem, catalogues, files);
+                _app.DataDirectoryPath, gameSystem.Id, files);
 
             await _app.StartAsync();
             _client = await _app.ConnectAsync();

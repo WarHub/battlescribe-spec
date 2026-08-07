@@ -66,7 +66,7 @@ public sealed class BsGameDataUiProbe : IAsyncDisposable
             files.AddRange(catXmls.Select(c => (c.FileName, c.Xml)));
 
             await BsUiDataStaging.StageDataFilesAsync(
-                _app.DataDirectoryPath, gameSystem, [.. catalogues], files);
+                _app.DataDirectoryPath, gameSystem.Id, files);
 
             foreach (var (fileName, _) in files)
             {
