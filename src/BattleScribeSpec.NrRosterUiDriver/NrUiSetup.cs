@@ -72,11 +72,29 @@ public static class NrUiSetup
             systemId,
             new() { Timeout = 10_000 });
 
-        // Close the "Add More Games" popup that's still open
+        // Close the "Add More Games" popup that's still open.
+        //
+        // `IsVisibleAsync` is a SNAPSHOT, not a wait, so this is check-then-act: if the popup closes
+        // itself between the check and the click — which it does once NR finishes installing the
+        // system — the click has nothing to hit and burns Playwright's full 30s default, failing
+        // Setup outright. Bounded and tolerated instead, because "the popup already went away" is a
+        // success for this step, not a failure.
+        //
+        // Found by the widened sequential lane (force/force-remove-second,
+        // selection/selection-with-children), and only there: `bs-spec run` gives every spec its own
+        // engine, so its timing never lined up this way.
         var closeBtn = page.Locator(".xCross").First;
         if (await closeBtn.IsVisibleAsync())
         {
-            await closeBtn.ClickAsync();
+            try
+            {
+                await closeBtn.ClickAsync(new() { Timeout = 5_000 });
+            }
+            catch (TimeoutException)
+            {
+                // Closed itself between the check and the click — which is what we wanted anyway.
+            }
+
             await page.WaitForTimeoutAsync(300);
         }
     }

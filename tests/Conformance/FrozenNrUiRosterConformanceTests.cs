@@ -75,7 +75,7 @@ public sealed class FrozenNrUiRosterConformanceTests
     /// </para>
     /// </remarks>
     private static readonly string[] MeasuredCategories =
-        ["force/", "cost/", "entry-group/", "gamesystem/"];
+        ["force/", "cost/", "entry-group/", "gamesystem/", "selection/", "condition/"];
 
     /// <summary>The concrete engine this lane drives, as specs address it.</summary>
     private const string EngineIdentity = "newrecruit-ui";

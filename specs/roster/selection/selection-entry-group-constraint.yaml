@@ -2,6 +2,13 @@ id: selection-entry-group-constraint
 category: selection
 description: SelectionEntryGroup can have constraints limiting how many entries can be selected from it
 
+# NR's UI enforces a selectionEntryGroup's `max` RADIO-STYLE: selecting a second entry in a
+# max=1 group swaps the first out rather than reporting a constraint violation, so the error this
+# spec expects can never appear through the UI. Measured 2026-08-05. Same category as
+# cost/cost-hidden-limit-validation. The store-direct engine reports it correctly.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     forceEntries:
