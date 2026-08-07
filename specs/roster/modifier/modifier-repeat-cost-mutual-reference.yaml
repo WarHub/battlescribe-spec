@@ -13,6 +13,11 @@ description: >
 
 engines:
   newrecruit: skip
+  # newrecruit-ui drives the same engine and reproduces this identically — same JSON path, same
+  # byte offset. NR's reactive cost evaluation has no convergence bound, so this mutual reference
+  # diverges and the state read fails the adapter's `decimal` parse before any assertion runs.
+  # See docs/cost-field-repeat-algorithm.md.
+  newrecruit-ui: skip
 
 setup:
   gameSystem:

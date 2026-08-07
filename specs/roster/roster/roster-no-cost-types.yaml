@@ -2,6 +2,16 @@ id: roster-no-cost-types
 category: roster
 description: Roster with no cost types has empty costs list
 
+# This spec asserts BEFORE it mutates, so the NR UI driver has to build the roster to answer at
+# all — and NR's Create List dialog refuses a catalogue with no loadable content, which is exactly
+# this setup: an empty `cat-1` and a gameSystem holding nothing but forceEntries. Byte-for-byte the
+# same setup as force/force-add-single, and the same limitation. The store-direct `newrecruit`
+# engine builds this roster fine — the limit is the dialog, not the data.
+# Declared `fail` rather than `skip` so an NR release that lifts it is reported as an unexpected
+# pass instead of going unnoticed. See docs/nr-ui-roster-coverage.md.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     forceEntries:

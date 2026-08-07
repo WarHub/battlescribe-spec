@@ -3,6 +3,17 @@ category: modifier
 description: Category unset-primary modifier removes primary status from a category on the selection
 tags: [newrecruit-bug]
 
+engines:
+  # Hidden at browse time, but by NR's own bug rather than by the spec. `se-1` declares no
+  # `hidden` and no hidden modifier; NR mis-applies the `unset-primary`/`field: category`
+  # modifier as hiding the entry — which is exactly what this spec's per-step `newrecruit`
+  # override already records. NR applies it while BROWSING, so the catalogue panel never
+  # renders a row and no UI gesture can reach it. Measured: the identical spec with the
+  # modifier removed passes on newrecruit-ui.
+  # `fail` rather than `skip` so the spec still RUNS — if NR fixes the modifier, that is
+  # reported as an unexpected pass instead of going unnoticed.
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     categoryEntries:

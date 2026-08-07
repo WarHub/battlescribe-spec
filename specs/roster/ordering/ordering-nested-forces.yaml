@@ -3,6 +3,17 @@ category: ordering
 tags: [childForce, design-difference]
 description: Child forces are ordered by their definition order
 
+# NR's Create List dialog refuses a catalogue with no loadable content, so this roster cannot be
+# built through the UI at all. `cat-1` is empty and the game system declares only forceEntries —
+# and NR needs a SELECTABLE entry (selectionEntries/entryLinks). Force and category entries do not
+# count: this is the same shape as force/force-with-categories, which also fails, while
+# gamesystem/gamesystem-root-selectionentry has selectionEntries and passes.
+# The store-direct `newrecruit` engine builds it fine — the limit is the dialog, not the data.
+# Declared `fail` so an NR release that lifts it is reported as an unexpected pass.
+# See docs/nr-ui-roster-coverage.md.
+engines:
+  newrecruit-ui: fail
+
 setup:
   gameSystem:
     forceEntries:
