@@ -67,12 +67,27 @@ public sealed class XunitTelemetryTests
             {
                 Assert.True(collector.Enabled);
 
+                // Wait for EXPORTS, not for time.
+                //
+                // These were two 600ms sleeps sized to outlast a 200ms export interval — a clock
+                // test. It burned 1.2s of every run and, on a loaded worker, could miss the window
+                // entirely. The collector now counts the export batches it accepts, so the test can
+                // wait for the thing it actually needs: a periodic export that happened WHILE both
+                // resources were alive.
+                //
+                // The artifact cannot be polled instead — OtlpArtifactWriter holds it with
+                // FileShare.None — which is why this needed a signal on the production side rather
+                // than a cleverer read.
+                var before = collector.MetricExportsReceived;
+
                 ResourceMetrics.Acquired(kind);
                 ResourceMetrics.Acquired(kind); // two alive at once: the peak this test expects
-                await Task.Delay(600, ct); // let the 200ms periodic reader export "2" more than once
+                await collector.WaitForMetricExportsAsync(before + 2, TimeSpan.FromSeconds(15), ct);
+
+                var afterPeak = collector.MetricExportsReceived;
                 ResourceMetrics.Released(kind);
                 ResourceMetrics.Released(kind);
-                await Task.Delay(600, ct); // and export "0" at least once before the final ForceFlush
+                await collector.WaitForMetricExportsAsync(afterPeak + 2, TimeSpan.FromSeconds(15), ct);
 
                 // Disposing the collector below force-flushes one last (zero) snapshot too.
             }

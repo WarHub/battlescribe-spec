@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.BsRosterUiDriver;
@@ -95,26 +94,10 @@ public sealed class BsUiProbe : IAsyncDisposable
         // BS shows a "Confirm" dialog on first launch asking to download data.
         // Dialog structure: btnPositive ("YES"), btnNegative ("NO"), btnNeutral (hidden).
         // We fire btnNegative to dismiss it.
-        await Task.Delay(2000); // Give BS a moment to show the dialog
-
-        var windows = await Client.GetWindowsAsync();
-        if (windows is not JsonArray windowArray)
-        {
-            return;
-        }
-
-        foreach (var w in windowArray)
-        {
-            var title = w?["title"]?.GetValue<string>();
-            if (title is not null && title.Contains("Confirm"))
-            {
-                log.WriteLine("  Dismissing startup confirmation dialog...");
-                await Client.FireButtonAsync("#btnNegative", windowTitle: "Confirm");
-                log.WriteLine("  Dialog dismissed.");
-                await Task.Delay(500);
-                break;
-            }
-        }
+        // One shared, condition-driven implementation — see AgentClient.DismissStartupConfirmAsync.
+        log.WriteLine("  Checking for the startup confirmation dialog...");
+        await Client.DismissStartupConfirmAsync();
+        log.WriteLine("  Startup dialog handled.");
     }
 
     public async ValueTask DisposeAsync()

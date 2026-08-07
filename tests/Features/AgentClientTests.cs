@@ -11,16 +11,34 @@ public sealed class AgentClientTests
     [Fact]
     public async Task LateResponseAfterTimeout_DoesNotDesyncNextCall()
     {
-        // Server: for id=1 ("slow"), wait past the client's CallTimeout before replying;
-        // for id=2 ("fast"), reply immediately. Both replies echo their request id.
-        await using var server = FakeAgentServer.Start(async (req, respond, ct) =>
+        var ct = TestContext.Current.CancellationToken;
+
+        // The TEST owns "slow", not the clock.
+        //
+        // This used to race two wall-clock durations: the handler slept 600ms against a 200ms
+        // CallTimeout. That tests the CLOCK rather than the logic — on a loaded worker the 600ms
+        // can lose to the 200ms, or the settle below can land in the wrong order — and it spent
+        // ~700ms of every run proving something that should be true by construction.
+        //
+        // Gating the reply on a TaskCompletionSource makes "slow" INFINITELY slow, so the client's
+        // own CallTimeout is the only clock left and can be tiny. Every line of the real path still
+        // runs: the WaitAsync on the linked token, the exception filter that distinguishes a
+        // timeout from a caller cancellation, the real TimeoutException, the pending-call removal,
+        // and the read loop's discard-an-abandoned-response branch. Nothing is faked or bypassed.
+        var slowRequestReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSlowReply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var slowReplyWritten = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var server = FakeAgentServer.Start(async (req, respond, serverCt) =>
         {
             var id = req["id"]!.GetValue<int>();
             var method = req["method"]!.GetValue<string>();
             if (method == "slow")
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(600), ct);   // > CallTimeout below
+                slowRequestReceived.TrySetResult();
+                await releaseSlowReply.Task.WaitAsync(serverCt);
                 await respond($$"""{"jsonrpc":"2.0","id":{{id}},"result":"slow-result"}""");
+                slowReplyWritten.TrySetResult();
             }
             else
             {
@@ -28,16 +46,24 @@ public sealed class AgentClientTests
             }
         });
 
-        using var client = new AgentClient(server.Connect()) { CallTimeout = TimeSpan.FromMilliseconds(200) };
-        var ct = TestContext.Current.CancellationToken;
+        using var client = new AgentClient(server.Connect()) { CallTimeout = TimeSpan.FromMilliseconds(10) };
 
-        await Assert.ThrowsAsync<TimeoutException>(() => client.CallAsync("slow", cancellationToken: ct));
+        var slowCall = client.CallAsync("slow", cancellationToken: ct);
 
-        // Give the late "slow" response (id=1, written ~600ms after the request) time to actually
-        // land on the wire and sit unread before we issue the next call. This makes the repro
-        // deterministic: a positional reader would consume this stale line first, regardless of
-        // small scheduling jitter between the timeout firing and the next call being issued.
-        await Task.Delay(TimeSpan.FromMilliseconds(500), ct);
+        // Wait for the FACT that the request reached the server — and is therefore registered as
+        // pending — rather than for a duration. Without it the assertion below could pass vacuously.
+        await slowRequestReceived.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        await Assert.ThrowsAsync<TimeoutException>(() => slowCall);
+
+        // Now release the late response and wait for the fact that it was WRITTEN.
+        //
+        // This is the load-bearing half of the regression (#271): the stale line has to be on the
+        // wire before the next request goes out, or a positional reader never gets the chance to
+        // mis-consume it and the test passes for the wrong reason. Deleting this wait without
+        // replacing the signal would leave a green test that proves nothing. One TCP stream, so
+        // written-before-request implies read-before-response.
+        releaseSlowReply.SetResult();
+        await slowReplyWritten.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
 
         // The next call (id=2) must get ITS OWN result, not the stale id=1 result.
         var fast = await client.CallAsync("fast", cancellationToken: ct);
@@ -99,16 +125,27 @@ public sealed class AgentClientTests
     [Fact]
     public async Task ConnectionClosed_FaultsPendingCall()
     {
+        var ct = TestContext.Current.CancellationToken;
+        var requestReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         // Never respond; just wait until the test disposes the server, which closes the socket.
-        await using var server = FakeAgentServer.Start(async (_, _, ct) => await Task.Delay(Timeout.InfiniteTimeSpan, ct));
+        //
+        // The Task.Delay here is NOT a wait to be removed — Timeout.InfiniteTimeSpan never elapses,
+        // so this is "never answer, until shutdown cancels me". A mechanical sweep of Task.Delay
+        // would delete the very behaviour this test needs.
+        await using var server = FakeAgentServer.Start(async (_, _, serverCt) =>
+        {
+            requestReceived.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, serverCt);
+        });
 
         using var client = new AgentClient(server.Connect()) { CallTimeout = Timeout.InfiniteTimeSpan };
-        var ct = TestContext.Current.CancellationToken;
 
         var callTask = client.CallAsync("hang", cancellationToken: ct);
 
-        // Give the request time to be written and registered as pending, then close the connection.
-        await Task.Delay(TimeSpan.FromMilliseconds(200), ct);
+        // Wait for the fact that the request arrived — which is what "registered as pending" needs —
+        // instead of guessing 200ms at it. Closing early would test a different thing entirely.
+        await requestReceived.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
         await server.DisposeAsync();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => callTask);

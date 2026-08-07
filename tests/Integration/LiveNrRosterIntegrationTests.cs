@@ -171,11 +171,33 @@ public sealed class LiveNrRosterIntegrationTests
 
 
     /// <summary>
-    /// Wait for the NR Pinia store to settle after an action.
-    /// Uses Playwright's timeout mechanism instead of Thread.Sleep.
+    /// Waits for NR's store to hold a roster with at least one force.
     /// </summary>
-    private void WaitForStoreSettled(int timeoutMs = 1000)
+    /// <remarks>
+    /// <para>
+    /// This was <c>Page.WaitForTimeoutAsync(1000)</c>, described in its own summary as "uses
+    /// Playwright's timeout mechanism instead of Thread.Sleep" — which is a distinction without a
+    /// difference. <c>WaitForTimeoutAsync</c> IS a sleep, and Playwright's own docs discourage it.
+    /// </para>
+    /// <para>
+    /// The condition is deliberately "the army exists and has a force" rather than a poll of the
+    /// exact thing the caller asserts. Polling the assertion would make it unfalsifiable —
+    /// "Forces.Count >= 1" would degrade to "this became true within N seconds", which is not the
+    /// same claim.
+    /// </para>
+    /// </remarks>
+    private void WaitForStoreSettled(int timeoutMs = 10_000)
     {
-        _fixture.Engine!.Browser.Page.WaitForTimeoutAsync(timeoutMs).GetAwaiter().GetResult();
+        _fixture.Engine!.Browser.Page.WaitForFunctionAsync(
+            """
+            () => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                return (army?.getForces?.() || []).length > 0;
+            }
+            """,
+            null,
+            new() { Timeout = timeoutMs }).GetAwaiter().GetResult();
     }
 }

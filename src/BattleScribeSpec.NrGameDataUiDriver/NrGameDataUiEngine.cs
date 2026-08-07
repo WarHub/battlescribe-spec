@@ -602,14 +602,41 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
                     "const tr = el.closest('tr'); const td = tr && tr.querySelector('td'); " +
                     "return (td && td.innerText.trim()) || (c && (c.className||'').toString()) || ''; }");
                 await input.ClickAsync(new LocatorClickOptions { Timeout = 3_000 });
-                await _page.WaitForTimeoutAsync(250);
+
+                // A NEGATIVE gate, handled as one rather than pretended away. This tool records
+                // whichever options a widget offers, so "this widget has zero options" is a
+                // legitimate RESULT — there is no positive signal for it, and NR renders no
+                // empty-state marker.
+                //
+                // Racing the first suggestion with a short bound is therefore the honest shape: a
+                // populated widget resolves as soon as it paints, and an empty one falls through
+                // and is recorded as empty. Waiting unconditionally would time out into the
+                // enclosing catch and DROP the widget from the report — a wrong answer in a tool
+                // whose entire output is "which options exist".
                 var suggestions = _page.Locator(".suggestions:not(.hidden) > div");
+                try
+                {
+                    await suggestions.First.WaitForAsync(new LocatorWaitForOptions
+                    {
+                        State = WaitForSelectorState.Visible,
+                        Timeout = 750,
+                    });
+                }
+                catch (TimeoutException)
+                {
+                    // Genuinely empty — recorded as [] below, not skipped.
+                }
+
                 var opts = await suggestions.AllTextContentsAsync();
                 var key = $"[{i}] {context}";
                 result[key] = [.. opts.Select(o => o.Trim()).Where(o => o.Length > 0)];
                 // Close the popup before moving on.
                 await _page.Keyboard.PressAsync("Escape");
-                await _page.WaitForTimeoutAsync(100);
+                await _page.Locator(".suggestions:not(.hidden)").WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Detached,
+                    Timeout = 2_000,
+                });
             }
             catch
             {
@@ -633,7 +660,9 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         var node = _page.Locator(nodeSelector).First;
         await node.ScrollIntoViewIfNeededAsync();
         await node.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-        await _page.WaitForTimeoutAsync(300);
+        // AllTextContentsAsync is a snapshot, so this wait is the only gate on the menu existing.
+        await _page.WaitForSelectorAsync(".context-menu:visible",
+            new PageWaitForSelectorOptions { Timeout = 5_000 });
 
         var menuItems = await _page.Locator(".context-menu:visible > div").AllTextContentsAsync();
         var trimmed = menuItems.Select(m => m.Trim().Replace("\n", " ")).Where(m => m.Length > 0).ToArray();
@@ -648,11 +677,17 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             {
                 var trigger = _page.Locator(".context-menu:visible > div")
                     .Filter(new LocatorFilterOptions { HasText = label });
+                // ContextMenu opens submenus from @mousemove, so the hover is the trigger and the
+                // SECOND visible menu is the condition — the same locator the read below uses.
                 await trigger.First.HoverAsync(new LocatorHoverOptions { Timeout = 2_000 });
-                await _page.WaitForTimeoutAsync(350);
-                var subItems = await _page.Locator(".context-menu:visible")
-                    .Filter(new LocatorFilterOptions { HasNotText = "Remove" })
-                    .First.Locator("> div").AllTextContentsAsync();
+                var submenu = _page.Locator(".context-menu:visible")
+                    .Filter(new LocatorFilterOptions { HasNotText = "Remove" });
+                await submenu.First.WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = 3_000,
+                });
+                var subItems = await submenu.First.Locator("> div").AllTextContentsAsync();
                 submenus[label] = [.. subItems.Select(s => s.Trim()).Where(s => s.Length > 0)];
             }
             catch
@@ -662,7 +697,11 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         }
 
         await _page.Keyboard.PressAsync("Escape");
-        await _page.WaitForTimeoutAsync(100);
+        await _page.Locator(".context-menu:visible").WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Detached,
+            Timeout = 2_000,
+        });
         return System.Text.Json.JsonSerializer.Serialize(new { menu = trimmed, submenus });
     }
 

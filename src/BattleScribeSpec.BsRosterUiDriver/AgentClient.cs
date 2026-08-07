@@ -272,26 +272,110 @@ public sealed class AgentClient : IDisposable
         await CallAsync("setNodeText", parameters);
     }
 
-    /// <summary>Polls for a node to appear, retrying until timeout.</summary>
-    public async Task<JsonNode?> WaitForNodeAsync(string selector, string? windowTitle = null, int timeoutMs = 10000, int pollIntervalMs = 250)
+    /// <summary>
+    /// Poll interval for window-state questions, matching the Java agent's own POLL_INTERVAL_MS.
+    /// </summary>
+    /// <remarks>
+    /// There is no window-shown event in this protocol — JsonRpcServer is a strict
+    /// one-response-per-request loop with no push — so polling is the only option here, and this is
+    /// a genuine poll INTERVAL rather than a fixed wait: every iteration asks a real question and
+    /// the loop exits the moment the answer changes.
+    /// <para>
+    /// Do not shrink it far below this. Each iteration is an FX-thread round trip contending with
+    /// BattleScribe's own dialog handling on that single thread — an observer effect DialogInspector's
+    /// javadoc records as measurably slowing real dialog transitions.
+    /// </para>
+    /// </remarks>
+    public const int WindowPollIntervalMs = 150;
+
+    /// <summary>True when a window with this exact title (or "title ") is showing.</summary>
+    /// <remarks>
+    /// Exact-or-prefix, deliberately NOT Contains: BattleScribe's main window title embeds the
+    /// roster name ("Roster Editor 2.03.21 - New Roster (GS v1)"), so a Contains match on a dialog
+    /// title such as "New Roster" false-positives against it.
+    /// </remarks>
+    public async Task<bool> HasWindowAsync(string title)
+    {
+        if (await GetWindowsAsync() is not JsonArray windows)
+        {
+            return false;
+        }
+
+        return windows.Any(w =>
+        {
+            var t = w?["title"]?.GetValue<string>();
+            return t is not null
+                && (string.Equals(t, title, StringComparison.Ordinal)
+                    || t.StartsWith(title + " ", StringComparison.Ordinal));
+        });
+    }
+
+    /// <summary>Waits for a window to stop showing. Throws if it is still there at the deadline.</summary>
+    public async Task WaitForWindowToCloseAsync(string title, int timeoutMs = 10_000)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var result = await FindNodeAsync(selector, windowTitle);
-            if (result is not null)
+            if (!await HasWindowAsync(title))
             {
-                return result;
+                return;
             }
 
-            await Task.Delay(pollIntervalMs);
+            await Task.Delay(WindowPollIntervalMs);
         }
 
-        return null;
+        throw new TimeoutException($"Window '{title}' did not close.");
+    }
+
+    /// <summary>
+    /// Dismisses BattleScribe's first-launch "download data?" prompt if it appears, then waits for
+    /// it to actually go away.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One implementation for what used to be four copies — the roster engine, the gamedata engine
+    /// and both probes — every one of which slept a fixed 1500-2000ms and then checked ONCE. Two
+    /// faults in that shape: the check is a snapshot, so a dialog arriving a moment later was missed
+    /// entirely; and when it arrived early the remaining second was pure cost on every cold start.
+    /// </para>
+    /// <para>
+    /// The ceiling remains because "this dialog will never appear" has no positive signal, but it is
+    /// a CEILING rather than a cost now — the loop exits the instant the dialog shows. A dialog
+    /// arriving after it is not silently lost either: DialogInspector.assertNoUnexpectedModals runs
+    /// on every Java-side wait and fails the next action loudly.
+    /// </para>
+    /// <para>
+    /// It is answered with <c>#btnNegative</c> deliberately: agreeing would make BattleScribe fetch
+    /// real game data over the staged spec data.
+    /// </para>
+    /// </remarks>
+    public async Task DismissStartupConfirmAsync(string title = "Confirm", int ceilingMs = 3_000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(ceilingMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await HasWindowAsync(title))
+            {
+                try
+                {
+                    await FireButtonAsync("#btnNegative", windowTitle: title);
+                    await WaitForWindowToCloseAsync(title);
+                }
+                catch (TimeoutException)
+                {
+                    // It closed itself, or refuses to; the next action's own modal assertion
+                    // reports a lingering dialog far better than a throw from here would.
+                }
+
+                return;
+            }
+
+            await Task.Delay(WindowPollIntervalMs);
+        }
     }
 
     /// <summary>Polls for a window with the given title to appear.</summary>
-    public async Task<bool> WaitForWindowAsync(string titleFragment, int timeoutMs = 30000, int pollIntervalMs = 500)
+    public async Task<bool> WaitForWindowAsync(string titleFragment, int timeoutMs = 30000, int pollIntervalMs = WindowPollIntervalMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)

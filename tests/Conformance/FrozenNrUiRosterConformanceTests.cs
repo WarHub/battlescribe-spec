@@ -1,3 +1,4 @@
+using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
@@ -193,6 +194,13 @@ public sealed class FrozenNrUiRosterConformanceTests
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
         skippedSteps.WriteTo(_output, LogPrefix);
+
+        // Where the wall-clock went, when asked (NR_UI_TIMINGS=1). Printed for passing runs too —
+        // the whole point is to measure a lane that works, not to explain one that broke.
+        if (NrUiTiming.Enabled)
+        {
+            _output.WriteLine(NrUiTiming.Report(loadedSpecs.Count));
+        }
 
         if (failures.Count > 0)
         {

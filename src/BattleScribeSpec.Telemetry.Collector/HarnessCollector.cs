@@ -36,12 +36,26 @@ public sealed class HarnessCollector : IAsyncDisposable
     private readonly OtlpArtifactWriter? _writer;
     private readonly ParentProviders? _providers;
 
-    private HarnessCollector(WebApplication? app, OtlpArtifactWriter? writer, ParentProviders? providers, string endpoint)
+    /// <summary>Shared mutable counter, since the OTLP routes are mapped before this instance exists.</summary>
+    private sealed class ExportCounter
+    {
+        public int MetricExports;
+    }
+
+    private readonly ExportCounter _exports;
+
+    private HarnessCollector(
+        WebApplication? app,
+        OtlpArtifactWriter? writer,
+        ParentProviders? providers,
+        string endpoint,
+        ExportCounter? exports = null)
     {
         _app = app;
         _writer = writer;
         _providers = providers;
         Endpoint = endpoint;
+        _exports = exports ?? new ExportCounter();
     }
 
     /// <summary>The receiver's base URL, e.g. <c>http://127.0.0.1:53411</c>. Empty when disabled.</summary>
@@ -54,6 +68,41 @@ public sealed class HarnessCollector : IAsyncDisposable
     /// only when the collector is fully disabled (e.g. the loopback port failed to bind).
     /// </summary>
     public bool Enabled => Endpoint.Length > 0;
+
+    /// <summary>How many metric export batches this collector has accepted.</summary>
+    /// <remarks>
+    /// Exists so tests can wait for an EXPORT rather than for a duration. OpenTelemetry's
+    /// PeriodicExportingMetricReader owns its own timer, and the artifact cannot be read mid-run
+    /// (OtlpArtifactWriter holds it with FileShare.None), so before this the only way to assert
+    /// "a periodic export landed while both resources were alive" was to sleep longer than the
+    /// export interval and hope. That is a clock test, and it fails on a loaded worker.
+    /// </remarks>
+    public int MetricExportsReceived => Volatile.Read(ref _exports.MetricExports);
+
+    /// <summary>
+    /// Waits until at least <paramref name="count"/> metric export batches have been received.
+    /// </summary>
+    /// <remarks>
+    /// A short poll rather than a signal: exports arrive on Kestrel request threads, and a
+    /// TaskCompletionSource per caller would need locking around the count anyway. The loop exits
+    /// on the real condition, which is the point — the deadline is a ceiling, not a cost.
+    /// </remarks>
+    public async Task WaitForMetricExportsAsync(int count, TimeSpan timeout, CancellationToken ct = default)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (MetricExportsReceived < count)
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new TimeoutException(
+                    $"Only {MetricExportsReceived} metric export(s) arrived within "
+                    + $"{timeout.TotalSeconds:F1}s; expected at least {count}. "
+                    + "Is OTEL_METRIC_EXPORT_INTERVAL set, and is the meter emitting?");
+            }
+
+            await Task.Delay(10, ct).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// True when <see cref="Enabled"/> telemetry is also being written to a local <c>.otlp.pb</c>
@@ -113,9 +162,11 @@ public sealed class HarnessCollector : IAsyncDisposable
 
         OtlpArtifactWriter? writer = null;
         WebApplication? app = null;
+        ExportCounter? exports = null;
         try
         {
             writer = new OtlpArtifactWriter(artifactPath);
+            exports = new ExportCounter();
 
             var builder = WebApplication.CreateSlimBuilder();
             builder.Logging.ClearProviders();
@@ -125,7 +176,7 @@ public sealed class HarnessCollector : IAsyncDisposable
                 kestrel.Listen(IPAddress.Loopback, 0, listen => listen.Protocols = HttpProtocols.Http1AndHttp2));
 
             app = builder.Build();
-            MapOtlp(app, writer);
+            MapOtlp(app, writer, exports);
 
             await app.StartAsync(ct).ConfigureAwait(false);
         }
@@ -176,10 +227,10 @@ public sealed class HarnessCollector : IAsyncDisposable
         // kind, span status and events, and emits an empty Resource.
         var providers = ParentProviders.Attach(endpoint, serviceName: "bs-spec");
 
-        return new HarnessCollector(app, writer, providers, endpoint);
+        return new HarnessCollector(app, writer, providers, endpoint, exports);
     }
 
-    private static void MapOtlp(WebApplication app, OtlpArtifactWriter writer)
+    private static void MapOtlp(WebApplication app, OtlpArtifactWriter writer, ExportCounter exports)
     {
         // Cast to Delegate: a bare Func<HttpContext, Task<IResult>> lambda is also convertible to
         // RequestDelegate (Func<HttpContext, Task>) via delegate return-type covariance, and the
@@ -192,7 +243,11 @@ public sealed class HarnessCollector : IAsyncDisposable
 
         app.MapPost("/v1/metrics", (Delegate)((HttpContext ctx) => ReceiveAsync(
             ctx,
-            body => writer.WriteAsync(ExportMetricsServiceRequest.Parser.ParseFrom(body)),
+            async body =>
+            {
+                await writer.WriteAsync(ExportMetricsServiceRequest.Parser.ParseFrom(body));
+                Interlocked.Increment(ref exports.MetricExports);
+            },
             new ExportMetricsServiceResponse())));
 
         app.MapPost("/v1/logs", (Delegate)((HttpContext ctx) => ReceiveAsync(

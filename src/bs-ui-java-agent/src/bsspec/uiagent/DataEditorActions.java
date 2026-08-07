@@ -527,13 +527,16 @@ public class DataEditorActions {
                             .getMethod("getLstCharacteristicTypes").invoke(panel);
             lst.getSelectionModel().select(charType); // fires the list listener → name field loads
         });
-        sleep(200);
+
+        // No sleeps here. ListView selection dispatches its listener synchronously, and both this
+        // and the write below run inside runOnFx, which blocks until the FX task completes — so the
+        // name field has already loaded when the first call returns, and the ChangeListener has
+        // already written the model when the second does.
         runOnFx(() -> {
             javafx.scene.control.TextField txt =
                     (javafx.scene.control.TextField) panel.getClass().getMethod("getTxtName").invoke(panel);
             txt.setText(name); // ChangeListener writes the selected characteristic type's name
         });
-        sleep(150);
     }
 
     /**
@@ -614,7 +617,8 @@ public class DataEditorActions {
         if (item == null) throw new RuntimeException("Tree item not found for setCost: " + entryId);
 
         runOnFx(() -> selectItem(ctrl, item));
-        sleep(200);
+        // No sleep: waitForFieldNodeRequired below waits for the panel control this step needs,
+        // which is a stronger statement than "the panel probably loaded by now".
 
         Object panel = runOnFxGet(() -> findPanelControllerWithMethod(ctrl, "getPnlCostLimits"));
         if (panel == null) {
@@ -642,8 +646,9 @@ public class DataEditorActions {
             throw new RuntimeException("setCost: no spinner in cost row " + idx);
         });
 
+        // setSpinnerValue drives the value factory, which fires the panel's ChangeListener
+        // synchronously; runOnFx has already waited for that.
         runOnFx(() -> setSpinnerValue((javafx.scene.control.Spinner<?>) spinner, value));
-        sleep(150);
         return "{}";
     }
 
@@ -664,7 +669,8 @@ public class DataEditorActions {
         Object model = item.getValue();
 
         runOnFx(() -> selectItem(ctrl, item));
-        sleep(200);
+        // No sleep: waitForFieldNodeRequired below waits for the panel control this step needs,
+        // which is a stronger statement than "the panel probably loaded by now".
 
         Object panel = runOnFxGet(() -> findPanelControllerWithMethod(ctrl, "getPnlProfile"));
         if (panel == null) {
@@ -696,8 +702,9 @@ public class DataEditorActions {
             throw new RuntimeException("setCharacteristic: no TextArea at row " + idx);
         });
 
+        // TextArea writeback is a ChangeListener on the text property — synchronous with setText,
+        // and runOnFx has already waited for it.
         runOnFx(() -> setNodeValue(textArea, "characteristic", value));
-        sleep(150);
         return "{}";
     }
 
@@ -1078,13 +1085,13 @@ public class DataEditorActions {
         }
 
         runOnFx(() -> selectItem(ctrl, item));
-        sleep(200);
+        // No sleep: waitForFieldNodeRequired below waits for the panel control this step needs,
+        // which is a stronger statement than "the panel probably loaded by now".
 
         // Modifier value: the panel makes exactly one of spn/txt/cboBoolean/cboCategories managed
         // based on the field's data type; drive that one.
         if ("value".equals(field) && "Modifier".equals(entryClass)) {
             setModifierValue(ctrl, value);
-            sleep(150);
             return;
         }
 
@@ -1107,8 +1114,11 @@ public class DataEditorActions {
         }
 
         Node node = waitForFieldNodeRequired(pnl, cssId, FIELD_GRACE_MS, field, entryClass);
+        // No trailing sleep. setNodeValue writes the control AND fires the event the panel listens
+        // on, JavaFX dispatches events synchronously, and runOnFx blocks until the FX task
+        // completes — so the model write has already happened when this returns. The 200ms was
+        // waiting for something that could not still be in flight.
         runOnFx(() -> setNodeValue(node, cssId, value));
-        sleep(200);
     }
 
     /** Set the link panel's Link Type combo to {@code kind} if it currently offers it (no-op otherwise). */
@@ -1122,8 +1132,8 @@ public class DataEditorActions {
             return false;
         });
         if (offered) {
+            // Synchronous, as above.
             runOnFx(() -> setNodeValue(combo, "cboType", kind));
-            sleep(150);
         }
     }
 

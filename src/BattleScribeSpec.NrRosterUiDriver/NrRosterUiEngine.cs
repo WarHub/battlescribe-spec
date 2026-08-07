@@ -106,7 +106,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // Load game data into NR (only once per unique system in frozen mode)
         if (!_systemLoaded || _loadedSystemId != gameSystem.Id)
         {
-            await NrUiSetup.LoadGameDataAsync(Browser, allFiles, gameSystem.Id);
+            await NrUiTiming.MeasureAsync("load-gamedata", () =>
+                NrUiSetup.LoadGameDataAsync(Browser, allFiles, gameSystem.Id));
             _systemLoaded = true;
             _loadedSystemId = gameSystem.Id;
 
@@ -132,7 +133,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// Currently uses JS (same as previous Setup flow). Will be replaced with UI-driven
     /// roster creation once the NR "Add List" flow is probed.
     /// </summary>
-    private async Task EnsureRosterCreatedAsync(string? catalogueId = null)
+    private async Task EnsureRosterCreatedAsync(string? catalogueId = null, string? forceEntryId = null)
     {
         if (_rosterCreated)
         {
@@ -154,12 +155,19 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         catalogueName ??= _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
 
-        var listId = await NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName);
+        // The force from that same first AddForce, so NR's Create List dialog builds the force the
+        // spec asked for rather than whichever one it would default to. Null for a step-0 read,
+        // which has no force in hand and keeps NR's default.
+        var listId = await NrUiTiming.MeasureAsync("create-roster", () =>
+            NrUiSetup.CreateRosterAsync(Browser.Page, _rosterName, catalogueName, forceEntryId));
         _listId = listId;
 
         // Wait for editor to stabilize and bypass supporter paywall
-        await NrUiSetup.WaitForEditorLoadedAsync(Browser.Page);
-        await NrUiSetup.BypassSupporterPaywallAsync(Browser.Page);
+        await NrUiTiming.MeasureAsync("wait-editor-loaded", () =>
+            NrUiSetup.WaitForEditorLoadedAsync(Browser.Page));
+
+        await NrUiTiming.MeasureAsync("bypass-paywall", () =>
+            NrUiSetup.BypassSupporterPaywallAsync(Browser.Page));
 
         _rosterCreated = true;
     }
@@ -235,7 +243,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private async Task<ActionOutputs> AddForceCoreAsync(string forceEntryId, string catalogueId)
     {
         var isFirstAddForce = !_rosterCreated;
-        await EnsureRosterCreatedAsync(catalogueId);
+        await EnsureRosterCreatedAsync(catalogueId, forceEntryId);
 
         string? uid;
 
@@ -586,7 +594,23 @@ public sealed class NrRosterUiEngine : IRosterEngine
             }
 
             await rosButton.First.ClickAsync(new() { Timeout = 5_000 });
-            await page.WaitForTimeoutAsync(150);
+
+            // Wait for the export hook to have CAPTURED the blob, rather than for 150ms and then
+            // reading whatever is there. The read below is a snapshot: too early and it returns
+            // null, which surfaces as "export produced no XML" — an accusation against NR for a
+            // race on this side.
+            try
+            {
+                await page.WaitForFunctionAsync(
+                    "() => window.__bsspec_rosCapture != null",
+                    null,
+                    new() { Timeout = 10_000 });
+            }
+            catch (TimeoutException)
+            {
+                // Fall through: the read below reports the empty capture with its own message.
+            }
+
             xml = await page.EvaluateAsync<string?>("window.__bsspec_rosCapture ?? null");
         }
         finally
@@ -694,7 +718,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // (e.g. the Create List dialog's controls become ambiguous once a prior list is present).
         try
         {
-            ResetBrowserStateAsync(listId).GetAwaiter().GetResult();
+            NrUiTiming.MeasureAsync("cleanup-reset-browser", () => ResetBrowserStateAsync(listId))
+                .GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {

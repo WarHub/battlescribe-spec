@@ -111,10 +111,33 @@ internal static class JsHelpers
                 const spec = window.__bsspec;
                 if (!spec) return JSON.stringify({...empty, validationErrors: [emptyErr('window.__bsspec not set — was Setup called?')]});
 
-                const army = spec.army;
+                // Prefer NR's LIVE list over the reference captured at creation, when they are the
+                // same list.
+                //
+                // `spec.army` is a snapshot taken once, and NR re-hydrates `currentList.army` —
+                // replacing the object, not mutating it — after a roster is created. Every read then
+                // reported the stale object, which has no selections, so specs failed with
+                // "force[0].selection[0] expected but only 0 selections" while the roster on screen
+                // was perfectly correct. In the NR-UI lane that re-hydration was being outrun by a
+                // 1500ms sleep during roster creation; the staleness itself was always there.
+                //
+                // Gated on the list key matching so this cannot silently retarget: the store-direct
+                // engine can hold lists that are not NR's current one, and "whatever is current" is
+                // not the same claim as "the list under test".
+                let live = null;
+                try {
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const cl = pinia?._s?.get('lists')?.currentList;
+                    const sameList = cl && cl.army && spec.row && cl.row
+                        && cl.row.list_key === spec.row.list_key;
+                    if (sameList) { live = cl; }
+                } catch(e) { /* fall back to the captured reference */ }
+
+                const army = live?.army ?? spec.army;
                 if (army === null || army === undefined) return JSON.stringify({...empty, validationErrors: [emptyErr('army is null')]});
 
-                const gs = spec.book?.catalogue?.gameSystem;
+                const gs = (live?.book ?? spec.book)?.catalogue?.gameSystem;
                 const costTypeHiddenMap = {};
                 if (gs?.costTypes) {
                     for (const ct of gs.costTypes) {
@@ -126,7 +149,7 @@ internal static class JsHelpers
                     const result = {
                         name: army.getCustomName?.() || army.getName?.() || spec.row?.name || '',
                         gameSystemId: spec.row?.bsid_system || '',
-                        gameSystemName: spec.row?.system_name || spec.book?.catalogue?.gameSystem?.name || null,
+                        gameSystemName: spec.row?.system_name || gs?.name || null,
                         forces: extractForces(army),
                         costs: extractTotalCosts(army),
                         costLimits: extractCostLimits(army),

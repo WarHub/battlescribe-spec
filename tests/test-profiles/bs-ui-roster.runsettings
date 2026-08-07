@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Run BS Roster UI conformance tests (requires the BattleScribe app and the Java agent;
+     both are provisioned by setup.ps1). -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Engine=BsRosterUi</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

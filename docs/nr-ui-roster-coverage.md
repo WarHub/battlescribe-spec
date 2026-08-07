@@ -16,7 +16,8 @@ Measured 2026-08-05, frozen HAR (offline), over **every applicable roster spec**
 | Skipped | 4 — never run on this engine |
 
 Every one of those 363 created its own roster in the same browser session, which is the fact that
-retires the one-spec limit. Wall-clock: **47 minutes**, sequential, one shared browser.
+retires the one-spec limit. Wall-clock: **18m17s**, sequential, one shared browser — down from 47
+minutes, see "Where the time went" below.
 
 There is no allow-list. A spec added tomorrow is covered the day it lands, and a driver regression
 that breaks a category nobody was watching is a failed lane rather than silence.
@@ -149,12 +150,77 @@ declarations rather than earning them — a spec marked `fail` with no reason be
 indistinguishable from a bug someone decided to stop looking at. So the lane grew as the
 classifications did, and the allow-list was deleted the moment it had nothing left to exclude.
 
-**47 minutes is the honest cost of "complete".** The lane is opt-in only — label, schedule or
-manual dispatch — so per-PR CI is untouched. Two measured levers remain if that becomes too steep,
-neither taken here: roughly 5s/spec of fixed sleeps still sit in `CreateRosterAsync` and
-`LoadGameDataAsync` (~15 minutes at this scale, though several of them gate NEGATIVE assertions and
-need conditions rather than smaller constants), and hybrid parallelism — N workers over contiguous
-chunks — which buys wall-clock by shortening the cross-spec chains that found the three races below.
+**The lane is opt-in only** — label, schedule or manual dispatch — so per-PR CI is untouched. It
+was 47 minutes when first widened to 363 specs; it is now 18m17s. See below.
+
+## Where the time went — 47m to 18m17s
+
+Measured, not estimated: `NR_UI_TIMINGS=1` prints a per-phase breakdown, added precisely because the
+case for this work had been arithmetic ("seven sleeps totalling 6.3s times 363 specs"), which says
+what the driver WAITS and not what it SPENDS.
+
+| per spec | before | after |
+|---|---:|---:|
+| `create-roster` | 2384ms | 278ms |
+| `load-gamedata` | 1039ms | 288ms |
+
+Five fixed sleeps became the condition each stood in for. Every replacement is strictly stronger
+than the constant — a slow render satisfies the condition and did not satisfy the sleep:
+
+| | was | now |
+|---|---|---:|
+| after "Create List" | 2000ms | wait `currentList.army != null` — 26ms |
+| after "New" | 1000ms | `SelectOptionAsync`'s own auto-wait — 11ms |
+| between install clicks | 500ms | nothing; `ClickAsync` already waits |
+| after `/app/MySystems` | 500ms | wait for the control, and for the route to hold — 17ms |
+| after MyLists click | 500ms | wait `location.pathname` — 27ms |
+| after popup close | 300ms | wait `.xCross` hidden |
+| before "Create List" | 1500ms | wait `loadedCatalogues` drained — 268ms |
+
+`NrUiSetup` now holds exactly one fixed wait: 1000ms in a branch only the two gamesystem-only specs
+reach, which is 2 seconds across the whole lane.
+
+Two were correctness fixes rather than trades. The 2000ms preceded a one-shot snapshot that returns
+null when the army is not ready, and on that path `window.__bsspec` — the state reader's only
+source — is never CREATED; nothing downstream repairs it, because `WaitForEditorLoadedAsync` guards
+its sync with `if (window.__bsspec && …)`. The MyLists sleep preceded `a[href='#']` matched on the
+substring "New", loose enough to hit a control on the page being navigated away from, which
+auto-waiting cannot protect against: it guards an element being absent, never the wrong one being
+present.
+
+**The last fixed wait in roster creation is gone too**, and with it the driver's habit of hoping NR
+guesses right. NR renders a FORCE dropdown whenever a roster could start from more than one force
+entry, and this driver never set it — so every roster began life with NR's default, which a flat
+1500ms made correct by letting `manager.loadedCatalogues` drain and re-render the control.
+
+The `<option>` carries the force entry id as its Vue-bound `_value`, which is the whole fix:
+
+    select#0  _value = {id: 'cat-1', name: …}   ← faction, binds a catalogue OBJECT
+    select#1  _value = 'fe-gs' / 'fe-cat'        ← force,   binds the entry id STRING
+
+The control identifies itself by what it carries — a string equal to the requested entry id can only
+be a force option. A first attempt matched option **text** and required the select to be **visible**,
+and both were wrong: names are ambiguous by design (`force-multi-catalogue-two-forces` has two
+"Patrol" forces), and the force select always exists — NR merely hides it when there is one option,
+so the filter skipped exactly the specs with nothing to choose.
+
+**Removing that sleep exposed what else it covered**, which is the finding worth keeping: NR renders
+and wires the unit list *before* it finishes parsing the catalogue, and a `+` clicked in that window
+is **discarded, not delayed** — a 10s wait proves it. Eight specs failed on their first action rather
+than during creation. `WaitForCatalogueWorkSettledAsync` now waits for `loadedCatalogues` to drain,
+bounded and tolerated (draining is not universal; a hard wait would hang the specs that never
+populate it).
+
+**Position mattered more than duration, at the cost of two lane runs.** Placed *after* roster
+creation the same wait left 63 specs failing — a list built from a half-parsed catalogue is wired to
+incomplete data, and the discarded clicks were a symptom of the roster, not the click. It also
+measured 1467ms there, close enough to the old 1500ms to support a confident and wrong conclusion,
+written down at the time, that this was NR's real work and unrecoverable. Moved to where the sleep
+actually sat, the identical condition costs **268ms**: by then the parse has been running since the
+faction was chosen. Same code, 5.5× cheaper, one statement's difference in placement.
+
+Hybrid parallelism — N workers over contiguous chunks — remains available and untaken; it buys
+wall-clock by shortening exactly the cross-spec chains that found all four races below.
 
 **The widening paid for itself on its first run**, which is the point of it. Sequencing 56 specs
 through one shared browser surfaced a navigation race in `LoadGameDataAsync` — it injected the
@@ -164,18 +230,33 @@ own, and Playwright reported "Execution context was destroyed". Structurally inv
 Fixed by injecting the mock after the navigation, where it is actually read; two clean 56-spec runs
 since, against one failure in two before.
 
-## 5. What widening it actually found — three navigation races
+## 5. What widening it actually found — four navigation races
 
-Sequencing 188 specs through one shared browser surfaced three separate races, one per lane run,
-each fixed at its source rather than retried away. All three share a shape — **an `evaluate` racing
-a navigation** — and all three were structurally invisible to `bs-spec run`, whose per-spec engines
-never navigate twice in quick succession.
+Sequencing specs through one shared browser surfaced four separate races, each fixed at its source.
+All four share a shape — **an operation racing a navigation** — and all four were structurally
+invisible to `bs-spec run`, whose per-spec engines never navigate twice in quick succession, and to
+the one-spec lane, which has no previous spec to race with at all.
 
 | Where | Mechanism |
 |---|---|
 | `LoadGameDataAsync` mock injection | Injected as the method's FIRST action, between the previous spec's cleanup navigation and its own. Moved to after the navigation, where the mock is actually read. |
 | `LoadGameDataAsync` popup close | `IsVisibleAsync` is a snapshot, not a wait, so `if (visible) click()` is check-then-act. When NR closed its own popup in between, the click burned Playwright's full 30s default and failed Setup. Bounded and tolerated — "already closed" is success for that step. |
 | `PushRouteAsync` | The evaluate **awaits the `router.push` it triggered**, so a navigation that replaces the execution context kills the very call that caused it. The push had succeeded; only the reporting channel died. Now tolerated, then the new context's router is awaited. Deliberately without re-asserting the route: `/app` legitimately redirects to `/app/MySystems`. |
+| `LoadGameDataAsync` whole install sequence | The route push to MySystems **succeeds and is then overridden**: the previous spec's navigation (its `CreateRosterAsync` clicks the MyLists nav link) is still in flight, and when it lands it takes the page with it. The install controls exist only on MySystems, so they were visible, then gone. Retried at SEQUENCE level, re-pushing only when the page really has drifted. Fires 5 times across 363 specs. |
+
+The fourth is worth reading for how it was found rather than what it was. It was misdiagnosed twice
+— as an animating element, then as a re-render — and "fixed" twice by guarding a single step, which
+cost a ~20-minute lane run each time. Guarding the *wait* could never work, because the drift
+happens after it: the wait passes and the click a moment later is on the wrong page. What ended it
+was not a better hypothesis but a better failure message. The one in place asserted a cause it had
+never checked — *"This is NR reflowing the page, not a missing element"* — and was false for
+precisely the cases that reached it; replacing it with the observation plus `page.Url` named the
+real cause on the next run:
+
+    'Add more games' … is now gone for 10s (page: https://www.newrecruit.eu/app/MyLists)
+
+That is the same defect this document records for the `library catalogues` and `child force not
+visible` messages, written fresh by someone who had just finished removing it elsewhere.
 
 Each surfaced as `Setup failed: …` on a **different spec each run**, which is what an intermittent
 looks like when the cause is shared and the victim is whoever happens to be next.
@@ -184,8 +265,10 @@ This is the lane paying for itself. `docs/warm-reuse.md` records the cost of the
 version — *"CI never caught the original bug because the NR-UI roster lane runs a single spec"* — and
 with one spec there is no previous spec to race with, so none of these three could ever have appeared.
 
-Two consecutive fully-green 188-spec runs before shipping, because a race that fires once in two runs
-hides from a single pass about a quarter of the time.
+Two consecutive fully-green runs before shipping, every time, because a race that fires once in two
+runs hides from a single pass about a quarter of the time. That rule is why the fourth race was
+caught at all: the 20-spec sample used while cutting the sleeps went green twice and was simply too
+small to contain it, and each premature "this is fixed" cost a full lane run to disprove.
 
 ## 6. Nothing is outside the lane
 
