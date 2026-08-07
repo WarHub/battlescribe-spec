@@ -48,10 +48,10 @@ public static class NrUiActions
             {
                 // Forces already exist — open via List Options dropdown
                 await page.Locator(".dotsMenuContainer").Filter(new() { HasText = "List Options" }).First.ClickAsync();
-                await page.GetByText("Add Force").First.ClickAsync(new() { Timeout = 5_000 });
+                await page.GetByText("Add Force").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
             }
 
-            await forcesPanel.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
+            await forcesPanel.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
         }
 
         // Point the panel at the catalogue this force belongs to, before reading the list off it.
@@ -75,7 +75,7 @@ public static class NrUiActions
         var forceRow = forcesPanel.Locator(".unit-wrap.force").Filter(new() { Has = page.Locator(".name", new() { HasTextString = forceName }) });
         if (await forceRow.CountAsync() > 0)
         {
-            await forceRow.First.Locator(".addButton").ClickAsync(new() { Timeout = 10_000 });
+            await forceRow.First.Locator(".addButton").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         }
         else if (forceEntryId is not null)
         {
@@ -178,7 +178,7 @@ public static class NrUiActions
             }
             """,
             new object[] { await picker.EvaluateAsync<string>(XPathOfElement), catalogueName },
-            new() { Timeout = 10_000 });
+            new() { Timeout = NrUiTimeouts.Interaction });
     }
 
     /// <summary>
@@ -240,13 +240,13 @@ public static class NrUiActions
             // itself (it waits for `.unitRow.editing` to be hidden), and the line below already
             // waits for the element this step actually needs.
             var childForcesHeader = parentBookForce.Locator(".childForces h3.arrowTitle").First;
-            await childForcesHeader.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await childForcesHeader.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
 
             var isCollapsed = await childForcesHeader.EvaluateAsync<bool>(
                 "el => el.classList.contains('collapsed')");
             if (isCollapsed)
             {
-                await childForcesHeader.ClickAsync(new() { Timeout = 3_000 });
+                await childForcesHeader.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
 
                 // Wait for the accordion to be EXPANDED, not for 300ms.
                 //
@@ -257,7 +257,7 @@ public static class NrUiActions
                 // WITHOUT A WORD, and the child force is built against the wrong book. That is the
                 // documented force/force-nested-multi-catalogue bug, which surfaced two steps later
                 // as "entry 'se-b1' is not visible in the catalogue panel".
-                await childForcesHeader.WaitForAsync(new() { Timeout = 5_000 });
+                await childForcesHeader.WaitForAsync(new() { Timeout = NrUiTimeouts.Condition });
                 await page.WaitForFunctionAsync(
                     """
                     (uid) => {
@@ -267,7 +267,7 @@ public static class NrUiActions
                     }
                     """,
                     parentForceId,
-                    new() { Timeout = 5_000 });
+                    new() { Timeout = NrUiTimeouts.Interaction });
             }
 
             // Same catalogue decision as the top-level add-force panel, same helper — NR renders a
@@ -276,10 +276,10 @@ public static class NrUiActions
                 page, parentBookForce.Locator(".childForces select").First, catalogueId, "child-force");
 
             var unitList = parentBookForce.Locator(".childForces .unitList");
-            await unitList.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await unitList.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
 
             var forceRow = unitList.Locator(".unit-wrap").Filter(new() { HasText = forceName });
-            await forceRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 5_000 });
+            await forceRow.Locator(".addButton").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         }
         catch (TimeoutException ex)
         {
@@ -319,8 +319,8 @@ public static class NrUiActions
             throw new InvalidOperationException($"NR UI: Force '{forceUid}' not found in army.getForces().");
         }
         var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
-        await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = 5_000 });
-        await page.GetByText("Delete Force", new() { Exact = true }).ClickAsync(new() { Timeout = 5_000 });
+        await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+        await page.GetByText("Delete Force", new() { Exact = true }).ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         await MaybeConfirmDeletionAsync(page);
 
         // Wait for the force to be GONE from the army, which is what this method promises.
@@ -339,7 +339,7 @@ public static class NrUiActions
             }
             """,
             forceUid,
-            new() { Timeout = 10_000 });
+            new() { Timeout = NrUiTimeouts.Interaction });
     }
 
     // ===== Selection operations =====
@@ -387,7 +387,7 @@ public static class NrUiActions
         var isVisible = await entryRow.CountAsync() > 0 && await entryRow.IsVisibleAsync();
         if (isVisible)
         {
-            await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 10_000 });
+            await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
             var selectionUid = await WaitForNewSelectionUidAsync(page, before);
 
             // NR can DISCARD the first '+' of a freshly created roster.
@@ -416,7 +416,7 @@ public static class NrUiActions
                 // 4 failures became 52 and the lane went from 16m44s to 47m31s. Stamping attributes
                 // onto Vue-managed rows makes NR patch them, so tagging mid-flow perturbs exactly
                 // the render it was meant to survive. The locators re-resolve on use anyway.
-                await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = 10_000 });
+                await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
                 selectionUid = await WaitForNewSelectionUidAsync(page, before);
             }
 
@@ -591,12 +591,12 @@ public static class NrUiActions
             // An entry inside a CONSTRAINED GROUP renders as a checkbox — no number input and no
             // "+" button. Clicking `button.boutonSubUnit` on such a row waited out Playwright's
             // full 30s default (selection/selection-entry-group-constraint).
-            await checkbox.First.CheckAsync(new() { Timeout = 5_000 });
+            await checkbox.First.CheckAsync(new() { Timeout = NrUiTimeouts.Interaction });
         }
         else
         {
             // Binary (checkbox-style) entry — click the "+" boutonSubUnit button
-            await entryOption.Locator("button.boutonSubUnit").First.ClickAsync(new() { Timeout = 5_000 });
+            await entryOption.Locator("button.boutonSubUnit").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         }
 
         // Report the uid by ENTRY ID where we have one. By name it cannot work for either failing
@@ -653,7 +653,7 @@ public static class NrUiActions
         {
             var row = page.Locator($"[data-nrui-option='{childSelectionUid}']");
             var rowInput = row.Locator("input[type='number']");
-            await rowInput.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await rowInput.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
             await rowInput.First.FillAsync(count.ToString());
             await rowInput.First.PressAsync("Tab");
             return;
@@ -662,7 +662,7 @@ public static class NrUiActions
         var entryOption = page.Locator(".inputOption")
             .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) });
         var numInput = entryOption.Locator("input[type='number']");
-        await numInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+        await numInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
         await numInput.First.FillAsync(count.ToString());
         await numInput.First.PressAsync("Tab");
     }
@@ -739,7 +739,7 @@ public static class NrUiActions
                 var checkbox = row.Locator("input[type='checkbox']");
                 if (await checkbox.CountAsync() > 0)
                 {
-                    await checkbox.First.UncheckAsync(new() { Timeout = 5_000 });
+                    await checkbox.First.UncheckAsync(new() { Timeout = NrUiTimeouts.Interaction });
                     return;
                 }
             }
@@ -790,8 +790,8 @@ public static class NrUiActions
         }
 
         var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
-        await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = 5_000 });
-        await page.GetByText("Duplicate Force", new() { Exact = true }).ClickAsync(new() { Timeout = 5_000 });
+        await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+        await page.GetByText("Duplicate Force", new() { Exact = true }).ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         return await WaitForNewForceUidAsync(page, before);
     }
 
@@ -816,12 +816,12 @@ public static class NrUiActions
         // Duplicate Force, and the "List Options" opener two lines up).
         await page.Locator(".subMenu .imgBt")
             .Filter(new() { HasText = "List Configuration" })
-            .First.ClickAsync(new() { Timeout = 5_000 });
+            .First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
 
         // Wait for the configuration dialog to appear with cost limit inputs
         // Use attribute selector since typeId often contains special chars (dots, dashes)
         var costInput = page.Locator($"input[id='{costTypeId}']");
-        await costInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+        await costInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
 
         // Set the value
         var valueStr = value < 0 ? "" : ((int)value).ToString();
@@ -831,7 +831,7 @@ public static class NrUiActions
         // Close the dialog, and wait for it to BE closed — the input disappearing is the
         // observable end of it, and callers read the roster right afterwards.
         await page.Keyboard.PressAsync("Escape");
-        await costInput.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 5_000 });
+        await costInput.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = NrUiTimeouts.Interaction });
     }
 
     /// <summary>
@@ -887,7 +887,7 @@ public static class NrUiActions
             await OpenUnitOptionsSubmenuAsync(page);
 
             // Click "Rename Unit" in the dropdown
-            await page.GetByText("Rename Unit").First.ClickAsync(new() { Timeout = 3_000 });
+            await page.GetByText("Rename Unit").First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
 
             // Wait for the editable field, rather than sleeping and then SNAPSHOTTING for it.
             // The 300ms here existed to prop up the `CountAsync() == 0` below — a snapshot, so a
@@ -898,7 +898,7 @@ public static class NrUiActions
                 .Locator(".unitNameTitle .editableDiv[contenteditable='true'], "
                     + ".unitNameTitle [contenteditable='true']")
                 .First;
-            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
             await nameInput.FillAsync(customName);
             await nameInput.PressAsync("Enter");
 
@@ -915,7 +915,7 @@ public static class NrUiActions
             await OpenUnitOptionsSubmenuAsync(page);
 
             // Click "Add Note" in the dropdown
-            await page.GetByText("Add Note").First.ClickAsync(new() { Timeout = 3_000 });
+            await page.GetByText("Add Note").First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
 
             // Same shape as the rename above: wait for the field instead of sleeping and then
             // snapshotting for it.
@@ -923,7 +923,7 @@ public static class NrUiActions
                 .Locator("pre.editableDiv.note[contenteditable='true'], pre[contenteditable='true'].note, "
                     + ".content [contenteditable='true']")
                 .First;
-            await noteField.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await noteField.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
             await noteField.FillAsync(customNotes);
 
             // No Enter is pressed here, so the commit rides on the input event alone — which is
@@ -970,7 +970,7 @@ public static class NrUiActions
             }
             """,
             new[] { uid, property, expected },
-            new() { Timeout = 10_000 });
+            new() { Timeout = NrUiTimeouts.Interaction });
 
     /// <summary>
     /// Opens the "Unit Options" submenu in the editing panel header.
@@ -990,7 +990,7 @@ public static class NrUiActions
             try
             {
                 await existingSubmenu.First.WaitForAsync(
-                    new() { State = WaitForSelectorState.Hidden, Timeout = 3_000 });
+                    new() { State = WaitForSelectorState.Hidden, Timeout = NrUiTimeouts.OptionalProbe });
             }
             catch (TimeoutException)
             {
@@ -1006,9 +1006,9 @@ public static class NrUiActions
         // does not depend on NR's UI language the way the sibling "Unit Options" label would.
         var unitOptionsBtn = page.Locator(".unitNameTitle .rightButton")
             .Filter(new() { Has = page.Locator(".menu") });
-        await unitOptionsBtn.ClickAsync(new() { Timeout = 5_000 });
+        await unitOptionsBtn.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         // Wait for submenu to appear
-        await page.Locator(".subMenu").WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 3_000 });
+        await page.Locator(".subMenu").WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.OptionalProbe });
     }
 
     /// <summary>
@@ -1048,10 +1048,10 @@ public static class NrUiActions
                 : page.Locator(".forceOptions").First;
 
             // Click "Force Options" dots menu
-            await forceOptions.Locator(".dotsMenuContainer .dots").ClickAsync(new() { Timeout = 5_000 });
+            await forceOptions.Locator(".dotsMenuContainer .dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
 
             // Click "Rename Force"
-            await page.GetByText("Rename Force").First.ClickAsync(new() { Timeout = 3_000 });
+            await page.GetByText("Rename Force").First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
 
             // Wait for the field instead of sleeping and then snapshotting for it with CountAsync;
             // one union locator covers both shapes the fallback was reaching for.
@@ -1059,7 +1059,7 @@ public static class NrUiActions
                 .Locator(".forceOptions [contenteditable='true'], "
                     + ".forceSection [contenteditable='true'], .titreForce [contenteditable='true']")
                 .First;
-            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5_000 });
+            await nameInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
             await nameInput.FillAsync(customName);
             await nameInput.PressAsync("Enter");
 
@@ -1076,7 +1076,7 @@ public static class NrUiActions
                 }
                 """,
                 new[] { forceId, customName },
-                new() { Timeout = 10_000 });
+                new() { Timeout = NrUiTimeouts.Interaction });
         }
     }
 
@@ -1200,7 +1200,7 @@ public static class NrUiActions
                     ?.classList.contains('editing') === true
                 """,
                 selectionUid,
-                new() { Timeout = 10_000 });
+                new() { Timeout = NrUiTimeouts.Interaction });
         }
     }
 
@@ -1580,7 +1580,7 @@ public static class NrUiActions
             var fcRoot = page.Locator(".fc-consent-root");
             try
             {
-                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 500 });
+                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.AbsenceProbe });
             }
             catch
             {
@@ -1591,9 +1591,9 @@ public static class NrUiActions
             var rejectBtn = fcRoot.GetByRole(AriaRole.Button, new() { NameRegex = new System.Text.RegularExpressions.Regex("do not consent|reject|decline", System.Text.RegularExpressions.RegexOptions.IgnoreCase) });
             try
             {
-                await rejectBtn.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 500 });
+                await rejectBtn.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.AbsenceProbe });
                 await rejectBtn.First.ClickAsync();
-                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 3_000 });
+                await fcRoot.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = NrUiTimeouts.OptionalProbe });
             }
             catch { /* no button visible */ }
         }
@@ -1615,14 +1615,14 @@ public static class NrUiActions
         var saveBtn = page.Locator(".unitNameTitle .back");
         if (await saveBtn.CountAsync() > 0)
         {
-            await saveBtn.First.ClickAsync(new() { Timeout = 3_000 });
+            await saveBtn.First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
 
             // Wait for the panel to be closed, which is the postcondition and — per this method's
             // own summary — what makes the left-panel elements reachable again. Callers index
             // `.forceOptions` positionally right afterwards, so acting while the panel is still up
             // reads the wrong list.
             await page.Locator(".unitRow.editing").First.WaitForAsync(
-                new() { State = WaitForSelectorState.Hidden, Timeout = 10_000 });
+                new() { State = WaitForSelectorState.Hidden, Timeout = NrUiTimeouts.Interaction });
         }
     }
 }
