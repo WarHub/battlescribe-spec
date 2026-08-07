@@ -74,6 +74,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private readonly Dictionary<string, string> _costNamesById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, decimal> _pendingCostLimits = new(StringComparer.Ordinal);
 
+    /// <summary>Ids that name a GROUP — a heading in the edit panel, never a control.</summary>
+    private readonly HashSet<string> _groupEntryIds = new(StringComparer.Ordinal);
+
     private BsRosterApp? _app;
     private AgentClient? _client;
     private ProtocolGameSystem? _gameSystem;
@@ -139,7 +142,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             ["forceId"] = forceId,
             ["parentSelectionId"] = parentSelectionId,
             ["entryId"] = entryId,
-            ["entryName"] = _entryNamesById.GetValueOrDefault(entryId) ?? entryId,
+            ["entryName"] = ResolveEntryLabel(entryId),
         }));
 
     public void DeselectSelection(string forceId, string selectionId)
@@ -234,6 +237,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _engineLocated = false;
         _pendingCostLimits.Clear();
         _entryNamesById.Clear();
+        _groupEntryIds.Clear();
         _costNamesById.Clear();
 
         IndexDefinitions(gameSystem, catalogues);
@@ -756,10 +760,52 @@ public sealed class BsUiRosterEngine : IRosterEngine
         foreach (var group in groups)
         {
             _entryNamesById[group.Id] = group.Name;
+            _groupEntryIds.Add(group.Id);
             IndexSelectionEntries(group.SelectionEntries);
             IndexEntryLinks(group.EntryLinks);
             IndexSelectionEntryGroups(group.SelectionEntryGroups);
         }
+    }
+
+    /// <summary>
+    /// The text the edit panel labels this entry with, which is how its control is addressed.
+    /// </summary>
+    /// <remarks>
+    /// A composite id — <c>el-relics-group::el-relic::sse-relic</c>, a group link through an entry
+    /// link to a shared entry — is not a key in the name index, because each SEGMENT is. Falling
+    /// back to the raw id made the driver hunt the panel for a label spelling out the composite,
+    /// and report "Control not found for label: el-relics-group::el-relic::sse-relic" about a row
+    /// that is sitting there under its name.
+    /// <para>
+    /// Segments are tried outermost-first: a link that carries its own name renames what it points
+    /// at, so the outer one is what BattleScribe renders. Segments with no name of their own are
+    /// skipped rather than treated as a match, or an unnamed link would mask the target's name.
+    /// </para>
+    /// </remarks>
+    private string ResolveEntryLabel(string entryId)
+    {
+        if (_entryNamesById.TryGetValue(entryId, out var direct) && !string.IsNullOrEmpty(direct))
+        {
+            return direct;
+        }
+
+        foreach (var segment in entryId.Split("::", StringSplitOptions.RemoveEmptyEntries))
+        {
+            // A GROUP segment names the heading the control sits under, never the control:
+            // `el-relics-group::el-relic::sse-relic` is labelled with the relic, under "Relics".
+            // Taking the group's name found no control and reported the heading as missing.
+            if (_groupEntryIds.Contains(segment))
+            {
+                continue;
+            }
+
+            if (_entryNamesById.TryGetValue(segment, out var name) && !string.IsNullOrEmpty(name))
+            {
+                return name;
+            }
+        }
+
+        return entryId;
     }
 
     private void IndexEntryLinks(IEnumerable<ProtocolEntryLink>? entryLinks)
@@ -772,6 +818,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
         foreach (var entryLink in entryLinks)
         {
             _entryNamesById[entryLink.Id] = entryLink.Name;
+            if (string.Equals(entryLink.Type, "selectionEntryGroup", StringComparison.Ordinal))
+            {
+                _groupEntryIds.Add(entryLink.Id);
+            }
         }
     }
 
@@ -917,7 +967,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             Rules: dto.Rules is null or [] ? null : [.. dto.Rules.Select(MapRuleState)]);
 
     private static CostState MapCostState(AgentCostState dto)
-        => new(dto.Name ?? string.Empty, dto.TypeId ?? string.Empty, dto.Value);
+        => new(dto.Name ?? string.Empty, dto.TypeId ?? string.Empty, dto.Value, dto.Hidden);
 
     private static CategoryState MapCategoryState(AgentCategoryState dto)
         => new(dto.Name ?? string.Empty, dto.EntryId, dto.Primary,
@@ -1307,6 +1357,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public string? Name { get; set; }
         public string? TypeId { get; set; }
         public decimal Value { get; set; }
+        public bool Hidden { get; set; }
     }
 
     private sealed class AgentCategoryState

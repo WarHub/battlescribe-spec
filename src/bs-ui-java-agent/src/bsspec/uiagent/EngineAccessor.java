@@ -589,6 +589,20 @@ public class EngineAccessor {
         return result;
     }
 
+    /** Whether the cost TYPE this cost belongs to is declared hidden. */
+    private boolean isCostTypeHidden(String typeId) {
+        try {
+            Object costType = findCostTypeById(typeId);
+            if (costType == null) {
+                return false;
+            }
+            Object hidden = callGetterObject(costType, "isHidden");
+            return hidden instanceof Boolean && (Boolean) hidden;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private JsonArray serializeCostList(Object list) throws Exception {
         JsonArray costs = new JsonArray();
         if (list == null) return costs;
@@ -597,7 +611,12 @@ public class EngineAccessor {
             Object cost = list.getClass().getMethod("get", int.class).invoke(list, i);
             JsonObject item = new JsonObject();
             item.addProperty("name", callGetter(cost, "getName"));
-            item.addProperty("typeId", callGetter(cost, "getTypeId"));
+            String typeId = callGetter(cost, "getTypeId");
+            item.addProperty("typeId", typeId);
+            // `hidden` is declared on the cost TYPE, not on the cost, so it has to be resolved
+            // through the game system. Omitting it reported every cost as visible — which reads as
+            // BattleScribe ignoring the flag rather than as this serializer never asking for it.
+            item.addProperty("hidden", isCostTypeHidden(typeId));
             try {
                 Method m = cost.getClass().getMethod("getValue");
                 Object value = m.invoke(cost);

@@ -953,8 +953,37 @@ public class RosterActions {
      */
     private void clickControlByLabel(String labelText, String windowTitle, String action) {
         if (!tryClickControlByLabel(labelText, windowTitle, action)) {
-            throw new RuntimeException("Control not found for label: " + labelText);
+            // Say what the panel DOES offer. "Control not found for label: Sword" cannot
+            // distinguish an entry the panel never rendered from one rendered under a different
+            // name from one whose label carries no control — three different bugs.
+            throw new RuntimeException("Control not found for label: " + labelText
+                    + "; panel offers: " + describeControlLabels(windowTitle));
         }
+    }
+
+    /** The edit panel's labels and whether each has a control beside it. FX thread only. */
+    private String describeControlLabels(String windowTitle) {
+        Scene scene = findScene(windowTitle);
+        if (scene == null) return "(scene not found)";
+        List<String> described = new ArrayList<>();
+        for (Node labelNode : scene.getRoot().lookupAll(".label")) {
+            if (!(labelNode instanceof Label)) continue;
+            String text = ((Label) labelNode).getText();
+            if (text == null || text.isEmpty()) continue;
+            javafx.scene.Parent parent = labelNode.getParent();
+            String control = "(no control)";
+            if (parent != null) {
+                for (Node sibling : parent.getChildrenUnmodifiable()) {
+                    if (sibling == labelNode) continue;
+                    if (sibling instanceof Spinner || sibling instanceof ButtonBase) {
+                        control = sibling.getClass().getSimpleName();
+                        break;
+                    }
+                }
+            }
+            described.add("'" + text + "' -> " + control);
+        }
+        return described.isEmpty() ? "(no labels)" : described.toString();
     }
 
     /**
