@@ -327,15 +327,11 @@ public sealed class BattleScribeEngine : IDisposable
                 CollectSelectionErrors(selection, result);
             }
         }
-        // Remap category-level max/hidden constraint errors to selection-level.
-        // BattleScribe places these on the category, but the canonical spec form
-        // uses selection-level placement (matching NR behavior).
-        RemapCategoryErrorsToSelection(result);
-        // Remap roster/force-level entry constraint errors to selection-level.
-        // BattleScribe places scope=roster errors on the roster and scope=force
-        // errors on the force, but NR attributes them to the selection.
-        RemapRosterErrorsToSelection(result);
-        RemapForceErrorsToSelection(result);
+        // One placement rule, shared with the UI driver so the two BattleScribe engines cannot
+        // drift apart on where an error belongs -- see BattleScribeErrorPlacement.
+        BattleScribeErrorPlacement.ApplyTo(
+            result,
+            linkId => _linkTargetMap.TryGetValue(linkId, out var targetId) ? targetId : null);
         return result;
     }
 
@@ -345,86 +341,6 @@ public sealed class BattleScribeEngine : IDisposable
         foreach (var child in JavaListToList<Selection>(selection.getSelections()))
         {
             CollectSelectionErrors(child, result);
-        }
-    }
-
-    /// <summary>
-    /// Remap category-level max/hidden/cost-over-limit constraint errors to selection-level.
-    /// BattleScribe's Java engine places these on the category node, but both NR and the
-    /// canonical spec form report them on the selection that violated the constraint.
-    /// Min constraint errors stay on category (both engines agree on that placement).
-    /// </summary>
-    private static void RemapCategoryErrorsToSelection(List<ValidationErrorState> errors)
-    {
-        for (var i = 0; i < errors.Count; i++)
-        {
-            var e = errors[i];
-            if (e.OwnerType != "category" || e.EntryId is null)
-            {
-                continue;
-            }
-
-            // Only remap over-limit and hidden errors (max constraints, cost-max, hidden entries).
-            // Min constraints ("must have", "must spend") stay on category.
-            // NOTE: relies on English error message strings from the BS Java engine.
-            // Accepted because the BS engine is EOL (v2.3.21) and messages are stable.
-            if (e.ConstraintId == "hidden" ||
-                e.Message.Contains("too many") ||
-                e.Message.Contains("too much"))
-            {
-                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
-            }
-        }
-    }
-
-    /// <summary>
-    /// Remap roster-level max constraint errors to selection-level.
-    /// BattleScribe's Java engine places scope=roster shared constraint violations
-    /// on the Roster node, but NR attributes them to the selection entry.
-    /// </summary>
-    private static void RemapRosterErrorsToSelection(List<ValidationErrorState> errors)
-    {
-        for (var i = 0; i < errors.Count; i++)
-        {
-            var e = errors[i];
-            if (e.OwnerType != "roster" || e.EntryId is null || e.EntryId == "costLimits")
-            {
-                continue;
-            }
-
-            if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
-                && !e.Message.Contains(" forces from "))
-            {
-                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId };
-            }
-        }
-    }
-
-    /// <summary>
-    /// Remap force-level max constraint errors to selection-level.
-    /// BattleScribe's Java engine places scope=force constraint violations on the
-    /// Force node, but NR attributes them to the selection entry. For entry-link
-    /// constraints, resolve the link target to get the selection entry ID.
-    /// </summary>
-    private void RemapForceErrorsToSelection(List<ValidationErrorState> errors)
-    {
-        for (var i = 0; i < errors.Count; i++)
-        {
-            var e = errors[i];
-            if (e.OwnerType != "force" || e.EntryId is null)
-            {
-                continue;
-            }
-
-            if ((e.Message.Contains("too many") || e.Message.Contains("too much"))
-                && !e.Message.Contains(" forces from "))
-            {
-                // Resolve entry link → target, or use entryId directly for shared entries
-                var selectionEntryId = _linkTargetMap.TryGetValue(e.EntryId, out var targetId)
-                    ? targetId
-                    : e.EntryId;
-                errors[i] = e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = selectionEntryId };
-            }
         }
     }
 
