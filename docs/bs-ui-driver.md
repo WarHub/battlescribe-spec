@@ -843,6 +843,25 @@ When an action fails, `BsUiDiagnostics.CaptureAsync()` writes a diagnostic dump 
 The diagnostic capture uses a reduced 5s timeout to avoid hanging when the agent is
 partially stuck.
 
+### What a failed wait says
+
+`RosterActions.waitForStateChange` takes an optional describer that renders the LAST state read
+into the timeout message. Pass it wherever the predicate asks a question the state can answer:
+"Timed out waiting for state change" on its own says only that the loop ran out, and cannot
+distinguish an action that did nothing from one whose result the predicate did not recognise from
+one that acted somewhere else. Those are different bugs — and on this lane they were two of them
+hiding behind one message. `selectEntryAction` and `selectChildEntryAction` pass one.
+
+### `BS_UI_VALIDATION_TRACE=1`
+
+Prints every validation error with each id source that could name it — the owning element's
+`getValidationErrorIds()`, the object BattleScribe attached to the error, and what
+`resolveValidationRef` made of them. Off by default; on, it is a line per error per state read.
+
+Which element carries usable ids varies by owner type, and the only way to find out is to look at
+all of them at once. Note that the attached object is the roster element the error hangs on, NOT
+the source constraint — see `resolveValidationRef`'s javadoc before reading ids off it.
+
 ---
 
 ## BsUiRosterEngine — IRosterEngine Mapping
