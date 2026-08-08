@@ -1249,6 +1249,43 @@ public class EngineAccessor {
      * text is the sole carrier, and the entry NAME plus the constraint's own type and value are
      * what it carries.
      */
+    /**
+     * What a selection made through an entry link IS, as specs name it.
+     *
+     * <p>Such a selection reports its entryId as the composite {@code linkId::targetId}. That is
+     * the right answer to "how did this get here" and the wrong one to "what is it": specs address
+     * the error's owner by the ENTRY, {@code shared-unit}, not by the route taken to it. The route
+     * still matters for {@code from}, which is why only the owner is reduced — see
+     * {@link #declaringEntryOf}.
+     */
+    private String linkTargetOf(String entryId) {
+        if (entryId == null || !entryId.contains("::")) {
+            return entryId;
+        }
+        String[] parts = entryId.split("::");
+        return parts[parts.length - 1];
+    }
+
+    /**
+     * Which segment of a composite id actually DECLARES {@code constraintId}.
+     *
+     * <p>A constraint on the link and a constraint on its target are different constraints with
+     * different meanings — per-link versus shared — and a spec asserts which one fired by naming
+     * its owner. Reporting the composite for both loses exactly that distinction, so each segment
+     * is asked whether the constraint is its own.
+     */
+    private String declaringEntryOf(String entryId, String constraintId) {
+        if (entryId == null || constraintId == null || !entryId.contains("::")) {
+            return entryId;
+        }
+        for (String segment : entryId.split("::")) {
+            if (constraintValuesOf(segment).containsKey(constraintId)) {
+                return segment;
+            }
+        }
+        return entryId;
+    }
+
     private ValidationRef resolveRefFromMessage(String message) {
         if (message == null) {
             return null;
@@ -1380,6 +1417,18 @@ public class EngineAccessor {
             }
             String entryName = getEntryName(candidateEntryId);
             if (containsIgnoreCase(message, entryName)) {
+                // With more than one candidate constraint, the id list alone cannot say which
+                // fired — they are all "on this entry". The message can, because it renders the
+                // value, so let the message-based resolution answer and only fall back to the
+                // list when it cannot. Picking the first here silently chose between a per-link
+                // maximum and a shared one.
+                if (entry.getValue().size() > 1) {
+                    ValidationRef byMessage = resolveRefFromMessage(message);
+                    if (byMessage != null) {
+                        return byMessage;
+                    }
+                }
+
                 return new ValidationRef(
                         candidateEntryId,
                         pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage));
@@ -1595,9 +1644,16 @@ public class EngineAccessor {
             item.addProperty("ownerType", ownerType);
             item.addProperty("ownerId", callGetter(element, "getId"));
             if (ownerEntryId != null) {
-                item.addProperty("ownerEntryId", ownerEntryId);
+                item.addProperty("ownerEntryId", linkTargetOf(ownerEntryId));
             }
-            if (validationRef.entryId != null) {
+            if (validationRef.entryId != null && validationRef.constraintId != null) {
+                // A composite entryId names the ROUTE to the entry; the constraint belongs to one
+                // element on that route, and which one is what distinguishes a per-link limit from
+                // a shared one.
+                item.addProperty(
+                        "entryId",
+                        declaringEntryOf(validationRef.entryId, validationRef.constraintId));
+            } else if (validationRef.entryId != null) {
                 item.addProperty("entryId", validationRef.entryId);
             }
             if (validationRef.constraintId != null) {

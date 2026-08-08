@@ -11,16 +11,16 @@ what it turned into.
 | | first measurement | now |
 |---|---:|---:|
 | Specs selected | 367 | 367 |
-| **Passed** | **284 (77%)** | **357 (97%)** |
-| Failed | 83 | 10 |
-| Wall-clock | 29m02s | 14m15s |
+| **Passed** | **284 (77%)** | **360 (98%)** |
+| Failed | 83 | 7 |
+| Wall-clock | 29m02s | 13m51s |
 
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
 measurement was reproduced exactly on a second run before anything was changed — which matters more
 than usual here, because a third of those failures were timeouts, and a timeout that moves between
 runs is a different problem from one that does not.
 
-The 16 minutes are almost entirely 10-second state polls that no longer run out.
+The 15 minutes are almost entirely 10-second state polls that no longer run out.
 
 ## The classification
 
@@ -36,13 +36,13 @@ work:
 | | was | fixed | left | cause |
 |---|---:|---:|---:|---|
 | A | 28 | 28 | 0 | `selectEntry`/`selectChildEntry` state-change timeouts — three causes |
-| E | 25 | 22 | 3 | validation error produced, `from` unresolved |
+| E | 25 | 23 | 2 | validation error produced, `from` unresolved |
 | B | 6 | 6 | 0 | BattleScribe deletes the staged `.cat` as corrupt |
 | J | 8 | 8 | 0 | cost mismatches — float drift and lane inheritance |
 | K | 9 | 7 + 1 declared | 2 | value mismatches, mostly lane inheritance |
 | D | 4 | 2 + 2 declared | 0 | no validation error produced at all |
 | G | 4 | 1 | 3 | edit-panel control not found by label |
-| C | 2 | 0 | 2 | `CategoryLink must have an ID` |
+| C | 2 | 2 | 0 | `CategoryLink must have an ID` |
 | F | 2 | implemented + 2 declared | 0 | `SetupFromFiles` unimplemented (`dataSource` specs) |
 
 ## What was actually wrong
@@ -142,12 +142,11 @@ Two diagnostic switches are kept, both off by default and both justified by a bu
 `BS_UI_VALIDATION_TRACE=1` prints every validation error with each id source that could name it, and
 `BS_UI_TREE_TRACE=1` dumps both roster trees around a `selectEntry`.
 
-## The 10 that remain
+## The 7 that remain
 
 Each has a named cause. **Five specs are declared `engines: {battlescribe-ui: fail}`** — the three cost limits, where the
 measurement that fixed two of the four explained the other three, and the two `real-world` specs,
-whose DATA BattleScribe refuses to parse. The remaining 10
-are NOT declared, deliberately: a cause is not a verdict, and declaring specs to get a green job
+whose DATA BattleScribe refuses to parse. The remaining 7 are NOT declared, deliberately: a cause is not a verdict, and declaring specs to get a green job
 would be inventing declarations rather than earning them — the exact defect
 `docs/nr-ui-roster-coverage.md` records for that lane's own history.
 
@@ -159,9 +158,8 @@ about the data rather than cover for an unfinished `SetupFromFiles`.
 | | count | what is known |
 |---|---:|---|
 | G | 3 | Grouped controls are now DRIVEN, and these are what is left behind them. `condition-shared-flag-nested` puts two links onto one shared entry, so both render as `'Trigger'` and label lookup cannot separate them — the catalogue-tree ambiguity again, without the escape, because the panel exposes no id. The other two now fail on real assertions rather than a missing control. |
-| E | 3 | Entry-link constraint attribution. `constraint-shared-flag` carries two maxima on one shared entry told apart only by the `shared` flag, which the rendered message does not mention. |
-| C | 2 | BattleScribe's own validator rejects a `categoryLink` with no id — its runtime rule, stricter than the XSD, which requires only `targetId`. Synthesising ids would change generated XML for **43** specs to fix 2, so it wants measuring before it is done, not after. |
+| E | 2 | **Not a driver gap: the two BattleScribe engines disagree.** `constraint-entry-link-merged`'s message says `(maximum 2)` — the LINK's constraint — and this driver reports it, while the in-process adapter reports the target's `con-shared-max` (value 4) because its resolution reached that one first and kept it as a fallback. The spec encodes the in-process answer. Which is right is a question about BattleScribe. `constraint-shared-flag` is the same family and still unexplained. |
 | K | 2 | `catalogue/catalogue-category-entries` — no catalogue-tree item for the entry under its force; NR's equivalent is a confirmed UI limitation, so this one is close to declarable. `selection/collective-per-model-operations` loses its cost types after a deselect, which is not. |
 
 The rule that replaces an allow-list, unchanged: **a failing spec carries its reason, or it is not
-failing on purpose.** Until all 10 are fixed or declared, the lane stays out of `ci.yml` (#355).
+failing on purpose.** Until all 7 are fixed or declared, the lane stays out of `ci.yml` (#355).
