@@ -259,7 +259,7 @@ public static class CatXmlGenerator
 
         if (spec.CategoryLinks is { } categoryLinks)
         {
-            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+            node = node.AddCategoryLinks(categoryLinks.Select((cl, i) => MapCategoryLink(cl, spec.Id, i)));
         }
 
         if (spec.ForceEntries is { } forceEntries)
@@ -410,7 +410,7 @@ public static class CatXmlGenerator
 
         if (spec.CategoryLinks is { } categoryLinks)
         {
-            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+            node = node.AddCategoryLinks(categoryLinks.Select((cl, i) => MapCategoryLink(cl, spec.Id, i)));
         }
 
         if (spec.Rules is { } rules)
@@ -513,7 +513,7 @@ public static class CatXmlGenerator
 
         if (spec.CategoryLinks is { } categoryLinks)
         {
-            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+            node = node.AddCategoryLinks(categoryLinks.Select((cl, i) => MapCategoryLink(cl, spec.Id, i)));
         }
 
         if (spec.Profiles is { } profiles)
@@ -577,7 +577,7 @@ public static class CatXmlGenerator
 
         if (spec.CategoryLinks is { } categoryLinks)
         {
-            node = node.AddCategoryLinks(categoryLinks.Select(MapCategoryLink));
+            node = node.AddCategoryLinks(categoryLinks.Select((cl, i) => MapCategoryLink(cl, spec.Id, i)));
         }
 
         if (spec.SelectionEntries is { } selectionEntries)
@@ -766,13 +766,32 @@ public static class CatXmlGenerator
             roundUp: spec.RoundUp);
     }
 
-    private static CategoryLinkNode MapCategoryLink(ProtocolCategoryLink spec)
+    /// <summary>
+    /// An id for a category link, synthesised from its owner and position when the spec omits one.
+    /// </summary>
+    /// <remarks>
+    /// BattleScribe's own data validator rejects a <c>categoryLink</c> with no id — "CategoryLink
+    /// must have an ID" — and refuses the whole catalogue with it. That is its RUNTIME rule and is
+    /// stricter than <c>Catalogue.xsd</c>, which requires only <c>targetId</c>, so a schema-valid
+    /// file is not necessarily one it will load.
+    /// <para>
+    /// Owner id plus index, rather than the target id: two entries linking the same category would
+    /// otherwise collide, and ids must be unique across the file. Deterministic, so regenerating
+    /// the same spec produces the same file.
+    /// </para>
+    /// </remarks>
+    private static string CategoryLinkId(ProtocolCategoryLink spec, string? ownerId, int index)
+        => string.IsNullOrWhiteSpace(spec.Id)
+            ? $"{ownerId}-catlink-{index}"
+            : spec.Id;
+
+    private static CategoryLinkNode MapCategoryLink(ProtocolCategoryLink spec, string? ownerId, int index)
     {
         var page = string.IsNullOrWhiteSpace(spec.Page) ? null : spec.Page;
         var pubId = string.IsNullOrWhiteSpace(spec.PublicationId) ? null : spec.PublicationId;
         var node = CategoryLink(
             comment: null,
-            id: spec.Id,
+            id: CategoryLinkId(spec, ownerId, index),
             name: spec.Name,
             publicationId: pubId,
             page: page,
