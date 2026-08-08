@@ -585,10 +585,13 @@ public sealed class BsUiRosterEngine : IRosterEngine
         // always moved it there — so without this the two BattleScribe engines answer the same
         // question differently, and this one produces the right `from` on the wrong `on`.
         //
-        // No link-target map here: the agent already resolves an entry link to its target when it
-        // names the error's source, so the entry id has been through that step by the time it
-        // arrives.
-        BattleScribeErrorPlacement.ApplyTo(errors);
+        // The link-target map matters here for the same reason it does in-process: placement moves
+        // an error onto the selection named by `from`, and `from` is deliberately the DECLARING
+        // element — which for a per-link constraint is the link, not the entry. Without this the
+        // error lands on `selection link-1`, naming the route rather than the thing.
+        BattleScribeErrorPlacement.ApplyTo(
+            errors,
+            linkId => _linkTargetsById.GetValueOrDefault(linkId));
         return errors;
     }
 
