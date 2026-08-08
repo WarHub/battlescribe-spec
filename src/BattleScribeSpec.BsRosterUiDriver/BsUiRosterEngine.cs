@@ -77,6 +77,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// <summary>Ids that name a GROUP — a heading in the edit panel, never a control.</summary>
     private readonly HashSet<string> _groupEntryIds = new(StringComparer.Ordinal);
 
+    /// <summary>Entry-link id to the id it targets, for resolving a link to what it labels as.</summary>
+    private readonly Dictionary<string, string> _linkTargetsById = new(StringComparer.Ordinal);
+
     private BsRosterApp? _app;
     private AgentClient? _client;
     private ProtocolGameSystem? _gameSystem;
@@ -285,6 +288,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _pendingCostLimits.Clear();
         _entryNamesById.Clear();
         _groupEntryIds.Clear();
+        _linkTargetsById.Clear();
         _costNamesById.Clear();
         _gameSystem = null;
         _gameSystemId = null;
@@ -788,6 +792,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
                     case "selectionEntry":
                     case "entryLink":
                         _entryNamesById[id] = (string?)element.Attribute("name") ?? id;
+                        if ((string?)element.Attribute("targetId") is { } target)
+                        {
+                            _linkTargetsById[id] = target;
+                        }
+
                         // An entryLink targeting a group is a group as far as labels go.
                         if ((string?)element.Attribute("type") == "selectionEntryGroup")
                         {
@@ -908,19 +917,21 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// and report "Control not found for label: el-relics-group::el-relic::sse-relic" about a row
     /// that is sitting there under its name.
     /// <para>
-    /// Segments are tried outermost-first: a link that carries its own name renames what it points
-    /// at, so the outer one is what BattleScribe renders. Segments with no name of their own are
-    /// skipped rather than treated as a match, or an unnamed link would mask the target's name.
+    /// Segments are tried innermost-first — the TARGET, not the link. BattleScribe labels the
+    /// control with the entry a link resolves to, even when the link carries a name of its own:
+    /// a link named "Alpha Trigger" onto a shared entry named "Trigger" renders as `'Trigger' ->
+    /// Spinner`. Trying the outer name first found nothing and reported the entry as missing.
+    /// Segments with no name of their own are skipped rather than treated as a match.
     /// </para>
     /// </remarks>
     private string ResolveEntryLabel(string entryId)
     {
-        if (_entryNamesById.TryGetValue(entryId, out var direct) && !string.IsNullOrEmpty(direct))
+        if (NameOfResolved(entryId) is { } direct)
         {
             return direct;
         }
 
-        foreach (var segment in entryId.Split("::", StringSplitOptions.RemoveEmptyEntries))
+        foreach (var segment in entryId.Split("::", StringSplitOptions.RemoveEmptyEntries).Reverse())
         {
             // A GROUP segment names the heading the control sits under, never the control:
             // `el-relics-group::el-relic::sse-relic` is labelled with the relic, under "Relics".
@@ -930,13 +941,42 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 continue;
             }
 
-            if (_entryNamesById.TryGetValue(segment, out var name) && !string.IsNullOrEmpty(name))
+            if (NameOfResolved(segment) is { } name)
             {
                 return name;
             }
         }
 
         return entryId;
+    }
+
+    /// <summary>
+    /// The name BattleScribe labels <paramref name="id"/> with, following entry links to what they
+    /// target, or null when nothing is indexed for it.
+    /// </summary>
+    /// <remarks>
+    /// A link does NOT rename what it points at, as far as the edit panel is concerned: a link
+    /// named "Alpha Trigger" onto a shared entry named "Trigger" renders as `'Trigger' -> Spinner`.
+    /// Taking the link's own name asked for a control that is not there.
+    /// </remarks>
+    private string? NameOfResolved(string id)
+    {
+        var current = id;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (seen.Add(current) && _linkTargetsById.TryGetValue(current, out var target)
+               && !string.IsNullOrEmpty(target))
+        {
+            current = target;
+        }
+
+        if (_entryNamesById.TryGetValue(current, out var name) && !string.IsNullOrEmpty(name))
+        {
+            return name;
+        }
+
+        // The target may not be indexed (a link into data we did not walk); the link's own name is
+        // the only thing left to try.
+        return _entryNamesById.TryGetValue(id, out var own) && !string.IsNullOrEmpty(own) ? own : null;
     }
 
     private void IndexEntryLinks(IEnumerable<ProtocolEntryLink>? entryLinks)
@@ -949,6 +989,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         foreach (var entryLink in entryLinks)
         {
             _entryNamesById[entryLink.Id] = entryLink.Name;
+            _linkTargetsById[entryLink.Id] = entryLink.TargetId;
             if (string.Equals(entryLink.Type, "selectionEntryGroup", StringComparison.Ordinal))
             {
                 _groupEntryIds.Add(entryLink.Id);

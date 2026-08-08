@@ -11,9 +11,9 @@ what it turned into.
 | | first measurement | now |
 |---|---:|---:|
 | Specs selected | 367 | 367 |
-| **Passed** | **284 (77%)** | **355 (97%)** |
-| Failed | 83 | 12 |
-| Wall-clock | 29m02s | 12m47s |
+| **Passed** | **284 (77%)** | **357 (97%)** |
+| Failed | 83 | 10 |
+| Wall-clock | 29m02s | 14m15s |
 
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
 measurement was reproduced exactly on a second run before anything was changed — which matters more
@@ -43,7 +43,7 @@ work:
 | D | 4 | 2 + 2 declared | 0 | no validation error produced at all |
 | G | 4 | 1 | 3 | edit-panel control not found by label |
 | C | 2 | 0 | 2 | `CategoryLink must have an ID` |
-| F | 2 | 0 | 2 | `SetupFromFiles` unimplemented (`dataSource` specs) |
+| F | 2 | implemented + 2 declared | 0 | `SetupFromFiles` unimplemented (`dataSource` specs) |
 
 ## What was actually wrong
 
@@ -142,25 +142,26 @@ Two diagnostic switches are kept, both off by default and both justified by a bu
 `BS_UI_VALIDATION_TRACE=1` prints every validation error with each id source that could name it, and
 `BS_UI_TREE_TRACE=1` dumps both roster trees around a `selectEntry`.
 
-## The 12 that remain
+## The 10 that remain
 
-Each has a named cause. **Three specs are declared `engines: {battlescribe-ui: fail}`** — the cost
-limits, where the measurement that fixed two of the four explained the other three. The remaining 12
+Each has a named cause. **Five specs are declared `engines: {battlescribe-ui: fail}`** — the three cost limits, where the
+measurement that fixed two of the four explained the other three, and the two `real-world` specs,
+whose DATA BattleScribe refuses to parse. The remaining 10
 are NOT declared, deliberately: a cause is not a verdict, and declaring specs to get a green job
 would be inventing declarations rather than earning them — the exact defect
 `docs/nr-ui-roster-coverage.md` records for that lane's own history.
 
-Where a declaration was earned, it also records what was NOT checked. The cost-limit three say the
-Edit Roster dialog has not been examined for per-cost-type limit fields, so they describe a measured
-limit of one route rather than claiming a limit no route can lift.
+Every declaration records what was NOT checked. The cost-limit three say the Edit Roster dialog has
+not been examined for per-cost-type limit fields. The `real-world` two name the four modifiers
+BattleScribe rejects and note that every catalogue loads — which is what makes them a statement
+about the data rather than cover for an unfinished `SetupFromFiles`.
 
 | | count | what is known |
 |---|---:|---|
-| G | 3 | **A `selectionEntryGroup` is rendered as ONE grouped control**, with its member entries as options inside it — the panel offers `'Weapon Options' -> RadioButton` and no row for the entry at all. This driver only knows labelled rows, so these are one unimplemented shape rather than three lookup bugs. A driver gap with a known fix, which is why none of them is declared: declaring would record it as a limitation of BattleScribe, and it is not one. |
+| G | 3 | Grouped controls are now DRIVEN, and these are what is left behind them. `condition-shared-flag-nested` puts two links onto one shared entry, so both render as `'Trigger'` and label lookup cannot separate them — the catalogue-tree ambiguity again, without the escape, because the panel exposes no id. The other two now fail on real assertions rather than a missing control. |
 | E | 3 | Entry-link constraint attribution. `constraint-shared-flag` carries two maxima on one shared entry told apart only by the `shared` flag, which the rendered message does not mention. |
 | C | 2 | BattleScribe's own validator rejects a `categoryLink` with no id — its runtime rule, stricter than the XSD, which requires only `targetId`. Synthesising ids would change generated XML for **43** specs to fix 2, so it wants measuring before it is done, not after. |
-| F | 2 | `SetupFromFilesAsync` is unimplemented. The same gap `real-world/wh40k-10e-*` has on `newrecruit-ui`, where it is declared a driver gap so that implementing it is reported. |
 | K | 2 | `catalogue/catalogue-category-entries` — no catalogue-tree item for the entry under its force; NR's equivalent is a confirmed UI limitation, so this one is close to declarable. `selection/collective-per-model-operations` loses its cost types after a deselect, which is not. |
 
 The rule that replaces an allow-list, unchanged: **a failing spec carries its reason, or it is not
-failing on purpose.** Until all 12 are fixed or declared, the lane stays out of `ci.yml` (#355).
+failing on purpose.** Until all 10 are fixed or declared, the lane stays out of `ci.yml` (#355).

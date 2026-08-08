@@ -757,18 +757,22 @@ public class RosterActions {
         final String labelText = entryName;
         runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null));
 
-        // Wait for the click to land — as a new child, OR as a count increase on an existing one.
+        // Wait for the click to land, in any of the three shapes it can take.
         //
-        // A COLLECTIVE entry does not gain a second child when selected again: BattleScribe
-        // increments the one that is already there. A predicate that only watches the child COUNT
-        // therefore waits out its full timeout on exactly those specs, and reports the click as
-        // having done nothing while the number it asked for sits in the state it just read.
+        // The child COUNT is the wrong thing to watch, and was the only thing watched. A COLLECTIVE
+        // entry does not gain a second child when selected again — BattleScribe increments the one
+        // already there. And a member of a single-choice GROUP does not gain one either: it
+        // REPLACES whichever member was chosen before, so the count is identical on both sides
+        // while the child that is there is a different entry entirely.
+        //
+        // What actually happened, in every case, is that the parent now holds a child for the
+        // requested entry that it did not hold before — or holds more of one it did.
         JsonObject after = waitForStateChange(state -> {
             JsonObject parent = findSelectionById(state, parentSelectionId);
             if (parent == null) return false;
             JsonObject beforeParent = findSelectionById(before, parentSelectionId);
             if (beforeParent == null) return true;
-            return childSelectionCount(parent) > childSelectionCount(beforeParent)
+            return findNewChildSelection(before, state, parentSelectionId, entryId) != null
                     || childNumberIncreased(beforeParent, parent, entryId);
         }, state -> {
             JsonObject parent = findSelectionById(state, parentSelectionId);
@@ -983,6 +987,18 @@ public class RosterActions {
             }
             described.add("'" + text + "' -> " + control);
         }
+
+        // Controls that carry their own text rather than sitting beside a Label. Listing them is
+        // the point: leaving them out is what made a panel full of radio buttons look empty.
+        for (String styleClass : new String[] { ".check-box", ".radio-button" }) {
+            for (Node node : scene.getRoot().lookupAll(styleClass)) {
+                if (!(node instanceof Labeled)) continue;
+                String text = ((Labeled) node).getText();
+                if (text == null || text.isEmpty()) continue;
+                described.add("'" + text + "' -> " + node.getClass().getSimpleName() + " (self-labelled)");
+            }
+        }
+
         return described.isEmpty() ? "(no labels)" : described.toString();
     }
 
@@ -1033,6 +1049,30 @@ public class RosterActions {
                 cb.fire();
                 return true;
             }
+        }
+
+        // Look for RadioButton by text.
+        //
+        // A selectionEntryGroup that permits one choice is not rendered as a row per entry: the
+        // GROUP gets one heading and its members become radio buttons, which carry their own text
+        // instead of sitting beside a Label. Both loops above therefore looked straight past them,
+        // and the panel appeared to offer the heading and nothing else.
+        //
+        // Selecting an already-selected radio is a no-op in JavaFX rather than a re-fire, so this
+        // reports "already chosen" as success: the caller's postcondition is that this entry IS
+        // the group's choice, and it is.
+        for (Node rbNode : scene.getRoot().lookupAll(".radio-button")) {
+            if (!(rbNode instanceof RadioButton)) continue;
+            RadioButton rb = (RadioButton) rbNode;
+            String rbText = rb.getText();
+            if (rbText == null || !rbText.contains(text)) continue;
+            // fire() and nothing else. RadioButton.fire() selects it and notifies the ToggleGroup,
+            // which is what BattleScribe listens to; setSelected() beforehand only flips the state
+            // fire() is about to toggle, so the pair can leave it deselected.
+            if (!rb.isSelected()) {
+                rb.fire();
+            }
+            return true;
         }
         return false;
     }
@@ -1218,8 +1258,7 @@ public class RosterActions {
                 if (!el.isJsonObject()) continue;
                 JsonObject sel = el.getAsJsonObject();
                 String id = getStringField(sel, "id");
-                if (id != null && !beforeIds.contains(id)
-                        && entryId.equals(getStringField(sel, "entryId"))) {
+                if (id != null && !beforeIds.contains(id) && isSelectionOfEntry(sel, entryId)) {
                     return sel;
                 }
             }
@@ -1230,8 +1269,7 @@ public class RosterActions {
                 if (!el.isJsonObject()) continue;
                 JsonObject child = el.getAsJsonObject();
                 String id = getStringField(child, "id");
-                if (id != null && !beforeIds.contains(id)
-                        && entryId.equals(getStringField(child, "entryId"))) {
+                if (id != null && !beforeIds.contains(id) && isSelectionOfEntry(child, entryId)) {
                     return child;
                 }
             }
