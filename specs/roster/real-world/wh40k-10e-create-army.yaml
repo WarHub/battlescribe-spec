@@ -11,8 +11,21 @@ tags: [wh40k-10e, real-world]
 # build the list by hand, and the store-direct `newrecruit` engine passes the spec end to end.
 # Declared `fail` rather than `skip` so implementing the path is reported as an unexpected pass.
 # See docs/nr-ui-roster-coverage.md.
+# BattleScribe 2.03.21 cannot PARSE this dataset. `Warhammer 40,000.gst` carries four modifiers
+# written `<modifier type="replace" field="…" arg="+0">` with no `value` attribute, and `value` is
+# `use="required"` on Modifier in BattleScribe's own schema — v2_03 and latest alike. Its parser
+# agrees: `ValueRequiredException: Unable to satisfy @Attribute(name="", required=true) on field
+# 'value' … at line 1197`. It then discards the game system and reports it missing, so the New
+# Roster dialog has nothing to build from.
+#
+# This is NOT the driver gap it looks like. SetupFromFiles is implemented here: the files stage,
+# the index.bsi builds from them, the app launches and parses all 200+ catalogues. Only the game
+# system is refused, by the app, over data BattleScribe itself calls invalid.
+# `fail` rather than `skip` so a data release that drops that modifier form — or a spec repinned to
+# one — is reported as an unexpected pass.
 engines:
   newrecruit-ui: fail
+  battlescribe-ui: fail
 
 setup:
   dataSource: "github:BSData/wh40k-10e@v10.6.0"
