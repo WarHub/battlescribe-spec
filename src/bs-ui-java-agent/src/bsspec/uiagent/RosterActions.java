@@ -1113,7 +1113,8 @@ public class RosterActions {
                 }
             }
         }
-        throw new RuntimeException("Spinner not found for label: " + text);
+        throw new RuntimeException("Spinner not found for label: " + text
+                + "; panel offers: " + describeControlLabels(windowTitle));
     }
 
     /**
