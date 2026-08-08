@@ -17,6 +17,15 @@ engines:
   # `fail` rather than `skip` so the spec still RUNS — an NR release that starts offering these
   # is reported as an unexpected pass. See docs/nr-ui-roster-coverage.md.
   newrecruit-ui: fail
+  # BattleScribe's desktop UI reaches the same place by the same route: its catalogue tree groups a
+  # force's entries under that force's categories, and `fe-1` declares no categoryLinks, so there is
+  # no branch for `Custom Category` to hang under and no item for Marine anywhere in the tree.
+  # Measured 2026-08-08 against the WHOLE tree, not just the force's subtree — the first run of this
+  # lane, before catalogue-tree lookups were scoped per force, failed identically with "never
+  # offered an item for id 'se-1'". So this is not an artifact of that scoping.
+  # `fail` rather than `skip` for the same reason as NR: the spec still RUNS, and a BattleScribe
+  # build that starts offering these is reported as an unexpected pass.
+  battlescribe-ui: fail
 
 setup:
   gameSystem:

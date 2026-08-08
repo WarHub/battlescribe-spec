@@ -6,8 +6,15 @@ description: SelectionEntryGroup can have constraints limiting how many entries 
 # max=1 group swaps the first out rather than reporting a constraint violation, so the error this
 # spec expects can never appear through the UI. Measured 2026-08-05. Same category as
 # cost/cost-hidden-limit-validation. The store-direct engine reports it correctly.
+# BattleScribe's desktop UI does exactly the same thing, and its scene graph says so directly: the
+# edit panel renders the GROUP as one control — `'Weapon Options' -> RadioButton` — with its members
+# as options inside, so choosing a second REPLACES the first. A max=1 group cannot be made to hold
+# two selections through this UI, which makes the violation unreachable rather than unreported.
+# Measured 2026-08-08 while implementing grouped-control support, which is what made the mechanism
+# visible; before that this failed as a missing control and looked like a driver gap.
 engines:
   newrecruit-ui: fail
+  battlescribe-ui: fail
 
 setup:
   gameSystem:
