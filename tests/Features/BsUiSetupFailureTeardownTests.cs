@@ -42,6 +42,9 @@ public sealed class BsUiSetupFailureTeardownTests
 {
     private const string NonexistentJavaPath = "no-such-java-executable-bsspec-test.exe";
 
+    private static ProtocolCatalogue MinimalCatalogue
+        => new() { Id = "cat", Name = "Cat", GameSystemId = "gs" };
+
     [Fact]
     public void BsUiRosterEngine_SetupFailure_TearsDownAppEvenWhenKeepAliveIsTrue()
     {
@@ -55,9 +58,19 @@ public sealed class BsUiSetupFailureTeardownTests
         using var engine = new BsUiRosterEngine(options) { KeepAlive = true };
         var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
 
-        var errors = engine.Setup(gameSystem, []);
+        // A catalogue, so setup gets as far as Process.Start and fails on the bogus Java path —
+        // which is the scenario this test documents. With none, `BuildXmlFiles` threw first and the
+        // test passed on a data-generation failure instead, never reaching the JVM at all.
+        // `RosterEngine_DataGenerationFailure_...` below covers that path deliberately.
+        var errors = engine.Setup(gameSystem, [MinimalCatalogue]);
 
         Assert.NotEmpty(errors); // the bogus Java path must actually fail setup
+
+        // ...and fail for THAT reason. Without this the test passes on any setup failure at all,
+        // which is how it went green on a data-generation error for however long the guard sat in
+        // the wrong place — asserting teardown after a failure that never created an app to tear
+        // down. The Java path appears in what Process.Start throws on every platform.
+        Assert.Contains(errors, e => e.Contains(NonexistentJavaPath, StringComparison.Ordinal));
 
         var appField = typeof(BsUiRosterEngine).GetField("_app", BindingFlags.NonPublic | BindingFlags.Instance);
         var clientField = typeof(BsUiRosterEngine).GetField("_client", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -69,6 +82,42 @@ public sealed class BsUiSetupFailureTeardownTests
         // CleanupAsync(force: true) tears it down and nulls it out regardless of KeepAlive.
         Assert.Null(appField!.GetValue(engine));
         Assert.Null(clientField!.GetValue(engine));
+    }
+
+    /// <summary>
+    /// A setup-phase failure BEFORE the app starts is still a setup failure, and
+    /// <c>Setup</c> reports it the way it reports every other one.
+    /// </summary>
+    /// <remarks>
+    /// The roster engine's <c>BuildXmlFiles</c> rejects an empty catalogue array, and that
+    /// generation used to run OUTSIDE the handler that converts setup failures into returned
+    /// errors — so this threw out of <c>Setup</c>, past <c>RosterRunner</c>'s "Setup error:"
+    /// reporting and past the forced teardown. The gamedata twin generates inside its handler and
+    /// never had the gap; the two were given the same fix and drifted on where the boundary sat.
+    /// <para>
+    /// This asserts the CONTRACT, not the guard's position: whatever rejects the data, and wherever
+    /// it sits, the caller sees errors rather than an exception.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void BsUiRosterEngine_DataGenerationFailure_ReturnsErrorsInsteadOfThrowing()
+    {
+        var options = new BsUiOptions
+        {
+            JavaPath = NonexistentJavaPath,
+            RosterEditorJarPath = "unused-roster-editor.jar",
+            AgentJarPath = "unused-agent.jar",
+        };
+
+        using var engine = new BsUiRosterEngine(options) { KeepAlive = true };
+        var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
+
+        // No catalogues — the generator's own precondition, and the closest hermetic stand-in for
+        // any spec whose data it refuses.
+        var errors = engine.Setup(gameSystem, []);
+
+        Assert.NotEmpty(errors);
+        Assert.Contains(errors, e => e.Contains("catalogue", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -84,9 +133,13 @@ public sealed class BsUiSetupFailureTeardownTests
         using var engine = new BsGameDataUiEngine(options) { KeepAlive = true };
         var gameSystem = new ProtocolGameSystem { Id = "gs", Name = "GS" };
 
+        // No catalogue needed: this engine's BuildXmlFiles tolerates an empty array, so setup
+        // reaches Process.Start either way. That difference from the roster engine is why only one
+        // of these two ever exercised the failure it documents.
         var errors = engine.Setup(gameSystem, []);
 
         Assert.NotEmpty(errors); // the bogus Java path must actually fail setup
+        Assert.Contains(errors, e => e.Contains(NonexistentJavaPath, StringComparison.Ordinal));
 
         var appField = typeof(BsGameDataUiEngine).GetField("_app", BindingFlags.NonPublic | BindingFlags.Instance);
         var clientField = typeof(BsGameDataUiEngine).GetField("_client", BindingFlags.NonPublic | BindingFlags.Instance);

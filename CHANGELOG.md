@@ -128,6 +128,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A BS Roster UI setup failure before the app starts is reported, not thrown** — `Setup` is
+  contracted to RETURN errors, which `RosterRunner` renders as `Setup error: …` and turns into a
+  failed spec. Entry indexing and XML generation ran ahead of the handler that upholds that, so a
+  spec whose data the generator refuses threw out of `Setup` instead — past the reporting, and past
+  the forced teardown that exists to stop a failed cold start orphaning its JVM. The guard now wraps
+  the whole setup phase (both the generated and the `dataSource` path, where `XDocument.Parse` reads
+  files this engine did not produce), and `StartOrReuseAsync` throws rather than carrying a second
+  copy of the same handler. The gamedata twin already generated inside its handler; the two were
+  given this fix together in review and drifted on where the boundary sat.
+  Its regression test had been passing on the wrong failure ever since
+  `GenerateAllCatalogueXml` gained its empty-catalogue precondition: with no catalogue it never
+  reached `Process.Start`, so it asserted teardown after a failure that never created an app to tear
+  down. It now supplies a catalogue, and both engines' tests assert the error names the bogus Java
+  path — so "some setup failure happened" can no longer stand in for the one they document. The
+  generation path gets its own test.
 - **The BS Roster UI lane's last five failures (#354)** — all five turned out to be defects, not
   expectations to write down, and the lane reaches 367/367 with **no spec declared
   `battlescribe-ui: fail` for any of them**.

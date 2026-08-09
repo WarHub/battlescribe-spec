@@ -294,23 +294,30 @@ public sealed class BsUiRosterEngine : IRosterEngine
         await CleanupAsync();
         ResetSetupState();
 
-        var gameSystemFile = files.FirstOrDefault(
-            f => f.FileName.EndsWith(".gst", StringComparison.OrdinalIgnoreCase));
-        if (gameSystemFile.Content is null)
+        // Inside the guard for the same reason as the generated path, and with one more of its own:
+        // these files come off DISK, so `XDocument.Parse` here is reading data this engine did not
+        // produce and cannot assume is well-formed.
+        return await GuardSetupAsync(async () =>
         {
-            return ["SetupFromFiles: no .gst game system file among the supplied files."];
-        }
+            var gameSystemFile = files.FirstOrDefault(
+                f => f.FileName.EndsWith(".gst", StringComparison.OrdinalIgnoreCase));
+            if (gameSystemFile.Content is null)
+            {
+                return ["SetupFromFiles: no .gst game system file among the supplied files."];
+            }
 
-        var root = System.Xml.Linq.XDocument.Parse(gameSystemFile.Content).Root;
-        _gameSystemId = (string?)root?.Attribute("id");
-        _gameSystemName = (string?)root?.Attribute("name");
-        if (string.IsNullOrEmpty(_gameSystemId) || string.IsNullOrEmpty(_gameSystemName))
-        {
-            return [$"SetupFromFiles: '{gameSystemFile.FileName}' has no id/name on its root element."];
-        }
+            var root = System.Xml.Linq.XDocument.Parse(gameSystemFile.Content).Root;
+            _gameSystemId = (string?)root?.Attribute("id");
+            _gameSystemName = (string?)root?.Attribute("name");
+            if (string.IsNullOrEmpty(_gameSystemId) || string.IsNullOrEmpty(_gameSystemName))
+            {
+                return [$"SetupFromFiles: '{gameSystemFile.FileName}' has no id/name on its root element."];
+            }
 
-        IndexDefinitionsFromXml(files);
-        return await StartOrReuseAsync(files);
+            IndexDefinitionsFromXml(files);
+            await StartOrReuseAsync(files);
+            return [];
+        });
     }
 
     private void ResetSetupState()
@@ -334,95 +341,124 @@ public sealed class BsUiRosterEngine : IRosterEngine
         await CleanupAsync();
         ResetSetupState();
 
-        _gameSystem = gameSystem;
-        _gameSystemId = gameSystem.Id;
-        _gameSystemName = gameSystem.Name;
+        return await GuardSetupAsync(async () =>
+        {
+            _gameSystem = gameSystem;
+            _gameSystemId = gameSystem.Id;
+            _gameSystemName = gameSystem.Name;
 
-        IndexDefinitions(gameSystem, catalogues);
+            IndexDefinitions(gameSystem, catalogues);
 
-        return await StartOrReuseAsync(BuildXmlFiles(gameSystem, catalogues));
+            await StartOrReuseAsync(BuildXmlFiles(gameSystem, catalogues));
+            return [];
+        });
     }
 
     /// <summary>
     /// Warm-reuses the running BattleScribe instance or cold-starts one, with
     /// <paramref name="files"/> staged either way.
     /// </summary>
-    private async Task<IReadOnlyList<string>> StartOrReuseAsync(
+    /// <remarks>
+    /// Throws on failure rather than returning errors: <see cref="GuardSetupAsync"/> is the one
+    /// place that turns a setup-phase failure into returned errors, and it covers the whole phase
+    /// including the data generation that runs before this.
+    /// </remarks>
+    private async Task StartOrReuseAsync(
         IReadOnlyList<(string FileName, string Content)> files)
+    {
+        // Warm start: reuse running app if available
+        if (KeepAlive && _app is not null && _client is not null)
+        {
+            try
+            {
+                // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
+                // undrivable instances reusable and every action against them then failed.
+                await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
+                Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
+
+                // No roster-close step here. There used to be a call to
+                // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
+                // is set false a few lines above, and that method's first act is a state read
+                // which short-circuits on exactly that flag and returns an EMPTY roster — so it
+                // always saw zero forces and returned before touching the app.
+                //
+                // Warm-start roster closing is really handled on the Java side, by
+                // RosterActions.waitForNewRosterWindowDismissingContinuePrompt, which answers
+                // BattleScribe's "Continue? Roster has not been saved" prompt with NO.
+                //
+                // If this is ever reinstated here it MUST end in a throw, never a return: a
+                // close that silently fails leaves the previous spec's roster open, and
+                // CallActionAsync then skips rosterCreateRosterAction because forces already
+                // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
+                // asserting only on its own selection would pass on polluted data.
+
+                // Restage data files for the new run.
+                // NOTE: The app's loaded game data is from the previous startup.
+                // Warm start is only reliable for re-running the same game system.
+                await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+
+                return;
+            }
+            catch
+            {
+                Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
+                // Fall through to cold start
+                ConnectedClient.Dispose();
+                _client = null;
+                await _app.DisposeAsync();
+                _app = null;
+            }
+        }
+
+        _app = new BsRosterApp(
+            _options.JavaPath,
+            _options.RosterEditorJarPath,
+            _options.AgentJarPath,
+            _options.IsolatedHomePath);
+
+        await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+
+        await _app.StartAsync();
+        _client = await _app.ConnectAsync();
+        _ = await ConnectedClient.PingAsync();
+
+        if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: WindowWaitMs))
+        {
+            throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
+        }
+
+        await HandleStartupDialogsAsync();
+    }
+
+    /// <summary>
+    /// Runs a setup phase so that ANY failure in it is reported the way <c>Setup</c> promises —
+    /// returned errors, with the app torn down — instead of an exception escaping the engine.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>force: true</c> — a setup-phase failure leaves no usable app (it may have died mid-start,
+    /// or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
+    /// force, <c>CleanupAsync</c> would no-op (KeepAlive defaults to true and <c>_poisoned</c> is
+    /// only set by action-phase failures), <c>_app</c> would be silently overwritten by the next
+    /// cold-start attempt, and the orphaned JVM process would leak.
+    /// </para>
+    /// <para>
+    /// This wraps the WHOLE phase rather than app startup alone, and that is the point. It used to
+    /// guard only <see cref="StartOrReuseAsync"/>, while entry indexing and XML generation ran
+    /// ahead of it — so a spec whose data the generator rejects threw out of <c>Setup</c> instead
+    /// of failing as a reported setup error, and skipped the teardown entirely. The gamedata engine
+    /// generates inside its handler and never had the gap; these two were given the same fix and
+    /// drifted on where the boundary sat.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> GuardSetupAsync(Func<Task<IReadOnlyList<string>>> setup)
     {
         try
         {
-            // Warm start: reuse running app if available
-            if (KeepAlive && _app is not null && _client is not null)
-            {
-                try
-                {
-                    // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
-                    // undrivable instances reusable and every action against them then failed.
-                    await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
-                    Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
-
-                    // No roster-close step here. There used to be a call to
-                    // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
-                    // is set false a few lines above, and that method's first act is a state read
-                    // which short-circuits on exactly that flag and returns an EMPTY roster — so it
-                    // always saw zero forces and returned before touching the app.
-                    //
-                    // Warm-start roster closing is really handled on the Java side, by
-                    // RosterActions.waitForNewRosterWindowDismissingContinuePrompt, which answers
-                    // BattleScribe's "Continue? Roster has not been saved" prompt with NO.
-                    //
-                    // If this is ever reinstated here it MUST end in a throw, never a return: a
-                    // close that silently fails leaves the previous spec's roster open, and
-                    // CallActionAsync then skips rosterCreateRosterAction because forces already
-                    // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
-                    // asserting only on its own selection would pass on polluted data.
-
-                    // Restage data files for the new run.
-                    // NOTE: The app's loaded game data is from the previous startup.
-                    // Warm start is only reliable for re-running the same game system.
-                    await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
-
-                    return [];
-                }
-                catch
-                {
-                    Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
-                    // Fall through to cold start
-                    ConnectedClient.Dispose();
-                    _client = null;
-                    await _app.DisposeAsync();
-                    _app = null;
-                }
-            }
-
-            _app = new BsRosterApp(
-                _options.JavaPath,
-                _options.RosterEditorJarPath,
-                _options.AgentJarPath,
-                _options.IsolatedHomePath);
-
-            await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
-
-            await _app.StartAsync();
-            _client = await _app.ConnectAsync();
-            _ = await ConnectedClient.PingAsync();
-
-            if (!await ConnectedClient.WaitForWindowAsync(MainWindowTitle, timeoutMs: WindowWaitMs))
-            {
-                throw new TimeoutException("Roster Editor window did not appear within 30 seconds.");
-            }
-
-            await HandleStartupDialogsAsync();
-            return [];
+            return await setup();
         }
         catch (Exception ex)
         {
-            // force: true — a setup-phase failure leaves no usable app (it may have died mid-start,
-            // or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
-            // force, CleanupAsync would no-op (KeepAlive defaults to true and _poisoned is only set by
-            // action-phase failures), _app would be silently overwritten by the next cold-start attempt,
-            // and the orphaned JVM process would leak.
             await CleanupAsync(force: true);
             return [ex.Message];
         }
