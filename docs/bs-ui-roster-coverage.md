@@ -11,16 +11,20 @@ what it turned into.
 | | first measurement | now |
 |---|---:|---:|
 | Specs selected | 367 | 367 |
-| **Passed** | **284 (77%)** | **362 (99%)** |
-| Failed | 83 | 5 |
-| Wall-clock | 29m02s | 13m32s |
+| **Passed** | **284 (77%)** | **367 (100%)** |
+| Failed | 83 | 0 |
+| Wall-clock | 29m02s | 10m50s |
 
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
 measurement was reproduced exactly on a second run before anything was changed — which matters more
 than usual here, because a third of those failures were timeouts, and a timeout that moves between
 runs is a different problem from one that does not.
 
-The 15 minutes are almost entirely 10-second state polls that no longer run out.
+The 18 minutes are almost entirely 10-second state polls that no longer run out.
+
+Both figures are from confirmed runs, not computed ones. The 362/5 row this table used to carry was
+re-measured before anything in that session changed — 362 passed, 5 failed, 11m52s — because the
+commit that preceded it had altered how two of the five failed, and the recorded number predated it.
 
 ## The classification
 
