@@ -62,15 +62,19 @@ steps:
     entryId: link-1
 
   # Exceeds entry link max=2 (scope=force) — link's constraint fires
-  # even though the shared entry's max=4 is not yet reached
+  # even though the shared entry's max=4 is not yet reached.
+  #
+  # BattleScribe's own message is "(maximum 2)", and 2 is the LINK's limit; the shared entry's
+  # max=4 is not reached by 3 selections and cannot be what fired. All three engines now say so.
+  # This spec previously expected `shared-unit/con-shared-max` because the in-process adapter
+  # answered that, and it was a resolution artefact rather than a behaviour: its message-matching
+  # kept the target's kind-matching constraint as a fallback and returned it without ever asking
+  # the link, so it named a limit the message rules out. Fixed 2026-08-09 alongside the same
+  # defect in the UI driver; `newrecruit` had always reported the link and needed the override
+  # that is now gone.
   - expectedState:
       errors:
         - on: selection shared-unit
-          from: shared-unit/con-shared-max
+          from: link-1/con-link-max
       forces:
         - selectionCount: 3
-      engines:
-        newrecruit:
-          errors:
-            - on: selection shared-unit
-              from: link-1/con-link-max

@@ -1417,21 +1417,31 @@ public class EngineAccessor {
             }
             String entryName = getEntryName(candidateEntryId);
             if (containsIgnoreCase(message, entryName)) {
-                // With more than one candidate constraint, the id list alone cannot say which
-                // fired — they are all "on this entry". The message can, because it renders the
-                // value, so let the message-based resolution answer and only fall back to the
-                // list when it cannot. Picking the first here silently chose between a per-link
-                // maximum and a shared one.
-                if (entry.getValue().size() > 1) {
+                // The id list cannot say which constraint fired, and a SHORT list is not evidence
+                // that it can. It is not per-error: BattleScribe lists ids the ELEMENT knows
+                // about, and one element carries every error raised under it.
+                //
+                // Measured on `constraint-shared-flag`: the force reports exactly one id,
+                // `…::shared-unit::con-max-shared`, while carrying three errors — two of them
+                // raised by `con-max-per-link`, which appears in no list anywhere. Trusting a
+                // one-element list therefore answered `con-max-shared` for a message reading
+                // `(maximum 2)`, naming a constraint whose limit is 3 and which that message
+                // rules out.
+                //
+                // So the rendered VALUE decides whenever it disagrees with the list, at any list
+                // size: a candidate the message contradicts is not a weaker witness than the
+                // message, it is a refuted one.
+                String picked = pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage);
+                if (!constraintValueMatchesMessage(candidateEntryId, picked, lowerMessage)) {
                     ValidationRef byMessage = resolveRefFromMessage(message);
-                    if (byMessage != null) {
+                    if (byMessage != null
+                            && constraintValueMatchesMessage(
+                                    byMessage.entryId, byMessage.constraintId, lowerMessage)) {
                         return byMessage;
                     }
                 }
 
-                return new ValidationRef(
-                        candidateEntryId,
-                        pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage));
+                return new ValidationRef(candidateEntryId, picked);
             }
         }
 
@@ -1533,6 +1543,27 @@ public class EngineAccessor {
             }
         }
         return constraintIds.get(0);
+    }
+
+    /**
+     * Whether the message quotes the limit this constraint actually declares.
+     *
+     * <p>The test a candidate has to survive before it is believed. A message rendering
+     * {@code (maximum 2)} is positive evidence for a constraint whose value is 2 and evidence
+     * AGAINST one whose value is 3 — so this separates "the only candidate offered" from "the
+     * candidate the app's own text supports". Absent a value on either side the answer is false,
+     * which leaves the caller on its existing path rather than inventing a preference.
+     */
+    private boolean constraintValueMatchesMessage(String entryId, String constraintId, String lowerMessage) {
+        if (entryId == null || constraintId == null || lowerMessage == null) {
+            return false;
+        }
+        // A composite entryId names the route; the constraint is declared by one segment of it.
+        Integer value = constraintValuesOf(declaringEntryOf(entryId, constraintId)).get(constraintId);
+        if (value == null) {
+            return false;
+        }
+        return lowerMessage.contains("maximum " + value) || lowerMessage.contains("minimum " + value);
     }
 
     /** An entry's own constraints as id -> declared value. */
