@@ -20,10 +20,16 @@ So the resolution order for a divergence inside one engine family is:
 This cuts against the reflex to make the newer driver match the established one, which is why it is
 written down. Concretely, on `battlescribe-ui` versus `battlescribe`:
 
-- `constraint/constraint-entry-link-merged` — BattleScribe's own message says `(maximum 2)`, the
-  LINK's constraint. The IKVM adapter reports the target's `con-shared-max` (value 4) because its
-  message-matching reached that one first and kept it as a fallback. **The UI is right**; the
-  adapter's answer is an artefact of its heuristic.
+- `constraint/constraint-entry-link-merged` — **worked through, and the outcome is the point.**
+  BattleScribe's own message says `(maximum 2)`, the LINK's constraint. The IKVM adapter reported
+  the target's `con-shared-max`, value 4, for 3 selections — a limit the message rules out — because
+  its message-matching kept the target's kind-match as a fallback and returned it without ever
+  asking the link. The UI was right, so the finding was a bug in the adapter and the adapter was
+  fixed (2026-08-09). All three engines now agree, `newrecruit` lost the override it had needed to
+  disagree with the base, and the spec carries no per-engine block at all.
+  **This is the resolution to prefer**: step 3 offers a documented override OR a bug fix, and a
+  divergence that turns out to be one implementation's artefact should end with one fewer override
+  in the suite, not one more.
 - Cost values — the desktop UI reports the raw double BattleScribe computed
   (`0.30000000000000004`); the IKVM adapter converts to decimal on the way out (`0.3`). The UI is
   the less processed answer, and the specs pin it under `battlescribe-ui`.
