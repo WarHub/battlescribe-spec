@@ -3,6 +3,34 @@
 BattleScribe Spec — declarative conformance test suite for BattleScribe roster engines.
 YAML specs in `specs/` define setup, actions, and expected state. SpecRunner executes them.
 
+## What is normative: the app, not our adapter
+
+**When a UI driver and a store-direct driver for the SAME app disagree, the UI is right.** The app
+is the specification; our adapters are attempts at it. A store-direct adapter exists because it is
+fast and because it came first — neither is a claim to correctness.
+
+So the resolution order for a divergence inside one engine family is:
+
+1. What the real application does, driven through its own UI, is the normative behaviour.
+2. The spec records that as the family's expectation.
+3. If the store-direct adapter differs, THAT is the finding — either a bug in it, or a
+   documented per-engine override naming it as a deviation. It is never the reason to bend the UI
+   driver into agreement.
+
+This cuts against the reflex to make the newer driver match the established one, which is why it is
+written down. Concretely, on `battlescribe-ui` versus `battlescribe`:
+
+- `constraint/constraint-entry-link-merged` — BattleScribe's own message says `(maximum 2)`, the
+  LINK's constraint. The IKVM adapter reports the target's `con-shared-max` (value 4) because its
+  message-matching reached that one first and kept it as a fallback. **The UI is right**; the
+  adapter's answer is an artefact of its heuristic.
+- Cost values — the desktop UI reports the raw double BattleScribe computed
+  (`0.30000000000000004`); the IKVM adapter converts to decimal on the way out (`0.3`). The UI is
+  the less processed answer, and the specs pin it under `battlescribe-ui`.
+
+A spec whose expectation was written against a store-direct adapter alone has never been checked
+against the app. Finding that out is what these lanes are for.
+
 ## Project status: Experimental
 
 This project is in an **experimental stage**. All interfaces, formats, conventions, and
