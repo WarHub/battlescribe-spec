@@ -885,14 +885,13 @@ public class RosterActions {
         // back `costs: []`.
         //
         // So either outcome ends the wait: gone, or fewer than there were.
-        waitForStateChange(s -> {
+        JsonObject settled = waitForStateChange(s -> {
             JsonObject now = findSelectionById(s, selectionId);
             return now == null || getIntField(now, "number", 1) < countBefore;
         });
 
         JsonObject result = new JsonObject();
-        boolean removed = findSelectionById(readRosterState(), selectionId) == null;
-        result.addProperty("removed", removed);
+        result.addProperty("removed", findSelectionById(settled, selectionId) == null);
         return result.toString();
     }
 

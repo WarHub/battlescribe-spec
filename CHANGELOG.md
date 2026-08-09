@@ -128,6 +128,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The BS Roster UI lane's last five failures (#354)** — all five turned out to be defects, not
+  expectations to write down, and the lane reaches 367/367 with **no spec declared
+  `battlescribe-ui: fail` for any of them**.
+  - **Validation attribution stopped trusting an id list the app's own message refutes.**
+    `getValidationErrorIds()` is not per-error — it lists ids an ELEMENT knows about, and one
+    element carries every error raised under it. On `constraint-shared-flag` the force reports a
+    single id naming `con-max-shared` while carrying three errors, two raised by `con-max-per-link`,
+    which appears in no list anywhere. The value tiebreak was gated on `size() > 1`, so a
+    one-element list skipped it and answered `con-max-shared` for a message reading `(maximum 2)` —
+    a constraint whose limit is 3. The rendered value now decides at any list size, and
+    message-resolution only wins when it can point at a constraint whose declared limit the text
+    quotes, so hidden-entry errors (no value on either side) keep their path.
+  - **The in-process adapter had the same defect in the other direction**, and it is fixed rather
+    than documented: `ResolveEntryFromMessage` consulted entry links only when the target carried no
+    kind-matching constraint of its own, so on `constraint-entry-link-merged` it returned the
+    target's `con-shared-max` (value 4) for 3 selections and a `(maximum 2)` message. Links are now
+    asked for a value match first. All three engines agree, so the spec's base expectation becomes
+    the app's answer and the `newrecruit` override that existed to disagree with it is gone.
+  - **`deselectSelection` destroyed what it was asked to decrement.** A collective child's control
+    steps the per-model count, so one press takes `number` 6 to 3 and the selection stays — but the
+    wait demanded it disappear, the action layer retried, and the second press took it to 0. Now the
+    wait ends on gone *or* fewer-than-there-were, and `removed` reports which. The same helper would
+    have fired an instanced entry's "+" for a decrement request, adding one while reporting a
+    removal; it now declines and lets the DELETE fallback run.
+  - **Two entry links onto one shared entry are two rows**, not one. They render spelled identically
+    (BattleScribe labels a control with what a link RESOLVES to) and the panel exposes no id, so
+    label lookup always drove the first. Recorded as possibly unfixable; it is not — the panel
+    offers one row per child in declaration order, so the driver indexes how many earlier siblings
+    share each entry's label and the agent skips that many controls. The `dataSource` path indexes
+    names without tracking parents and keeps first-match behaviour.
+  - **`collective-instance-amount` gains the one genuine expectation**, measured: asked for three of
+    an instanced entry, the app's "+" makes three sibling selections costing 32, and only the
+    COLLECTIVE child rides along into the copies — the gap to the 36 that store-direct semantics
+    predict is exactly the two non-collective Badges it declines to duplicate.
 - **An `expectedFile` step no longer passes when the engine cannot export (#309)** —
   `RosterRunner.ExecuteFileAssertion` opened with `catch (NotSupportedException) { return; }`, so an
   engine reporting no roster export made every byte-compare pass while comparing nothing. #326 fixed
