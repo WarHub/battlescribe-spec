@@ -80,6 +80,30 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// <summary>Entry-link id to the id it targets, for resolving a link to what it labels as.</summary>
     private readonly Dictionary<string, string> _linkTargetsById = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Children of one container, in declaration order — one list per container. Collected while
+    /// indexing and consumed once by <see cref="IndexLabelOccurrences"/>, which needs every name
+    /// resolved before it can tell which siblings share a label.
+    /// </summary>
+    private readonly List<List<string>> _siblingGroups = [];
+
+    /// <summary>
+    /// How many EARLIER siblings carry the same edit-panel label as this entry.
+    /// <para>
+    /// Two entry links onto one shared entry render as two rows spelled identically — BattleScribe
+    /// labels a control with what the link RESOLVES to, so `link-alpha` and `link-alpha-2` onto a
+    /// shared `Trigger` both read `'Trigger'`, and the panel exposes no id to tell them apart.
+    /// Addressing by label alone always drove the first of them, so asking for the second
+    /// incremented the first and the wait timed out reporting a child that was never added.
+    /// </para>
+    /// <para>
+    /// Position is the key that is left: the panel renders one row per child, and rows sharing a
+    /// label appear in the order their entries are declared. Both orders come from the same
+    /// catalogue, so they agree by construction rather than by observation.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<string, int> _labelOccurrenceById = new(StringComparer.Ordinal);
+
     private BsRosterApp? _app;
     private AgentClient? _client;
     private ProtocolGameSystem? _gameSystem;
@@ -153,7 +177,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
             ["parentSelectionId"] = parentSelectionId,
             ["entryId"] = entryId,
             ["entryName"] = ResolveEntryLabel(entryId),
+            ["labelOccurrence"] = LabelOccurrenceOf(entryId),
         }));
+
+    /// <summary>
+    /// Which of the identically-labelled rows this entry is, or 0 when its label is its own.
+    /// </summary>
+    private int LabelOccurrenceOf(string entryId)
+        => _labelOccurrenceById.TryGetValue(entryId, out var occurrence) ? occurrence : 0;
 
     public void DeselectSelection(string forceId, string selectionId)
         => RunAsync(() => CallActionAsync("rosterDeselectSelectionAction", new JsonObject
@@ -296,6 +327,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _entryNamesById.Clear();
         _groupEntryIds.Clear();
         _linkTargetsById.Clear();
+        _siblingGroups.Clear();
+        _labelOccurrenceById.Clear();
         _costNamesById.Clear();
         _gameSystem = null;
         _gameSystemId = null;
@@ -899,6 +932,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 _costNamesById[costType.Id] = costType.Name;
             }
         }
+
+        // Last, because it resolves labels and every name has to be indexed for that to answer.
+        IndexLabelOccurrences();
     }
 
     private void IndexSelectionContainer(
@@ -923,9 +959,58 @@ public sealed class BsUiRosterEngine : IRosterEngine
         foreach (var selectionEntry in selectionEntries)
         {
             _entryNamesById[selectionEntry.Id] = selectionEntry.Name;
+            RecordSiblingOrder(
+                selectionEntry.SelectionEntries?.Select(e => e.Id),
+                selectionEntry.EntryLinks?.Select(l => l.Id),
+                selectionEntry.SelectionEntryGroups?.Select(g => g.Id));
             IndexSelectionEntries(selectionEntry.SelectionEntries);
             IndexEntryLinks(selectionEntry.EntryLinks);
             IndexSelectionEntryGroups(selectionEntry.SelectionEntryGroups);
+        }
+    }
+
+    /// <summary>
+    /// Notes one container's children in the order the edit panel lists them: direct entries, then
+    /// entry links, then groups — the order observed in BattleScribe's own panel.
+    /// </summary>
+    /// <remarks>
+    /// Only the order among children that end up sharing a LABEL is load-bearing, and links sit
+    /// with links, so the arrangement between the three collections never decides an occurrence
+    /// on its own.
+    /// </remarks>
+    private void RecordSiblingOrder(
+        IEnumerable<string>? entries,
+        IEnumerable<string>? links,
+        IEnumerable<string>? groups)
+    {
+        List<string> siblings = [.. entries ?? [], .. links ?? [], .. groups ?? []];
+        if (siblings.Count > 1)
+        {
+            _siblingGroups.Add(siblings);
+        }
+    }
+
+    /// <summary>
+    /// Assigns each entry its <see cref="_labelOccurrenceById"/> index, once every name is known.
+    /// </summary>
+    private void IndexLabelOccurrences()
+    {
+        foreach (var siblings in _siblingGroups)
+        {
+            Dictionary<string, int> seenPerLabel = new(StringComparer.Ordinal);
+            foreach (var childId in siblings)
+            {
+                var label = ResolveEntryLabel(childId);
+                seenPerLabel.TryGetValue(label, out var seen);
+                // Only a repeat is worth recording: a unique label needs no position, and storing
+                // 0 for every entry would bury the handful that matter.
+                if (seen > 0)
+                {
+                    _labelOccurrenceById[childId] = seen;
+                }
+
+                seenPerLabel[label] = seen + 1;
+            }
         }
     }
 
@@ -940,6 +1025,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             _entryNamesById[group.Id] = group.Name;
             _groupEntryIds.Add(group.Id);
+            RecordSiblingOrder(
+                group.SelectionEntries?.Select(e => e.Id),
+                group.EntryLinks?.Select(l => l.Id),
+                group.SelectionEntryGroups?.Select(g => g.Id));
             IndexSelectionEntries(group.SelectionEntries);
             IndexEntryLinks(group.EntryLinks);
             IndexSelectionEntryGroups(group.SelectionEntryGroups);

@@ -760,7 +760,8 @@ public class RosterActions {
 
         // Click the control by label (spinner increment, button fire, or checkbox toggle)
         final String labelText = entryName;
-        runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null));
+        final int labelOccurrence = getIntParam(p, "labelOccurrence", 0);
+        runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null, labelOccurrence));
 
         // Wait for the click to land, in any of the three shapes it can take.
         //
@@ -853,6 +854,7 @@ public class RosterActions {
         // want here.
 
         // Try decrement via control by label
+        final int countBefore = getIntField(selection, "number", 1);
         final String finalEntryName = entryName;
         AtomicReference<Boolean> clicked = new AtomicReference<>(false);
         runOnFx(() -> {
@@ -867,13 +869,30 @@ public class RosterActions {
                 selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW);
             });
             runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
+            // DELETE removes the row outright, so disappearance is the whole postcondition.
+            waitForStateChange(s -> findSelectionById(s, selectionId) == null);
+            JsonObject deleted = new JsonObject();
+            deleted.addProperty("removed", true);
+            return deleted.toString();
         }
 
-        // Wait for selection to disappear
-        waitForStateChange(s -> findSelectionById(s, selectionId) == null);
+        // A decrement is not a removal, and demanding one turned a correct press into a
+        // destructive action. BattleScribe's control on a COLLECTIVE child steps the PER-MODEL
+        // count: under a parent of 3, one press takes 2-per-model to 1 and the selection stays,
+        // with `number` 6 -> 3. Waiting for it to vanish timed that press out, the action layer
+        // retried the whole action, and the second press took 1 -> 0 and destroyed a selection the
+        // caller had asked to decrement — reported as a clean success, with the roster reading
+        // back `costs: []`.
+        //
+        // So either outcome ends the wait: gone, or fewer than there were.
+        waitForStateChange(s -> {
+            JsonObject now = findSelectionById(s, selectionId);
+            return now == null || getIntField(now, "number", 1) < countBefore;
+        });
 
         JsonObject result = new JsonObject();
-        result.addProperty("removed", true);
+        boolean removed = findSelectionById(readRosterState(), selectionId) == null;
+        result.addProperty("removed", removed);
         return result.toString();
     }
 
@@ -968,13 +987,43 @@ public class RosterActions {
      * Must be called from the FX thread.
      */
     private void clickControlByLabel(String labelText, String windowTitle, String action) {
-        if (!tryClickControlByLabel(labelText, windowTitle, action)) {
+        clickControlByLabel(labelText, windowTitle, action, 0);
+    }
+
+    /**
+     * As above, but drives the {@code occurrence}-th control whose label matches.
+     *
+     * <p>Two entry links onto one shared entry render as two rows spelled the same — BattleScribe
+     * labels a control with what a link RESOLVES to — and the panel carries no id to separate
+     * them. Position is the key that is left, and the caller supplies it from the catalogue, where
+     * both orders come from.
+     */
+    private void clickControlByLabel(String labelText, String windowTitle, String action, int occurrence) {
+        if (!tryClickControlByLabel(labelText, windowTitle, action, occurrence)) {
             // Say what the panel DOES offer. "Control not found for label: Sword" cannot
             // distinguish an entry the panel never rendered from one rendered under a different
             // name from one whose label carries no control — three different bugs.
             throw new RuntimeException("Control not found for label: " + labelText
+                    + (occurrence > 0 ? " (occurrence " + occurrence + ")" : "")
                     + "; panel offers: " + describeControlLabels(windowTitle));
         }
+    }
+
+    /**
+     * Whether this label sits beside a control the given action could drive.
+     *
+     * <p>Mirrors the acceptance test of the loop that consumes it, so skipping a row and driving a
+     * row agree about what a row IS. A "+" button is not a decrement control, so a decrement pass
+     * neither drives it nor counts it.
+     */
+    private boolean hasControlSibling(javafx.scene.Parent parent, Label label, String action) {
+        boolean decrement = "decrement".equals(action);
+        for (Node sibling : parent.getChildrenUnmodifiable()) {
+            if (sibling == label) continue;
+            if (sibling instanceof Spinner) return true;
+            if (sibling instanceof Button && !decrement) return true;
+        }
+        return false;
     }
 
     /** The edit panel's labels and whether each has a control beside it. FX thread only. */
@@ -1020,8 +1069,16 @@ public class RosterActions {
      */
     @SuppressWarnings("unchecked")
     private boolean tryClickControlByLabel(String text, String windowTitle, String action) {
+        return tryClickControlByLabel(text, windowTitle, action, 0);
+    }
+
+    private boolean tryClickControlByLabel(String text, String windowTitle, String action, int occurrence) {
         Scene scene = findScene(windowTitle);
         if (scene == null) return false;
+
+        // Counted over labels that actually CARRY a control, not over every label that spells the
+        // text. The roster tree spells it too, and a row there is not an occurrence of a panel row.
+        int remaining = occurrence;
 
         // Look for Label → sibling Spinner/Button
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
@@ -1032,6 +1089,11 @@ public class RosterActions {
 
             javafx.scene.Parent parent = label.getParent();
             if (parent == null) continue;
+
+            if (remaining > 0 && hasControlSibling(parent, label, action)) {
+                remaining--;
+                continue;
+            }
 
             for (Node sibling : parent.getChildrenUnmodifiable()) {
                 if (sibling == label) continue;
@@ -1046,6 +1108,13 @@ public class RosterActions {
                     return true;
                 }
                 if (sibling instanceof Button) {
+                    // The button an INSTANCED entry gets is "+", and it only adds. Firing it for a
+                    // decrement would add an instance while reporting that one was removed — so
+                    // decline, and let the caller fall through to its DELETE path, which can
+                    // actually take one away.
+                    if ("decrement".equals(action)) {
+                        continue;
+                    }
                     ((Button) sibling).fire();
                     return true;
                 }
@@ -1053,6 +1122,16 @@ public class RosterActions {
         }
 
         // Look for CheckBox by text
+        //
+        // Occurrence is not applied past this point. It is derived from the panel's row-per-child
+        // layout, and a checkbox or radio carries its own text instead of sitting beside a Label —
+        // so counting them alongside labelled rows would be counting two different things. An
+        // occurrence that reaches here has already failed to find its row, and falling back to the
+        // first control of another shape would be the well-formed wrong answer.
+        if (occurrence > 0) {
+            return false;
+        }
+
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
             if (!(cbNode instanceof CheckBox)) continue;
             CheckBox cb = (CheckBox) cbNode;

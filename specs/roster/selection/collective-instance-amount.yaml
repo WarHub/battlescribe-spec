@@ -148,3 +148,59 @@ steps:
                             - name: pts
                               typeId: pts
                               value: 10
+        # What the desktop app does when asked for three of an INSTANCED entry, measured
+        # 2026-08-09. The store-direct adapter reaches `setNumSelections`, which is a no-op here
+        # (the `battlescribe:` block above) — but the app never offers that operation. An instanced
+        # entry's edit panel carries a "+" button, not a spinner, so "three Sergeants" is three
+        # SIBLING selections of number 1, not one of number 3.
+        #
+        # And the copies are not copies. Only the COLLECTIVE child rides along: Sergeants 2 and 3
+        # get Weapon and not Badge, because a collective child is a property of the entry (one per
+        # model) while a non-collective one is a selection made on a particular instance. Hence 32
+        # = 12 + 10 + 10 and not 36 — the number the store-direct semantics predict — and the gap
+        # is exactly the two Badges the app declines to duplicate.
+        #
+        # NOT checked: whether a Badge added to Sergeant 2 afterwards behaves the same, and whether
+        # removing an instance renumbers the rest. Both are follow-on questions about the "+"
+        # control rather than about the count this step sets.
+        battlescribe-ui:
+          costs:
+            - typeId: pts
+              value: 32
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Sergeant
+                      number: 1
+                      children:
+                        - name: Badge
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 2
+                        - name: Weapon
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 10
+                    - name: Sergeant
+                      number: 1
+                      children:
+                        - name: Weapon
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 10
+                    - name: Sergeant
+                      number: 1
+                      children:
+                        - name: Weapon
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: pts
+                              value: 10
