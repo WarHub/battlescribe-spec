@@ -57,6 +57,9 @@ public class RosterActions {
      */
     private static final String CONTINUE_WINDOW = "Continue?";
 
+    /** Passed as currentCount when the control must be a spinner and no count applies. */
+    private static final int NO_COUNT_CONTEXT = -1;
+
     private static final int POLL_INTERVAL_MS = 200;
     private static final int STATE_POLL_TIMEOUT_MS = 10_000;
     private static final int WINDOW_TIMEOUT_MS = 15_000;
@@ -462,7 +465,9 @@ public class RosterActions {
         waitForWindow(EDIT_ROSTER_WINDOW);
 
         // Set cost limit spinner by name
-        runOnFx(() -> setSpinnerValueByLabel(costName, value, EDIT_ROSTER_WINDOW));
+        // NO_COUNT_CONTEXT: a roster cost limit is a spinner by nature. Passing a real count here
+        // would let the add-button branch fire, which would be a different operation entirely.
+        runOnFx(() -> setSpinnerValueByLabel(costName, value, NO_COUNT_CONTEXT, EDIT_ROSTER_WINDOW));
 
         // Close Edit Roster
         runOnFx(() -> fireButton("#btnDone", EDIT_ROSTER_WINDOW));
@@ -917,7 +922,8 @@ public class RosterActions {
 
         // Set spinner value by label
         final String finalEntryName = entryName;
-        runOnFx(() -> setSpinnerValueByLabel(finalEntryName, count, MAIN_WINDOW));
+        final int currentCount = getIntField(selection, "number", 1);
+        runOnFx(() -> setSpinnerValueByLabel(finalEntryName, count, currentCount, MAIN_WINDOW));
 
         // Wait for the count to match — as the spinner's own value, OR as the per-model total.
         //
@@ -926,19 +932,25 @@ public class RosterActions {
         // across the parent's models. Waiting only for `number == count` therefore waits out the
         // full timeout on exactly those specs and reports it as the spinner not having taken.
         final int parentNumber = parentNumberOf(state, selectionId);
+        final String countedEntryId = entryId;
+        final String countScopeId = parentId;
         waitForStateChange(s -> {
             JsonObject sel = findSelectionById(s, selectionId);
-            if (sel == null) return false;
-            int number = getIntField(sel, "number", -1);
-            return number == count || number == count * parentNumber;
+            if (sel != null) {
+                int number = getIntField(sel, "number", -1);
+                if (number == count || number == count * parentNumber) return true;
+            }
+            // An INSTANCED entry counts by siblings, not by number: the panel's "+" adds another
+            // selection rather than raising this one's. Either shape means the count was reached.
+            return countSiblingsOfEntry(s, countScopeId, countedEntryId) == count;
         }, s -> {
             JsonObject sel = findSelectionById(s, selectionId);
-            return sel == null
-                    ? "selection " + selectionId + " is no longer in the roster"
-                    : "spinner '" + finalEntryName + "' set to " + count + " left selection "
-                            + selectionId + " at number " + getIntField(sel, "number", -1)
-                            + " (wanted " + count + ", or " + (count * parentNumber)
-                            + " for a collective under a parent of " + parentNumber + ")";
+            return "setting '" + finalEntryName + "' to " + count + " left selection " + selectionId
+                    + (sel == null ? " gone from the roster" : " at number " + getIntField(sel, "number", -1))
+                    + " and " + countSiblingsOfEntry(s, countScopeId, countedEntryId)
+                    + " sibling(s) of that entry (wanted number " + count + ", or "
+                    + (count * parentNumber) + " for a collective under a parent of " + parentNumber
+                    + ", or " + count + " siblings for an instanced entry)";
         });
 
         JsonObject result = new JsonObject();
@@ -1082,7 +1094,14 @@ public class RosterActions {
      * Must be called from the FX thread.
      */
     @SuppressWarnings("unchecked")
-    private void setSpinnerValueByLabel(String text, int value, String windowTitle) {
+    /**
+     * Sets a labelled count control in the edit panel.
+     *
+     * <p>{ currentCount} is the selection's own number, read from roster state. A spinner
+     * reports its own value and does not need it; an add BUTTON has no value to read, so the
+     * caller's knowledge of where the count is now is the only way to know how many times to fire.
+     */
+    private void setSpinnerValueByLabel(String text, int value, int currentCount, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
 
@@ -1108,6 +1127,30 @@ public class RosterActions {
                         for (int i = 0; i < delta; i++) factory.increment(1);
                     } else {
                         for (int i = 0; i < -delta; i++) factory.decrement(1);
+                    }
+                    return;
+                }
+
+                // An INSTANCED entry gets a "+" button where a collective one gets a spinner:
+                // BattleScribe offers "add another of these" rather than "how many of these".
+                // Screenshot of the Squad's panel with a Sergeant already in it:
+                //
+                //     Options
+                //     [ + ]  Sergeant • 12pts
+                //
+                // Looking only for a Spinner reported that as "Spinner not found" — an entry the
+                // panel was offering, under its own name, one control along.
+                if (sibling instanceof ButtonBase && currentCount != NO_COUNT_CONTEXT) {
+                    int delta = value - currentCount;
+                    if (delta <= 0) {
+                        // Removal is not this control's job; the instance rows carry their own
+                        // close buttons. Say so rather than firing "+" a negative number of times.
+                        throw new RuntimeException("Cannot reduce '" + text + "' from " + currentCount
+                                + " to " + value + " through the panel: it offers an add button, not a"
+                                + " spinner. Removal goes through the instance row's close control.");
+                    }
+                    for (int i = 0; i < delta; i++) {
+                        ((ButtonBase) sibling).fire();
                     }
                     return;
                 }
@@ -1192,6 +1235,21 @@ public class RosterActions {
             if (was != null && getIntField(child, "number", 1) > was) return true;
         }
         return false;
+    }
+
+    /** How many selections of {@code entryId} sit directly under {@code scopeId}. */
+    private int countSiblingsOfEntry(JsonObject state, String scopeId, String entryId) {
+        int count = 0;
+        for (JsonObject sel : getSelectionsInScope(state, scopeId, null)) {
+            if (isSelectionOfEntry(sel, entryId)) count++;
+        }
+        for (JsonObject sel : allSelections(state)) {
+            if (!scopeId.equals(getStringField(sel, "id"))) continue;
+            for (JsonObject child : childSelectionsOf(sel)) {
+                if (isSelectionOfEntry(child, entryId)) count++;
+            }
+        }
+        return count;
     }
 
     /** The child selections {@link #childSelectionCount} counts, for diagnostics. */
