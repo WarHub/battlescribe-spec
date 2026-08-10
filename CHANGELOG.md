@@ -128,6 +128,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`setSelectionCount` with a count of zero removes the selection instead of decrementing it** — it
+  delegated to `deselectSelection`, and those are not the same operation. `deselectSelection` on a
+  collective child steps the PER-MODEL count: one press takes `number` 6 to 3 and the selection
+  stays, which is what `collective-per-model-operations` asserts and why its wait accepts
+  fewer-than-there-were. Zero instances is not fewer instances, so the delegation reported
+  `count: 0` about a selection sitting in the roster at 3. (Before the wait was relaxed it reached
+  zero by accident — the wait timed out, the action layer retried, and the second press finished the
+  job.) A count of zero now takes the row away through the one control that can, and the DELETE
+  fallback both paths share is one method.
 - **A control that was already in the asked-for state stopped being reported as a click** —
   grouped-control support gave `tryClickControlByLabel` a radio-button path that returns success
   without firing when the member is already chosen, on the correct grounds that the postcondition
