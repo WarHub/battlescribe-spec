@@ -126,6 +126,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`modifier-field-constraint-value` enhanced** — now selects 3 times to verify the
   constraint value change from max=2 to max=5 is actually observable (no error at 3).
 
+### Removed
+
+- **The unscoped tree-lookup overloads, which nothing called and anything could have** —
+  `waitForTreeItem(selector, id)` and `clickTreeItemById(selector, id, doubleClick)` were left behind
+  when catalogue lookups gained a force scope, as delegators passing `null` for the container. Both
+  had no callers; both were a way to ask the question without the scoping that is the only reason the
+  answer can be trusted, and a click is where losing it is least visible — it lands on a real row, in
+  a real force, and the caller finds out a poll timeout later while looking somewhere else.
+  `clickControlByLabel(text, window, action)` goes with them for the same reason.
+
 ### Added
 
 - **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on

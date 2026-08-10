@@ -1006,15 +1006,8 @@ public class RosterActions {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * Clicks the edit panel control (Spinner/Button/CheckBox) by its sibling label text.
-     * Must be called from the FX thread.
-     */
-    private ControlOutcome clickControlByLabel(String labelText, String windowTitle, String action) {
-        return clickControlByLabel(labelText, windowTitle, action, 0);
-    }
-
-    /**
-     * As above, but drives the {@code occurrence}-th control whose label matches.
+     * Drives the {@code occurrence}-th edit-panel control whose label matches, and throws if there
+     * is none. Must be called from the FX thread.
      *
      * <p>Two entry links onto one shared entry render as two rows spelled the same — BattleScribe
      * labels a control with what a link RESOLVES to — and the panel carries no id to separate
@@ -1930,25 +1923,19 @@ public class RosterActions {
     }
 
     /**
-     * Waits until {@code treeSelector} contains a tree item for {@code id}.
+     * Waits until {@code treeSelector} offers an item for {@code id} inside {@code containerId}'s
+     * own subtree, excluding {@code nestedContainerIds}' — see {@link #resolveTreeScope} for why the
+     * container matters, and {@link #findTreeItemByText(TreeItem, String, Set)} for why its nested
+     * containers have to be left out of it.
      *
      * <p>Selecting a force rebuilds the catalogue tree beside it. Acting on that tree before the
      * rebuild lands either misses the item — a bare "Tree item not found" from a step that had
      * nothing to do with the tree — or, when the previous force offered a like-named entry, hits
      * the WRONG one. The 300ms that used to sit here covered neither case reliably.
+     *
+     * <p>No unscoped overload. There were two, both unused, and both a way to ask this question
+     * without the scoping that is the only reason the answer is trustworthy.
      */
-    private void waitForTreeItem(String treeSelector, String id) {
-        waitForTreeItem(treeSelector, null, id);
-    }
-
-    /**
-     * Waits until {@code treeSelector} offers an item for {@code id} INSIDE {@code containerId}'s
-     * subtree — see {@link #resolveTreeScope} for why the container matters.
-     */
-    private void waitForTreeItem(String treeSelector, String containerId, String id) {
-        waitForTreeItem(treeSelector, containerId, id, Collections.<String>emptySet());
-    }
-
     private void waitForTreeItem(
             String treeSelector, String containerId, String id, Set<String> nestedContainerIds) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
@@ -2163,23 +2150,14 @@ public class RosterActions {
     }
 
     /**
-     * Clicks (or double-clicks) a tree item located by ID token.
-     */
-    private void clickTreeItemById(String treeSelector, String id, boolean doubleClick) {
-        clickTreeItemById(treeSelector, null, id, doubleClick);
-    }
-
-    /**
-     * Clicks (or double-clicks) the item for {@code id} INSIDE {@code containerId}'s subtree —
-     * see {@link #resolveTreeScope} for why the container matters.
-     */
-    private void clickTreeItemById(String treeSelector, String containerId, String id, boolean doubleClick) {
-        clickTreeItemById(treeSelector, containerId, id, doubleClick, Collections.<String>emptySet());
-    }
-
-    /**
-     * As above, but confined to {@code containerId}'s OWN subtree — no nested container's copy of
-     * the same entry. See {@link #findTreeItemByText(TreeItem, String, Set)}.
+     * Clicks (or double-clicks) the item for {@code id} inside {@code containerId}'s OWN subtree —
+     * no nested container's copy of the same entry. See {@link #resolveTreeScope} for why the
+     * container matters and {@link #findTreeItemByText(TreeItem, String, Set)} for why its nested
+     * containers are excluded from it.
+     *
+     * <p>No unscoped overload. There were two, both unused, and a click is the operation where
+     * losing the scope is least visible: it lands on a real row, in a real force, and the caller
+     * discovers it a poll timeout later while looking somewhere else.
      */
     private void clickTreeItemById(
             String treeSelector,
