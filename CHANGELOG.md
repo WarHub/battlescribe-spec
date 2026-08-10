@@ -128,6 +128,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A call that needs its own timeout passes one instead of re-tuning the shared client** —
+  `AgentClient.CallTimeout` was a property seven call sites assigned, used and restored: the FX-thread
+  probe (2s), both diagnostic captures (5s), and both drivers' action helpers (90s). Every one of
+  them re-tuned a client the rest of the driver shares, for as long as its `finally` took to run —
+  and a diagnostic capture that faulted before restoring would leave every later call on a 5s clock.
+  `CallAsync` now takes an optional `timeout`, `CallTimeout` is documented as the default for calls
+  that name none, and nothing assigns it. The 90s action timeout and the 5s diagnostic timeout become
+  named constants next to the reasoning for their size.
 - **A checkbox-rendered entry is driven towards the state that was asked for, not away from it** —
   the checkbox branch of `tryClickControlByLabel` never read `action`, so it fired blind and got both
   directions wrong from the wrong starting state. `deselectSelection` on such an entry **ticked an

@@ -1440,29 +1440,18 @@ public sealed class BsUiRosterEngine : IRosterEngine
             }
         }
 
-        // The action methods on the Java side run on a background thread with their own timeouts.
-        // Increase call timeout to match: Java has 30s window wait + 10s state poll per step.
-        var originalTimeout = ConnectedClient.CallTimeout;
-        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
-        try
-        {
-            var result = await ConnectedClient.CallAsync(method, parameters);
-            var json = result?.ToJsonString() ?? "{}";
-            var output = JsonSerializer.Deserialize<T>(json, JsonOptions)
-                ?? throw new InvalidOperationException($"{method} returned null result");
+        var result = await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
+        var json = result?.ToJsonString() ?? "{}";
+        var output = JsonSerializer.Deserialize<T>(json, JsonOptions)
+            ?? throw new InvalidOperationException($"{method} returned null result");
 
-            // Mark engine as located after first successful action that creates a roster
-            if (!_engineLocated && output is ActionOutputs { ForceId: not null })
-            {
-                _engineLocated = true;
-            }
-
-            return output;
-        }
-        finally
+        // Mark engine as located after first successful action that creates a roster
+        if (!_engineLocated && output is ActionOutputs { ForceId: not null })
         {
-            ConnectedClient.CallTimeout = originalTimeout;
+            _engineLocated = true;
         }
+
+        return output;
     }
 
     /// <summary>
@@ -1471,18 +1460,18 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task CallActionAsync(string method, JsonObject parameters)
     {
         EnsureSetup();
-
-        var originalTimeout = ConnectedClient.CallTimeout;
-        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
-        try
-        {
-            await ConnectedClient.CallAsync(method, parameters);
-        }
-        finally
-        {
-            ConnectedClient.CallTimeout = originalTimeout;
-        }
+        await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
     }
+
+    /// <summary>
+    /// How long one high-level Java-side action gets.
+    /// </summary>
+    /// <remarks>
+    /// The action methods run on a background thread with their own internal timeouts — a 30s window
+    /// wait plus a 10s state poll per step — so the call has to outlast them or it reports a
+    /// deadlock where the Java side is about to report what actually went wrong.
+    /// </remarks>
+    private static readonly TimeSpan ActionCallTimeout = TimeSpan.FromSeconds(90);
 
     /// <summary>
     /// Maximum number of retry attempts for transient failures (timeout, agent communication).

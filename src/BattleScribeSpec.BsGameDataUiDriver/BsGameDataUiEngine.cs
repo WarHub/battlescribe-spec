@@ -423,11 +423,9 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     {
         ThrowIfDisposed();
         EnsureSetup();
-        var savedTimeout = ConnectedClient.CallTimeout;
-        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
         try
         {
-            await ConnectedClient.CallAsync(method, parameters);
+            await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
         }
         catch (AgentException ex) when (ex.Message.Contains("not yet implemented") || ex.Message.Contains("UnsupportedOperationException"))
         {
@@ -436,21 +434,15 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                 $"Run `bs-spec probe --engine battlescribe --ui` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
-        finally
-        {
-            ConnectedClient.CallTimeout = savedTimeout;
-        }
     }
 
     private async Task<T> CallActionAsync<T>(string method, JsonObject? parameters)
     {
         ThrowIfDisposed();
         EnsureSetup();
-        var savedTimeout = ConnectedClient.CallTimeout;
-        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
         try
         {
-            var result = await ConnectedClient.CallAsync(method, parameters)
+            var result = await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout)
                 ?? throw new InvalidOperationException($"{method} returned null result.");
 
             var json = result.ToJsonString();
@@ -464,11 +456,15 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                 $"Run `bs-spec probe --engine battlescribe --ui` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
-        finally
-        {
-            ConnectedClient.CallTimeout = savedTimeout;
-        }
     }
+
+    /// <summary>
+    /// How long one high-level Java-side action gets — the Data Editor counterpart of
+    /// <c>BsUiRosterEngine.ActionCallTimeout</c>, and for the same reason: the Java side runs its own
+    /// window waits and state polls, so the call has to outlast them or it reports a deadlock just
+    /// before the agent reports what actually happened.
+    /// </summary>
+    private static readonly TimeSpan ActionCallTimeout = TimeSpan.FromSeconds(90);
 
     private async Task CleanupAsync(bool force = false)
     {
