@@ -18,6 +18,37 @@ public abstract class ConformanceTestBase
     /// <summary>Engine name used in spec YAML 'engines' field for applicability/expectation checks.</summary>
     protected abstract string EngineName { get; }
 
+    /// <summary>
+    /// The engine whose expectations this lane inherits when a spec says nothing about
+    /// <see cref="EngineName"/> specifically. Defaults to <see cref="EngineName"/>; a UI lane
+    /// overrides it with the engine it drives.
+    /// </summary>
+    /// <remarks>
+    /// A UI driver <em>produces</em> what its base engine produces but does not necessarily
+    /// <em>support</em> what its base engine supports, so specs address the two separately and the
+    /// most specific one wins — the rule <see cref="RosterRunner"/> and
+    /// <c>FrozenNrUiRosterConformanceTests</c> already apply.
+    /// <para>
+    /// Without this, a lane running <c>battlescribe-ui</c> resolved every per-engine
+    /// <c>expectedState</c> under its own name alone, found none, and fell through to the BASE
+    /// assertion — the one written for the engine whose behaviour differs. Twenty roster specs
+    /// carry a <c>battlescribe:</c> override precisely because BattleScribe diverges there; each
+    /// was being asserted against the divergence rather than against it. That is a lane defect,
+    /// not a driver one, and it is invisible from the failure text: the spec reports a plain
+    /// value mismatch with no hint that a correct expectation for this engine exists in the file.
+    /// </para>
+    /// </remarks>
+    protected virtual string BaseEngineName => EngineName;
+
+    /// <summary>
+    /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c> — resolved
+    /// most-specific-first: this driver's own entry, else the base engine's.
+    /// </summary>
+    private string ExpectationFor(SpecFile spec)
+        => spec.Engines is not null && spec.Engines.ContainsKey(EngineName)
+            ? spec.GetExpectation(EngineName)
+            : spec.GetExpectation(BaseEngineName);
+
     /// <summary>Optional prefix for log messages (e.g., "[FROZEN]").</summary>
     protected virtual string LogPrefix => "";
 
@@ -106,14 +137,15 @@ public abstract class ConformanceTestBase
     protected void RunSpec(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
+        var expectation = ExpectationFor(spec);
 
-        if (!spec.IsApplicableTo(EngineName))
+        if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
         {
             _output.WriteLine($"{LogPrefix}Skipping spec: {specName} — not applicable to {EngineName} engine");
             return;
         }
 
-        var expectedToFail = spec.IsExpectedToFail(EngineName);
+        var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
         _output.WriteLine($"{LogPrefix}Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engine = GetEngine();
@@ -122,7 +154,7 @@ public abstract class ConformanceTestBase
             return;
         }
 
-        var runner = new RosterRunner(engine, new DataSourceResolver(), EngineName);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), BaseEngineName, EngineName);
         var result = runner.Run(spec);
 
         // What this engine was opted out of, printed on pass as well as fail — a green spec that
