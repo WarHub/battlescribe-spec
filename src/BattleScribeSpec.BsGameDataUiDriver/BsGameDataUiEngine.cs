@@ -49,6 +49,12 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
     private const int WindowWaitMs = 30_000;
 
+    /// <summary>
+    /// How long one <see cref="AgentClient.ProbeFxThreadAsync"/> call is given before the instance
+    /// is called wedged and warm-start reuse is refused.
+    /// </summary>
+    private static readonly TimeSpan FxProbeTimeout = TimeSpan.FromSeconds(2);
+
     private readonly BsUiOptions _options;
 
     private BsRosterApp? _app;
@@ -274,7 +280,9 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             {
                 try
                 {
-                    _ = await _client.PingAsync();
+                    // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
+                    // undrivable instances reusable and every action against them then failed.
+                    await _client.ProbeFxThreadAsync(FxProbeTimeout);
                     Console.Error.WriteLine("[bs-gamedata-ui] Warm start: reusing existing BattleScribe instance.");
                     var warmFiles = BuildXmlFiles(gameSystem, catalogues);
                     await BsUiDataStaging.StageDataFilesAsync(

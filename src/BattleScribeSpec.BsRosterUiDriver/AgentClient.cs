@@ -177,11 +177,48 @@ public sealed class AgentClient : IDisposable
         }
     }
 
-    /// <summary>Sends a ping and verifies the agent is responsive.</summary>
+    /// <summary>Sends a ping, proving the agent's SOCKET is answering.</summary>
+    /// <remarks>
+    /// <b>This is not a liveness check for the application.</b> `ping` is not in the agent's
+    /// <c>FX_THREAD_METHODS</c>, so it is answered from the socket thread and succeeds against an
+    /// instance whose JavaFX application thread is fully deadlocked. Use it to confirm a freshly
+    /// connected socket works. To decide whether an instance can still be DRIVEN — the question a
+    /// warm-start reuse gate or a retry backoff is asking — use
+    /// <see cref="ProbeFxThreadAsync"/> instead.
+    /// </remarks>
     public async Task<string> PingAsync()
     {
         var result = await CallAsync("ping");
         return result?.GetValue<string>() ?? throw new InvalidOperationException("Unexpected ping response.");
+    }
+
+    /// <summary>
+    /// Asks one question that only a pumping JavaFX application thread can answer, and throws if it
+    /// is not answered within <paramref name="timeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>getWindows</c> IS an FX-thread method, so a successful reply is proof the FX thread
+    /// dequeued and ran something — which is the whole reason this calls it and discards the
+    /// result. A wedged-but-pingable instance passes a <see cref="PingAsync"/> gate and then fails
+    /// every action taken against it, several steps removed from the symptom.
+    /// <para>
+    /// <paramref name="timeout"/> defaults far below <see cref="CallTimeout"/> because the only two
+    /// answers worth acting on are "yes, promptly" and "no": a caller that waits 30s for a third
+    /// one stalls on exactly the instances it means to discard quickly.
+    /// </para>
+    /// </remarks>
+    public async Task ProbeFxThreadAsync(TimeSpan? timeout = null)
+    {
+        var saved = CallTimeout;
+        CallTimeout = timeout ?? TimeSpan.FromSeconds(2);
+        try
+        {
+            _ = await GetWindowsAsync();
+        }
+        finally
+        {
+            CallTimeout = saved;
+        }
     }
 
     /// <summary>Dumps the JavaFX scene graph tree.</summary>
@@ -374,23 +411,29 @@ public sealed class AgentClient : IDisposable
         }
     }
 
-    /// <summary>Polls for a window with the given title to appear.</summary>
-    public async Task<bool> WaitForWindowAsync(string titleFragment, int timeoutMs = 30000, int pollIntervalMs = WindowPollIntervalMs)
+    /// <summary>
+    /// Polls for a window with this title to appear. Returns false if it has not by the deadline.
+    /// </summary>
+    /// <remarks>
+    /// Matching is <see cref="HasWindowAsync"/>'s, and deliberately not this method's former
+    /// <c>Contains</c>. Under <c>Contains</c> a dialog title that is a substring of the main
+    /// window's — "New Roster" against "Roster Editor 2.03.21 - New Roster (GS v1)" — returns true
+    /// against the MAIN window, immediately, and the dialog is never actually awaited. Nothing
+    /// reports that: the caller proceeds to act on a dialog that does not exist yet.
+    /// <para>
+    /// Every caller today passes a main-window title, so the two rules agreed and the bug was
+    /// latent (#358). It is fixed here rather than when the first dialog caller arrives, because
+    /// the symptom then would be an action failing for no visible reason several steps later.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> WaitForWindowAsync(string title, int timeoutMs = 30000, int pollIntervalMs = WindowPollIntervalMs)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var windows = await GetWindowsAsync();
-            if (windows is JsonArray arr)
+            if (await HasWindowAsync(title))
             {
-                foreach (var w in arr)
-                {
-                    var title = w?["title"]?.GetValue<string>();
-                    if (title is not null && title.Contains(titleFragment))
-                    {
-                        return true;
-                    }
-                }
+                return true;
             }
 
             await Task.Delay(pollIntervalMs);
