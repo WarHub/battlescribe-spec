@@ -84,6 +84,16 @@ steps:
               value: 0.3
             - typeId: oct
               value: 0.375
+        # The desktop UI is the same engine and does NOT agree with it here: the in-process adapter
+        # converts to decimal on the way out, while this driver reads the double off the Java model
+        # and passes it through. So the drifted value is what BattleScribe itself computed, and
+        # 0.3 is the in-process adapter's rounding of it.
+        battlescribe-ui:
+          costs:
+            - typeId: pts
+              value: 0.30000000000000004
+            - typeId: oct
+              value: 0.375
         newrecruit:
           costs:
             - typeId: pts

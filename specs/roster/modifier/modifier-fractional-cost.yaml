@@ -52,6 +52,19 @@ steps:
                 - typeId: pts
                   value: 0.3
       engines:
+        # Same drift, different reason: BattleScribe computes in double either way, and only the
+        # in-process adapter converts to decimal on the way out. This driver reads the double off
+        # the Java model, so it reports what the engine actually held.
+        battlescribe-ui:
+          costs:
+            - typeId: pts
+              value: 0.30000000000000004
+          forces:
+            - selections:
+                - name: Unit
+                  costs:
+                    - typeId: pts
+                      value: 0.30000000000000004
         # Floating-point deviation in NR's modifier arithmetic.
         newrecruit:
           costs:
