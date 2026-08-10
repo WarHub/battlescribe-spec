@@ -1488,15 +1488,28 @@ steps:
   # when a selection comes and goes, and it came back `power, pts` where the snapshot records
   # `pts, power` — 165 lines either way, differing at line 4. Sequencing them after the export keeps
   # the recorded bytes a property of the built roster rather than of the last thing that touched it.
+  # `newrecruit-ui` is opted out, and the reason is an observation rather than a guess: NR's options
+  # panel renders no row at all for this entry — "child entry 'Squad Banner' (entryId=se-inf-banner)
+  # has no row in the options panel", measured 2026-08-10 on the frozen lane. NOT a control-shape
+  # gap in that driver, which already drives `input[type=checkbox]` rows and `button.boutonSubUnit`
+  # ones; the row is absent, not unrecognised.
+  #
+  # What has NOT been established is why NR omits it — whether a max-1 constraint outside a group is
+  # rendered somewhere else, or a costless option is not listed, or something else. That is a
+  # question about NewRecruit, and answering it here would mean guessing; it belongs in its own
+  # investigation against the live client. The store-direct `newrecruit` engine takes both steps
+  # normally, so this is the UI's rendering and not NR's model.
   - action: selectChildEntry
     id: select-banner
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-infantry-2.selectionId }}
     entryId: se-inf-banner
+    skipEngines: [newrecruit-ui]
 
   - action: deselectSelection
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-banner.selectionId }}
+    skipEngines: [newrecruit-ui]
 
   # Back where the roster was before the option was taken: costless and max 1, so no total moved
   # while it was held, and it is gone again now.

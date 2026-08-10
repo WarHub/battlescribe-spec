@@ -152,7 +152,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   resolved to, and the smoke step sets it — a passing spec proves an entry was reached, not what was
   clicked to reach it, so without it the coverage claim would be an assumption. It reports
   `'Squad Banner' -> CheckBox (DRIVEN)` on both directions, which is the first record in this repo of
-  BattleScribe rendering that control at all.
+  BattleScribe rendering that control at all. `newrecruit-ui` is opted out of the two steps on a
+  measured observation — NR's options panel renders no row for the entry, and that driver already
+  handles checkbox and `boutonSubUnit` rows, so the row is absent rather than unrecognised. Why NR
+  omits it is left open rather than guessed at; the store-direct `newrecruit` engine takes both steps
+  normally, so it is that UI's rendering and not NR's model.
 - **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on
   `Engine=BsGameDataUi`, so the Data Editor had a lane and the Roster Editor had none: every change to
   `BsUiRosterEngine` and `RosterActions.java` reached `main` exercised by unit tests and one teardown
