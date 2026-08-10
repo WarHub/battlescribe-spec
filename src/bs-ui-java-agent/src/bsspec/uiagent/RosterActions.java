@@ -1117,6 +1117,97 @@ public class RosterActions {
     }
 
     /**
+     * How well a rendered control label answers to an entry's name.
+     *
+     * <p>Ranked, because a bare {@code contains} cannot tell the entry from its neighbours and the
+     * spec corpus is full of neighbours: {@code Armor} is inside {@code Light Armor},
+     * {@code Heavy Armor} and {@code Armor Type} in one panel; {@code Trigger} is inside
+     * {@code Alpha Trigger} and {@code Beta Trigger} in another; {@code Unit 1} is inside
+     * {@code Unit 10}. Under {@code contains} the answer is whichever node {@code lookupAll} yields
+     * first, which is a wrong control driven silently.
+     *
+     * <p>Equality alone is not the fix either — BattleScribe decorates a row with its cost, so the
+     * label for {@code Sergeant} reads {@code Sergeant • 12pts}. Hence a middle rank: the name, then
+     * something that is not more name.
+     */
+    private enum LabelMatch {
+        /** The label IS the name. */
+        EXACT,
+
+        /** The name, then decoration the panel added — {@code Sergeant • 12pts}. */
+        DECORATED,
+
+        /** The name is in there somewhere — {@code Alpha Trigger} for {@code Trigger}. */
+        CONTAINED,
+
+        /** Not this label. */
+        NONE,
+    }
+
+    /** Where {@code rendered} sits in {@link LabelMatch}'s ranking for {@code name}. */
+    private static LabelMatch matchLabel(String rendered, String name) {
+        if (rendered == null || name == null || name.isEmpty()) return LabelMatch.NONE;
+        if (rendered.equals(name)) return LabelMatch.EXACT;
+        if (rendered.startsWith(name) && !Character.isLetterOrDigit(rendered.charAt(name.length()))) {
+            return LabelMatch.DECORATED;
+        }
+        return rendered.contains(name) ? LabelMatch.CONTAINED : LabelMatch.NONE;
+    }
+
+    /**
+     * The best rank reached for {@code name} by anything in this window that CARRIES a control.
+     *
+     * <p><b>Only rows that carry one.</b> The scene spells an entry's name in several places that
+     * are not panel rows — the roster tree renders {@code Trooper} while the panel renders
+     * {@code Trooper • 10pts} beside its spinner — so ranking over every label lets a tree row win
+     * as an EXACT match and then match nothing drivable, turning a control that is right there into
+     * "Spinner not found". This is the rule the occurrence counter below already states for the same
+     * reason: a row in the tree is not a row in the panel.
+     *
+     * <p>Chosen BEFORE anything is driven, and independently of the action, so that a control
+     * declining to act (an unticked checkbox asked to decrement) cannot let a worse rank take over
+     * and drive a different entry's row.
+     */
+    private LabelMatch bestLabelMatch(Scene scene, String name) {
+        LabelMatch best = LabelMatch.NONE;
+        for (String styleClass : new String[] { ".label", ".check-box", ".radio-button" }) {
+            for (Node node : scene.getRoot().lookupAll(styleClass)) {
+                if (!(node instanceof Labeled) || !carriesControl(node)) continue;
+                LabelMatch match = matchLabel(((Labeled) node).getText(), name);
+                if (match.ordinal() < best.ordinal()) best = match;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Whether this node is something the panel can be driven through.
+     *
+     * <p>A checkbox or radio IS the control and carries its own text. A Label is only a panel row
+     * when a control sits beside it; everywhere else the same text is just text — a tree row, a
+     * heading, a total.
+     *
+     * <p>Deliberately blind to the action, unlike {@link #hasControlSibling}: this decides whether a
+     * label is a candidate at all, and a row that exists but declines this particular request is
+     * still a row. Letting the action narrow it here is what would allow a decline to promote a
+     * neighbour.
+     */
+    private boolean carriesControl(Node node) {
+        if (node instanceof CheckBox || node instanceof RadioButton) {
+            return true;
+        }
+        if (!(node instanceof Label)) return false;
+
+        javafx.scene.Parent parent = node.getParent();
+        if (parent == null) return false;
+        for (Node sibling : parent.getChildrenUnmodifiable()) {
+            if (sibling == node) continue;
+            if (sibling instanceof Spinner || sibling instanceof ButtonBase) return true;
+        }
+        return false;
+    }
+
+    /**
      * Tries to drive an edit panel control by label.
      * Must be called from the FX thread.
      */
@@ -1130,6 +1221,12 @@ public class RosterActions {
         Scene scene = findScene(windowTitle);
         if (scene == null) return ControlOutcome.NOT_FOUND;
 
+        // Settle for the closest spelling the panel offers, and then consider only that — see
+        // LabelMatch. A panel holding both `Armor` and `Light Armor` has an exact answer, and taking
+        // the first CONTAINED one instead is how a spec ends up driving its neighbour.
+        LabelMatch tier = bestLabelMatch(scene, text);
+        if (tier == LabelMatch.NONE) return ControlOutcome.NOT_FOUND;
+
         // Counted over labels that actually CARRY a control, not over every label that spells the
         // text. The roster tree spells it too, and a row there is not an occurrence of a panel row.
         int remaining = occurrence;
@@ -1139,7 +1236,7 @@ public class RosterActions {
             if (!(labelNode instanceof Label)) continue;
             Label label = (Label) labelNode;
             String lt = label.getText();
-            if (lt == null || !lt.contains(text)) continue;
+            if (matchLabel(lt, text) != tier) continue;
 
             javafx.scene.Parent parent = label.getParent();
             if (parent == null) continue;
@@ -1197,8 +1294,7 @@ public class RosterActions {
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
             if (!(cbNode instanceof CheckBox)) continue;
             CheckBox cb = (CheckBox) cbNode;
-            String cbText = cb.getText();
-            if (cbText == null || !cbText.contains(text)) continue;
+            if (matchLabel(cb.getText(), text) != tier) continue;
 
             if ("decrement".equals(action)) {
                 // Only a ticked box has anything to take away. An unticked one is not this entry's
@@ -1230,8 +1326,7 @@ public class RosterActions {
         for (Node rbNode : scene.getRoot().lookupAll(".radio-button")) {
             if (!(rbNode instanceof RadioButton)) continue;
             RadioButton rb = (RadioButton) rbNode;
-            String rbText = rb.getText();
-            if (rbText == null || !rbText.contains(text)) continue;
+            if (matchLabel(rb.getText(), text) != tier) continue;
             // A radio is a choice, not a count: selecting one cannot take anything away, and the
             // group has no "none" member to move to. So a decrement declines here for the same
             // reason the "+" button does, and the caller falls through to its DELETE path.
@@ -1265,11 +1360,21 @@ public class RosterActions {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
 
+        // Closest spelling only, as in tryClickControlByLabel — a count set on the neighbouring row
+        // is worse than one not set at all, because the spec then asserts against a roster that was
+        // changed somewhere it never looked.
+        LabelMatch tier = bestLabelMatch(scene, text);
+        if (tier == LabelMatch.NONE) {
+            // Out before the loop, or `matchLabel(...) != NONE` would be false for every label that
+            // does not match and the loop would consider all of them.
+            throw new RuntimeException("Spinner not found for label: " + text
+                    + "; panel offers: " + describeControlLabels(windowTitle));
+        }
+
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
             if (!(labelNode instanceof Label)) continue;
             Label label = (Label) labelNode;
-            String lt = label.getText();
-            if (lt == null || !lt.contains(text)) continue;
+            if (matchLabel(label.getText(), text) != tier) continue;
 
             javafx.scene.Parent parent = label.getParent();
             if (parent == null) continue;

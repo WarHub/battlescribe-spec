@@ -515,6 +515,37 @@ Falls back to searching CheckBoxes by their own text if no label+sibling match i
 - **Note**: Interactions are scheduled via `Platform.runLater()` to avoid deadlocks when
   the value change triggers BS engine recalculation on the FX thread.
 
+#### Which label answers to a name
+
+`contains` cannot tell an entry from its neighbours, and the spec corpus is full of neighbours:
+`Armor` sits inside `Light Armor`, `Heavy Armor` and `Armor Type` in one panel; `Trigger` inside
+`Alpha Trigger` and `Beta Trigger` in another; `Unit 1` inside `Unit 10`. Under `contains` the answer
+was whichever node `lookupAll` yielded first — a different entry's control, driven silently.
+
+Equality alone is not the rule either: BattleScribe decorates a row with its cost, so `Sergeant`
+renders as `Sergeant • 12pts`. So candidates are **ranked** (`RosterActions.LabelMatch`):
+
+| rank | rule | example, for the name `Armor` |
+|---|---|---|
+| `EXACT` | the label is the name | `Armor` |
+| `DECORATED` | the name, then a non-alphanumeric character | `Armor • 3pts`, `Armor Type` |
+| `CONTAINED` | the name appears anywhere | `Light Armor` |
+
+The **best rank present in the window** is chosen first, and only over things that **carry a
+control** — a checkbox or radio (which is the control), or a Label with a Spinner or Button beside
+it. The scene spells an entry's name in several places that are not panel rows: the roster tree
+renders `Trooper` while the panel renders `Trooper • 10pts` next to its spinner. Ranking over every
+label lets the tree row win as `EXACT` and then match nothing drivable — "Spinner not found" about a
+control that is right there. Same rule the `occurrence` counter states: a row in the tree is not a row
+in the panel.
+
+The rank is settled before anything is driven and without consulting the action. Picking it after
+would let a control that declines to act (an unticked checkbox asked to decrement) hand the request
+down to a worse rank, which is the neighbour-driving bug wearing a fallback's clothes.
+
+`occurrence` (for two links onto one shared entry, which render identically) counts within the chosen
+rank — identical spellings share a rank by construction.
+
 #### Three outcomes, not two
 
 `RosterActions.tryClickControlByLabel` returns a `ControlOutcome`, because a caller has three

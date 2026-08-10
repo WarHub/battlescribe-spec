@@ -128,6 +128,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **An edit-panel control is addressed by the closest spelling of a name, not the first one
+  containing it** — label lookup matched with `contains`, and the spec corpus is full of names inside
+  other names in the same panel: `Armor` inside `Light Armor`, `Heavy Armor` and `Armor Type` (and
+  `Armor` is that group's auto-selected default, so all three are rendered at once); `Trigger` inside
+  `Alpha Trigger` and `Beta Trigger`; `Unit 1` inside `Unit 10`; `HQ` inside `HQ Unit`; `Weapon`
+  inside `Weapon Options`. The control driven was whichever node `lookupAll` yielded first. Candidates
+  are now ranked — the label *is* the name, the name followed by decoration (`Sergeant • 12pts`), or
+  the name somewhere inside — and only the best rank the window offers is considered. The rank is
+  chosen before anything is driven and without consulting the action, so a control that declines to
+  act cannot hand the request down to a worse rank — and only over things that carry a control, since
+  the scene spells an entry's name in places that are not panel rows (the roster tree renders
+  `Trooper` where the panel renders `Trooper • 10pts` beside its spinner). A name with no exact or
+  decorated match and only containing ones now fails with the panel's contents listed, where it used
+  to drive a neighbour.
 - **A call that needs its own timeout passes one instead of re-tuning the shared client** —
   `AgentClient.CallTimeout` was a property seven call sites assigned, used and restored: the FX-thread
   probe (2s), both diagnostic captures (5s), and both drivers' action helpers (90s). Every one of
