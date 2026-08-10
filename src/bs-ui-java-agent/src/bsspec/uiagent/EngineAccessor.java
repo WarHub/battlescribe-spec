@@ -48,8 +48,45 @@ public class EngineAccessor {
     private Class<?> rosterClass;
     private Method getRosterMethod;
 
+    /**
+     * Classes {@link #findClass} has already resolved.
+     *
+     * <p><b>Hits only, never misses.</b> A name that is not loaded yet may be loaded later — the app
+     * loads its model classes as data arrives — so a remembered miss would be a permanent one. The
+     * asymmetry costs nothing: a miss is the case where the scan found no candidate, which is also
+     * the case a cache could not have shortened.
+     */
+    private final Map<String, Class<?>> classesByName = new HashMap<String, Class<?>>();
+
+    /**
+     * What the {@link #getValidationErrors()} call in progress has already worked out, or null when
+     * no call is in progress. See {@link ValidationPass}.
+     */
+    private ValidationPass validationPass;
+
     public EngineAccessor(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
+    }
+
+    /**
+     * Answers one pass of validation-error collection reuses, rather than recomputing per error.
+     *
+     * <p>Resolving one error's {@code from} can cost a full reflective walk of the object graph and
+     * a roster search, and a roster with N errors asks the same handful of questions N times over a
+     * model that cannot change while the pass runs. Caching per PASS rather than for the session is
+     * the point: the roster does change between passes, and an entry absent now may exist after the
+     * next selection — a session-scoped "not found" would outlive the fact that produced it.
+     *
+     * <p>No locking, and none needed: {@code JsonRpcServer.acceptLoop} calls {@code handleClient}
+     * inline and reads one connection's requests in a loop, and its FX dispatch blocks that thread
+     * until the FX task returns. One request is in flight at a time.
+     */
+    private static final class ValidationPass {
+        /** Instances of a class reachable from the engine and roster — see {@link #collectInstances}. */
+        final Map<Class<?>, List<Object>> instances = new IdentityHashMap<Class<?>, List<Object>>();
+
+        /** An entry's declared constraints as id -> value — see {@link #constraintValuesOf}. */
+        final Map<String, Map<String, Integer>> constraintValues = new HashMap<String, Map<String, Integer>>();
     }
 
     /**
@@ -412,6 +449,8 @@ public class EngineAccessor {
             return errorJson("Engine not found. Call findEngine first.");
         }
 
+        // One pass, one set of answers — and none of them outlive it. See ValidationPass.
+        validationPass = new ValidationPass();
         try {
             Object roster = getCurrentRoster();
             JsonArray errors = new JsonArray();
@@ -426,6 +465,8 @@ public class EngineAccessor {
             return errors.toString();
         } catch (Exception e) {
             return errorJson("getValidationErrors failed: " + buildExceptionMessage(e));
+        } finally {
+            validationPass = null;
         }
     }
 
@@ -1566,8 +1607,32 @@ public class EngineAccessor {
         return lowerMessage.contains("maximum " + value) || lowerMessage.contains("minimum " + value);
     }
 
-    /** An entry's own constraints as id -> declared value. */
+    /**
+     * An entry's own constraints as id -> declared value.
+     *
+     * <p>Asked repeatedly for the same few ids while resolving one roster's errors — once per
+     * candidate in {@link #pickConstraintId}, once per segment in {@link #declaringEntryOf}, and
+     * again by {@link #constraintValueMatchesMessage} — and every ask is a roster search. Hence the
+     * per-pass memory; see {@link ValidationPass} for why it is per pass and not per session.
+     */
     private Map<String, Integer> constraintValuesOf(String entryId) {
+        ValidationPass pass = validationPass;
+        if (pass != null) {
+            Map<String, Integer> remembered = pass.constraintValues.get(entryId);
+            if (remembered != null) {
+                return remembered;
+            }
+        }
+
+        Map<String, Integer> values = readConstraintValues(entryId);
+        if (pass != null) {
+            pass.constraintValues.put(entryId, values);
+        }
+        return values;
+    }
+
+    /** {@link #constraintValuesOf} without the per-pass memory — the lookup itself. */
+    private Map<String, Integer> readConstraintValues(String entryId) {
         Map<String, Integer> values = new HashMap<String, Integer>();
         try {
             Object entry = findEntryById(entryId);
@@ -1744,10 +1809,28 @@ public class EngineAccessor {
      * be large, so an unbounded walk is a hang rather than an answer.
      */
     private List<Object> collectInstances(Class<?> targetClass) {
-        List<Object> found = new ArrayList<Object>();
         if (targetClass == null) {
-            return found;
+            return new ArrayList<Object>();
         }
+
+        ValidationPass pass = validationPass;
+        if (pass != null) {
+            List<Object> remembered = pass.instances.get(targetClass);
+            if (remembered != null) {
+                return remembered;
+            }
+        }
+
+        List<Object> found = scanInstances(targetClass);
+        if (pass != null) {
+            pass.instances.put(targetClass, found);
+        }
+        return found;
+    }
+
+    /** {@link #collectInstances} without the per-pass memory — the walk itself. */
+    private List<Object> scanInstances(Class<?> targetClass) {
+        List<Object> found = new ArrayList<Object>();
 
         Object roster;
         try {
@@ -2138,9 +2221,23 @@ public class EngineAccessor {
         return cls;
     }
 
+    /**
+     * The loaded class with this name, or null.
+     *
+     * <p>A linear scan of every class the JVM has loaded — thousands, in an app the size of this
+     * one. That is affordable at setup and was not on the validation path, where resolving a single
+     * error's {@code from} asks for four classes by name and a roster can carry dozens of errors.
+     * Hence {@link #classesByName}, which remembers what it finds.
+     */
     private Class<?> findClass(String name) {
+        Class<?> cached = classesByName.get(name);
+        if (cached != null) {
+            return cached;
+        }
+
         for (Class<?> cls : instrumentation.getAllLoadedClasses()) {
             if (cls.getName().equals(name)) {
+                classesByName.put(name, cls);
                 return cls;
             }
         }

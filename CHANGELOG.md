@@ -128,6 +128,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Validation attribution stopped re-deriving the same answers per error** — resolving one error's
+  `from` can reach `resolveRefFromMessage`, which asks for four classes by name and walks the object
+  graph once per class; each ask was a linear scan of every class the JVM has loaded, and each walk
+  was uncached. `constraintValuesOf` was a roster search per candidate constraint, per segment, per
+  message check. A roster with N errors paid all of it N times over a model that cannot change while
+  the call runs. `findClass` now remembers what it finds for the session (hits only — a class not
+  loaded yet may be loaded later); `collectInstances` and `constraintValuesOf` remember for the
+  duration of ONE `getValidationErrors` call and forget when it returns. Per call and not per
+  session, because the roster changes between calls: an entry absent now exists after the next
+  selection, and a session-scoped "not found" would outlive the fact that produced it. Widening the
+  message-resolution fallback from "the id list is ambiguous" to "the message contradicts the id
+  list" is what made this reachable often enough to matter.
 - **A fractional cost limit is refused on both routes into BattleScribe, not one** — the New Roster
   dialog's spinner already declined a `defaultCostLimit` it could not spell, on the stated grounds
   that 0.25 entered as 0 puts every selection over a limit the game system never declared. The Edit

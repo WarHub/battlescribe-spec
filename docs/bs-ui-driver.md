@@ -732,6 +732,19 @@ collecting constraint violations.
   ]
   ```
 
+##### What one call remembers
+
+Attributing a single error can cost a reflective walk of the object graph (`collectInstances`) and a
+roster search per candidate constraint (`constraintValuesOf`), and a roster with N errors asks the
+same handful of questions N times over a model that cannot change while the call runs. Both are
+memoized for the duration of ONE `getValidationErrors` call, in `EngineAccessor.ValidationPass`, and
+the memory is dropped when it returns.
+
+Per call rather than per session, deliberately: the roster changes between calls, and an entry that
+is absent now exists after the next selection — a session-scoped "not found" would outlive the fact
+that produced it. `findClass` is the one exception and caches for the session, because a loaded class
+stays loaded; it remembers hits only, since a class not loaded yet may be loaded later.
+
 ---
 
 ### High-Level Action RPCs
