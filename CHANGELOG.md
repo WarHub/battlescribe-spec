@@ -128,6 +128,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The agent's object-graph walks answer the same way twice, and say when they gave up** — both
+  walks enumerated fields with `Class.getDeclaredFields()`, whose order the JDK documents as
+  unspecified, and both then answered order-sensitive questions off it: `findObjectById` returns the
+  first match it reaches, and `matchConstraintOwner` keeps the first kind-match as its fallback. A
+  run that attributed an error correctly was therefore no evidence about the next run. Fields are now
+  taken in name order. Both walks also stopped at a 10 000-object ceiling and reported that as a
+  plain negative — no instances, or no such id — so "not reached" and "not present" were the same
+  answer; hitting the ceiling now prints which one it was. The two copies of the traversal are one
+  method, which is what let their ceiling checks sit in different places to begin with.
 - **Validation attribution stopped re-deriving the same answers per error** — resolving one error's
   `from` can reach `resolveRefFromMessage`, which asks for four classes by name and walks the object
   graph once per class; each ask was a linear scan of every class the JVM has loaded, and each walk
