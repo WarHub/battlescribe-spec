@@ -1456,14 +1456,24 @@ steps:
       forces:
         - categoryCount: 4
 
-  # ── Step 12: a boolean option, taken and given back ──
+  # Byte-compare the fully-built roster's exported .ros against a per-engine snapshot
+  # (NewRecruit base + battlescribe override). This exercises IRosterEngine.ExportRosterXml()
+  # end-to-end — including the NewRecruit UI engine's real Export-button flow — on the one
+  # spec the frozen NR-UI suite runs. Per-run instance ids are templated: step-produced ids
+  # resolve to ${{ steps.* }} refs, the rest to ${{ match('...') }} regex wildcards
+  # (single-quoted so the snapshot stays well-formed XML).
+  - id: exported-roster
+    expectedFile: {}
+
+  # ── A boolean option, taken and given back ──
   #
   # `se-inf-banner` is max 1 / min 0 / costless, so it is the one child of Infantry Squad that can
-  # only be present or absent. Every other child is countable — Trooper and Vox-caster are
-  # unbounded, and the Weapon Options members are a single-choice group — and an option panel gives
-  # those different controls. This spec is the one the every-push `smoke` lane runs, so the shapes
-  # it drives are the shapes that get per-push coverage; before this it drove a spinner, an add
-  # button and a radio, and never a boolean.
+  # only be present or absent. Every other child is countable — Trooper and Vox-caster are unbounded,
+  # and the Weapon Options members are a single-choice group — and an option panel gives those
+  # different controls. This spec is the one the every-push `smoke` lane runs, so the shapes it
+  # drives are the shapes that get per-push coverage; before this it drove a spinner, an add button
+  # and a radio, and never a boolean. Confirmed with `BS_UI_PANEL_TRACE=1`:
+  #   [agent] panel trace: 'Squad Banner' -> CheckBox (DRIVEN)
   #
   # The two ACTIONS are the assertion. `selectChildEntry` fails loudly when no control carries the
   # label — "Control not found for label: Squad Banner; panel offers: …" — and again when the click
@@ -1471,6 +1481,13 @@ steps:
   # selection, which is the other direction through the same control and the one that used to add
   # where it was asked to remove. Chaining the second step off the first's `selectionId` means a
   # step that created nothing cannot pass quietly either.
+  #
+  # AFTER the byte-compare above, deliberately. These steps were first written before it, on the
+  # reasoning that a costless option moves no total and so cannot disturb the export. The values
+  # were indeed untouched and the ORDER was not: BattleScribe rebuilds the roster's cost collection
+  # when a selection comes and goes, and it came back `power, pts` where the snapshot records
+  # `pts, power` — 165 lines either way, differing at line 4. Sequencing them after the export keeps
+  # the recorded bytes a property of the built roster rather than of the last thing that touched it.
   - action: selectChildEntry
     id: select-banner
     forceId: ${{ steps.add-battalion.forceId }}
@@ -1481,24 +1498,14 @@ steps:
     forceId: ${{ steps.add-battalion.forceId }}
     selectionId: ${{ steps.select-banner.selectionId }}
 
-  # Back to where the assertion above left the roster. Costless and max 1, so neither total moved
-  # while it was held — which is also why the byte-compared export below is unaffected by any of
-  # this, and why these steps could be inserted without re-recording two snapshots.
+  # Back where the roster was before the option was taken: costless and max 1, so no total moved
+  # while it was held, and it is gone again now.
   - expectedState:
       errorCount: 1
       costCount: 2
       costLimitCount: 1
       forces:
         - categoryCount: 4
-
-  # Byte-compare the fully-built roster's exported .ros against a per-engine snapshot
-  # (NewRecruit base + battlescribe override). This exercises IRosterEngine.ExportRosterXml()
-  # end-to-end — including the NewRecruit UI engine's real Export-button flow — on the one
-  # spec the frozen NR-UI suite runs. Per-run instance ids are templated: step-produced ids
-  # resolve to ${{ steps.* }} refs, the rest to ${{ match('...') }} regex wildcards
-  # (single-quoted so the snapshot stays well-formed XML).
-  - id: exported-roster
-    expectedFile: {}
 
   # ── Persistence actions ──
   # Protocol coverage for the two roster persistence actions. What they *mean* is proven by the
