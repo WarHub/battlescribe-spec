@@ -128,6 +128,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A checkbox-rendered entry is driven towards the state that was asked for, not away from it** —
+  the checkbox branch of `tryClickControlByLabel` never read `action`, so it fired blind and got both
+  directions wrong from the wrong starting state. `deselectSelection` on such an entry **ticked an
+  unticked box** — adding the selection the caller asked to remove — reported success, and thereby
+  skipped the DELETE fallback that would have worked; `selectChildEntry` on an already-ticked one
+  **unticked it**, removing the selection it was asked to make. Each then waited out its 10s poll for
+  the opposite of what it had just caused. A checkbox is now driven only when it is on the wrong side
+  of the request: already-ticked answers `ALREADY_SET` for a select, and already-unticked declines a
+  decrement so the DELETE path runs. This is the rule the `"+"` button branch already had; the
+  checkbox and radio branches sat directly beneath it without it. Also moves a misplaced
+  `@SuppressWarnings("unchecked")` onto the overload that actually casts, which silences a real
+  warning rather than an empty one.
 - **`setSelectionCount` with a count of zero removes the selection instead of decrementing it** — it
   delegated to `deselectSelection`, and those are not the same operation. `deselectSelection` on a
   collective child steps the PER-MODEL count: one press takes `number` 6 to 3 and the selection
