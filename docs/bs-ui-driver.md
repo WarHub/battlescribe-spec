@@ -429,6 +429,18 @@ mouse events on it. Used for double-clicking catalogue entries (which adds them 
   ```
   - `cellFound`: Whether the actual rendered TreeCell was located (false = clicked the TreeView itself as fallback)
 
+#### Scoping a catalogue-tree lookup to one force
+
+`#treeCatalogue` is not per-force: it holds the whole roster, one subtree per force, each offering
+that force's own copy of the same catalogue entries. So `rosterSelectEntryAction` confines its search
+to the target force's subtree (`resolveTreeScope`) — an unscoped search returns whichever copy comes
+first in tree order, and clicking it adds the selection to a different force entirely.
+
+**A force's subtree contains its child forces' subtrees**, which offer those entries a third time, so
+confining to the parent is not yet confining to the parent. The search therefore also refuses to
+descend into any nested force's subtree. Those ids come from roster state, not from the tree: every
+tree node renders the same `Name:id:…` shape, so the tree cannot say which of its nodes is a force.
+
 #### `clickTreeCellButton`
 
 Fires a Button embedded inside a TreeCell's graphic node. Used for the "remove force" (X)
