@@ -528,12 +528,22 @@ renders as `Sergeant • 12pts`. So candidates are **ranked** (`RosterActions.La
 | rank | rule | example, for the name `Armor` |
 |---|---|---|
 | `EXACT` | the label is the name | `Armor` |
-| `DECORATED` | the name, then a non-alphanumeric character | `Armor • 3pts`, `Armor Type` |
-| `CONTAINED` | the name appears anywhere | `Light Armor` |
+| `DECORATED` | the name, at most one space, then something that is not more name | `Armor • 3pts` |
+| `CONTAINED` | the name appears anywhere | `Light Armor`, `Armor Type` |
+
+`DECORATED` allows **one** space before the decoration and then requires a non-alphanumeric. Rejecting
+only a letter-or-digit continuation is not enough, because a space is neither: under that rule
+`Armor Type` ranked as decoration of `Armor` and tied with the real `Armor • 3pts` row, handing the
+choice back to `lookupAll` order — the tie the ranking exists to break. The corpus carries the shape
+in `Armor`/`Armor Type`, `Trooper`/`Trooper Support` and `Bolter`/`Bolter Modifications`, and an
+append-name modifier manufactures more of it from a single entry.
 
 The **best rank present in the window** is chosen first, and only over things that **carry a
-control** — a checkbox or radio (which is the control), or a Label with a Spinner or Button beside
-it. The scene spells an entry's name in several places that are not panel rows: the roster tree
+control** *and that the caller can actually drive*. The rank is a hard filter, so a candidate the
+caller cannot reach does not merely compete — it removes every candidate the caller can reach.
+`setSpinnerValueByLabel` scans labelled rows alone, and `tryClickControlByLabel` does too once
+`occurrence > 0`; both therefore rank over labelled rows only. A candidate is a checkbox or radio
+(which *is* the control), or a Label with a Spinner or Button beside it. The scene spells an entry's name in several places that are not panel rows: the roster tree
 renders `Trooper` while the panel renders `Trooper • 10pts` next to its spinner. Ranking over every
 label lets the tree row win as `EXACT` and then match nothing drivable — "Spinner not found" about a
 control that is right there. Same rule the `occurrence` counter states: a row in the tree is not a row

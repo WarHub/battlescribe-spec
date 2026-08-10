@@ -1137,12 +1137,27 @@ public class RosterActions {
         NONE,
     }
 
-    /** Where {@code rendered} sits in {@link LabelMatch}'s ranking for {@code name}. */
+    /**
+     * Where {@code rendered} sits in {@link LabelMatch}'s ranking for {@code name}.
+     *
+     * <p>DECORATED allows at most ONE space before the decoration, and then requires something that
+     * is not more name. " • 3pts" qualifies; " Type" does not. Rejecting only a letter-or-digit
+     * continuation is not enough, because a space is neither: under that rule {@code Armor Type}
+     * ranked as decoration of {@code Armor}, tying with the real {@code Armor • 3pts} row and
+     * handing the choice back to {@code lookupAll} order — the tie this ranking exists to break.
+     * The corpus carries the shape three times over ({@code Armor}/{@code Armor Type},
+     * {@code Trooper}/{@code Trooper Support}, {@code Bolter}/{@code Bolter Modifications}), and an
+     * append-name modifier manufactures more of it from a single entry.
+     */
     private static LabelMatch matchLabel(String rendered, String name) {
         if (rendered == null || name == null || name.isEmpty()) return LabelMatch.NONE;
         if (rendered.equals(name)) return LabelMatch.EXACT;
-        if (rendered.startsWith(name) && !Character.isLetterOrDigit(rendered.charAt(name.length()))) {
-            return LabelMatch.DECORATED;
+        if (rendered.startsWith(name)) {
+            String rest = rendered.substring(name.length());
+            int decoration = rest.startsWith(" ") ? 1 : 0;
+            if (decoration < rest.length() && !Character.isLetterOrDigit(rest.charAt(decoration))) {
+                return LabelMatch.DECORATED;
+            }
         }
         return rendered.contains(name) ? LabelMatch.CONTAINED : LabelMatch.NONE;
     }
@@ -1160,10 +1175,21 @@ public class RosterActions {
      * <p>Chosen BEFORE anything is driven, and independently of the action, so that a control
      * declining to act (an unticked checkbox asked to decrement) cannot let a worse rank take over
      * and drive a different entry's row.
+     *
+     * <p><b>Ranked over what the CALLER can drive</b>, hence {@code labelledRowsOnly}. The rank is a
+     * hard filter, so a candidate the caller cannot reach does not merely compete — it REMOVES every
+     * candidate the caller can reach. {@link #setSpinnerValueByLabel} scans labelled rows alone, and
+     * {@link #tryClickControlByLabel} does too once {@code occurrence > 0}; letting a self-labelled
+     * checkbox or radio set the rank for either would reproduce the tree-row bug this whole ranking
+     * was added to fix, one population over.
      */
-    private LabelMatch bestLabelMatch(Scene scene, String name) {
+    private LabelMatch bestLabelMatch(Scene scene, String name, boolean labelledRowsOnly) {
+        String[] styleClasses = labelledRowsOnly
+                ? new String[] { ".label" }
+                : new String[] { ".label", ".check-box", ".radio-button" };
+
         LabelMatch best = LabelMatch.NONE;
-        for (String styleClass : new String[] { ".label", ".check-box", ".radio-button" }) {
+        for (String styleClass : styleClasses) {
             for (Node node : scene.getRoot().lookupAll(styleClass)) {
                 if (!(node instanceof Labeled) || !carriesControl(node)) continue;
                 LabelMatch match = matchLabel(((Labeled) node).getText(), name);
@@ -1217,7 +1243,12 @@ public class RosterActions {
         // Settle for the closest spelling the panel offers, and then consider only that — see
         // LabelMatch. A panel holding both `Armor` and `Light Armor` has an exact answer, and taking
         // the first CONTAINED one instead is how a spec ends up driving its neighbour.
-        LabelMatch tier = bestLabelMatch(scene, text);
+        //
+        // Ranked over labelled rows alone once an occurrence is asked for, because the checkbox and
+        // radio loops below are unreachable in that case (see the `occurrence > 0` return): a
+        // self-labelled control setting the rank there would exclude every row that can still be
+        // driven.
+        LabelMatch tier = bestLabelMatch(scene, text, occurrence > 0);
         if (tier == LabelMatch.NONE) return ControlOutcome.NOT_FOUND;
 
         // Counted over labels that actually CARRY a control, not over every label that spells the
@@ -1356,7 +1387,11 @@ public class RosterActions {
         // Closest spelling only, as in tryClickControlByLabel — a count set on the neighbouring row
         // is worse than one not set at all, because the spec then asserts against a roster that was
         // changed somewhere it never looked.
-        LabelMatch tier = bestLabelMatch(scene, text);
+        //
+        // Labelled rows only: this method scans nothing else, so a self-labelled checkbox or radio
+        // spelling the same name would set a rank no candidate here can reach and turn a spinner
+        // that is present into "Spinner not found".
+        LabelMatch tier = bestLabelMatch(scene, text, true);
         if (tier == LabelMatch.NONE) {
             // Out before the loop, or `matchLabel(...) != NONE` would be false for every label that
             // does not match and the loop would consider all of them.
