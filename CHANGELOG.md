@@ -128,6 +128,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The roster lane's diagnostics artifact collected nothing** — `BsUiDiagnostics` defaults to
+  `Directory.GetCurrentDirectory()/artifacts/bs-ui-diagnostics`, which is right for the CLI and wrong
+  for the conformance lane: VSTest runs the test host with its working directory set to the test
+  assembly's output folder, so a failing spec wrote its dump to
+  `artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/bs-ui-diagnostics/` while CI's "Upload
+  diagnostics" step looked at the repo root. Measured locally: 19 dumps in the nested path, 1 at the
+  root. The artifact would have been empty for exactly the failures it exists to explain, and
+  `if-no-files-found: ignore` would have kept that quiet. `BsRosterUiFixture` now anchors the
+  directory at the repo root, which is the fix `TelemetryAssemblyFixture` already documents for the
+  telemetry artifact after the same trap; an explicit `BS_UI_DIAGNOSTICS_DIR` still wins.
 - **Label ranking: a longer NAME is not decoration, and the rank is taken over what the caller can
   drive** — two defects in the ranking added earlier in this stack, both found by an independent
   review of it rather than by CI. `DECORATED` rejected only a letter-or-digit continuation, and a

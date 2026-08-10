@@ -63,11 +63,52 @@ public sealed class BsRosterUiFixture : IAsyncLifetime
             return ValueTask.CompletedTask;
         }
 
+        AnchorDiagnosticsAtRepoRoot();
+
         var keepAlive = FixtureConcurrency.Resolve("battlescribe-ui", LoadTarget.Local).ReuseRoster;
 
         using var span = FixtureTelemetry.StartInit(nameof(BsRosterUiFixture));
         Engine = new BsUiRosterEngine(options) { KeepAlive = keepAlive };
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Points <see cref="BsUiDiagnostics"/> at the repo root's <c>artifacts/</c>, not the test
+    /// host's.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The driver defaults to <c>Directory.GetCurrentDirectory()/artifacts/bs-ui-diagnostics</c>,
+    /// which is right for the CLI and wrong here: VSTest runs the test host with its working
+    /// directory set to the test assembly's own output folder, so a failing spec in this lane writes
+    /// its dump to <c>artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/bs-ui-diagnostics/</c> —
+    /// measured, 19 dumps there against 1 at the repo root — and CI's "Upload diagnostics" step
+    /// looks only at the latter. The artifact would be empty for exactly the failures it exists to
+    /// explain, and <c>if-no-files-found: ignore</c> would keep that quiet.
+    /// </para>
+    /// <para>
+    /// The same trap, with the same cause and the same fix, is written down in
+    /// <see cref="TelemetryAssemblyFixture"/> for the telemetry artifact. It is done here rather
+    /// than in the driver because <c>TestPaths</c> is test-side, and because knowing that this
+    /// process is a VSTest host is the fixture's business, not the driver's.
+    /// </para>
+    /// <para>
+    /// An explicit <c>BS_UI_DIAGNOSTICS_DIR</c> still wins — this only replaces the default, and
+    /// only when the repo root can be found.
+    /// </para>
+    /// </remarks>
+    private static void AnchorDiagnosticsAtRepoRoot()
+    {
+        if (Environment.GetEnvironmentVariable("BS_UI_DIAGNOSTICS_DIR") is { Length: > 0 })
+        {
+            return;
+        }
+
+        if (TestPaths.RepoRootDirectory is { } repoRoot)
+        {
+            BsUiDiagnostics.DiagnosticsDirectory =
+                Path.Combine(repoRoot, "artifacts", "bs-ui-diagnostics");
+        }
     }
 
     public ValueTask DisposeAsync()
