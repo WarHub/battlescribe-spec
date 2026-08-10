@@ -29,14 +29,13 @@ public sealed class BsUiProbe : IAsyncDisposable
     /// </summary>
     public async Task LaunchAsync(
         ProtocolGameSystem gameSystem,
-        IReadOnlyList<ProtocolCatalogue> catalogues,
         IReadOnlyList<(string FileName, string Content)> xmlFiles,
         TextWriter? log = null)
     {
         log ??= TextWriter.Null;
 
         var dataDir = _app.DataDirectoryPath;
-        await BsUiDataStaging.StageDataFilesAsync(dataDir, gameSystem, catalogues, xmlFiles);
+        await BsUiDataStaging.StageDataFilesAsync(dataDir, gameSystem.Id, xmlFiles);
         foreach (var (fileName, _) in xmlFiles)
         {
             log.WriteLine($"  Staged: {fileName}");

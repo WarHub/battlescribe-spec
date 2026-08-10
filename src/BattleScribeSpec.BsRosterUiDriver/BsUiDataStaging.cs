@@ -1,5 +1,4 @@
 using System.Xml.Linq;
-using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.BsRosterUiDriver;
 
@@ -7,14 +6,25 @@ public static class BsUiDataStaging
 {
     private const string BattleScribeVersion = "2.03";
 
+    /// <summary>
+    /// Writes <paramref name="files"/> into the isolated BattleScribe data directory, under a
+    /// subdirectory named for the game system, with the <c>index.bsi</c> BattleScribe needs to see
+    /// them at all.
+    /// </summary>
+    /// <remarks>
+    /// Takes raw XML rather than Protocol objects, because the <c>dataSource</c> path has no
+    /// Protocol objects — its files are real BattleScribe data read off disk. The index is built by
+    /// READING those files, which is also why the generated path routes through here: an index
+    /// describing what was actually staged cannot disagree with it, and one built from the objects
+    /// the files were generated from can.
+    /// </remarks>
     public static async Task StageDataFilesAsync(
         string dataDirectoryPath,
-        ProtocolGameSystem gameSystem,
-        IReadOnlyList<ProtocolCatalogue> catalogues,
+        string gameSystemId,
         IReadOnlyList<(string FileName, string Content)> files)
     {
         Directory.CreateDirectory(dataDirectoryPath);
-        var gameSystemDirectory = Path.Combine(dataDirectoryPath, gameSystem.Id);
+        var gameSystemDirectory = Path.Combine(dataDirectoryPath, gameSystemId);
         if (Directory.Exists(gameSystemDirectory))
         {
             Directory.Delete(gameSystemDirectory, recursive: true);
@@ -29,50 +39,60 @@ public static class BsUiDataStaging
         }
 
         var indexPath = Path.Combine(gameSystemDirectory, "index.bsi");
-        await File.WriteAllTextAsync(indexPath, BuildIndexXml(gameSystem, catalogues, files));
+        await File.WriteAllTextAsync(indexPath, BuildIndexXml(files));
     }
 
-    public static string BuildIndexXml(
-        ProtocolGameSystem gameSystem,
-        IReadOnlyList<ProtocolCatalogue> catalogues,
-        IReadOnlyList<(string FileName, string Content)> files)
+    /// <summary>
+    /// The <c>index.bsi</c> describing <paramref name="files"/>, with every id and name read out of
+    /// the files themselves.
+    /// </summary>
+    public static string BuildIndexXml(IReadOnlyList<(string FileName, string Content)> files)
     {
-        var gstFileName = files.FirstOrDefault(x => x.FileName.EndsWith(".gst", StringComparison.Ordinal)).FileName
-            ?? "system.gst";
-        var catalogueFiles = files.Where(x => x.FileName.EndsWith(".cat", StringComparison.Ordinal)).ToList();
         XNamespace ns = "http://www.battlescribe.net/schema/dataIndexSchema";
-        var entries = new List<XElement>
-        {
-            new(
-                ns + "dataIndexEntry",
-                new XAttribute("filePath", gstFileName),
-                new XAttribute("dataType", "gamesystem"),
-                new XAttribute("dataId", gameSystem.Id),
-                new XAttribute("dataName", gameSystem.Name),
-                new XAttribute("dataBattleScribeVersion", BattleScribeVersion),
-                new XAttribute("dataRevision", 1)),
-        };
+        var entries = new List<XElement>();
+        string? systemName = null;
 
-        for (var i = 0; i < catalogues.Count; i++)
+        foreach (var (fileName, content) in files)
         {
-            var fileName = i < catalogueFiles.Count ? catalogueFiles[i].FileName : $"catalogue{i}.cat";
+            var isGameSystem = fileName.EndsWith(".gst", StringComparison.OrdinalIgnoreCase);
+            if (!isGameSystem && !fileName.EndsWith(".cat", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var root = XDocument.Parse(content).Root;
+            if (root is null)
+            {
+                continue;
+            }
+
+            var name = (string?)root.Attribute("name") ?? fileName;
+            if (isGameSystem)
+            {
+                systemName = name;
+            }
+
             entries.Add(
                 new XElement(
                     ns + "dataIndexEntry",
                     new XAttribute("filePath", fileName),
-                    new XAttribute("dataType", "catalogue"),
-                    new XAttribute("dataId", catalogues[i].Id),
-                    new XAttribute("dataName", catalogues[i].Name),
-                    new XAttribute("dataBattleScribeVersion", BattleScribeVersion),
-                    new XAttribute("dataRevision", 1)));
+                    new XAttribute("dataType", isGameSystem ? "gamesystem" : "catalogue"),
+                    new XAttribute("dataId", (string?)root.Attribute("id") ?? fileName),
+                    new XAttribute("dataName", name),
+                    new XAttribute("dataBattleScribeVersion", (string?)root.Attribute("battleScribeVersion") ?? BattleScribeVersion),
+                    new XAttribute("dataRevision", (string?)root.Attribute("revision") ?? "1")));
         }
 
-        var root = new XElement(
+        // The game system entry first: BattleScribe reads the index in order and a catalogue whose
+        // system has not been seen yet is not attached to one.
+        entries = [.. entries.OrderByDescending(e => (string?)e.Attribute("dataType") == "gamesystem")];
+
+        var index = new XElement(
             ns + "dataIndex",
             new XAttribute("battleScribeVersion", BattleScribeVersion),
-            new XAttribute("name", gameSystem.Name),
+            new XAttribute("name", systemName ?? "Spec Data"),
             new XElement(ns + "dataIndexEntries", entries));
 
-        return new XDocument(new XDeclaration("1.0", "utf-8", "yes"), root).ToString();
+        return new XDocument(new XDeclaration("1.0", "utf-8", "yes"), index).ToString();
     }
 }

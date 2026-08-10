@@ -98,7 +98,7 @@ internal static class ProbeCommand
         Ui.Info($"BS UI Probe — launching with {xmlFiles.Count} data file(s)");
 
         await using var probe = new BsUiProbe(options);
-        await probe.LaunchAsync(gameSystem, catalogues, xmlFiles, Console.Error);
+        await probe.LaunchAsync(gameSystem, xmlFiles, Console.Error);
 
         Ui.Blank();
         Ui.Info("── Scene Graph Dump ──");
