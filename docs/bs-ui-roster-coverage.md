@@ -4,7 +4,7 @@
 injected into the JVM: real dialogs, real tree clicks, state read back from the Java model. The lane
 was added in #353 and its 83 failures were unclassified, which is why it was deliberately not wired
 into `ci.yml` — a permanently-red job is worse than no job. This document is the classification, and
-what it turned into.
+what it turned into. It is wired in now; see [In CI](#in-ci).
 
 ## Where it went
 
@@ -230,3 +230,21 @@ spec currently needs one.
 
 The rule that replaces an allow-list, unchanged: **a failing spec carries its reason, or it is not
 failing on purpose.** With all 5 resolved, the lane's blocker on `ci.yml` (#355) is gone.
+
+## In CI
+
+The lane now runs as the `roster` half of `thorough-ui-bs`, sharded 2 ways on the same `Shard` trait
+as the gamedata half — a `suite` axis on the existing job rather than a second job, because the two
+halves need identical artifacts, JDK, agent build and `xvfb`, and a copied setup block is one that
+drifts.
+
+It is **opt-in**, like every other thorough lane: `workflow_dispatch`, the weekly Monday schedule, a
+`thorough-ci` label on a PR, a `[nr-test]` commit message, or a PR touching `testdata.json`. So a
+BattleScribe change still merges without it unless someone asks — the difference is that asking is
+now possible, and the weekly run reports drift that previously nothing looked for.
+
+**The table above predates the driver fixes that followed it.** The 367/367 was measured before the
+nested-force scoping, the label ranking, the checkbox direction and the count-of-zero fix landed;
+each of those changes behaviour on paths the corpus exercises. The first opt-in run on this stack is
+the confirming measurement, and the numbers here should be re-recorded from it rather than assumed to
+carry over.

@@ -126,6 +126,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`modifier-field-constraint-value` enhanced** — now selects 3 times to verify the
   constraint value change from max=2 to max=5 is actually observable (no error at 3).
 
+### Added
+
+- **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on
+  `Engine=BsGameDataUi`, so the Data Editor had a lane and the Roster Editor had none: every change to
+  `BsUiRosterEngine` and `RosterActions.java` reached `main` exercised by unit tests and one teardown
+  test. `BsRosterUiConformanceTests` was written to shard on the same trait for exactly this and then
+  held back (#355) until its failures were each fixed or declared, which #354 completed. The job gains
+  a `suite` matrix axis — one job definition, not two, because the halves need identical artifacts,
+  JDK, agent build and `xvfb`, and a copied fifty-line setup block is one that drifts — plus a
+  90-minute ceiling where both halves previously inherited GitHub's six-hour default. Still opt-in on
+  the same four triggers as every thorough lane. The diagnostics upload also stops pointing the
+  gamedata leg at the roster driver's directory, which is what it had been collecting (nothing).
+
 ### Fixed
 
 - **An edit-panel control is addressed by the closest spelling of a name, not the first one
