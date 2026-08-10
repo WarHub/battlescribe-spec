@@ -313,6 +313,12 @@ jobs:
         # --no-build: reuse the binaries from the Build step above. Without it, `dotnet run`
         # rebuilds with default props (analyzers on), re-doing the whole solution.
         run: xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli --no-build -- run --engine battlescribe --ui protocol-kitchen-sink
+        env:
+          # One spec, so a line per driven control is affordable — and it is the only way this lane
+          # can say WHICH control shapes it covers. A passing spec proves an entry was reached, not
+          # what was clicked to reach it, and that gap is how the driver's checkbox branch survived
+          # without anyone knowing whether BattleScribe renders one at all.
+          BS_UI_PANEL_TRACE: 1
 
   # ── THOROUGH conformance (opt-in): the full offline + frozen-NR suites that the
   #    every-push lanes trim to kitchen-sink. ──

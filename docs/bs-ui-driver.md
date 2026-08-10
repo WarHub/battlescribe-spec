@@ -940,6 +940,19 @@ distinguish an action that did nothing from one whose result the predicate did n
 one that acted somewhere else. Those are different bugs — and on this lane they were two of them
 hiding behind one message. `selectEntryAction` and `selectChildEntryAction` pass one.
 
+### `BS_UI_PANEL_TRACE=1`
+
+Prints one line per labelled edit-panel request naming the control it resolved to and what driving it
+did — `[agent] panel trace: 'Squad Banner' -> CheckBox (DRIVEN)`.
+
+It answers a question nothing else in the driver can: **what shape is this entry rendered as**. A
+passing spec proves the entry was reached, not what was clicked to reach it. That gap is how the
+checkbox branch was written from JavaFX's class list rather than from an observed panel, and went
+unexamined until `protocol-kitchen-sink` was extended to take a boolean option.
+
+`ci.yml`'s smoke step sets it, because that step runs one spec and the log is then a per-push record
+of which control shapes kitchen-sink actually covers.
+
 ### `BS_UI_VALIDATION_TRACE=1`
 
 Prints every validation error with each id source that could name it — the owning element's

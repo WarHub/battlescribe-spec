@@ -262,6 +262,21 @@ setup:
               name: Hidden Upgrade
               type: upgrade
               hidden: true
+            # A take-it-or-leave-it upgrade: max 1, min 0, no cost. Its shape is the point — an
+            # entry that can only be present or absent is the one an option panel has a boolean
+            # control for, and every other child here is a countable one (Trooper and Vox-caster
+            # are unbounded, the Weapon Options members are a single-choice group). Costless so
+            # that selecting it moves no total, which keeps the byte-compared export and the
+            # cost assertions around it untouched.
+            - id: se-inf-banner
+              name: Squad Banner
+              type: upgrade
+              constraints:
+                - id: con-banner-max-1
+                  type: max
+                  value: 1
+                  field: selections
+                  scope: parent
           selectionEntryGroups:
             - id: seg-inf-weapons
               name: Weapon Options
@@ -1434,6 +1449,41 @@ steps:
                   rules: *req-rules
                   categories: *req-cat-elites
 
+  - expectedState:
+      errorCount: 1
+      costCount: 2
+      costLimitCount: 1
+      forces:
+        - categoryCount: 4
+
+  # ── Step 12: a boolean option, taken and given back ──
+  #
+  # `se-inf-banner` is max 1 / min 0 / costless, so it is the one child of Infantry Squad that can
+  # only be present or absent. Every other child is countable — Trooper and Vox-caster are
+  # unbounded, and the Weapon Options members are a single-choice group — and an option panel gives
+  # those different controls. This spec is the one the every-push `smoke` lane runs, so the shapes
+  # it drives are the shapes that get per-push coverage; before this it drove a spinner, an add
+  # button and a radio, and never a boolean.
+  #
+  # The two ACTIONS are the assertion. `selectChildEntry` fails loudly when no control carries the
+  # label — "Control not found for label: Squad Banner; panel offers: …" — and again when the click
+  # lands but the roster does not change. `deselectSelection` then has to take back the same
+  # selection, which is the other direction through the same control and the one that used to add
+  # where it was asked to remove. Chaining the second step off the first's `selectionId` means a
+  # step that created nothing cannot pass quietly either.
+  - action: selectChildEntry
+    id: select-banner
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-infantry-2.selectionId }}
+    entryId: se-inf-banner
+
+  - action: deselectSelection
+    forceId: ${{ steps.add-battalion.forceId }}
+    selectionId: ${{ steps.select-banner.selectionId }}
+
+  # Back to where the assertion above left the roster. Costless and max 1, so neither total moved
+  # while it was held — which is also why the byte-compared export below is unaffected by any of
+  # this, and why these steps could be inserted without re-recording two snapshots.
   - expectedState:
       errorCount: 1
       costCount: 2

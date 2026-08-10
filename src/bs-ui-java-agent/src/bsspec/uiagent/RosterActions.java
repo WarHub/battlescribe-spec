@@ -1249,7 +1249,7 @@ public class RosterActions {
                     } else {
                         spinner.getValueFactory().increment(1);
                     }
-                    return ControlOutcome.DRIVEN;
+                    return traced(text, "Spinner", ControlOutcome.DRIVEN);
                 }
                 if (sibling instanceof Button) {
                     // The button an INSTANCED entry gets is "+", and it only adds. Firing it for a
@@ -1260,7 +1260,7 @@ public class RosterActions {
                         continue;
                     }
                     ((Button) sibling).fire();
-                    return ControlOutcome.DRIVEN;
+                    return traced(text, "Button", ControlOutcome.DRIVEN);
                 }
             }
         }
@@ -1294,14 +1294,14 @@ public class RosterActions {
                 // removal control, so keep looking and let the caller reach its DELETE path.
                 if (!cb.isSelected()) continue;
                 cb.fire();
-                return ControlOutcome.DRIVEN;
+                return traced(text, "CheckBox", ControlOutcome.DRIVEN);
             }
 
             if (cb.isSelected()) {
-                return ControlOutcome.ALREADY_SET;
+                return traced(text, "CheckBox", ControlOutcome.ALREADY_SET);
             }
             cb.fire();
-            return ControlOutcome.DRIVEN;
+            return traced(text, "CheckBox", ControlOutcome.DRIVEN);
         }
 
         // Look for RadioButton by text.
@@ -1327,15 +1327,15 @@ public class RosterActions {
                 continue;
             }
             if (rb.isSelected()) {
-                return ControlOutcome.ALREADY_SET;
+                return traced(text, "RadioButton", ControlOutcome.ALREADY_SET);
             }
             // fire() and nothing else. RadioButton.fire() selects it and notifies the ToggleGroup,
             // which is what BattleScribe listens to; setSelected() beforehand only flips the state
             // fire() is about to toggle, so the pair can leave it deselected.
             rb.fire();
-            return ControlOutcome.DRIVEN;
+            return traced(text, "RadioButton", ControlOutcome.DRIVEN);
         }
-        return ControlOutcome.NOT_FOUND;
+        return traced(text, "(none)", ControlOutcome.NOT_FOUND);
     }
 
     /**
@@ -2112,6 +2112,28 @@ public class RosterActions {
 
     /** Set {@code BS_UI_TREE_TRACE=1} to dump both roster trees around a selectEntry. */
     private static final boolean TREE_TRACE = "1".equals(System.getenv("BS_UI_TREE_TRACE"));
+
+    /**
+     * Set {@code BS_UI_PANEL_TRACE=1} to print which edit-panel control each labelled request drove.
+     *
+     * <p>The question it answers is "what shape is this entry rendered as", and nothing else in the
+     * driver can answer it: a spec that passes proves the entry was reached, not what was clicked to
+     * reach it. That gap is how the checkbox branch went years without anyone knowing whether
+     * BattleScribe ever renders one — the code was written from the class list, not from a panel.
+     *
+     * <p>Cheap enough to leave on for a single spec, which is what {@code ci.yml}'s smoke step does:
+     * the log then says, every push, which control shapes kitchen-sink actually covers.
+     */
+    private static final boolean PANEL_TRACE = "1".equals(System.getenv("BS_UI_PANEL_TRACE"));
+
+    /** Records what a labelled request resolved to, and returns it unchanged. */
+    private ControlOutcome traced(String label, String controlKind, ControlOutcome outcome) {
+        if (PANEL_TRACE) {
+            System.err.println("[agent] panel trace: '" + label + "' -> " + controlKind
+                    + " (" + outcome + ")");
+        }
+        return outcome;
+    }
 
     /** A TreeView's visible structure, for diagnostics. FX thread only. */
     @SuppressWarnings("unchecked")

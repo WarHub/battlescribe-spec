@@ -138,6 +138,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`protocol-kitchen-sink` takes a boolean option, and the smoke lane says which controls it drove**
+  — kitchen-sink is the one spec the every-push `smoke` job runs against the real BattleScribe app,
+  and it drove a spinner, an add button and a radio. Never a checkbox. So the driver's checkbox
+  branch — the one control that answers both directions by toggling, and which was wrong in both of
+  them until this stack — had no per-push coverage and, as far as the record goes, had never been
+  observed running at all: it was written from JavaFX's class list rather than from a panel.
+  `se-inf-banner` is max 1, min 0 and costless, which makes it the only child of Infantry Squad that
+  can only be present or absent; the spec now takes it and gives it back. Costless so the
+  byte-compared export and the cost assertions either side are untouched, which is why this needed no
+  snapshot re-recording. New `BS_UI_PANEL_TRACE=1` prints the control each labelled request resolved
+  to, and the smoke step sets it — a passing spec proves an entry was reached, not what was clicked
+  to reach it, so without it the coverage claim would be an assumption.
 - **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on
   `Engine=BsGameDataUi`, so the Data Editor had a lane and the Roster Editor had none: every change to
   `BsUiRosterEngine` and `RosterActions.java` reached `main` exercised by unit tests and one teardown
