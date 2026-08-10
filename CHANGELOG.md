@@ -128,6 +128,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A fractional cost limit is refused on both routes into BattleScribe, not one** — the New Roster
+  dialog's spinner already declined a `defaultCostLimit` it could not spell, on the stated grounds
+  that 0.25 entered as 0 puts every selection over a limit the game system never declared. The Edit
+  Roster route reached by `setCostLimit` cast the same kind of value to `int` instead, so the answer
+  the dialog refused to invent was invented the moment a roster already existed. Both now ask one
+  rule, `BsUiCostLimits`, which also refuses a negative limit (the format's "no limit", which an
+  untouched spinner already means, and which the spinner would clamp to a real 0) and a value past
+  `Spinner<Integer>`'s range. A refusal is printed, because its only other symptom is a limit that is
+  simply absent — indistinguishable from BattleScribe ignoring one. No spec sets a fractional limit
+  through `setCostLimit` today; the rule is one file with its own tests precisely so the two routes
+  cannot drift apart again, and so a route later found to carry a fractional or per-type limit is one
+  edit rather than a hunt for call sites.
 - **The BS Roster UI lane's last five failures (#354)** — all five turned out to be defects, not
   expectations to write down, and the lane reaches 367/367 with **no spec declared
   `battlescribe-ui: fail` for any of them**.
