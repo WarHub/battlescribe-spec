@@ -30,6 +30,15 @@ import java.util.Set;
  */
 public class EngineAccessor {
 
+    /**
+     * Set {@code BS_UI_VALIDATION_TRACE=1} to print every validation error with each id source that
+     * could name it. Off by default; on, it is one line per error per state read.
+     *
+     * <p>Worth having as a switch rather than as a temporary edit: which element carries usable ids
+     * varies by owner type, and the only way to find out is to look at all of them at once.
+     */
+    private static final boolean VALIDATION_TRACE = "1".equals(System.getenv("BS_UI_VALIDATION_TRACE"));
+
     private final Instrumentation instrumentation;
 
     // Cached references
@@ -1186,7 +1195,21 @@ public class EngineAccessor {
         return errorIdMap;
     }
 
-    private ValidationRef resolveValidationRef(Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
+    /**
+     * Resolves the {@code entryId/constraintId} a spec asserts as {@code from}.
+     *
+     * <p><b>The error object cannot answer this.</b> {@code net.battlescribe.engine.b.a} is
+     * constructed as {@code (Object, String)} and exposes the object as {@code a()}, which reads
+     * like the source constraint and is not: it is the ROSTER ELEMENT the error hangs on — a
+     * {@code model.roster.Category} whose parent is the {@code Force} — carrying runtime ids
+     * regenerated on every recalculation. Reading ids off it produces a well-formed and entirely
+     * wrong {@code from}, which is worse than none. Measured with {@code BS_UI_VALIDATION_TRACE=1}.
+     *
+     * <p>So the only carriers are {@code getValidationErrorIds()}, which is where the spec-side ids
+     * genuinely live, and failing that the message text. Both are used below.
+     */
+    private ValidationRef resolveValidationRef(
+            Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
         String lowerMessage = message != null ? message.toLowerCase(Locale.ROOT) : null;
 
         if ("roster".equals(ownerType)) {
@@ -1349,6 +1372,12 @@ public class EngineAccessor {
         List<String> errorIdList = extractStrings(errorIds);
         Map<String, List<String>> errorIdMap = parseValidationErrorIds(errorIdList);
         String ownerEntryId = callGetter(element, "getEntryId");
+        if (VALIDATION_TRACE) {
+            System.err.println("[agent] validation trace: element ownerType=" + ownerType
+                    + " ownerEntryId=" + ownerEntryId
+                    + " errorIds=" + errorIdList
+                    + " errorCount=" + toJavaList(elementErrors).size());
+        }
         for (Object error : toJavaList(elementErrors)) {
             String message = extractValidationMessage(error);
             ValidationRef validationRef = resolveValidationRef(errorIdMap, ownerType, message, ownerEntryId);
@@ -1364,6 +1393,27 @@ public class EngineAccessor {
             }
             if (validationRef.constraintId != null) {
                 item.addProperty("constraintId", validationRef.constraintId);
+            }
+            if (VALIDATION_TRACE) {
+                Object attached = callGetterObject(error, "a");
+                System.err.println("[agent] validation trace: ownerType=" + ownerType
+                        + " ownerEntryId=" + ownerEntryId
+                        + " ownErrorIds=" + errorIdList
+                        + " attached=" + (attached == null ? null : attached.getClass().getName())
+                        + " resolved=" + validationRef.entryId + "/" + validationRef.constraintId
+                        + " message=" + message);
+            }
+            if (validationRef.entryId == null || validationRef.constraintId == null) {
+                // An unresolved ref is not an absent error: the error IS reported, with its owner
+                // and message intact, and only `from` is missing — so the spec fails saying the
+                // error was "not found in" a list that visibly contains it. Say what could not be
+                // resolved, and from what, or the next reader diagnoses it as a missing error.
+                System.err.println("[agent] validation ref unresolved: ownerType=" + ownerType
+                        + " ownerEntryId=" + ownerEntryId
+                        + " entryId=" + validationRef.entryId
+                        + " constraintId=" + validationRef.constraintId
+                        + " errorIds=" + errorIdList
+                        + " message=" + message);
             }
             if (!errorIdList.isEmpty()) {
                 item.add("errorIds", toJsonArray(errorIdList));

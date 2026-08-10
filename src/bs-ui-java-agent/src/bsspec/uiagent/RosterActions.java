@@ -23,6 +23,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -206,11 +207,25 @@ public class RosterActions {
         // like-named entry of the previously selected force.
         waitForTreeItem("#treeCatalogue", entryId);
 
-        // Phase 2: Double-click the entry in the catalogue tree
-        runOnFx(() -> clickTreeItemById("#treeCatalogue", entryId, true));
+        // Phase 2: Double-click the entry in the catalogue tree, recording what the ROSTER tree
+        // believed was selected at that moment rather than assuming it. When two forces come from
+        // the same force entry their catalogue trees are identical, so the wait above cannot tell a
+        // rebuilt tree from a stale one and the click lands wherever BattleScribe thinks it is —
+        // which the timeout below would otherwise report as "the click did nothing".
+        //
+        // Read inside the click's own dispatch: a separate runOnFxGet would add an FX round trip to
+        // every selectEntry in the suite, and each one contends with BattleScribe's own work on that
+        // single thread.
+        String treeSelection = runOnFxGet(() -> {
+            String selected = describeTreeSelection("#treeRoster");
+            clickTreeItemById("#treeCatalogue", entryId, true);
+            return selected;
+        });
 
-        JsonObject after = waitForStateChange(state ->
-                findCreatedSelection(before, state, forceId, null, entryId) != null);
+        JsonObject after = waitForStateChange(
+                state -> findCreatedSelection(before, state, forceId, null, entryId) != null,
+                state -> describeMissingSelection(state, forceId, null, entryId)
+                        + "; roster tree had selected: " + treeSelection);
 
         JsonObject created = findCreatedSelection(before, after, forceId, null, entryId);
         return buildSelectionOutputs(before, after, created).toString();
@@ -742,6 +757,18 @@ public class RosterActions {
             JsonObject beforeParent = findSelectionById(before, parentSelectionId);
             if (beforeParent == null) return true;
             return childSelectionCount(parent) > childSelectionCount(beforeParent);
+        }, state -> {
+            JsonObject parent = findSelectionById(state, parentSelectionId);
+            if (parent == null) {
+                return "parent selection " + parentSelectionId + " is no longer in the roster";
+            }
+            JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+            return "clicking control '" + labelText + "' left parent " + parentSelectionId
+                    + " with the same child count ("
+                    + (beforeParent == null ? "?" : childSelectionCount(beforeParent))
+                    + " -> " + childSelectionCount(parent) + "), children now: "
+                    + describeSelections(childSelectionsOf(parent))
+                    + "; wanted entryId '" + entryId + "'";
         });
 
         // Find the new child selection (in after but not in before)
@@ -1021,6 +1048,18 @@ public class RosterActions {
     /**
      * Gets the number of child selections in a selection/force.
      */
+    /** The child selections {@link #childSelectionCount} counts, for diagnostics. */
+    private List<JsonObject> childSelectionsOf(JsonObject scope) {
+        List<JsonObject> result = new ArrayList<>();
+        for (String key : new String[] { "selections", "children" }) {
+            if (!scope.has(key)) continue;
+            for (JsonElement el : scope.getAsJsonArray(key)) {
+                if (el.isJsonObject()) result.add(el.getAsJsonObject());
+            }
+        }
+        return result;
+    }
+
     private int childSelectionCount(JsonObject scope) {
         int count = 0;
         if (scope.has("selections")) {
@@ -1235,12 +1274,28 @@ public class RosterActions {
     }
 
     private JsonObject waitForStateChange(Predicate<JsonObject> predicate) {
+        return waitForStateChange(predicate, null);
+    }
+
+    /**
+     * Polls roster state until {@code predicate} holds, or throws at the deadline.
+     *
+     * <p>{@code describeOnTimeout} renders the LAST state read into the timeout message. It is
+     * worth passing wherever the predicate asks a question the state can answer, because
+     * "Timed out waiting for state change" on its own says only that this loop ran out — not
+     * whether the action did nothing, did something the predicate did not recognise, or did it
+     * somewhere else. Those are different bugs and the bare message cannot tell them apart.
+     */
+    private JsonObject waitForStateChange(
+            Predicate<JsonObject> predicate, Function<JsonObject, String> describeOnTimeout) {
         long deadline = System.currentTimeMillis() + STATE_POLL_TIMEOUT_MS;
         RuntimeException lastError = null;
+        JsonObject lastState = null;
 
         while (System.currentTimeMillis() < deadline) {
             try {
                 JsonObject state = readRosterState();
+                lastState = state;
                 if (predicate.test(state)) {
                     return state;
                 }
@@ -1254,8 +1309,73 @@ public class RosterActions {
             sleep(POLL_INTERVAL_MS);
         }
 
+        String detail = "";
+        if (describeOnTimeout != null && lastState != null) {
+            try {
+                detail = " — " + describeOnTimeout.apply(lastState);
+            } catch (RuntimeException e) {
+                detail = " — (could not describe final state: " + e + ")";
+            }
+        }
+
         throw new RuntimeException("Timed out waiting for state change" +
-                (lastError != null ? ": " + lastError.getMessage() : ""));
+                (lastError != null ? ": " + lastError.getMessage() : "") + detail);
+    }
+
+    /**
+     * Describes why {@link #findCreatedSelection} found nothing, from the final state.
+     *
+     * <p>Names the three outcomes that produce an identical timeout: the force holds nothing new
+     * (the click did not land), it holds something new under a different entryId (the predicate's
+     * equality is what failed), or the selection exists but under a different owner (it landed
+     * somewhere else — a wrong-force or wrong-depth bug wearing a timeout's clothes).
+     */
+    private String describeMissingSelection(
+            JsonObject state, String forceId, String parentSelectionId, String entryId) {
+        JsonObject force = findForceById(state, forceId);
+        if (force == null) {
+            return "force " + forceId + " is not in the roster at all; forces present: "
+                    + describeIds(allForces(state));
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("no selection for entryId '").append(entryId).append("' in ");
+        sb.append(parentSelectionId == null
+                ? "force " + forceId
+                : "selection " + parentSelectionId + " of force " + forceId);
+        sb.append("; that scope holds: ").append(describeSelections(
+                getSelectionsInScope(state, forceId, parentSelectionId)));
+
+        List<String> elsewhere = new ArrayList<>();
+        for (JsonObject sel : allSelections(state)) {
+            if (Objects.equals(getStringField(sel, "entryId"), entryId)) {
+                elsewhere.add(getStringField(sel, "id") + " (" + getStringField(sel, "name") + ")");
+            }
+        }
+        if (!elsewhere.isEmpty()) {
+            sb.append("; but the roster DOES hold that entryId elsewhere: ").append(elsewhere);
+        }
+        return sb.toString();
+    }
+
+    private String describeSelections(List<JsonObject> selections) {
+        if (selections.isEmpty()) {
+            return "(nothing)";
+        }
+        List<String> parts = new ArrayList<>();
+        for (JsonObject sel : selections) {
+            parts.add(getStringField(sel, "entryId") + "=" + getStringField(sel, "id")
+                    + " (" + getStringField(sel, "name") + " x" + getIntField(sel, "number", 1) + ")");
+        }
+        return parts.toString();
+    }
+
+    private String describeIds(List<JsonObject> objects) {
+        List<String> ids = new ArrayList<>();
+        for (JsonObject o : objects) {
+            ids.add(getStringField(o, "id") + " (" + getStringField(o, "name") + ")");
+        }
+        return ids.toString();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1478,6 +1598,19 @@ public class RosterActions {
         if (item == null) throw new RuntimeException("Tree item not found for id: " + id);
 
         tree.getSelectionModel().select(item);
+    }
+
+    /** The text of a TreeView's selected item, for diagnostics. FX thread only. */
+    @SuppressWarnings("unchecked")
+    private String describeTreeSelection(String treeSelector) {
+        Scene scene = findScene(MAIN_WINDOW);
+        if (scene == null) return "(main window scene not found)";
+        Node node = scene.getRoot().lookup(treeSelector);
+        if (!(node instanceof TreeView)) return "(not a TreeView: " + treeSelector + ")";
+        TreeItem<Object> item = ((TreeView<Object>) node).getSelectionModel().getSelectedItem();
+        if (item == null) return "(nothing)";
+        Object value = item.getValue();
+        return value == null ? "(item with null value)" : String.valueOf(value);
     }
 
     /**
