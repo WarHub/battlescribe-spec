@@ -138,6 +138,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`protocol-kitchen-sink` takes a boolean option, and the smoke lane says which controls it drove**
+  — kitchen-sink is the one spec the every-push `smoke` job runs against the real BattleScribe app,
+  and it drove a spinner, an add button and a radio. Never a checkbox. So the driver's checkbox
+  branch — the one control that answers both directions by toggling, and which was wrong in both of
+  them until this stack — had no per-push coverage and, as far as the record goes, had never been
+  observed running at all: it was written from JavaFX's class list rather than from a panel.
+  `se-inf-banner` is max 1, min 0 and costless, which makes it the only child of Infantry Squad that
+  can only be present or absent; the spec now takes it and gives it back, after the byte-compared
+  export rather than before it — a costless option moves no cost VALUE, but BattleScribe rebuilds the
+  roster's cost collection when a selection comes and goes, and it came back `power, pts` where the
+  snapshot records `pts, power`. New `BS_UI_PANEL_TRACE=1` prints the control each labelled request
+  resolved to, and the smoke step sets it — a passing spec proves an entry was reached, not what was
+  clicked to reach it, so without it the coverage claim would be an assumption. It reports
+  `'Squad Banner' -> CheckBox (DRIVEN)` on both directions, which is the first record in this repo of
+  BattleScribe rendering that control at all. `newrecruit-ui` is opted out of the two steps on a
+  measured observation — NR's options panel renders no row for the entry, and that driver already
+  handles checkbox and `boutonSubUnit` rows, so the row is absent rather than unrecognised. Why NR
+  omits it is left open rather than guessed at; the store-direct `newrecruit` engine takes both steps
+  normally, so it is that UI's rendering and not NR's model.
 - **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on
   `Engine=BsGameDataUi`, so the Data Editor had a lane and the Roster Editor had none: every change to
   `BsUiRosterEngine` and `RosterActions.java` reached `main` exercised by unit tests and one teardown
