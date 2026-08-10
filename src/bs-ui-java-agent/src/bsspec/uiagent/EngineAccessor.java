@@ -14,6 +14,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -57,6 +58,10 @@ public class EngineAccessor {
      * the case a cache could not have shortened.
      */
     private final Map<String, Class<?>> classesByName = new HashMap<String, Class<?>>();
+
+    /** Per-class field lists for the object-graph walks — see {@link #traversableFieldsOf}. */
+    private final Map<Class<?>, List<Field>> traversableFieldsByClass =
+            new IdentityHashMap<Class<?>, List<Field>>();
 
     /**
      * What the {@link #getValidationErrors()} call in progress has already worked out, or null when
@@ -1847,7 +1852,12 @@ public class EngineAccessor {
             }
         }
 
-        while (!pending.isEmpty() && visited.size() <= 10000) {
+        while (!pending.isEmpty()) {
+            if (visited.size() > GRAPH_WALK_VISIT_CEILING) {
+                reportWalkTruncated("instance scan for " + targetClass.getName(), visited.size());
+                break;
+            }
+
             Object current = pending.removeFirst();
             if (current == null || isLeafValue(current) || !visited.add(current)) {
                 continue;
@@ -1857,48 +1867,7 @@ public class EngineAccessor {
                 found.add(current);
             }
 
-            if (current instanceof Iterable) {
-                for (Object item : (Iterable<?>) current) {
-                    if (item != null) pending.addLast(item);
-                }
-                continue;
-            }
-            if (current instanceof Map) {
-                for (Object item : ((Map<?, ?>) current).values()) {
-                    if (item != null) pending.addLast(item);
-                }
-                continue;
-            }
-            if (current.getClass().isArray()) {
-                int len = Array.getLength(current);
-                for (int i = 0; i < len; i++) {
-                    Object item = Array.get(current, i);
-                    if (item != null) pending.addLast(item);
-                }
-                continue;
-            }
-            if (!shouldTraverseObject(current.getClass())) {
-                continue;
-            }
-
-            Class<?> c = current.getClass();
-            while (c != null && c != Object.class) {
-                for (Field f : c.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) {
-                        continue;
-                    }
-                    try {
-                        f.setAccessible(true);
-                        Object value = f.get(current);
-                        if (value != null && !isLeafValue(value)) {
-                            pending.addLast(value);
-                        }
-                    } catch (Exception e) {
-                        // ignore inaccessible fields
-                    }
-                }
-                c = c.getSuperclass();
-            }
+            enqueueReferences(current, pending);
         }
         return found;
     }
@@ -1925,61 +1894,131 @@ public class EngineAccessor {
             if (targetClass.isInstance(current) && matchesId(callGetter(current, "getId"), id)) {
                 return current;
             }
-            if (visited.size() > 10000) {
+            if (visited.size() > GRAPH_WALK_VISIT_CEILING) {
+                reportWalkTruncated(
+                        "search for " + targetClass.getName() + " id '" + id + "'", visited.size());
                 return null;
             }
 
-            if (current instanceof Iterable) {
-                for (Object item : (Iterable<?>) current) {
-                    if (item != null) {
-                        pending.addLast(item);
-                    }
-                }
-                continue;
-            }
-            if (current instanceof Map) {
-                for (Object item : ((Map<?, ?>) current).values()) {
-                    if (item != null) {
-                        pending.addLast(item);
-                    }
-                }
-                continue;
-            }
-            if (current.getClass().isArray()) {
-                int len = Array.getLength(current);
-                for (int i = 0; i < len; i++) {
-                    Object item = Array.get(current, i);
-                    if (item != null) {
-                        pending.addLast(item);
-                    }
-                }
-                continue;
-            }
-            if (!shouldTraverseObject(current.getClass())) {
-                continue;
-            }
-
-            Class<?> c = current.getClass();
-            while (c != null && c != Object.class) {
-                for (Field f : c.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) {
-                        continue;
-                    }
-                    try {
-                        f.setAccessible(true);
-                        Object value = f.get(current);
-                        if (value != null && !isLeafValue(value)) {
-                            pending.addLast(value);
-                        }
-                    } catch (Exception e) {
-                        // ignore inaccessible fields
-                    }
-                }
-                c = c.getSuperclass();
-            }
+            enqueueReferences(current, pending);
         }
 
         return null;
+    }
+
+    /**
+     * The visit ceiling both object-graph walks stop at.
+     *
+     * <p>The graph has cycles and a real data file is large, so an unbounded walk is a hang rather
+     * than an answer. But a walk that stops early is one that may not have reached what it was
+     * asked for, and both walks report that as a plain negative — no instances, or no such id.
+     * Hence {@link #reportWalkTruncated}: the two are different facts and only one of them is
+     * about the roster.
+     */
+    private static final int GRAPH_WALK_VISIT_CEILING = 10000;
+
+    /**
+     * Says that a walk ran out of ceiling rather than out of graph.
+     *
+     * <p>Unconditional, not behind {@code BS_UI_VALIDATION_TRACE}: this is the one event that makes
+     * a negative answer untrustworthy, it is rare, and a trace flag is only ever set by someone who
+     * already suspects the thing this line would have told them.
+     */
+    private void reportWalkTruncated(String what, int visited) {
+        System.err.println("[agent] object-graph walk truncated: " + what + " stopped after "
+                + visited + " objects (ceiling " + GRAPH_WALK_VISIT_CEILING
+                + "); a negative result here may mean 'not reached', not 'not present'");
+    }
+
+    /**
+     * Queues everything {@code current} references, in an order that does not change between runs.
+     *
+     * <p>One implementation for both walks, so they cannot come to disagree about what traversing an
+     * object means — they were two copies of this, and the copies are what let the ceiling check
+     * drift into different places.
+     *
+     * <p><b>Fields are taken in name order</b> because {@link Class#getDeclaredFields()} is
+     * explicitly documented as returning them in no particular order. Both walks then answer
+     * order-sensitive questions off that enumeration — {@link #findObjectById} returns the first
+     * match it reaches, {@link #matchConstraintOwner} keeps the first kind-match as its fallback —
+     * so leaving the order to the JVM leaves those answers to the JVM too, and a run that picked the
+     * right one is no evidence about the next.
+     */
+    private void enqueueReferences(Object current, ArrayDeque<Object> pending) {
+        if (current instanceof Iterable) {
+            for (Object item : (Iterable<?>) current) {
+                if (item != null) {
+                    pending.addLast(item);
+                }
+            }
+            return;
+        }
+        if (current instanceof Map) {
+            for (Object item : ((Map<?, ?>) current).values()) {
+                if (item != null) {
+                    pending.addLast(item);
+                }
+            }
+            return;
+        }
+        if (current.getClass().isArray()) {
+            int len = Array.getLength(current);
+            for (int i = 0; i < len; i++) {
+                Object item = Array.get(current, i);
+                if (item != null) {
+                    pending.addLast(item);
+                }
+            }
+            return;
+        }
+        if (!shouldTraverseObject(current.getClass())) {
+            return;
+        }
+
+        for (Class<?> c = current.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : traversableFieldsOf(c)) {
+                try {
+                    Object value = field.get(current);
+                    if (value != null && !isLeafValue(value)) {
+                        pending.addLast(value);
+                    }
+                } catch (Exception e) {
+                    // ignore inaccessible fields
+                }
+            }
+        }
+    }
+
+    /**
+     * {@code cls}'s own non-static reference fields, name-ordered and already made accessible.
+     *
+     * <p>Remembered per class for the session, which a field list can be: a loaded class does not
+     * grow fields. That makes the sort free after the first visit, and the walks visit the same few
+     * hundred model classes over and over.
+     */
+    private List<Field> traversableFieldsOf(Class<?> cls) {
+        List<Field> remembered = traversableFieldsByClass.get(cls);
+        if (remembered != null) {
+            return remembered;
+        }
+
+        List<Field> fields = new ArrayList<Field>();
+        for (Field field : cls.getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive()) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+            } catch (RuntimeException e) {
+                // Not readable here; keep it anyway so the get() below reports it the same way it
+                // always did, rather than making inaccessibility look like absence.
+            }
+            fields.add(field);
+        }
+        Collections.sort(fields, Comparator.comparing(Field::getName));
+
+        traversableFieldsByClass.put(cls, fields);
+        return fields;
     }
 
     private boolean shouldTraverseObject(Class<?> cls) {
