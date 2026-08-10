@@ -1155,22 +1155,56 @@ public class RosterActions {
     }
 
     /**
-     * The best rank any control text in this window reaches for {@code name}.
+     * The best rank reached for {@code name} by anything in this window that CARRIES a control.
      *
-     * <p>Chosen over the whole window BEFORE anything is driven, and independently of the action, so
-     * that a control declining to act (an unticked checkbox asked to decrement) cannot let a worse
-     * rank take over and drive a different entry's row.
+     * <p><b>Only rows that carry one.</b> The scene spells an entry's name in several places that
+     * are not panel rows — the roster tree renders {@code Trooper} while the panel renders
+     * {@code Trooper • 10pts} beside its spinner — so ranking over every label lets a tree row win
+     * as an EXACT match and then match nothing drivable, turning a control that is right there into
+     * "Spinner not found". This is the rule the occurrence counter below already states for the same
+     * reason: a row in the tree is not a row in the panel.
+     *
+     * <p>Chosen BEFORE anything is driven, and independently of the action, so that a control
+     * declining to act (an unticked checkbox asked to decrement) cannot let a worse rank take over
+     * and drive a different entry's row.
      */
     private LabelMatch bestLabelMatch(Scene scene, String name) {
         LabelMatch best = LabelMatch.NONE;
         for (String styleClass : new String[] { ".label", ".check-box", ".radio-button" }) {
             for (Node node : scene.getRoot().lookupAll(styleClass)) {
-                if (!(node instanceof Labeled)) continue;
+                if (!(node instanceof Labeled) || !carriesControl(node)) continue;
                 LabelMatch match = matchLabel(((Labeled) node).getText(), name);
                 if (match.ordinal() < best.ordinal()) best = match;
             }
         }
         return best;
+    }
+
+    /**
+     * Whether this node is something the panel can be driven through.
+     *
+     * <p>A checkbox or radio IS the control and carries its own text. A Label is only a panel row
+     * when a control sits beside it; everywhere else the same text is just text — a tree row, a
+     * heading, a total.
+     *
+     * <p>Deliberately blind to the action, unlike {@link #hasControlSibling}: this decides whether a
+     * label is a candidate at all, and a row that exists but declines this particular request is
+     * still a row. Letting the action narrow it here is what would allow a decline to promote a
+     * neighbour.
+     */
+    private boolean carriesControl(Node node) {
+        if (node instanceof CheckBox || node instanceof RadioButton) {
+            return true;
+        }
+        if (!(node instanceof Label)) return false;
+
+        javafx.scene.Parent parent = node.getParent();
+        if (parent == null) return false;
+        for (Node sibling : parent.getChildrenUnmodifiable()) {
+            if (sibling == node) continue;
+            if (sibling instanceof Spinner || sibling instanceof ButtonBase) return true;
+        }
+        return false;
     }
 
     /**
