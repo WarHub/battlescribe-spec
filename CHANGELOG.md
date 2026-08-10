@@ -126,6 +126,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`modifier-field-constraint-value` enhanced** — now selects 3 times to verify the
   constraint value change from max=2 to max=5 is actually observable (no error at 3).
 
+### Fixed
+
+- **Label ranking: a longer NAME is not decoration, and the rank is taken over what the caller can
+  drive** — two defects in the ranking added earlier in this stack, both found by an independent
+  review of it rather than by CI. `DECORATED` rejected only a letter-or-digit continuation, and a
+  space is neither, so `Armor Type` ranked as decoration of `Armor` and tied with the real
+  `Armor • 3pts` row — handing the choice back to `lookupAll` order, which is the tie the ranking
+  exists to break. Measured: `Armor`/`Armor Type`, `Trooper`/`Trooper Support` and
+  `Bolter`/`Bolter Modifications` all mis-ranked, and an append-name modifier manufactures the shape
+  from a single entry. `DECORATED` now allows one space and then requires something that is not more
+  name. Separately, the rank was chosen over checkboxes and radios even for callers that scan only
+  labelled rows: because the rank is a hard filter, a self-labelled control could set a rank no
+  reachable candidate matched and turn a spinner that was present into "Spinner not found" — the
+  tree-row bug one population over. `bestLabelMatch` now ranks over the caller's own candidates.
+
 ### Removed
 
 - **The unscoped tree-lookup overloads, which nothing called and anything could have** —
