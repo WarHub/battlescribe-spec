@@ -10,6 +10,17 @@ tags:
   - validation-errors
   - structured-errors
 
+# BattleScribe's New Roster dialog carries one INTEGER spinner (a Spinner<Integer>), so a 0.25 limit
+# cannot be entered through it at all. The driver deliberately leaves the spinner alone rather than
+# truncating: 0.25 entered as 0 would put every selection over a limit the game system never
+# declared, turning "cannot express this" into a wrong answer that looks like a real violation.
+# BattleScribe applies a costType default only to a roster created through its ENGINE, not through
+# this dialog, so the roster ends up with no limit and the expected over-limit error never fires.
+# `fail` rather than `skip` so the spec still RUNS and any route that can carry a fractional limit
+# is reported as a pass.
+engines:
+  battlescribe-ui: fail
+
 setup:
   gameSystem:
     costTypes:
