@@ -884,15 +884,8 @@ public class RosterActions {
                 runOnFxGet(() -> tryClickControlByLabel(finalEntryName, MAIN_WINDOW, "decrement"));
 
         if (outcome != ControlOutcome.DRIVEN) {
-            // Fallback: select the selection itself and press DELETE
-            // Both calls block on the FX thread and the selection is applied synchronously, so
-            // the key press below already lands on the intended row.
-            runOnFx(() -> {
-                selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW);
-            });
-            runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
-            // DELETE removes the row outright, so disappearance is the whole postcondition.
-            waitForStateChange(s -> findSelectionById(s, selectionId) == null);
+            // Fallback: no decrement control, so take the row away outright.
+            removeSelectionEntirely(selectionId);
             JsonObject deleted = new JsonObject();
             deleted.addProperty("removed", true);
             return deleted.toString();
@@ -931,11 +924,20 @@ public class RosterActions {
         if (count < 0) throw new RuntimeException("count must be >= 0");
 
         if (count == 0) {
-            // Deselect (remove) the selection
-            JsonObject deselectParams = new JsonObject();
-            deselectParams.addProperty("forceId", forceId);
-            deselectParams.addProperty("selectionId", selectionId);
-            return deselectSelectionAction(deselectParams.toString());
+            // Zero instances means gone, and that is NOT what deselectSelection does. Its control on
+            // a collective child steps the per-model count -- one press takes number 6 to 3 and the
+            // selection stays, which is the semantics `collective-per-model-operations` asserts and
+            // the reason its wait accepts fewer-than-there-were. Delegating here would therefore
+            // report "count is now 0" about a selection sitting in the roster at 3.
+            //
+            // So this asks for the whole thing to go, through the one control that can do it.
+            removeSelectionEntirely(selectionId);
+
+            JsonObject removed = new JsonObject();
+            removed.addProperty("set", true);
+            removed.addProperty("count", 0);
+            removed.addProperty("removed", true);
+            return removed.toString();
         }
 
         JsonObject state = readRosterState();
@@ -1392,6 +1394,34 @@ public class RosterActions {
             }
         }
         return count;
+    }
+
+    /**
+     * Takes {@code selectionId} out of the roster entirely, and waits until it is gone.
+     *
+     * <p>The DELETE key on the roster tree row, which is the one control that removes a selection
+     * outright. Deliberately NOT the edit panel's decrement: on a collective child that steps the
+     * per-model count and leaves the selection there, which is the right answer to
+     * {@code deselectSelection} and the wrong one to "this selection has zero instances".
+     *
+     * <p>Both FX calls block until their task completes and JavaFX applies a tree selection
+     * synchronously, so the key press already lands on the intended row.
+     */
+    private void removeSelectionEntirely(String selectionId) {
+        runOnFx(() -> selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW));
+        runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
+
+        // Disappearance is the whole postcondition here — unlike a decrement, DELETE has no partial
+        // outcome to accept.
+        waitForStateChange(
+                s -> findSelectionById(s, selectionId) == null,
+                s -> {
+                    JsonObject still = findSelectionById(s, selectionId);
+                    return still == null
+                            ? "(it is gone — the predicate and this message disagree)"
+                            : "DELETE left selection " + selectionId + " in the roster at number "
+                                    + getIntField(still, "number", -1);
+                });
     }
 
     /** {@code scope}'s first child selection for {@code entryId}, or null. */
