@@ -765,41 +765,63 @@ public class RosterActions {
             entryName = resolveEntryName(before, entryId);
         }
 
-        // Click the control by label (spinner increment, button fire, or checkbox toggle)
+        // Click the control by label (spinner increment, button fire, checkbox toggle, radio select)
         final String labelText = entryName;
         final int labelOccurrence = getIntParam(p, "labelOccurrence", 0);
-        runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null, labelOccurrence));
+        ControlOutcome outcome =
+                runOnFxGet(() -> clickControlByLabel(labelText, MAIN_WINDOW, null, labelOccurrence));
 
-        // Wait for the click to land, in any of the three shapes it can take.
-        //
-        // The child COUNT is the wrong thing to watch, and was the only thing watched. A COLLECTIVE
-        // entry does not gain a second child when selected again — BattleScribe increments the one
-        // already there. And a member of a single-choice GROUP does not gain one either: it
-        // REPLACES whichever member was chosen before, so the count is identical on both sides
-        // while the child that is there is a different entry entirely.
-        //
-        // What actually happened, in every case, is that the parent now holds a child for the
-        // requested entry that it did not hold before — or holds more of one it did.
-        JsonObject after = waitForStateChange(state -> {
-            JsonObject parent = findSelectionById(state, parentSelectionId);
-            if (parent == null) return false;
-            JsonObject beforeParent = findSelectionById(before, parentSelectionId);
-            if (beforeParent == null) return true;
-            return findNewChildSelection(before, state, parentSelectionId, entryId) != null
-                    || childNumberIncreased(beforeParent, parent, entryId);
-        }, state -> {
-            JsonObject parent = findSelectionById(state, parentSelectionId);
-            if (parent == null) {
-                return "parent selection " + parentSelectionId + " is no longer in the roster";
+        JsonObject after;
+        if (outcome == ControlOutcome.ALREADY_SET) {
+            // Nothing was driven, so there is no change to wait for: a single-choice group whose
+            // chosen member is already this entry is in the state this action exists to reach.
+            // Polling for a delta here burns the whole 10s timeout and then reports the click as
+            // having done nothing — true, and the opposite of what happened.
+            after = readRosterState();
+            JsonObject parent = findSelectionById(after, parentSelectionId);
+            if (childOfEntry(parent, entryId) == null) {
+                // The panel and the roster disagree: the control says this entry is chosen and the
+                // model has no child for it. Loud, because every later step referencing this step's
+                // selectionId would otherwise fail somewhere else entirely.
+                throw new RuntimeException("Control '" + labelText + "' reports entryId '" + entryId
+                        + "' is already selected, but parent " + parentSelectionId
+                        + (parent == null
+                                ? " is not in the roster"
+                                : " holds no child for it; children: "
+                                        + describeSelections(childSelectionsOf(parent))));
             }
-            JsonObject beforeParent = findSelectionById(before, parentSelectionId);
-            return "clicking control '" + labelText + "' left parent " + parentSelectionId
-                    + " with the same child count ("
-                    + (beforeParent == null ? "?" : childSelectionCount(beforeParent))
-                    + " -> " + childSelectionCount(parent) + "), children now: "
-                    + describeSelections(childSelectionsOf(parent))
-                    + "; wanted entryId '" + entryId + "'";
-        });
+        } else {
+            // Wait for the click to land, in any of the three shapes it can take.
+            //
+            // The child COUNT is the wrong thing to watch, and was the only thing watched. A
+            // COLLECTIVE entry does not gain a second child when selected again — BattleScribe
+            // increments the one already there. And a member of a single-choice GROUP does not gain
+            // one either: it REPLACES whichever member was chosen before, so the count is identical
+            // on both sides while the child that is there is a different entry entirely.
+            //
+            // What actually happened, in every case, is that the parent now holds a child for the
+            // requested entry that it did not hold before — or holds more of one it did.
+            after = waitForStateChange(state -> {
+                JsonObject parent = findSelectionById(state, parentSelectionId);
+                if (parent == null) return false;
+                JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+                if (beforeParent == null) return true;
+                return findNewChildSelection(before, state, parentSelectionId, entryId) != null
+                        || childNumberIncreased(beforeParent, parent, entryId);
+            }, state -> {
+                JsonObject parent = findSelectionById(state, parentSelectionId);
+                if (parent == null) {
+                    return "parent selection " + parentSelectionId + " is no longer in the roster";
+                }
+                JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+                return "clicking control '" + labelText + "' left parent " + parentSelectionId
+                        + " with the same child count ("
+                        + (beforeParent == null ? "?" : childSelectionCount(beforeParent))
+                        + " -> " + childSelectionCount(parent) + "), children now: "
+                        + describeSelections(childSelectionsOf(parent))
+                        + "; wanted entryId '" + entryId + "'";
+            });
+        }
 
         // Find the new child selection (in after but not in before). A collective entry produced no
         // new child — it incremented the existing one — so fall back to that, or the step's
@@ -807,15 +829,7 @@ public class RosterActions {
         // somewhere else entirely.
         JsonObject createdSelection = findNewChildSelection(before, after, parentSelectionId, entryId);
         if (createdSelection == null) {
-            JsonObject parent = findSelectionById(after, parentSelectionId);
-            if (parent != null) {
-                for (JsonObject child : childSelectionsOf(parent)) {
-                    if (isSelectionOfEntry(child, entryId)) {
-                        createdSelection = child;
-                        break;
-                    }
-                }
-            }
+            createdSelection = childOfEntry(findSelectionById(after, parentSelectionId), entryId);
         }
 
         JsonObject result = new JsonObject();
@@ -863,12 +877,13 @@ public class RosterActions {
         // Try decrement via control by label
         final int countBefore = getIntField(selection, "number", 1);
         final String finalEntryName = entryName;
-        AtomicReference<Boolean> clicked = new AtomicReference<>(false);
-        runOnFx(() -> {
-            clicked.set(tryClickControlByLabel(finalEntryName, MAIN_WINDOW, "decrement"));
-        });
+        // DRIVEN or nothing. ALREADY_SET means a control was found and deliberately not driven,
+        // which for a decrement is the same as having no decrement control at all — so it takes the
+        // DELETE path, which can actually take something away.
+        ControlOutcome outcome =
+                runOnFxGet(() -> tryClickControlByLabel(finalEntryName, MAIN_WINDOW, "decrement"));
 
-        if (!clicked.get()) {
+        if (outcome != ControlOutcome.DRIVEN) {
             // Fallback: select the selection itself and press DELETE
             // Both calls block on the FX thread and the selection is applied synchronously, so
             // the key press below already lands on the intended row.
@@ -992,8 +1007,8 @@ public class RosterActions {
      * Clicks the edit panel control (Spinner/Button/CheckBox) by its sibling label text.
      * Must be called from the FX thread.
      */
-    private void clickControlByLabel(String labelText, String windowTitle, String action) {
-        clickControlByLabel(labelText, windowTitle, action, 0);
+    private ControlOutcome clickControlByLabel(String labelText, String windowTitle, String action) {
+        return clickControlByLabel(labelText, windowTitle, action, 0);
     }
 
     /**
@@ -1003,9 +1018,13 @@ public class RosterActions {
      * labels a control with what a link RESOLVES to — and the panel carries no id to separate
      * them. Position is the key that is left, and the caller supplies it from the catalogue, where
      * both orders come from.
+     *
+     * @return what driving the control did; never {@link ControlOutcome#NOT_FOUND}, which throws.
      */
-    private void clickControlByLabel(String labelText, String windowTitle, String action, int occurrence) {
-        if (!tryClickControlByLabel(labelText, windowTitle, action, occurrence)) {
+    private ControlOutcome clickControlByLabel(
+            String labelText, String windowTitle, String action, int occurrence) {
+        ControlOutcome outcome = tryClickControlByLabel(labelText, windowTitle, action, occurrence);
+        if (outcome == ControlOutcome.NOT_FOUND) {
             // Say what the panel DOES offer. "Control not found for label: Sword" cannot
             // distinguish an entry the panel never rendered from one rendered under a different
             // name from one whose label carries no control — three different bugs.
@@ -1013,6 +1032,7 @@ public class RosterActions {
                     + (occurrence > 0 ? " (occurrence " + occurrence + ")" : "")
                     + "; panel offers: " + describeControlLabels(windowTitle));
         }
+        return outcome;
     }
 
     /**
@@ -1070,17 +1090,43 @@ public class RosterActions {
     }
 
     /**
-     * Tries to click an edit panel control by label. Returns true if found and clicked.
+     * What driving a labelled edit-panel control actually did.
+     *
+     * <p>Three outcomes and not two, because a caller has three different jobs after them: report a
+     * missing control, wait for the roster to change, or stop — and the third used to be spelled the
+     * same as the second.
+     */
+    private enum ControlOutcome {
+        /** No control carries this label. */
+        NOT_FOUND,
+
+        /** Driven. The roster should change, and the caller should wait until it does. */
+        DRIVEN,
+
+        /**
+         * The control was already in the state being asked for, so nothing was driven and nothing
+         * is going to change.
+         *
+         * <p>This is a success — the postcondition holds — but a caller that treats it as
+         * {@link #DRIVEN} waits for a change that cannot come, spends its whole poll timeout, and
+         * then reports the click as having done nothing.
+         */
+        ALREADY_SET,
+    }
+
+    /**
+     * Tries to drive an edit panel control by label.
      * Must be called from the FX thread.
      */
     @SuppressWarnings("unchecked")
-    private boolean tryClickControlByLabel(String text, String windowTitle, String action) {
+    private ControlOutcome tryClickControlByLabel(String text, String windowTitle, String action) {
         return tryClickControlByLabel(text, windowTitle, action, 0);
     }
 
-    private boolean tryClickControlByLabel(String text, String windowTitle, String action, int occurrence) {
+    private ControlOutcome tryClickControlByLabel(
+            String text, String windowTitle, String action, int occurrence) {
         Scene scene = findScene(windowTitle);
-        if (scene == null) return false;
+        if (scene == null) return ControlOutcome.NOT_FOUND;
 
         // Counted over labels that actually CARRY a control, not over every label that spells the
         // text. The roster tree spells it too, and a row there is not an occurrence of a panel row.
@@ -1111,7 +1157,7 @@ public class RosterActions {
                     } else {
                         spinner.getValueFactory().increment(1);
                     }
-                    return true;
+                    return ControlOutcome.DRIVEN;
                 }
                 if (sibling instanceof Button) {
                     // The button an INSTANCED entry gets is "+", and it only adds. Firing it for a
@@ -1122,7 +1168,7 @@ public class RosterActions {
                         continue;
                     }
                     ((Button) sibling).fire();
-                    return true;
+                    return ControlOutcome.DRIVEN;
                 }
             }
         }
@@ -1135,7 +1181,7 @@ public class RosterActions {
         // occurrence that reaches here has already failed to find its row, and falling back to the
         // first control of another shape would be the well-formed wrong answer.
         if (occurrence > 0) {
-            return false;
+            return ControlOutcome.NOT_FOUND;
         }
 
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
@@ -1143,8 +1189,10 @@ public class RosterActions {
             CheckBox cb = (CheckBox) cbNode;
             String cbText = cb.getText();
             if (cbText != null && cbText.contains(text)) {
+                // fire() toggles, so this always changes something — there is no already-set case
+                // for a checkbox the way there is for a radio in a group.
                 cb.fire();
-                return true;
+                return ControlOutcome.DRIVEN;
             }
         }
 
@@ -1155,23 +1203,32 @@ public class RosterActions {
         // instead of sitting beside a Label. Both loops above therefore looked straight past them,
         // and the panel appeared to offer the heading and nothing else.
         //
-        // Selecting an already-selected radio is a no-op in JavaFX rather than a re-fire, so this
-        // reports "already chosen" as success: the caller's postcondition is that this entry IS
-        // the group's choice, and it is.
+        // Selecting an already-selected radio is a no-op in JavaFX rather than a re-fire, so an
+        // already-chosen member is ALREADY_SET and not DRIVEN. The postcondition holds either way —
+        // this entry IS the group's choice — but only one of the two is followed by a change, and
+        // saying "clicked" for both left the caller polling ten seconds for a state that had
+        // already arrived, then reporting the click as having done nothing.
         for (Node rbNode : scene.getRoot().lookupAll(".radio-button")) {
             if (!(rbNode instanceof RadioButton)) continue;
             RadioButton rb = (RadioButton) rbNode;
             String rbText = rb.getText();
             if (rbText == null || !rbText.contains(text)) continue;
+            // A radio is a choice, not a count: selecting one cannot take anything away, and the
+            // group has no "none" member to move to. So a decrement declines here for the same
+            // reason the "+" button does, and the caller falls through to its DELETE path.
+            if ("decrement".equals(action)) {
+                continue;
+            }
+            if (rb.isSelected()) {
+                return ControlOutcome.ALREADY_SET;
+            }
             // fire() and nothing else. RadioButton.fire() selects it and notifies the ToggleGroup,
             // which is what BattleScribe listens to; setSelected() beforehand only flips the state
             // fire() is about to toggle, so the pair can leave it deselected.
-            if (!rb.isSelected()) {
-                rb.fire();
-            }
-            return true;
+            rb.fire();
+            return ControlOutcome.DRIVEN;
         }
-        return false;
+        return ControlOutcome.NOT_FOUND;
     }
 
     /**
@@ -1335,6 +1392,15 @@ public class RosterActions {
             }
         }
         return count;
+    }
+
+    /** {@code scope}'s first child selection for {@code entryId}, or null. */
+    private JsonObject childOfEntry(JsonObject scope, String entryId) {
+        if (scope == null) return null;
+        for (JsonObject child : childSelectionsOf(scope)) {
+            if (isSelectionOfEntry(child, entryId)) return child;
+        }
+        return null;
     }
 
     /** The child selections {@link #childSelectionCount} counts, for diagnostics. */

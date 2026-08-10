@@ -128,6 +128,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A control that was already in the asked-for state stopped being reported as a click** —
+  grouped-control support gave `tryClickControlByLabel` a radio-button path that returns success
+  without firing when the member is already chosen, on the correct grounds that the postcondition
+  holds. Its caller then waited for a roster change, which could not come: a full 10s
+  `STATE_POLL_TIMEOUT_MS` ending in "clicking control X left parent Y with the same child count" —
+  true, and the opposite of what happened. The helper now answers `NOT_FOUND` / `DRIVEN` /
+  `ALREADY_SET`, and `selectChildEntry` reads the roster once instead of polling for a delta. If the
+  panel says the entry is chosen and the model holds no child for it, that disagreement is thrown
+  rather than returned as a step with no `selectionId`. A decrement can no longer produce
+  `ALREADY_SET` at all: a radio is a choice and not a count, so like the `"+"` button it declines a
+  decrement and lets the DELETE path run.
 - **A catalogue-tree lookup scoped to a force stops at that force's child forces** — confining the
   search to the target force's subtree fixed the sibling-force case that had 20 specs adding
   selections to the wrong force. It did not fix the nested case, because a force's subtree *contains*

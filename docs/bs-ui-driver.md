@@ -515,6 +515,25 @@ Falls back to searching CheckBoxes by their own text if no label+sibling match i
 - **Note**: Interactions are scheduled via `Platform.runLater()` to avoid deadlocks when
   the value change triggers BS engine recalculation on the FX thread.
 
+#### Three outcomes, not two
+
+`RosterActions.tryClickControlByLabel` returns a `ControlOutcome`, because a caller has three
+different jobs after driving a control:
+
+| outcome | meaning | what the caller must do |
+|---|---|---|
+| `NOT_FOUND` | no control carries this label | report it, or fall back to another route |
+| `DRIVEN` | the control was operated | wait for the roster to change |
+| `ALREADY_SET` | the control was **already** in the asked-for state | do **not** wait — nothing will change |
+
+`ALREADY_SET` exists because of the single-choice group: its members are radio buttons, and selecting
+an already-selected radio is a no-op in JavaFX rather than a re-fire. Reporting that as `DRIVEN` left
+`rosterSelectChildEntryAction` polling for a delta that could never arrive — a full 10s
+`STATE_POLL_TIMEOUT_MS` ending in "the click did nothing", about a postcondition that already held.
+
+A **decrement** never yields `ALREADY_SET`: neither the `"+"` button nor a radio can take anything
+away, so both decline a decrement request and the caller falls through to its DELETE path.
+
 #### `setSpinnerValueByLabel`
 
 Finds a Spinner adjacent to a label matching the given text and sets it to the target value
