@@ -21,9 +21,15 @@ public sealed class AgentClient : IDisposable
     private volatile Exception? _fault;
 
     /// <summary>
-    /// Default timeout for a single JSON-RPC call. Set to <see cref="Timeout.InfiniteTimeSpan"/>
+    /// Timeout for a call that does not name its own. Set to <see cref="Timeout.InfiniteTimeSpan"/>
     /// to disable. Default is 30 seconds.
     /// </summary>
+    /// <remarks>
+    /// A <em>default</em>, and nothing else. A call that wants a different clock passes one to
+    /// <see cref="CallAsync"/> rather than assigning here and restoring afterwards — that pattern
+    /// re-tunes the client every other call on the connection borrows, and it survives only as long
+    /// as its <c>finally</c> runs on the thread that set it.
+    /// </remarks>
     public TimeSpan CallTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
     public AgentClient(TcpClient client)
@@ -108,8 +114,22 @@ public sealed class AgentClient : IDisposable
     }
 
     /// <summary>Sends a JSON-RPC request and returns the result.</summary>
-    public async Task<JsonNode?> CallAsync(string method, JsonObject? parameters = null, CancellationToken cancellationToken = default)
+    /// <param name="method">The JSON-RPC method name.</param>
+    /// <param name="parameters">The method's params object, or null for none.</param>
+    /// <param name="timeout">
+    /// This call's clock, or null for <see cref="CallTimeout"/>. Per call rather than by assigning
+    /// the property, so a caller that needs longer (a high-level action) or shorter (a liveness
+    /// probe, a diagnostic capture against a half-stuck agent) cannot leave that clock behind for
+    /// the next caller.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the call without treating it as a timeout.</param>
+    public async Task<JsonNode?> CallAsync(
+        string method,
+        JsonObject? parameters = null,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
     {
+        var callTimeout = timeout ?? CallTimeout;
         if (_fault is { } fault)
         {
             throw new InvalidOperationException("Agent connection is faulted.", fault);
@@ -145,8 +165,8 @@ public sealed class AgentClient : IDisposable
                 _writeLock.Release();
             }
 
-            using var timeoutCts = CallTimeout != Timeout.InfiniteTimeSpan
-                ? new CancellationTokenSource(CallTimeout)
+            using var timeoutCts = callTimeout != Timeout.InfiniteTimeSpan
+                ? new CancellationTokenSource(callTimeout)
                 : new CancellationTokenSource();
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
 
@@ -158,7 +178,7 @@ public sealed class AgentClient : IDisposable
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException(
-                    $"Agent did not respond to '{method}' within {CallTimeout.TotalSeconds:F0}s. " +
+                    $"Agent did not respond to '{method}' within {callTimeout.TotalSeconds:F0}s. " +
                     "The JavaFX thread may be blocked (deadlock).");
             }
 
@@ -206,23 +226,24 @@ public sealed class AgentClient : IDisposable
     /// answers worth acting on are "yes, promptly" and "no": a caller that waits 30s for a third
     /// one stalls on exactly the instances it means to discard quickly.
     /// </para>
+    /// <para>
+    /// It reaches the call as an argument, not as a temporary assignment to <see cref="CallTimeout"/>
+    /// — a probe must not re-tune the client it borrowed, and a save/restore only holds for as long
+    /// as nothing else uses the connection in between.
+    /// </para>
     /// </remarks>
     public async Task ProbeFxThreadAsync(TimeSpan? timeout = null)
-    {
-        var saved = CallTimeout;
-        CallTimeout = timeout ?? TimeSpan.FromSeconds(2);
-        try
-        {
-            _ = await GetWindowsAsync();
-        }
-        finally
-        {
-            CallTimeout = saved;
-        }
-    }
+        => _ = await GetWindowsAsync(timeout ?? DefaultFxProbeTimeout);
+
+    /// <summary>How long <see cref="ProbeFxThreadAsync"/> waits when the caller names no timeout.</summary>
+    public static readonly TimeSpan DefaultFxProbeTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>Dumps the JavaFX scene graph tree.</summary>
-    public async Task<JsonNode?> DumpTreeAsync(int maxDepth = 10, string? windowTitle = null)
+    /// <param name="maxDepth">How deep to walk the scene graph.</param>
+    /// <param name="windowTitle">Which window to dump, or null for the main one.</param>
+    /// <param name="timeout">This call's clock, or null for <see cref="CallTimeout"/>.</param>
+    public async Task<JsonNode?> DumpTreeAsync(
+        int maxDepth = 10, string? windowTitle = null, TimeSpan? timeout = null)
     {
         var parameters = new JsonObject { ["maxDepth"] = maxDepth };
         if (windowTitle is not null)
@@ -230,13 +251,14 @@ public sealed class AgentClient : IDisposable
             parameters["windowTitle"] = windowTitle;
         }
 
-        return await CallAsync("dumpTree", parameters);
+        return await CallAsync("dumpTree", parameters, timeout: timeout);
     }
 
     /// <summary>Gets information about all open JavaFX windows.</summary>
-    public async Task<JsonNode?> GetWindowsAsync()
+    /// <param name="timeout">This call's clock, or null for <see cref="CallTimeout"/>.</param>
+    public async Task<JsonNode?> GetWindowsAsync(TimeSpan? timeout = null)
     {
-        return await CallAsync("getWindows");
+        return await CallAsync("getWindows", timeout: timeout);
     }
 
     /// <summary>Finds a node by CSS selector.</summary>

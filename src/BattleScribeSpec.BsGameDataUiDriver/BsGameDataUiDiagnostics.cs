@@ -14,6 +14,14 @@ public static class BsGameDataUiDiagnostics
     private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
 
     /// <summary>
+    /// How long each diagnostic call waits — short, because this runs after something already went
+    /// wrong and the agent may be half-stuck. Passed per call rather than assigned to
+    /// <see cref="AgentClient.CallTimeout"/>: the client belongs to the engine, and a capture that
+    /// faults before restoring it would leave every later call on a 5s clock.
+    /// </summary>
+    private static readonly TimeSpan DiagnosticCallTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Directory where diagnostic dumps are written. Defaults to ./artifacts/bs-gamedata-ui-diagnostics/,
     /// suffixed per worker (e.g. <c>-w2</c>) when <c>BSSPEC_WORKER_INDEX</c> is set — otherwise N
     /// parallel adapter processes resolve the same directory and overwrite each other's dumps.
@@ -69,84 +77,77 @@ public static class BsGameDataUiDiagnostics
 
             if (client is not null)
             {
-                var originalTimeout = client.CallTimeout;
-                client.CallTimeout = TimeSpan.FromSeconds(5);
+                sb.AppendLine("─── OPEN WINDOWS ───────────────────────────────────────");
                 try
                 {
-                    sb.AppendLine("─── OPEN WINDOWS ───────────────────────────────────────");
-                    try
-                    {
-                        var windows = await client.GetWindowsAsync();
-                        sb.AppendLine(FormatJson(windows));
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [Failed to get windows: {ex.GetType().Name}: {ex.Message}]");
-                    }
-
-                    sb.AppendLine();
-                    sb.AppendLine("─── OPEN DIALOGS (title/modal/scraped text) ───────────");
-                    try
-                    {
-                        var dialogs = await client.CallAsync("getOpenDialogs", null);
-                        sb.AppendLine(FormatJson(dialogs));
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [Failed to get open dialogs: {ex.GetType().Name}: {ex.Message}]");
-                    }
-
-                    sb.AppendLine();
-                    sb.AppendLine("─── ALL WINDOWS SCENE DUMP (depth=4) ────────────────────");
-                    try
-                    {
-                        var allWindows = await client.CallAsync("dumpAllWindows", new JsonObject { ["maxDepth"] = 4 });
-                        sb.AppendLine(FormatJson(allWindows));
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [Failed to dump all windows: {ex.GetType().Name}: {ex.Message}]");
-                    }
-
-                    sb.AppendLine();
-                    sb.AppendLine("─── DATA STATE ──────────────────────────────────────────");
-                    try
-                    {
-                        var dataState = await client.CallAsync("gamedataGetDataState");
-                        sb.AppendLine(FormatJson(dataState));
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [Failed to get data state: {ex.GetType().Name}: {ex.Message}]");
-                    }
-
-                    sb.AppendLine();
-                    sb.AppendLine("─── THREAD DUMP ────────────────────────────────────────");
-                    try
-                    {
-                        var threadDump = await client.CallAsync("threadDump", null);
-                        sb.AppendLine(FormatJson(threadDump));
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [Failed to get thread dump: {ex.GetType().Name}: {ex.Message}]");
-                    }
-
-                    sb.AppendLine();
-                    sb.AppendLine("─── SCENE GRAPH (depth=5) ──────────────────────────────");
-                    try
-                    {
-                        var tree = await client.DumpTreeAsync(maxDepth: 5);
-                        sb.AppendLine(FormatJson(tree));
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [Failed to dump tree: {ex.GetType().Name}: {ex.Message}]");
-                    }
+                    var windows = await client.GetWindowsAsync(DiagnosticCallTimeout);
+                    sb.AppendLine(FormatJson(windows));
                 }
-                finally
+                catch (Exception ex)
                 {
-                    client.CallTimeout = originalTimeout;
+                    sb.AppendLine($"  [Failed to get windows: {ex.GetType().Name}: {ex.Message}]");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("─── OPEN DIALOGS (title/modal/scraped text) ───────────");
+                try
+                {
+                    var dialogs = await client.CallAsync("getOpenDialogs", null, timeout: DiagnosticCallTimeout);
+                    sb.AppendLine(FormatJson(dialogs));
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"  [Failed to get open dialogs: {ex.GetType().Name}: {ex.Message}]");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("─── ALL WINDOWS SCENE DUMP (depth=4) ────────────────────");
+                try
+                {
+                    var allWindows = await client.CallAsync(
+                        "dumpAllWindows", new JsonObject { ["maxDepth"] = 4 }, timeout: DiagnosticCallTimeout);
+                    sb.AppendLine(FormatJson(allWindows));
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"  [Failed to dump all windows: {ex.GetType().Name}: {ex.Message}]");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("─── DATA STATE ──────────────────────────────────────────");
+                try
+                {
+                    var dataState = await client.CallAsync(
+                        "gamedataGetDataState", timeout: DiagnosticCallTimeout);
+                    sb.AppendLine(FormatJson(dataState));
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"  [Failed to get data state: {ex.GetType().Name}: {ex.Message}]");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("─── THREAD DUMP ────────────────────────────────────────");
+                try
+                {
+                    var threadDump = await client.CallAsync("threadDump", null, timeout: DiagnosticCallTimeout);
+                    sb.AppendLine(FormatJson(threadDump));
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"  [Failed to get thread dump: {ex.GetType().Name}: {ex.Message}]");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("─── SCENE GRAPH (depth=5) ──────────────────────────────");
+                try
+                {
+                    var tree = await client.DumpTreeAsync(maxDepth: 5, timeout: DiagnosticCallTimeout);
+                    sb.AppendLine(FormatJson(tree));
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"  [Failed to dump tree: {ex.GetType().Name}: {ex.Message}]");
                 }
             }
             else
