@@ -534,6 +534,19 @@ an already-selected radio is a no-op in JavaFX rather than a re-fire. Reporting 
 A **decrement** never yields `ALREADY_SET`: neither the `"+"` button nor a radio can take anything
 away, so both decline a decrement request and the caller falls through to its DELETE path.
 
+A **checkbox** is the one control that answers both directions, and it answers them by toggling — so
+it is driven only when it is on the wrong side of what was asked. Firing it blind ticked an unticked
+box for a decrement (adding the selection the caller asked to remove) and unticked a ticked one for a
+select (removing the selection the caller asked for); each then waited out its poll for the opposite
+of what it had just caused.
+
+| control | select, already there | decrement, nothing to remove |
+|---|---|---|
+| Spinner | steps up (a count has no "already") | steps down |
+| Button (`"+"`) | fires (adds another) | declines |
+| CheckBox | `ALREADY_SET` | declines (box already unticked) |
+| RadioButton | `ALREADY_SET` | declines |
+
 #### `setSpinnerValueByLabel`
 
 Finds a Spinner adjacent to a label matching the given text and sets it to the target value

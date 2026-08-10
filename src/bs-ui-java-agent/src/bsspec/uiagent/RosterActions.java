@@ -1120,11 +1120,11 @@ public class RosterActions {
      * Tries to drive an edit panel control by label.
      * Must be called from the FX thread.
      */
-    @SuppressWarnings("unchecked")
     private ControlOutcome tryClickControlByLabel(String text, String windowTitle, String action) {
         return tryClickControlByLabel(text, windowTitle, action, 0);
     }
 
+    @SuppressWarnings("unchecked")
     private ControlOutcome tryClickControlByLabel(
             String text, String windowTitle, String action, int occurrence) {
         Scene scene = findScene(windowTitle);
@@ -1186,16 +1186,33 @@ public class RosterActions {
             return ControlOutcome.NOT_FOUND;
         }
 
+        // A checkbox is a STATE and fire() TOGGLES it, so what firing does depends entirely on where
+        // the box already is. Firing blind gets both directions wrong in the same way: a decrement
+        // request ticks an unticked box, adding the selection the caller asked to remove; a select
+        // request unticks a ticked one, removing the selection the caller asked for. Each then waits
+        // out its poll for the opposite of what it just caused.
+        //
+        // This is the Button branch's rule — "the control cannot do what was asked, so decline" —
+        // applied to a control that can do it, in one direction, from one starting state.
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
             if (!(cbNode instanceof CheckBox)) continue;
             CheckBox cb = (CheckBox) cbNode;
             String cbText = cb.getText();
-            if (cbText != null && cbText.contains(text)) {
-                // fire() toggles, so this always changes something — there is no already-set case
-                // for a checkbox the way there is for a radio in a group.
+            if (cbText == null || !cbText.contains(text)) continue;
+
+            if ("decrement".equals(action)) {
+                // Only a ticked box has anything to take away. An unticked one is not this entry's
+                // removal control, so keep looking and let the caller reach its DELETE path.
+                if (!cb.isSelected()) continue;
                 cb.fire();
                 return ControlOutcome.DRIVEN;
             }
+
+            if (cb.isSelected()) {
+                return ControlOutcome.ALREADY_SET;
+            }
+            cb.fire();
+            return ControlOutcome.DRIVEN;
         }
 
         // Look for RadioButton by text.
@@ -1234,17 +1251,16 @@ public class RosterActions {
     }
 
     /**
-     * Sets a Spinner's value by its sibling label. Increments/decrements to reach target.
-     * Must be called from the FX thread.
-     */
-    @SuppressWarnings("unchecked")
-    /**
-     * Sets a labelled count control in the edit panel.
+     * Sets a labelled count control in the edit panel to {@code value}, by stepping a Spinner or by
+     * firing an add Button the required number of times.
      *
-     * <p>{ currentCount} is the selection's own number, read from roster state. A spinner
+     * <p>Must be called from the FX thread.
+     *
+     * <p>{@code currentCount} is the selection's own number, read from roster state. A spinner
      * reports its own value and does not need it; an add BUTTON has no value to read, so the
      * caller's knowledge of where the count is now is the only way to know how many times to fire.
      */
+    @SuppressWarnings("unchecked")
     private void setSpinnerValueByLabel(String text, int value, int currentCount, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
