@@ -211,11 +211,18 @@ public class RosterActions {
                             + "\n  catalogue: " + describeTree("#treeCatalogue")));
         }
 
-        // Wait for the entry to be THERE — under THIS force — rather than for 300ms. Scoping is
-        // not belt-and-braces: #treeCatalogue lists every force's own copy of the same entries, so
-        // an unscoped wait is satisfied by a sibling force's item and an unscoped click adds the
-        // selection to that force instead. See resolveTreeScope.
-        waitForTreeItem("#treeCatalogue", forceId, entryId);
+        // Wait for the entry to be THERE — under THIS force and no other — rather than for 300ms.
+        //
+        // Scoping is not belt-and-braces: #treeCatalogue lists every force's own copy of the same
+        // entries, so an unscoped wait is satisfied by a sibling force's item and an unscoped click
+        // adds the selection to that force instead. See resolveTreeScope.
+        //
+        // A force's subtree contains its CHILD forces' subtrees, which offer those same entries a
+        // third time — so scoping to the parent is not yet scoping to the parent. The child ids come
+        // from the state already read above, because the tree cannot say which of its nodes is a
+        // force: every one renders the same `Name:id:…` shape.
+        Set<String> nestedForceIds = nestedForceIdsOf(before, forceId);
+        waitForTreeItem("#treeCatalogue", forceId, entryId, nestedForceIds);
 
         // Phase 2: Double-click the entry in the catalogue tree, recording what the ROSTER tree
         // believed was selected at that moment rather than assuming it. When two forces come from
@@ -228,7 +235,7 @@ public class RosterActions {
         // single thread.
         String treeSelection = runOnFxGet(() -> {
             String selected = describeTreeSelection("#treeRoster");
-            clickTreeItemById("#treeCatalogue", forceId, entryId, true);
+            clickTreeItemById("#treeCatalogue", forceId, entryId, true, nestedForceIds);
             return selected;
         });
 
@@ -1722,28 +1729,37 @@ public class RosterActions {
      * subtree — see {@link #resolveTreeScope} for why the container matters.
      */
     private void waitForTreeItem(String treeSelector, String containerId, String id) {
+        waitForTreeItem(treeSelector, containerId, id, Collections.<String>emptySet());
+    }
+
+    private void waitForTreeItem(
+            String treeSelector, String containerId, String id, Set<String> nestedContainerIds) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
-            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, containerId, id));
+            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, containerId, id, nestedContainerIds));
             if (present) return;
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException(
                 "Tree '" + treeSelector + "' never offered an item for id '" + id + "'"
                         + (containerId == null ? "" : " under '" + containerId + "'")
+                        + (nestedContainerIds.isEmpty()
+                                ? ""
+                                : " (excluding nested forces " + nestedContainerIds + ")")
                         + " within " + WINDOW_TIMEOUT_MS + "ms");
     }
 
     /** True when {@code treeSelector} holds an item carrying this id token. FX thread only. */
     @SuppressWarnings("unchecked")
-    private boolean hasTreeItem(String treeSelector, String containerId, String id) {
+    private boolean hasTreeItem(
+            String treeSelector, String containerId, String id, Set<String> nestedContainerIds) {
         Scene scene = findScene(MAIN_WINDOW);
         if (scene == null) return false;
         Node node = scene.getRoot().lookup(treeSelector);
         if (!(node instanceof TreeView)) return false;
         TreeView<Object> tree = (TreeView<Object>) node;
         TreeItem<Object> scope = resolveTreeScope(tree, containerId);
-        return scope != null && findTreeItemByText(scope, ":" + id + ":") != null;
+        return scope != null && findTreeItemByText(scope, ":" + id + ":", nestedContainerIds) != null;
     }
 
     /** True when {@code selector}'s ComboBox holds an item with this id. FX thread only. */
@@ -1941,6 +1957,19 @@ public class RosterActions {
      * see {@link #resolveTreeScope} for why the container matters.
      */
     private void clickTreeItemById(String treeSelector, String containerId, String id, boolean doubleClick) {
+        clickTreeItemById(treeSelector, containerId, id, doubleClick, Collections.<String>emptySet());
+    }
+
+    /**
+     * As above, but confined to {@code containerId}'s OWN subtree — no nested container's copy of
+     * the same entry. See {@link #findTreeItemByText(TreeItem, String, Set)}.
+     */
+    private void clickTreeItemById(
+            String treeSelector,
+            String containerId,
+            String id,
+            boolean doubleClick,
+            Set<String> nestedContainerIds) {
         String token = ":" + id + ":";
         Scene scene = findScene(MAIN_WINDOW);
         if (scene == null) throw new RuntimeException("Main window scene not found");
@@ -1956,10 +1985,13 @@ public class RosterActions {
                     "Tree '" + treeSelector + "' has no subtree for container id: " + containerId);
         }
 
-        TreeItem<Object> item = findTreeItemByText(scope, token);
+        TreeItem<Object> item = findTreeItemByText(scope, token, nestedContainerIds);
         if (item == null) {
             throw new RuntimeException("Tree item not found for id: " + id
-                    + (containerId == null ? "" : " under " + containerId));
+                    + (containerId == null ? "" : " under " + containerId)
+                    + (nestedContainerIds.isEmpty()
+                            ? ""
+                            : " (excluding nested forces " + nestedContainerIds + ")"));
         }
 
         // Select the item first
@@ -2399,16 +2431,76 @@ public class RosterActions {
     // ═══════════════════════════════════════════════════════════════════
 
     private TreeItem<Object> findTreeItemByText(TreeItem<Object> item, String text) {
+        return findTreeItemByText(item, text, Collections.<String>emptySet());
+    }
+
+    /**
+     * As above, but never descends into a subtree belonging to one of {@code nestedContainerIds}.
+     *
+     * <p>Scoping to a container's subtree is not the same as scoping to the container. A force's
+     * subtree CONTAINS its child forces' subtrees, and each of those offers the same catalogue
+     * entries again — so a search confined to the parent still reaches the child's copy, and which
+     * one it reaches first is whatever order BattleScribe happened to build the tree in. Clicking
+     * the child's copy adds the selection to the CHILD force, and the caller then waits out its poll
+     * looking in the parent.
+     *
+     * <p>The excluded ids come from roster state rather than from the tree, because the tree says
+     * nothing about what an item IS — every node renders the same {@code Name:id:…} shape whether it
+     * is a force, a category or an entry. Roster state knows the difference and the action has
+     * already read it.
+     */
+    private TreeItem<Object> findTreeItemByText(
+            TreeItem<Object> item, String text, Set<String> nestedContainerIds) {
         if (item == null) return null;
         Object val = item.getValue();
         if (val != null && val.toString().contains(text)) {
             return item;
         }
         for (TreeItem<Object> child : item.getChildren()) {
-            TreeItem<Object> found = findTreeItemByText(child, text);
+            if (isContainerFor(child, nestedContainerIds)) continue;
+            TreeItem<Object> found = findTreeItemByText(child, text, nestedContainerIds);
             if (found != null) return found;
         }
         return null;
+    }
+
+    /** Whether this item is the root of one of {@code containerIds}' subtrees. */
+    private boolean isContainerFor(TreeItem<Object> item, Set<String> containerIds) {
+        if (containerIds.isEmpty() || item == null) return false;
+        Object val = item.getValue();
+        if (val == null) return false;
+        String rendered = val.toString();
+        for (String containerId : containerIds) {
+            if (rendered.contains(":" + containerId + ":")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The ids of every force nested under {@code forceId}, at any depth.
+     *
+     * <p>What a catalogue-tree lookup for {@code forceId} must NOT walk into — see
+     * {@link #findTreeItemByText(TreeItem, String, Set)}.
+     */
+    private Set<String> nestedForceIdsOf(JsonObject state, String forceId) {
+        JsonObject force = findForceById(state, forceId);
+        Set<String> ids = new LinkedHashSet<>();
+        if (force != null) {
+            collectNestedForceIds(force, ids);
+        }
+        return ids;
+    }
+
+    private void collectNestedForceIds(JsonObject force, Set<String> ids) {
+        JsonArray childForces = force.has("childForces") ? force.getAsJsonArray("childForces") : null;
+        if (childForces == null) return;
+        for (JsonElement el : childForces) {
+            if (!el.isJsonObject()) continue;
+            JsonObject child = el.getAsJsonObject();
+            String id = getStringField(child, "id");
+            if (id != null) ids.add(id);
+            collectNestedForceIds(child, ids);
+        }
     }
 
     /**

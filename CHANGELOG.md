@@ -128,6 +128,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A catalogue-tree lookup scoped to a force stops at that force's child forces** — confining the
+  search to the target force's subtree fixed the sibling-force case that had 20 specs adding
+  selections to the wrong force. It did not fix the nested case, because a force's subtree *contains*
+  its child forces' subtrees, and each of those offers the same catalogue entries again: with a child
+  force present, `selectEntry` on the parent could still click the child's copy, add the selection
+  there, and time out looking in the parent. Which one it reached was whatever order BattleScribe
+  built the tree in — so `force-nested-parent-child-selections` and the other 13 `addChildForce`
+  specs were passing on tree order rather than on addressing. The search now refuses to descend into
+  a nested force's subtree, with the ids taken from roster state because the tree cannot say which of
+  its nodes is a force: every node renders the same `Name:id:…` shape.
 - **The agent's object-graph walks answer the same way twice, and say when they gave up** — both
   walks enumerated fields with `Class.getDeclaredFields()`, whose order the JDK documents as
   unspecified, and both then answered order-sensitive questions off it: `findObjectById` returns the
