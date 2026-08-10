@@ -839,6 +839,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             PublicationId: string.IsNullOrEmpty(dto.PublicationId) ? null : dto.PublicationId,
             Page: dto.Page,
             Rules: dto.Rules is null or [] ? null : [.. dto.Rules.Select(MapRuleState)],
+            Profiles: dto.Profiles is null or [] ? null : [.. dto.Profiles.Select(MapProfileState)],
             EntryId: dto.EntryId,
             CatalogueName: dto.CatalogueName,
             CustomName: dto.CustomName,
@@ -1229,6 +1230,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         public List<AgentCategoryState>? Categories { get; set; }
         public List<AgentPublicationState>? Publications { get; set; }
         public List<AgentRuleState>? Rules { get; set; }
+        public List<AgentProfileState>? Profiles { get; set; }
     }
 
     private sealed class AgentSelectionState

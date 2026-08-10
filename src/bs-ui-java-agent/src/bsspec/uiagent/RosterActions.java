@@ -2211,6 +2211,29 @@ public class RosterActions {
         return null;
     }
 
+    /**
+     * True when a selection's reported entryId is the one that was asked for.
+     *
+     * <p>Not equality. A selection made from an ENTRY LINK reports the composite
+     * {@code linkId::targetId} — <code>link-alpha::shared-unit</code> for a spec that asked for
+     * <code>link-alpha</code> — so equality answers "no selection was created" about a selection
+     * sitting right there. That surfaced as a 10s poll timing out in every spec whose action
+     * addresses a link, and read as the click having done nothing.
+     *
+     * <p>Matching is one-directional on purpose: the composite may be widened by a prefix, so its
+     * segments are candidates for the requested id, but a request for the composite is not
+     * satisfied by a selection carrying only one segment of it.
+     */
+    private boolean isSelectionOfEntry(JsonObject selection, String entryId) {
+        String actual = getStringField(selection, "entryId");
+        if (actual == null || entryId == null) return false;
+        if (actual.equals(entryId)) return true;
+        for (String segment : actual.split("::")) {
+            if (segment.equals(entryId)) return true;
+        }
+        return false;
+    }
+
     private JsonObject findCreatedSelection(
             JsonObject before, JsonObject after,
             String forceId, String parentSelectionId, String entryId) {
@@ -2222,7 +2245,7 @@ public class RosterActions {
         for (JsonObject sel : afterSelections) {
             String id = getStringField(sel, "id");
             if (id == null || beforeIds.contains(id)) continue;
-            if (Objects.equals(getStringField(sel, "entryId"), entryId)) {
+            if (isSelectionOfEntry(sel, entryId)) {
                 return sel;
             }
         }
@@ -2232,13 +2255,13 @@ public class RosterActions {
         Map<String, Integer> beforeNumbers = new HashMap<>();
         for (JsonObject sel : beforeSelections) {
             String id = getStringField(sel, "id");
-            if (id != null && Objects.equals(getStringField(sel, "entryId"), entryId)) {
+            if (id != null && isSelectionOfEntry(sel, entryId)) {
                 beforeNumbers.put(id, getIntField(sel, "number", 1));
             }
         }
         for (JsonObject sel : afterSelections) {
             String id = getStringField(sel, "id");
-            if (id != null && Objects.equals(getStringField(sel, "entryId"), entryId)) {
+            if (id != null && isSelectionOfEntry(sel, entryId)) {
                 int afterNum = getIntField(sel, "number", 1);
                 Integer beforeNum = beforeNumbers.get(id);
                 if (beforeNum != null && afterNum > beforeNum) {
