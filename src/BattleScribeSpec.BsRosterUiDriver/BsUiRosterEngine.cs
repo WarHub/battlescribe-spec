@@ -80,6 +80,30 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// <summary>Entry-link id to the id it targets, for resolving a link to what it labels as.</summary>
     private readonly Dictionary<string, string> _linkTargetsById = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Children of one container, in declaration order — one list per container. Collected while
+    /// indexing and consumed once by <see cref="IndexLabelOccurrences"/>, which needs every name
+    /// resolved before it can tell which siblings share a label.
+    /// </summary>
+    private readonly List<List<string>> _siblingGroups = [];
+
+    /// <summary>
+    /// How many EARLIER siblings carry the same edit-panel label as this entry.
+    /// <para>
+    /// Two entry links onto one shared entry render as two rows spelled identically — BattleScribe
+    /// labels a control with what the link RESOLVES to, so `link-alpha` and `link-alpha-2` onto a
+    /// shared `Trigger` both read `'Trigger'`, and the panel exposes no id to tell them apart.
+    /// Addressing by label alone always drove the first of them, so asking for the second
+    /// incremented the first and the wait timed out reporting a child that was never added.
+    /// </para>
+    /// <para>
+    /// Position is the key that is left: the panel renders one row per child, and rows sharing a
+    /// label appear in the order their entries are declared. Both orders come from the same
+    /// catalogue, so they agree by construction rather than by observation.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<string, int> _labelOccurrenceById = new(StringComparer.Ordinal);
+
     private BsRosterApp? _app;
     private AgentClient? _client;
     private ProtocolGameSystem? _gameSystem;
@@ -153,7 +177,14 @@ public sealed class BsUiRosterEngine : IRosterEngine
             ["parentSelectionId"] = parentSelectionId,
             ["entryId"] = entryId,
             ["entryName"] = ResolveEntryLabel(entryId),
+            ["labelOccurrence"] = LabelOccurrenceOf(entryId),
         }));
+
+    /// <summary>
+    /// Which of the identically-labelled rows this entry is, or 0 when its label is its own.
+    /// </summary>
+    private int LabelOccurrenceOf(string entryId)
+        => _labelOccurrenceById.TryGetValue(entryId, out var occurrence) ? occurrence : 0;
 
     public void DeselectSelection(string forceId, string selectionId)
         => RunAsync(() => CallActionAsync("rosterDeselectSelectionAction", new JsonObject
@@ -191,12 +222,27 @@ public sealed class BsUiRosterEngine : IRosterEngine
             // Roster not yet created; cost limit will be applied during createRosterAction.
             return;
         }
+
+        // The same refusal the New Roster dialog makes, for the same reason and through the same
+        // rule — see BsUiCostLimits. This path used to cast instead, so a value the dialog declined
+        // to invent was invented here the moment a roster already existed.
+        if (BsUiCostLimits.SpinnerValueFor(value) is not { } spinnerValue)
+        {
+            // Said out loud: the observable consequence is a limit that is simply absent, which
+            // reads as BattleScribe ignoring one rather than as never having been given one.
+            Console.Error.WriteLine(
+                $"[bs-ui] Cost limit {value} for '{costTypeId}' is not a whole number and cannot be "
+                + "entered in BattleScribe's integer spinner — leaving the roster's limit unset "
+                + "rather than truncating it.");
+            return;
+        }
+
         var costName = _costNamesById.GetValueOrDefault(costTypeId) ?? costTypeId;
         RunAsync(() => CallActionAsync("rosterSetCostLimitAction", new JsonObject
         {
             ["costTypeId"] = costTypeId,
             ["costName"] = costName,
-            ["value"] = (int)value,
+            ["value"] = spinnerValue,
         }));
     }
 
@@ -296,6 +342,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _entryNamesById.Clear();
         _groupEntryIds.Clear();
         _linkTargetsById.Clear();
+        _siblingGroups.Clear();
+        _labelOccurrenceById.Clear();
         _costNamesById.Clear();
         _gameSystem = null;
         _gameSystemId = null;
@@ -746,42 +794,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
     }
 
     /// <summary>
-    /// The value to put in the New Roster dialog's cost-limit spinner, or null to leave it alone.
+    /// The value to put in the New Roster dialog's cost-limit spinner, or null to leave it alone —
+    /// see <see cref="BsUiCostLimits.ForNewRoster"/>, which is the whole rule.
     /// </summary>
-    /// <remarks>
-    /// A spec's own <c>setCostLimit</c> wins. Failing that, the game system's
-    /// <c>defaultCostLimit</c> is used — and it has to be, because <b>BattleScribe applies that
-    /// default only to a roster created through the engine, not to one created through this
-    /// dialog</b>. Leaving the spinner untouched produced a roster with NO cost limit at all
-    /// (`costLimits: []` read straight back off the model), so a spec whose whole subject is a
-    /// default limit saw no violation to report and failed asking where its error went.
-    /// <para>
-    /// One cost type only, in both cases: the dialog has a single spinner, so there is no way to
-    /// express a per-type limit here and guessing which type it meant would be worse than leaving
-    /// it unset. A multi-type system falls through to whatever BattleScribe does on its own.
-    /// </para>
-    /// </remarks>
     private int? ResolveNewRosterCostLimit()
-    {
-        if (_pendingCostLimits.Count == 1)
-        {
-            return (int)_pendingCostLimits.Values.First();
-        }
-
-        if (_pendingCostLimits.Count == 0 && _gameSystem?.CostTypes is { } costTypes)
-        {
-            var defaults = costTypes.Where(c => c.DefaultCostLimit is >= 0).ToList();
-            // Integral only. The spinner is a Spinner<Integer>, so a fractional default cannot be
-            // entered — and truncating one is worse than not setting it: 0.5 becomes 0, and every
-            // selection is then over a limit the game system never declared.
-            if (defaults.Count == 1 && defaults[0].DefaultCostLimit!.Value % 1 == 0)
-            {
-                return (int)defaults[0].DefaultCostLimit!.Value;
-            }
-        }
-
-        return null;
-    }
+        => BsUiCostLimits.ForNewRoster(_pendingCostLimits, _gameSystem?.CostTypes);
 
     private static Task StageDataFilesAsync(
         string dataDirectoryPath,
@@ -899,6 +916,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 _costNamesById[costType.Id] = costType.Name;
             }
         }
+
+        // Last, because it resolves labels and every name has to be indexed for that to answer.
+        IndexLabelOccurrences();
     }
 
     private void IndexSelectionContainer(
@@ -923,9 +943,58 @@ public sealed class BsUiRosterEngine : IRosterEngine
         foreach (var selectionEntry in selectionEntries)
         {
             _entryNamesById[selectionEntry.Id] = selectionEntry.Name;
+            RecordSiblingOrder(
+                selectionEntry.SelectionEntries?.Select(e => e.Id),
+                selectionEntry.EntryLinks?.Select(l => l.Id),
+                selectionEntry.SelectionEntryGroups?.Select(g => g.Id));
             IndexSelectionEntries(selectionEntry.SelectionEntries);
             IndexEntryLinks(selectionEntry.EntryLinks);
             IndexSelectionEntryGroups(selectionEntry.SelectionEntryGroups);
+        }
+    }
+
+    /// <summary>
+    /// Notes one container's children in the order the edit panel lists them: direct entries, then
+    /// entry links, then groups — the order observed in BattleScribe's own panel.
+    /// </summary>
+    /// <remarks>
+    /// Only the order among children that end up sharing a LABEL is load-bearing, and links sit
+    /// with links, so the arrangement between the three collections never decides an occurrence
+    /// on its own.
+    /// </remarks>
+    private void RecordSiblingOrder(
+        IEnumerable<string>? entries,
+        IEnumerable<string>? links,
+        IEnumerable<string>? groups)
+    {
+        List<string> siblings = [.. entries ?? [], .. links ?? [], .. groups ?? []];
+        if (siblings.Count > 1)
+        {
+            _siblingGroups.Add(siblings);
+        }
+    }
+
+    /// <summary>
+    /// Assigns each entry its <see cref="_labelOccurrenceById"/> index, once every name is known.
+    /// </summary>
+    private void IndexLabelOccurrences()
+    {
+        foreach (var siblings in _siblingGroups)
+        {
+            Dictionary<string, int> seenPerLabel = new(StringComparer.Ordinal);
+            foreach (var childId in siblings)
+            {
+                var label = ResolveEntryLabel(childId);
+                seenPerLabel.TryGetValue(label, out var seen);
+                // Only a repeat is worth recording: a unique label needs no position, and storing
+                // 0 for every entry would bury the handful that matter.
+                if (seen > 0)
+                {
+                    _labelOccurrenceById[childId] = seen;
+                }
+
+                seenPerLabel[label] = seen + 1;
+            }
         }
     }
 
@@ -940,6 +1009,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
         {
             _entryNamesById[group.Id] = group.Name;
             _groupEntryIds.Add(group.Id);
+            RecordSiblingOrder(
+                group.SelectionEntries?.Select(e => e.Id),
+                group.EntryLinks?.Select(l => l.Id),
+                group.SelectionEntryGroups?.Select(g => g.Id));
             IndexSelectionEntries(group.SelectionEntries);
             IndexEntryLinks(group.EntryLinks);
             IndexSelectionEntryGroups(group.SelectionEntryGroups);
@@ -1367,29 +1440,18 @@ public sealed class BsUiRosterEngine : IRosterEngine
             }
         }
 
-        // The action methods on the Java side run on a background thread with their own timeouts.
-        // Increase call timeout to match: Java has 30s window wait + 10s state poll per step.
-        var originalTimeout = ConnectedClient.CallTimeout;
-        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
-        try
-        {
-            var result = await ConnectedClient.CallAsync(method, parameters);
-            var json = result?.ToJsonString() ?? "{}";
-            var output = JsonSerializer.Deserialize<T>(json, JsonOptions)
-                ?? throw new InvalidOperationException($"{method} returned null result");
+        var result = await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
+        var json = result?.ToJsonString() ?? "{}";
+        var output = JsonSerializer.Deserialize<T>(json, JsonOptions)
+            ?? throw new InvalidOperationException($"{method} returned null result");
 
-            // Mark engine as located after first successful action that creates a roster
-            if (!_engineLocated && output is ActionOutputs { ForceId: not null })
-            {
-                _engineLocated = true;
-            }
-
-            return output;
-        }
-        finally
+        // Mark engine as located after first successful action that creates a roster
+        if (!_engineLocated && output is ActionOutputs { ForceId: not null })
         {
-            ConnectedClient.CallTimeout = originalTimeout;
+            _engineLocated = true;
         }
+
+        return output;
     }
 
     /// <summary>
@@ -1398,18 +1460,18 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task CallActionAsync(string method, JsonObject parameters)
     {
         EnsureSetup();
-
-        var originalTimeout = ConnectedClient.CallTimeout;
-        ConnectedClient.CallTimeout = TimeSpan.FromSeconds(90);
-        try
-        {
-            await ConnectedClient.CallAsync(method, parameters);
-        }
-        finally
-        {
-            ConnectedClient.CallTimeout = originalTimeout;
-        }
+        await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
     }
+
+    /// <summary>
+    /// How long one high-level Java-side action gets.
+    /// </summary>
+    /// <remarks>
+    /// The action methods run on a background thread with their own internal timeouts — a 30s window
+    /// wait plus a 10s state poll per step — so the call has to outlast them or it reports a
+    /// deadlock where the Java side is about to report what actually went wrong.
+    /// </remarks>
+    private static readonly TimeSpan ActionCallTimeout = TimeSpan.FromSeconds(90);
 
     /// <summary>
     /// Maximum number of retry attempts for transient failures (timeout, agent communication).

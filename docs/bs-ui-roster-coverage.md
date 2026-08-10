@@ -4,23 +4,27 @@
 injected into the JVM: real dialogs, real tree clicks, state read back from the Java model. The lane
 was added in #353 and its 83 failures were unclassified, which is why it was deliberately not wired
 into `ci.yml` — a permanently-red job is worse than no job. This document is the classification, and
-what it turned into.
+what it turned into. It is wired in now; see [In CI](#in-ci).
 
 ## Where it went
 
 | | first measurement | now |
 |---|---:|---:|
 | Specs selected | 367 | 367 |
-| **Passed** | **284 (77%)** | **362 (99%)** |
-| Failed | 83 | 5 |
-| Wall-clock | 29m02s | 13m32s |
+| **Passed** | **284 (77%)** | **367 (100%)** |
+| Failed | 83 | 0 |
+| Wall-clock | 29m02s | 10m50s |
 
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
 measurement was reproduced exactly on a second run before anything was changed — which matters more
 than usual here, because a third of those failures were timeouts, and a timeout that moves between
 runs is a different problem from one that does not.
 
-The 15 minutes are almost entirely 10-second state polls that no longer run out.
+The 18 minutes are almost entirely 10-second state polls that no longer run out.
+
+Both figures are from confirmed runs, not computed ones. The 362/5 row this table used to carry was
+re-measured before anything in that session changed — 362 passed, 5 failed, 11m52s — because the
+commit that preceded it had altered how two of the five failed, and the recorded number predated it.
 
 ## The classification
 
@@ -36,12 +40,12 @@ work:
 | | was | fixed | left | cause |
 |---|---:|---:|---:|---|
 | A | 28 | 28 | 0 | `selectEntry`/`selectChildEntry` state-change timeouts — three causes |
-| E | 25 | 23 | 2 | validation error produced, `from` unresolved |
+| E | 25 | 25 | 0 | validation error produced, `from` unresolved |
 | B | 6 | 6 | 0 | BattleScribe deletes the staged `.cat` as corrupt |
 | J | 8 | 8 | 0 | cost mismatches — float drift and lane inheritance |
-| K | 9 | 7 + 2 declared | 1 | value mismatches, mostly lane inheritance |
+| K | 9 | 8 + 2 declared | 0 | value mismatches, mostly lane inheritance |
 | D | 4 | 2 + 2 declared | 0 | no validation error produced at all |
-| G | 4 | 1 + 1 declared | 2 | edit-panel control not found by label |
+| G | 4 | 3 + 1 declared | 0 | edit-panel control not found by label |
 | C | 2 | 2 | 0 | `CategoryLink must have an ID` |
 | F | 2 | implemented + 2 declared | 0 | `SetupFromFiles` unimplemented (`dataSource` specs) |
 
@@ -142,26 +146,105 @@ Two diagnostic switches are kept, both off by default and both justified by a bu
 `BS_UI_VALIDATION_TRACE=1` prints every validation error with each id source that could name it, and
 `BS_UI_TREE_TRACE=1` dumps both roster trees around a `selectEntry`.
 
-## The 5 that remain
+## The last 5 — and why none of them was declared
 
-Each has a named cause. **Seven specs are declared `engines: {battlescribe-ui: fail}`** — three cost limits, two `real-world`
-specs whose DATA BattleScribe refuses to parse, and two limitations that only became legible once
-grouped controls were driven: a `max=1` group is a RadioButton, so its violation is unreachable
-rather than unreported, and an entry whose primary category is not one of its force's is absent from
-the catalogue tree entirely. The remaining 5 are NOT declared, deliberately: a cause is not a verdict, and declaring specs to get a green job
-would be inventing declarations rather than earning them — the exact defect
-`docs/nr-ui-roster-coverage.md` records for that lane's own history.
+**Seven specs are declared `engines: {battlescribe-ui: fail}`**, and the number did not grow to
+twelve. The seven are three cost limits, two `real-world` specs whose DATA BattleScribe refuses to
+parse, and two limitations that only became legible once grouped controls were driven: a `max=1`
+group is a RadioButton, so its violation is unreachable rather than unreported, and an entry whose
+primary category is not one of its force's is absent from the catalogue tree entirely.
 
 Every declaration records what was NOT checked. The cost-limit three say the Edit Roster dialog has
 not been examined for per-cost-type limit fields. The `real-world` two name the four modifiers
 BattleScribe rejects and note that every catalogue loads — which is what makes them a statement
 about the data rather than cover for an unfinished `SetupFromFiles`.
 
-| | count | what is known |
-|---|---:|---|
-| G | 2 | Grouped controls are DRIVEN; these are what is left behind them, and they are two different shapes. `condition-shared-flag-nested` puts two links onto one shared entry, so both render as `'Trigger'` and label lookup cannot separate them — the catalogue-tree ambiguity again, with no escape, because the panel exposes no id. `collective-instance-amount` offers `'Sergeant • 12pts' -> (no control)`: the label is there and carries nothing to click, which is neither "no row" nor "row with spinner". **Disproved 2026-08-08: it is not that the row lives in the selection's own panel rather than its parent's.** Selecting the selection itself and re-describing gives the same answer — every label the scene offers is roster-tree text (`'Sergeant • 12pts'`, `'Badge, Weapon'`) and the edit panel has no controls at all. That attempt was written, run, and reverted; what BattleScribe renders for a collective child that has acquired its OWN children is still unknown. |
-| E | 2 | **Not a driver gap: the two BattleScribe engines disagree.** `constraint-entry-link-merged`'s message says `(maximum 2)` — the LINK's constraint — and this driver reports it, while the in-process adapter reports the target's `con-shared-max` (value 4) because its resolution reached that one first and kept it as a fallback. The spec encodes the in-process answer. Which is right is a question about BattleScribe. `constraint-shared-flag` is the same family and still unexplained. |
-| K | 1 | `selection/collective-per-model-operations` reports `cost type 'pts' not found in roster` after a deselect, and the roster reads back `"costs": []` with the whole sub-selection gone. It is the SAME cause as `collective-instance-amount`: the decrement path cannot find a control either, so `deselectSelectionAction` falls through to its select-and-press-DELETE fallback and removes the entire selection instead of one model. Two specs, one missing control. |
+The last five stayed failing for as long as they had a cause and no verdict, and that was the right
+state to leave them in. **Four of the five turned out to be driver defects and one an expectation to
+measure — none was the app's limitation, and none needed declaring.** Three had been characterised
+in this document as something other than what they were, so what each actually was is worth keeping:
+
+| filed as | actually |
+|---|---|
+| G — `condition-shared-flag-nested`: two links render as `'Trigger'`, "with no escape, because the panel exposes no id" | **Wrong, and one screenshot settled it.** The panel offers `[1] Target`, `[1] Trigger`, `[0] Trigger` — three distinct rows, one per child, in declaration order. There is no id, but there is a POSITION, and the catalogue supplies it. The driver now indexes how many earlier siblings share an entry's label and the agent skips that many controls. Both orders come from the same catalogue, so they agree by construction. |
+| G — `collective-instance-amount`: `'Sergeant • 12pts' -> (no control)`, "what BattleScribe renders is still unknown" | Answered by #377's screenshot (a `+` where the code demanded a Spinner) and now by the assertion behind it. Asked for three of an instanced entry, the app makes **three sibling selections costing 32**, and only the COLLECTIVE child rides along into the copies: Sergeants 2 and 3 have Weapon and not Badge. The gap to the 36 store-direct semantics predict is exactly the two Badges the app declines to duplicate. That is the spec's one new `battlescribe-ui` expectation. |
+| E — `constraint-entry-link-merged` / `constraint-shared-flag`: "not a driver gap: the two BattleScribe engines disagree" | **Both were bugs — one in each engine.** See below; the divergence ended with one fewer override in the suite rather than one more. |
+| K — `collective-per-model-operations`: "the SAME cause as `collective-instance-amount` — the decrement path cannot find a control" | **Wrong. The control was found and driven correctly.** The decrement worked; the POSTCONDITION was wrong. Detail below. |
+
+### An id list is not per-error, and a short one is not evidence
+
+`constraint-shared-flag` was the one genuine open puzzle: the message said `(maximum 2)` and
+resolution answered `con-max-shared`, whose value is 3. `BS_UI_VALIDATION_TRACE=1` printed the
+reason next to itself — the force reports **one** id, `…::shared-unit::con-max-shared`, while
+carrying **three** errors, two of them raised by `con-max-per-link`, which appears in no list
+anywhere.
+
+`getValidationErrorIds()` lists ids the ELEMENT knows about; one element carries every error raised
+under it. The value tiebreak was gated on `size() > 1`, so a one-element list skipped it entirely
+and returned the only candidate offered — naming a limit the message rules out. The gate is gone:
+the rendered value decides at any list size, and message-resolution only wins when it can point at a
+constraint whose declared limit the text actually quotes. Hidden-entry errors carry no value on
+either side and keep their path.
+
+> **A cause is not a verdict, and a verdict is not a declaration.** This one sat named-but-unexplained
+> across two sessions. Declaring it would have bought a green job and lost the bug.
+
+### The same defect in the in-process adapter, fixed rather than documented
+
+`constraint-entry-link-merged` looked like a genuine engine divergence and was written up here as
+one. It was not: `ResolveEntryFromMessage` consulted entry links only when the target carried no
+kind-matching constraint of its own, so it kept the target's `con-shared-max` (value 4) as a
+fallback and returned it for 3 selections against a `(maximum 2)` message — an answer that is
+self-inconsistent, since 3 does not exceed 4. Links are now asked for a value match first.
+
+All three engines now agree. The spec's base expectation becomes the app's answer, `newrecruit`
+loses the override it had needed to disagree with it, and the spec carries no per-engine block at
+all. AGENTS.md's step 3 offers "a bug in it, OR a documented override" — this records that the bug
+fix is the one to prefer, because it removes a divergence instead of enshrining one.
+
+### A decrement is not a removal
+
+`deselectSelection` on a collective child read as "the decrement path cannot find a control". It
+found it and drove it correctly. The wait then demanded the selection DISAPPEAR — but a collective
+control steps the PER-MODEL count, so one press takes `number` 6 to 3 under a parent of 3 and the
+selection stays. That correct press timed out, the action layer **retried the whole action**, and
+the second press took it to 0. The roster read back `costs: []` and the step reported success.
+
+Two screenshots showed it in one look: `[2] Weapon • 30pts` before, `[0] Weapon • 15pts` after — a
+spinner two steps down from one requested decrement, with a label still quoting the value it had at
+1. The wait now ends on gone OR fewer-than-there-were.
+
+Found alongside it: the same helper would have fired an instanced entry's `+` for a decrement
+request, adding one while reporting a removal. It now declines and lets the DELETE fallback run.
+
+### Method, again
+
+Both of the two hardest were settled by looking rather than reasoning — a trace switch that printed
+the id list beside the messages it was being asked to explain, and a screenshot pair that showed a
+spinner at 0 where the theory said 1. #377 recorded that lesson about `--screenshots`; this session
+underused it again for a while, and the entries above are what that cost.
+
+**Not covered by the occurrence fix:** the `dataSource` path indexes names from XML without tracking
+parents, so it computes no occurrences and keeps the previous first-match behaviour. No `dataSource`
+spec currently needs one.
 
 The rule that replaces an allow-list, unchanged: **a failing spec carries its reason, or it is not
-failing on purpose.** Until all 5 are fixed or declared, the lane stays out of `ci.yml` (#355).
+failing on purpose.** With all 5 resolved, the lane's blocker on `ci.yml` (#355) is gone.
+
+## In CI
+
+The lane now runs as the `roster` half of `thorough-ui-bs`, sharded 2 ways on the same `Shard` trait
+as the gamedata half — a `suite` axis on the existing job rather than a second job, because the two
+halves need identical artifacts, JDK, agent build and `xvfb`, and a copied setup block is one that
+drifts.
+
+It is **opt-in**, like every other thorough lane: `workflow_dispatch`, the weekly Monday schedule, a
+`thorough-ci` label on a PR, a `[nr-test]` commit message, or a PR touching `testdata.json`. So a
+BattleScribe change still merges without it unless someone asks — the difference is that asking is
+now possible, and the weekly run reports drift that previously nothing looked for.
+
+**The table above predates the driver fixes that followed it.** The 367/367 was measured before the
+nested-force scoping, the label ranking, the checkbox direction and the count-of-zero fix landed;
+each of those changes behaviour on paths the corpus exercises. The first opt-in run on this stack is
+the confirming measurement, and the numbers here should be re-recorded from it rather than assumed to
+carry over.

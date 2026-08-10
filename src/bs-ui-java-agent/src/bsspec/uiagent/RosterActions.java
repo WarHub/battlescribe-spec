@@ -211,11 +211,18 @@ public class RosterActions {
                             + "\n  catalogue: " + describeTree("#treeCatalogue")));
         }
 
-        // Wait for the entry to be THERE — under THIS force — rather than for 300ms. Scoping is
-        // not belt-and-braces: #treeCatalogue lists every force's own copy of the same entries, so
-        // an unscoped wait is satisfied by a sibling force's item and an unscoped click adds the
-        // selection to that force instead. See resolveTreeScope.
-        waitForTreeItem("#treeCatalogue", forceId, entryId);
+        // Wait for the entry to be THERE — under THIS force and no other — rather than for 300ms.
+        //
+        // Scoping is not belt-and-braces: #treeCatalogue lists every force's own copy of the same
+        // entries, so an unscoped wait is satisfied by a sibling force's item and an unscoped click
+        // adds the selection to that force instead. See resolveTreeScope.
+        //
+        // A force's subtree contains its CHILD forces' subtrees, which offer those same entries a
+        // third time — so scoping to the parent is not yet scoping to the parent. The child ids come
+        // from the state already read above, because the tree cannot say which of its nodes is a
+        // force: every one renders the same `Name:id:…` shape.
+        Set<String> nestedForceIds = nestedForceIdsOf(before, forceId);
+        waitForTreeItem("#treeCatalogue", forceId, entryId, nestedForceIds);
 
         // Phase 2: Double-click the entry in the catalogue tree, recording what the ROSTER tree
         // believed was selected at that moment rather than assuming it. When two forces come from
@@ -228,7 +235,7 @@ public class RosterActions {
         // single thread.
         String treeSelection = runOnFxGet(() -> {
             String selected = describeTreeSelection("#treeRoster");
-            clickTreeItemById("#treeCatalogue", forceId, entryId, true);
+            clickTreeItemById("#treeCatalogue", forceId, entryId, true, nestedForceIds);
             return selected;
         });
 
@@ -758,40 +765,63 @@ public class RosterActions {
             entryName = resolveEntryName(before, entryId);
         }
 
-        // Click the control by label (spinner increment, button fire, or checkbox toggle)
+        // Click the control by label (spinner increment, button fire, checkbox toggle, radio select)
         final String labelText = entryName;
-        runOnFx(() -> clickControlByLabel(labelText, MAIN_WINDOW, null));
+        final int labelOccurrence = getIntParam(p, "labelOccurrence", 0);
+        ControlOutcome outcome =
+                runOnFxGet(() -> clickControlByLabel(labelText, MAIN_WINDOW, null, labelOccurrence));
 
-        // Wait for the click to land, in any of the three shapes it can take.
-        //
-        // The child COUNT is the wrong thing to watch, and was the only thing watched. A COLLECTIVE
-        // entry does not gain a second child when selected again — BattleScribe increments the one
-        // already there. And a member of a single-choice GROUP does not gain one either: it
-        // REPLACES whichever member was chosen before, so the count is identical on both sides
-        // while the child that is there is a different entry entirely.
-        //
-        // What actually happened, in every case, is that the parent now holds a child for the
-        // requested entry that it did not hold before — or holds more of one it did.
-        JsonObject after = waitForStateChange(state -> {
-            JsonObject parent = findSelectionById(state, parentSelectionId);
-            if (parent == null) return false;
-            JsonObject beforeParent = findSelectionById(before, parentSelectionId);
-            if (beforeParent == null) return true;
-            return findNewChildSelection(before, state, parentSelectionId, entryId) != null
-                    || childNumberIncreased(beforeParent, parent, entryId);
-        }, state -> {
-            JsonObject parent = findSelectionById(state, parentSelectionId);
-            if (parent == null) {
-                return "parent selection " + parentSelectionId + " is no longer in the roster";
+        JsonObject after;
+        if (outcome == ControlOutcome.ALREADY_SET) {
+            // Nothing was driven, so there is no change to wait for: a single-choice group whose
+            // chosen member is already this entry is in the state this action exists to reach.
+            // Polling for a delta here burns the whole 10s timeout and then reports the click as
+            // having done nothing — true, and the opposite of what happened.
+            after = readRosterState();
+            JsonObject parent = findSelectionById(after, parentSelectionId);
+            if (childOfEntry(parent, entryId) == null) {
+                // The panel and the roster disagree: the control says this entry is chosen and the
+                // model has no child for it. Loud, because every later step referencing this step's
+                // selectionId would otherwise fail somewhere else entirely.
+                throw new RuntimeException("Control '" + labelText + "' reports entryId '" + entryId
+                        + "' is already selected, but parent " + parentSelectionId
+                        + (parent == null
+                                ? " is not in the roster"
+                                : " holds no child for it; children: "
+                                        + describeSelections(childSelectionsOf(parent))));
             }
-            JsonObject beforeParent = findSelectionById(before, parentSelectionId);
-            return "clicking control '" + labelText + "' left parent " + parentSelectionId
-                    + " with the same child count ("
-                    + (beforeParent == null ? "?" : childSelectionCount(beforeParent))
-                    + " -> " + childSelectionCount(parent) + "), children now: "
-                    + describeSelections(childSelectionsOf(parent))
-                    + "; wanted entryId '" + entryId + "'";
-        });
+        } else {
+            // Wait for the click to land, in any of the three shapes it can take.
+            //
+            // The child COUNT is the wrong thing to watch, and was the only thing watched. A
+            // COLLECTIVE entry does not gain a second child when selected again — BattleScribe
+            // increments the one already there. And a member of a single-choice GROUP does not gain
+            // one either: it REPLACES whichever member was chosen before, so the count is identical
+            // on both sides while the child that is there is a different entry entirely.
+            //
+            // What actually happened, in every case, is that the parent now holds a child for the
+            // requested entry that it did not hold before — or holds more of one it did.
+            after = waitForStateChange(state -> {
+                JsonObject parent = findSelectionById(state, parentSelectionId);
+                if (parent == null) return false;
+                JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+                if (beforeParent == null) return true;
+                return findNewChildSelection(before, state, parentSelectionId, entryId) != null
+                        || childNumberIncreased(beforeParent, parent, entryId);
+            }, state -> {
+                JsonObject parent = findSelectionById(state, parentSelectionId);
+                if (parent == null) {
+                    return "parent selection " + parentSelectionId + " is no longer in the roster";
+                }
+                JsonObject beforeParent = findSelectionById(before, parentSelectionId);
+                return "clicking control '" + labelText + "' left parent " + parentSelectionId
+                        + " with the same child count ("
+                        + (beforeParent == null ? "?" : childSelectionCount(beforeParent))
+                        + " -> " + childSelectionCount(parent) + "), children now: "
+                        + describeSelections(childSelectionsOf(parent))
+                        + "; wanted entryId '" + entryId + "'";
+            });
+        }
 
         // Find the new child selection (in after but not in before). A collective entry produced no
         // new child — it incremented the existing one — so fall back to that, or the step's
@@ -799,15 +829,7 @@ public class RosterActions {
         // somewhere else entirely.
         JsonObject createdSelection = findNewChildSelection(before, after, parentSelectionId, entryId);
         if (createdSelection == null) {
-            JsonObject parent = findSelectionById(after, parentSelectionId);
-            if (parent != null) {
-                for (JsonObject child : childSelectionsOf(parent)) {
-                    if (isSelectionOfEntry(child, entryId)) {
-                        createdSelection = child;
-                        break;
-                    }
-                }
-            }
+            createdSelection = childOfEntry(findSelectionById(after, parentSelectionId), entryId);
         }
 
         JsonObject result = new JsonObject();
@@ -853,27 +875,38 @@ public class RosterActions {
         // want here.
 
         // Try decrement via control by label
+        final int countBefore = getIntField(selection, "number", 1);
         final String finalEntryName = entryName;
-        AtomicReference<Boolean> clicked = new AtomicReference<>(false);
-        runOnFx(() -> {
-            clicked.set(tryClickControlByLabel(finalEntryName, MAIN_WINDOW, "decrement"));
-        });
+        // DRIVEN or nothing. ALREADY_SET means a control was found and deliberately not driven,
+        // which for a decrement is the same as having no decrement control at all — so it takes the
+        // DELETE path, which can actually take something away.
+        ControlOutcome outcome =
+                runOnFxGet(() -> tryClickControlByLabel(finalEntryName, MAIN_WINDOW, "decrement"));
 
-        if (!clicked.get()) {
-            // Fallback: select the selection itself and press DELETE
-            // Both calls block on the FX thread and the selection is applied synchronously, so
-            // the key press below already lands on the intended row.
-            runOnFx(() -> {
-                selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW);
-            });
-            runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
+        if (outcome != ControlOutcome.DRIVEN) {
+            // Fallback: no decrement control, so take the row away outright.
+            removeSelectionEntirely(selectionId);
+            JsonObject deleted = new JsonObject();
+            deleted.addProperty("removed", true);
+            return deleted.toString();
         }
 
-        // Wait for selection to disappear
-        waitForStateChange(s -> findSelectionById(s, selectionId) == null);
+        // A decrement is not a removal, and demanding one turned a correct press into a
+        // destructive action. BattleScribe's control on a COLLECTIVE child steps the PER-MODEL
+        // count: under a parent of 3, one press takes 2-per-model to 1 and the selection stays,
+        // with `number` 6 -> 3. Waiting for it to vanish timed that press out, the action layer
+        // retried the whole action, and the second press took 1 -> 0 and destroyed a selection the
+        // caller had asked to decrement — reported as a clean success, with the roster reading
+        // back `costs: []`.
+        //
+        // So either outcome ends the wait: gone, or fewer than there were.
+        JsonObject settled = waitForStateChange(s -> {
+            JsonObject now = findSelectionById(s, selectionId);
+            return now == null || getIntField(now, "number", 1) < countBefore;
+        });
 
         JsonObject result = new JsonObject();
-        result.addProperty("removed", true);
+        result.addProperty("removed", findSelectionById(settled, selectionId) == null);
         return result.toString();
     }
 
@@ -891,11 +924,20 @@ public class RosterActions {
         if (count < 0) throw new RuntimeException("count must be >= 0");
 
         if (count == 0) {
-            // Deselect (remove) the selection
-            JsonObject deselectParams = new JsonObject();
-            deselectParams.addProperty("forceId", forceId);
-            deselectParams.addProperty("selectionId", selectionId);
-            return deselectSelectionAction(deselectParams.toString());
+            // Zero instances means gone, and that is NOT what deselectSelection does. Its control on
+            // a collective child steps the per-model count -- one press takes number 6 to 3 and the
+            // selection stays, which is the semantics `collective-per-model-operations` asserts and
+            // the reason its wait accepts fewer-than-there-were. Delegating here would therefore
+            // report "count is now 0" about a selection sitting in the roster at 3.
+            //
+            // So this asks for the whole thing to go, through the one control that can do it.
+            removeSelectionEntirely(selectionId);
+
+            JsonObject removed = new JsonObject();
+            removed.addProperty("set", true);
+            removed.addProperty("count", 0);
+            removed.addProperty("removed", true);
+            return removed.toString();
         }
 
         JsonObject state = readRosterState();
@@ -964,17 +1006,45 @@ public class RosterActions {
     // ═══════════════════════════════════════════════════════════════════
 
     /**
-     * Clicks the edit panel control (Spinner/Button/CheckBox) by its sibling label text.
-     * Must be called from the FX thread.
+     * Drives the {@code occurrence}-th edit-panel control whose label matches, and throws if there
+     * is none. Must be called from the FX thread.
+     *
+     * <p>Two entry links onto one shared entry render as two rows spelled the same — BattleScribe
+     * labels a control with what a link RESOLVES to — and the panel carries no id to separate
+     * them. Position is the key that is left, and the caller supplies it from the catalogue, where
+     * both orders come from.
+     *
+     * @return what driving the control did; never {@link ControlOutcome#NOT_FOUND}, which throws.
      */
-    private void clickControlByLabel(String labelText, String windowTitle, String action) {
-        if (!tryClickControlByLabel(labelText, windowTitle, action)) {
+    private ControlOutcome clickControlByLabel(
+            String labelText, String windowTitle, String action, int occurrence) {
+        ControlOutcome outcome = tryClickControlByLabel(labelText, windowTitle, action, occurrence);
+        if (outcome == ControlOutcome.NOT_FOUND) {
             // Say what the panel DOES offer. "Control not found for label: Sword" cannot
             // distinguish an entry the panel never rendered from one rendered under a different
             // name from one whose label carries no control — three different bugs.
             throw new RuntimeException("Control not found for label: " + labelText
+                    + (occurrence > 0 ? " (occurrence " + occurrence + ")" : "")
                     + "; panel offers: " + describeControlLabels(windowTitle));
         }
+        return outcome;
+    }
+
+    /**
+     * Whether this label sits beside a control the given action could drive.
+     *
+     * <p>Mirrors the acceptance test of the loop that consumes it, so skipping a row and driving a
+     * row agree about what a row IS. A "+" button is not a decrement control, so a decrement pass
+     * neither drives it nor counts it.
+     */
+    private boolean hasControlSibling(javafx.scene.Parent parent, Label label, String action) {
+        boolean decrement = "decrement".equals(action);
+        for (Node sibling : parent.getChildrenUnmodifiable()) {
+            if (sibling == label) continue;
+            if (sibling instanceof Spinner) return true;
+            if (sibling instanceof Button && !decrement) return true;
+        }
+        return false;
     }
 
     /** The edit panel's labels and whether each has a control beside it. FX thread only. */
@@ -1015,23 +1085,190 @@ public class RosterActions {
     }
 
     /**
-     * Tries to click an edit panel control by label. Returns true if found and clicked.
+     * What driving a labelled edit-panel control actually did.
+     *
+     * <p>Three outcomes and not two, because a caller has three different jobs after them: report a
+     * missing control, wait for the roster to change, or stop — and the third used to be spelled the
+     * same as the second.
+     */
+    private enum ControlOutcome {
+        /** No control carries this label. */
+        NOT_FOUND,
+
+        /** Driven. The roster should change, and the caller should wait until it does. */
+        DRIVEN,
+
+        /**
+         * The control was already in the state being asked for, so nothing was driven and nothing
+         * is going to change.
+         *
+         * <p>This is a success — the postcondition holds — but a caller that treats it as
+         * {@link #DRIVEN} waits for a change that cannot come, spends its whole poll timeout, and
+         * then reports the click as having done nothing.
+         */
+        ALREADY_SET,
+    }
+
+    /**
+     * How well a rendered control label answers to an entry's name.
+     *
+     * <p>Ranked, because a bare {@code contains} cannot tell the entry from its neighbours and the
+     * spec corpus is full of neighbours: {@code Armor} is inside {@code Light Armor},
+     * {@code Heavy Armor} and {@code Armor Type} in one panel; {@code Trigger} is inside
+     * {@code Alpha Trigger} and {@code Beta Trigger} in another; {@code Unit 1} is inside
+     * {@code Unit 10}. Under {@code contains} the answer is whichever node {@code lookupAll} yields
+     * first, which is a wrong control driven silently.
+     *
+     * <p>Equality alone is not the fix either — BattleScribe decorates a row with its cost, so the
+     * label for {@code Sergeant} reads {@code Sergeant • 12pts}. Hence a middle rank: the name, then
+     * something that is not more name.
+     */
+    private enum LabelMatch {
+        /** The label IS the name. */
+        EXACT,
+
+        /** The name, then decoration the panel added — {@code Sergeant • 12pts}. */
+        DECORATED,
+
+        /** The name is in there somewhere — {@code Alpha Trigger} for {@code Trigger}. */
+        CONTAINED,
+
+        /** Not this label. */
+        NONE,
+    }
+
+    /**
+     * Where {@code rendered} sits in {@link LabelMatch}'s ranking for {@code name}.
+     *
+     * <p>DECORATED allows at most ONE space before the decoration, and then requires something that
+     * is not more name. " • 3pts" qualifies; " Type" does not. Rejecting only a letter-or-digit
+     * continuation is not enough, because a space is neither: under that rule {@code Armor Type}
+     * ranked as decoration of {@code Armor}, tying with the real {@code Armor • 3pts} row and
+     * handing the choice back to {@code lookupAll} order — the tie this ranking exists to break.
+     * The corpus carries the shape three times over ({@code Armor}/{@code Armor Type},
+     * {@code Trooper}/{@code Trooper Support}, {@code Bolter}/{@code Bolter Modifications}), and an
+     * append-name modifier manufactures more of it from a single entry.
+     */
+    private static LabelMatch matchLabel(String rendered, String name) {
+        if (rendered == null || name == null || name.isEmpty()) return LabelMatch.NONE;
+        if (rendered.equals(name)) return LabelMatch.EXACT;
+        if (rendered.startsWith(name)) {
+            String rest = rendered.substring(name.length());
+            int decoration = rest.startsWith(" ") ? 1 : 0;
+            if (decoration < rest.length() && !Character.isLetterOrDigit(rest.charAt(decoration))) {
+                return LabelMatch.DECORATED;
+            }
+        }
+        return rendered.contains(name) ? LabelMatch.CONTAINED : LabelMatch.NONE;
+    }
+
+    /**
+     * The best rank reached for {@code name} by anything in this window that CARRIES a control.
+     *
+     * <p><b>Only rows that carry one.</b> The scene spells an entry's name in several places that
+     * are not panel rows — the roster tree renders {@code Trooper} while the panel renders
+     * {@code Trooper • 10pts} beside its spinner — so ranking over every label lets a tree row win
+     * as an EXACT match and then match nothing drivable, turning a control that is right there into
+     * "Spinner not found". This is the rule the occurrence counter below already states for the same
+     * reason: a row in the tree is not a row in the panel.
+     *
+     * <p>Chosen BEFORE anything is driven, and independently of the action, so that a control
+     * declining to act (an unticked checkbox asked to decrement) cannot let a worse rank take over
+     * and drive a different entry's row.
+     *
+     * <p><b>Ranked over what the CALLER can drive</b>, hence {@code labelledRowsOnly}. The rank is a
+     * hard filter, so a candidate the caller cannot reach does not merely compete — it REMOVES every
+     * candidate the caller can reach. {@link #setSpinnerValueByLabel} scans labelled rows alone, and
+     * {@link #tryClickControlByLabel} does too once {@code occurrence > 0}; letting a self-labelled
+     * checkbox or radio set the rank for either would reproduce the tree-row bug this whole ranking
+     * was added to fix, one population over.
+     */
+    private LabelMatch bestLabelMatch(Scene scene, String name, boolean labelledRowsOnly) {
+        String[] styleClasses = labelledRowsOnly
+                ? new String[] { ".label" }
+                : new String[] { ".label", ".check-box", ".radio-button" };
+
+        LabelMatch best = LabelMatch.NONE;
+        for (String styleClass : styleClasses) {
+            for (Node node : scene.getRoot().lookupAll(styleClass)) {
+                if (!(node instanceof Labeled) || !carriesControl(node)) continue;
+                LabelMatch match = matchLabel(((Labeled) node).getText(), name);
+                if (match.ordinal() < best.ordinal()) best = match;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Whether this node is something the panel can be driven through.
+     *
+     * <p>A checkbox or radio IS the control and carries its own text. A Label is only a panel row
+     * when a control sits beside it; everywhere else the same text is just text — a tree row, a
+     * heading, a total.
+     *
+     * <p>Deliberately blind to the action, unlike {@link #hasControlSibling}: this decides whether a
+     * label is a candidate at all, and a row that exists but declines this particular request is
+     * still a row. Letting the action narrow it here is what would allow a decline to promote a
+     * neighbour.
+     */
+    private boolean carriesControl(Node node) {
+        if (node instanceof CheckBox || node instanceof RadioButton) {
+            return true;
+        }
+        if (!(node instanceof Label)) return false;
+
+        javafx.scene.Parent parent = node.getParent();
+        if (parent == null) return false;
+        for (Node sibling : parent.getChildrenUnmodifiable()) {
+            if (sibling == node) continue;
+            if (sibling instanceof Spinner || sibling instanceof ButtonBase) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Tries to drive an edit panel control by label.
      * Must be called from the FX thread.
      */
+    private ControlOutcome tryClickControlByLabel(String text, String windowTitle, String action) {
+        return tryClickControlByLabel(text, windowTitle, action, 0);
+    }
+
     @SuppressWarnings("unchecked")
-    private boolean tryClickControlByLabel(String text, String windowTitle, String action) {
+    private ControlOutcome tryClickControlByLabel(
+            String text, String windowTitle, String action, int occurrence) {
         Scene scene = findScene(windowTitle);
-        if (scene == null) return false;
+        if (scene == null) return ControlOutcome.NOT_FOUND;
+
+        // Settle for the closest spelling the panel offers, and then consider only that — see
+        // LabelMatch. A panel holding both `Armor` and `Light Armor` has an exact answer, and taking
+        // the first CONTAINED one instead is how a spec ends up driving its neighbour.
+        //
+        // Ranked over labelled rows alone once an occurrence is asked for, because the checkbox and
+        // radio loops below are unreachable in that case (see the `occurrence > 0` return): a
+        // self-labelled control setting the rank there would exclude every row that can still be
+        // driven.
+        LabelMatch tier = bestLabelMatch(scene, text, occurrence > 0);
+        if (tier == LabelMatch.NONE) return ControlOutcome.NOT_FOUND;
+
+        // Counted over labels that actually CARRY a control, not over every label that spells the
+        // text. The roster tree spells it too, and a row there is not an occurrence of a panel row.
+        int remaining = occurrence;
 
         // Look for Label → sibling Spinner/Button
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
             if (!(labelNode instanceof Label)) continue;
             Label label = (Label) labelNode;
             String lt = label.getText();
-            if (lt == null || !lt.contains(text)) continue;
+            if (matchLabel(lt, text) != tier) continue;
 
             javafx.scene.Parent parent = label.getParent();
             if (parent == null) continue;
+
+            if (remaining > 0 && hasControlSibling(parent, label, action)) {
+                remaining--;
+                continue;
+            }
 
             for (Node sibling : parent.getChildrenUnmodifiable()) {
                 if (sibling == label) continue;
@@ -1043,24 +1280,59 @@ public class RosterActions {
                     } else {
                         spinner.getValueFactory().increment(1);
                     }
-                    return true;
+                    return traced(text, "Spinner", ControlOutcome.DRIVEN);
                 }
                 if (sibling instanceof Button) {
+                    // The button an INSTANCED entry gets is "+", and it only adds. Firing it for a
+                    // decrement would add an instance while reporting that one was removed — so
+                    // decline, and let the caller fall through to its DELETE path, which can
+                    // actually take one away.
+                    if ("decrement".equals(action)) {
+                        continue;
+                    }
                     ((Button) sibling).fire();
-                    return true;
+                    return traced(text, "Button", ControlOutcome.DRIVEN);
                 }
             }
         }
 
         // Look for CheckBox by text
+        //
+        // Occurrence is not applied past this point. It is derived from the panel's row-per-child
+        // layout, and a checkbox or radio carries its own text instead of sitting beside a Label —
+        // so counting them alongside labelled rows would be counting two different things. An
+        // occurrence that reaches here has already failed to find its row, and falling back to the
+        // first control of another shape would be the well-formed wrong answer.
+        if (occurrence > 0) {
+            return ControlOutcome.NOT_FOUND;
+        }
+
+        // A checkbox is a STATE and fire() TOGGLES it, so what firing does depends entirely on where
+        // the box already is. Firing blind gets both directions wrong in the same way: a decrement
+        // request ticks an unticked box, adding the selection the caller asked to remove; a select
+        // request unticks a ticked one, removing the selection the caller asked for. Each then waits
+        // out its poll for the opposite of what it just caused.
+        //
+        // This is the Button branch's rule — "the control cannot do what was asked, so decline" —
+        // applied to a control that can do it, in one direction, from one starting state.
         for (Node cbNode : scene.getRoot().lookupAll(".check-box")) {
             if (!(cbNode instanceof CheckBox)) continue;
             CheckBox cb = (CheckBox) cbNode;
-            String cbText = cb.getText();
-            if (cbText != null && cbText.contains(text)) {
+            if (matchLabel(cb.getText(), text) != tier) continue;
+
+            if ("decrement".equals(action)) {
+                // Only a ticked box has anything to take away. An unticked one is not this entry's
+                // removal control, so keep looking and let the caller reach its DELETE path.
+                if (!cb.isSelected()) continue;
                 cb.fire();
-                return true;
+                return traced(text, "CheckBox", ControlOutcome.DRIVEN);
             }
+
+            if (cb.isSelected()) {
+                return traced(text, "CheckBox", ControlOutcome.ALREADY_SET);
+            }
+            cb.fire();
+            return traced(text, "CheckBox", ControlOutcome.DRIVEN);
         }
 
         // Look for RadioButton by text.
@@ -1070,46 +1342,67 @@ public class RosterActions {
         // instead of sitting beside a Label. Both loops above therefore looked straight past them,
         // and the panel appeared to offer the heading and nothing else.
         //
-        // Selecting an already-selected radio is a no-op in JavaFX rather than a re-fire, so this
-        // reports "already chosen" as success: the caller's postcondition is that this entry IS
-        // the group's choice, and it is.
+        // Selecting an already-selected radio is a no-op in JavaFX rather than a re-fire, so an
+        // already-chosen member is ALREADY_SET and not DRIVEN. The postcondition holds either way —
+        // this entry IS the group's choice — but only one of the two is followed by a change, and
+        // saying "clicked" for both left the caller polling ten seconds for a state that had
+        // already arrived, then reporting the click as having done nothing.
         for (Node rbNode : scene.getRoot().lookupAll(".radio-button")) {
             if (!(rbNode instanceof RadioButton)) continue;
             RadioButton rb = (RadioButton) rbNode;
-            String rbText = rb.getText();
-            if (rbText == null || !rbText.contains(text)) continue;
+            if (matchLabel(rb.getText(), text) != tier) continue;
+            // A radio is a choice, not a count: selecting one cannot take anything away, and the
+            // group has no "none" member to move to. So a decrement declines here for the same
+            // reason the "+" button does, and the caller falls through to its DELETE path.
+            if ("decrement".equals(action)) {
+                continue;
+            }
+            if (rb.isSelected()) {
+                return traced(text, "RadioButton", ControlOutcome.ALREADY_SET);
+            }
             // fire() and nothing else. RadioButton.fire() selects it and notifies the ToggleGroup,
             // which is what BattleScribe listens to; setSelected() beforehand only flips the state
             // fire() is about to toggle, so the pair can leave it deselected.
-            if (!rb.isSelected()) {
-                rb.fire();
-            }
-            return true;
+            rb.fire();
+            return traced(text, "RadioButton", ControlOutcome.DRIVEN);
         }
-        return false;
+        return traced(text, "(none)", ControlOutcome.NOT_FOUND);
     }
 
     /**
-     * Sets a Spinner's value by its sibling label. Increments/decrements to reach target.
-     * Must be called from the FX thread.
-     */
-    @SuppressWarnings("unchecked")
-    /**
-     * Sets a labelled count control in the edit panel.
+     * Sets a labelled count control in the edit panel to {@code value}, by stepping a Spinner or by
+     * firing an add Button the required number of times.
      *
-     * <p>{ currentCount} is the selection's own number, read from roster state. A spinner
+     * <p>Must be called from the FX thread.
+     *
+     * <p>{@code currentCount} is the selection's own number, read from roster state. A spinner
      * reports its own value and does not need it; an add BUTTON has no value to read, so the
      * caller's knowledge of where the count is now is the only way to know how many times to fire.
      */
+    @SuppressWarnings("unchecked")
     private void setSpinnerValueByLabel(String text, int value, int currentCount, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
 
+        // Closest spelling only, as in tryClickControlByLabel — a count set on the neighbouring row
+        // is worse than one not set at all, because the spec then asserts against a roster that was
+        // changed somewhere it never looked.
+        //
+        // Labelled rows only: this method scans nothing else, so a self-labelled checkbox or radio
+        // spelling the same name would set a rank no candidate here can reach and turn a spinner
+        // that is present into "Spinner not found".
+        LabelMatch tier = bestLabelMatch(scene, text, true);
+        if (tier == LabelMatch.NONE) {
+            // Out before the loop, or `matchLabel(...) != NONE` would be false for every label that
+            // does not match and the loop would consider all of them.
+            throw new RuntimeException("Spinner not found for label: " + text
+                    + "; panel offers: " + describeControlLabels(windowTitle));
+        }
+
         for (Node labelNode : scene.getRoot().lookupAll(".label")) {
             if (!(labelNode instanceof Label)) continue;
             Label label = (Label) labelNode;
-            String lt = label.getText();
-            if (lt == null || !lt.contains(text)) continue;
+            if (matchLabel(label.getText(), text) != tier) continue;
 
             javafx.scene.Parent parent = label.getParent();
             if (parent == null) continue;
@@ -1250,6 +1543,43 @@ public class RosterActions {
             }
         }
         return count;
+    }
+
+    /**
+     * Takes {@code selectionId} out of the roster entirely, and waits until it is gone.
+     *
+     * <p>The DELETE key on the roster tree row, which is the one control that removes a selection
+     * outright. Deliberately NOT the edit panel's decrement: on a collective child that steps the
+     * per-model count and leaves the selection there, which is the right answer to
+     * {@code deselectSelection} and the wrong one to "this selection has zero instances".
+     *
+     * <p>Both FX calls block until their task completes and JavaFX applies a tree selection
+     * synchronously, so the key press already lands on the intended row.
+     */
+    private void removeSelectionEntirely(String selectionId) {
+        runOnFx(() -> selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW));
+        runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
+
+        // Disappearance is the whole postcondition here — unlike a decrement, DELETE has no partial
+        // outcome to accept.
+        waitForStateChange(
+                s -> findSelectionById(s, selectionId) == null,
+                s -> {
+                    JsonObject still = findSelectionById(s, selectionId);
+                    return still == null
+                            ? "(it is gone — the predicate and this message disagree)"
+                            : "DELETE left selection " + selectionId + " in the roster at number "
+                                    + getIntField(still, "number", -1);
+                });
+    }
+
+    /** {@code scope}'s first child selection for {@code entryId}, or null. */
+    private JsonObject childOfEntry(JsonObject scope, String entryId) {
+        if (scope == null) return null;
+        for (JsonObject child : childSelectionsOf(scope)) {
+            if (isSelectionOfEntry(child, entryId)) return child;
+        }
+        return null;
     }
 
     /** The child selections {@link #childSelectionCount} counts, for diagnostics. */
@@ -1628,44 +1958,47 @@ public class RosterActions {
     }
 
     /**
-     * Waits until {@code treeSelector} contains a tree item for {@code id}.
+     * Waits until {@code treeSelector} offers an item for {@code id} inside {@code containerId}'s
+     * own subtree, excluding {@code nestedContainerIds}' — see {@link #resolveTreeScope} for why the
+     * container matters, and {@link #findTreeItemByText(TreeItem, String, Set)} for why its nested
+     * containers have to be left out of it.
      *
      * <p>Selecting a force rebuilds the catalogue tree beside it. Acting on that tree before the
      * rebuild lands either misses the item — a bare "Tree item not found" from a step that had
      * nothing to do with the tree — or, when the previous force offered a like-named entry, hits
      * the WRONG one. The 300ms that used to sit here covered neither case reliably.
+     *
+     * <p>No unscoped overload. There were two, both unused, and both a way to ask this question
+     * without the scoping that is the only reason the answer is trustworthy.
      */
-    private void waitForTreeItem(String treeSelector, String id) {
-        waitForTreeItem(treeSelector, null, id);
-    }
-
-    /**
-     * Waits until {@code treeSelector} offers an item for {@code id} INSIDE {@code containerId}'s
-     * subtree — see {@link #resolveTreeScope} for why the container matters.
-     */
-    private void waitForTreeItem(String treeSelector, String containerId, String id) {
+    private void waitForTreeItem(
+            String treeSelector, String containerId, String id, Set<String> nestedContainerIds) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
-            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, containerId, id));
+            Boolean present = runOnFxGet(() -> hasTreeItem(treeSelector, containerId, id, nestedContainerIds));
             if (present) return;
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException(
                 "Tree '" + treeSelector + "' never offered an item for id '" + id + "'"
                         + (containerId == null ? "" : " under '" + containerId + "'")
+                        + (nestedContainerIds.isEmpty()
+                                ? ""
+                                : " (excluding nested forces " + nestedContainerIds + ")")
                         + " within " + WINDOW_TIMEOUT_MS + "ms");
     }
 
     /** True when {@code treeSelector} holds an item carrying this id token. FX thread only. */
     @SuppressWarnings("unchecked")
-    private boolean hasTreeItem(String treeSelector, String containerId, String id) {
+    private boolean hasTreeItem(
+            String treeSelector, String containerId, String id, Set<String> nestedContainerIds) {
         Scene scene = findScene(MAIN_WINDOW);
         if (scene == null) return false;
         Node node = scene.getRoot().lookup(treeSelector);
         if (!(node instanceof TreeView)) return false;
         TreeView<Object> tree = (TreeView<Object>) node;
         TreeItem<Object> scope = resolveTreeScope(tree, containerId);
-        return scope != null && findTreeItemByText(scope, ":" + id + ":") != null;
+        return scope != null && findTreeItemByText(scope, ":" + id + ":", nestedContainerIds) != null;
     }
 
     /** True when {@code selector}'s ComboBox holds an item with this id. FX thread only. */
@@ -1815,6 +2148,28 @@ public class RosterActions {
     /** Set {@code BS_UI_TREE_TRACE=1} to dump both roster trees around a selectEntry. */
     private static final boolean TREE_TRACE = "1".equals(System.getenv("BS_UI_TREE_TRACE"));
 
+    /**
+     * Set {@code BS_UI_PANEL_TRACE=1} to print which edit-panel control each labelled request drove.
+     *
+     * <p>The question it answers is "what shape is this entry rendered as", and nothing else in the
+     * driver can answer it: a spec that passes proves the entry was reached, not what was clicked to
+     * reach it. That gap is how the checkbox branch went years without anyone knowing whether
+     * BattleScribe ever renders one — the code was written from the class list, not from a panel.
+     *
+     * <p>Cheap enough to leave on for a single spec, which is what {@code ci.yml}'s smoke step does:
+     * the log then says, every push, which control shapes kitchen-sink actually covers.
+     */
+    private static final boolean PANEL_TRACE = "1".equals(System.getenv("BS_UI_PANEL_TRACE"));
+
+    /** Records what a labelled request resolved to, and returns it unchanged. */
+    private ControlOutcome traced(String label, String controlKind, ControlOutcome outcome) {
+        if (PANEL_TRACE) {
+            System.err.println("[agent] panel trace: '" + label + "' -> " + controlKind
+                    + " (" + outcome + ")");
+        }
+        return outcome;
+    }
+
     /** A TreeView's visible structure, for diagnostics. FX thread only. */
     @SuppressWarnings("unchecked")
     private String describeTree(String treeSelector) {
@@ -1852,17 +2207,21 @@ public class RosterActions {
     }
 
     /**
-     * Clicks (or double-clicks) a tree item located by ID token.
+     * Clicks (or double-clicks) the item for {@code id} inside {@code containerId}'s OWN subtree —
+     * no nested container's copy of the same entry. See {@link #resolveTreeScope} for why the
+     * container matters and {@link #findTreeItemByText(TreeItem, String, Set)} for why its nested
+     * containers are excluded from it.
+     *
+     * <p>No unscoped overload. There were two, both unused, and a click is the operation where
+     * losing the scope is least visible: it lands on a real row, in a real force, and the caller
+     * discovers it a poll timeout later while looking somewhere else.
      */
-    private void clickTreeItemById(String treeSelector, String id, boolean doubleClick) {
-        clickTreeItemById(treeSelector, null, id, doubleClick);
-    }
-
-    /**
-     * Clicks (or double-clicks) the item for {@code id} INSIDE {@code containerId}'s subtree —
-     * see {@link #resolveTreeScope} for why the container matters.
-     */
-    private void clickTreeItemById(String treeSelector, String containerId, String id, boolean doubleClick) {
+    private void clickTreeItemById(
+            String treeSelector,
+            String containerId,
+            String id,
+            boolean doubleClick,
+            Set<String> nestedContainerIds) {
         String token = ":" + id + ":";
         Scene scene = findScene(MAIN_WINDOW);
         if (scene == null) throw new RuntimeException("Main window scene not found");
@@ -1878,10 +2237,13 @@ public class RosterActions {
                     "Tree '" + treeSelector + "' has no subtree for container id: " + containerId);
         }
 
-        TreeItem<Object> item = findTreeItemByText(scope, token);
+        TreeItem<Object> item = findTreeItemByText(scope, token, nestedContainerIds);
         if (item == null) {
             throw new RuntimeException("Tree item not found for id: " + id
-                    + (containerId == null ? "" : " under " + containerId));
+                    + (containerId == null ? "" : " under " + containerId)
+                    + (nestedContainerIds.isEmpty()
+                            ? ""
+                            : " (excluding nested forces " + nestedContainerIds + ")"));
         }
 
         // Select the item first
@@ -2321,16 +2683,76 @@ public class RosterActions {
     // ═══════════════════════════════════════════════════════════════════
 
     private TreeItem<Object> findTreeItemByText(TreeItem<Object> item, String text) {
+        return findTreeItemByText(item, text, Collections.<String>emptySet());
+    }
+
+    /**
+     * As above, but never descends into a subtree belonging to one of {@code nestedContainerIds}.
+     *
+     * <p>Scoping to a container's subtree is not the same as scoping to the container. A force's
+     * subtree CONTAINS its child forces' subtrees, and each of those offers the same catalogue
+     * entries again — so a search confined to the parent still reaches the child's copy, and which
+     * one it reaches first is whatever order BattleScribe happened to build the tree in. Clicking
+     * the child's copy adds the selection to the CHILD force, and the caller then waits out its poll
+     * looking in the parent.
+     *
+     * <p>The excluded ids come from roster state rather than from the tree, because the tree says
+     * nothing about what an item IS — every node renders the same {@code Name:id:…} shape whether it
+     * is a force, a category or an entry. Roster state knows the difference and the action has
+     * already read it.
+     */
+    private TreeItem<Object> findTreeItemByText(
+            TreeItem<Object> item, String text, Set<String> nestedContainerIds) {
         if (item == null) return null;
         Object val = item.getValue();
         if (val != null && val.toString().contains(text)) {
             return item;
         }
         for (TreeItem<Object> child : item.getChildren()) {
-            TreeItem<Object> found = findTreeItemByText(child, text);
+            if (isContainerFor(child, nestedContainerIds)) continue;
+            TreeItem<Object> found = findTreeItemByText(child, text, nestedContainerIds);
             if (found != null) return found;
         }
         return null;
+    }
+
+    /** Whether this item is the root of one of {@code containerIds}' subtrees. */
+    private boolean isContainerFor(TreeItem<Object> item, Set<String> containerIds) {
+        if (containerIds.isEmpty() || item == null) return false;
+        Object val = item.getValue();
+        if (val == null) return false;
+        String rendered = val.toString();
+        for (String containerId : containerIds) {
+            if (rendered.contains(":" + containerId + ":")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The ids of every force nested under {@code forceId}, at any depth.
+     *
+     * <p>What a catalogue-tree lookup for {@code forceId} must NOT walk into — see
+     * {@link #findTreeItemByText(TreeItem, String, Set)}.
+     */
+    private Set<String> nestedForceIdsOf(JsonObject state, String forceId) {
+        JsonObject force = findForceById(state, forceId);
+        Set<String> ids = new LinkedHashSet<>();
+        if (force != null) {
+            collectNestedForceIds(force, ids);
+        }
+        return ids;
+    }
+
+    private void collectNestedForceIds(JsonObject force, Set<String> ids) {
+        JsonArray childForces = force.has("childForces") ? force.getAsJsonArray("childForces") : null;
+        if (childForces == null) return;
+        for (JsonElement el : childForces) {
+            if (!el.isJsonObject()) continue;
+            JsonObject child = el.getAsJsonObject();
+            String id = getStringField(child, "id");
+            if (id != null) ids.add(id);
+            collectNestedForceIds(child, ids);
+        }
     }
 
     /**

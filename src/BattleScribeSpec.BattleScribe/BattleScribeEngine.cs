@@ -624,8 +624,7 @@ public sealed class BattleScribeEngine : IDisposable
             foreach (var c in constraints)
             {
                 var type = c.getType();
-                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
-                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                if (MessageMatchesConstraintKind(message, type))
                 {
                     // Prefer constraint whose value matches the message
                     var value = (int)c.getValue();
@@ -636,21 +635,39 @@ public sealed class BattleScribeEngine : IDisposable
                     firstMatch ??= c.getId();
                 }
             }
+
+            // A link onto this entry carries constraints of its own, and expansion merges them into
+            // the same expanded copy — so both are candidates for one message. The VALUE is what
+            // says which fired, and it is asked here rather than after `firstMatch` because a
+            // kind-match whose value the message contradicts is not evidence: with `(maximum 2)` on
+            // an entry whose own maximum is 4, the entry's constraint is the one constraint the
+            // message rules OUT. Returning it named a limit that 3 selections do not exceed.
+            (string linkId, string constraintId)? linkFirstMatch = null;
+            if (_linkConstraintLookup.TryGetValue(id, out var linkConstraints))
+            {
+                foreach (var (linkId, constraintId, constraintType, constraintValue) in linkConstraints)
+                {
+                    if (!MessageMatchesConstraintKind(message, constraintType))
+                    {
+                        continue;
+                    }
+                    if (message.Contains($"maximum {constraintValue}") ||
+                        message.Contains($"minimum {constraintValue}"))
+                    {
+                        return (linkId, constraintId);
+                    }
+                    linkFirstMatch ??= (linkId, constraintId);
+                }
+            }
+
             if (firstMatch is not null)
             {
                 return (id, firstMatch);
             }
-            // Entry has no matching constraint — check entry links targeting this entry
-            if (_linkConstraintLookup.TryGetValue(id, out var linkConstraints))
+            // Entry has no matching constraint — fall back to a link's kind-match.
+            if (linkFirstMatch is not null)
             {
-                foreach (var (linkId, constraintId, constraintType) in linkConstraints)
-                {
-                    if ((constraintType == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
-                        (constraintType == "max" && (message.Contains("too many") || message.Contains("too much"))))
-                    {
-                        return (linkId, constraintId);
-                    }
-                }
+                return linkFirstMatch.Value;
             }
         }
         // Also search SelectionEntryGroups for constraint matches
@@ -665,9 +682,7 @@ public sealed class BattleScribeEngine : IDisposable
             var constraints = JavaListToList<Constraint>(group.getConstraints());
             foreach (var c in constraints)
             {
-                var type = c.getType();
-                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
-                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
+                if (MessageMatchesConstraintKind(message, c.getType()))
                 {
                     return (id, c.getId());
                 }
@@ -675,6 +690,16 @@ public sealed class BattleScribeEngine : IDisposable
         }
         return (null, null);
     }
+
+    /// <summary>
+    /// Whether the message's phrasing is the one BattleScribe renders for this constraint type.
+    /// </summary>
+    private static bool MessageMatchesConstraintKind(string message, string? type) => type switch
+    {
+        "min" => message.Contains("must have") || message.Contains("must spend"),
+        "max" => message.Contains("too many") || message.Contains("too much"),
+        _ => false,
+    };
 
     /// <summary>
     /// Check if the roster has any validation errors.
@@ -737,8 +762,11 @@ public sealed class BattleScribeEngine : IDisposable
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = [];
     private readonly Dictionary<string, SelectionEntryGroup> _groupLookup = [];
-    // Entry link constraints indexed by target entry ID: targetId → [(linkId, constraintId, constraintType)]
-    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType)>> _linkConstraintLookup = [];
+    // Entry link constraints indexed by target entry ID:
+    // targetId → [(linkId, constraintId, constraintType, constraintValue)]. The VALUE is carried
+    // because it is what tells a link's constraint apart from its target's when one message could
+    // name either — see ResolveEntryFromMessage.
+    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType, int constraintValue)>> _linkConstraintLookup = [];
     // Entry link target resolution: linkId → targetId
     private readonly Dictionary<string, string> _linkTargetMap = [];
     // Per-catalogue entry lists for multi-catalogue support
@@ -1836,7 +1864,11 @@ public sealed class BattleScribeEngine : IDisposable
                         }
                         foreach (var cSpec in elSpec.Constraints)
                         {
-                            list.Add((elSpec.Id, cSpec.Id, cSpec.Type ?? "max"));
+                            // Truncated to int to match what the entry-side path does with
+                            // `getValue()`, because both are compared against the same rendered
+                            // "maximum N" — the two must round the same way or they disagree about
+                            // which constraint a message names.
+                            list.Add((elSpec.Id, cSpec.Id, cSpec.Type ?? "max", (int)cSpec.Value));
                         }
                     }
                 }

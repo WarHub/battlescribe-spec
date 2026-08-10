@@ -429,6 +429,18 @@ mouse events on it. Used for double-clicking catalogue entries (which adds them 
   ```
   - `cellFound`: Whether the actual rendered TreeCell was located (false = clicked the TreeView itself as fallback)
 
+#### Scoping a catalogue-tree lookup to one force
+
+`#treeCatalogue` is not per-force: it holds the whole roster, one subtree per force, each offering
+that force's own copy of the same catalogue entries. So `rosterSelectEntryAction` confines its search
+to the target force's subtree (`resolveTreeScope`) — an unscoped search returns whichever copy comes
+first in tree order, and clicking it adds the selection to a different force entirely.
+
+**A force's subtree contains its child forces' subtrees**, which offer those entries a third time, so
+confining to the parent is not yet confining to the parent. The search therefore also refuses to
+descend into any nested force's subtree. Those ids come from roster state, not from the tree: every
+tree node renders the same `Name:id:…` shape, so the tree cannot say which of its nodes is a force.
+
 #### `clickTreeCellButton`
 
 Fires a Button embedded inside a TreeCell's graphic node. Used for the "remove force" (X)
@@ -502,6 +514,79 @@ Falls back to searching CheckBoxes by their own text if no label+sibling match i
   ```
 - **Note**: Interactions are scheduled via `Platform.runLater()` to avoid deadlocks when
   the value change triggers BS engine recalculation on the FX thread.
+
+#### Which label answers to a name
+
+`contains` cannot tell an entry from its neighbours, and the spec corpus is full of neighbours:
+`Armor` sits inside `Light Armor`, `Heavy Armor` and `Armor Type` in one panel; `Trigger` inside
+`Alpha Trigger` and `Beta Trigger` in another; `Unit 1` inside `Unit 10`. Under `contains` the answer
+was whichever node `lookupAll` yielded first — a different entry's control, driven silently.
+
+Equality alone is not the rule either: BattleScribe decorates a row with its cost, so `Sergeant`
+renders as `Sergeant • 12pts`. So candidates are **ranked** (`RosterActions.LabelMatch`):
+
+| rank | rule | example, for the name `Armor` |
+|---|---|---|
+| `EXACT` | the label is the name | `Armor` |
+| `DECORATED` | the name, at most one space, then something that is not more name | `Armor • 3pts` |
+| `CONTAINED` | the name appears anywhere | `Light Armor`, `Armor Type` |
+
+`DECORATED` allows **one** space before the decoration and then requires a non-alphanumeric. Rejecting
+only a letter-or-digit continuation is not enough, because a space is neither: under that rule
+`Armor Type` ranked as decoration of `Armor` and tied with the real `Armor • 3pts` row, handing the
+choice back to `lookupAll` order — the tie the ranking exists to break. The corpus carries the shape
+in `Armor`/`Armor Type`, `Trooper`/`Trooper Support` and `Bolter`/`Bolter Modifications`, and an
+append-name modifier manufactures more of it from a single entry.
+
+The **best rank present in the window** is chosen first, and only over things that **carry a
+control** *and that the caller can actually drive*. The rank is a hard filter, so a candidate the
+caller cannot reach does not merely compete — it removes every candidate the caller can reach.
+`setSpinnerValueByLabel` scans labelled rows alone, and `tryClickControlByLabel` does too once
+`occurrence > 0`; both therefore rank over labelled rows only. A candidate is a checkbox or radio
+(which *is* the control), or a Label with a Spinner or Button beside it. The scene spells an entry's name in several places that are not panel rows: the roster tree
+renders `Trooper` while the panel renders `Trooper • 10pts` next to its spinner. Ranking over every
+label lets the tree row win as `EXACT` and then match nothing drivable — "Spinner not found" about a
+control that is right there. Same rule the `occurrence` counter states: a row in the tree is not a row
+in the panel.
+
+The rank is settled before anything is driven and without consulting the action. Picking it after
+would let a control that declines to act (an unticked checkbox asked to decrement) hand the request
+down to a worse rank, which is the neighbour-driving bug wearing a fallback's clothes.
+
+`occurrence` (for two links onto one shared entry, which render identically) counts within the chosen
+rank — identical spellings share a rank by construction.
+
+#### Three outcomes, not two
+
+`RosterActions.tryClickControlByLabel` returns a `ControlOutcome`, because a caller has three
+different jobs after driving a control:
+
+| outcome | meaning | what the caller must do |
+|---|---|---|
+| `NOT_FOUND` | no control carries this label | report it, or fall back to another route |
+| `DRIVEN` | the control was operated | wait for the roster to change |
+| `ALREADY_SET` | the control was **already** in the asked-for state | do **not** wait — nothing will change |
+
+`ALREADY_SET` exists because of the single-choice group: its members are radio buttons, and selecting
+an already-selected radio is a no-op in JavaFX rather than a re-fire. Reporting that as `DRIVEN` left
+`rosterSelectChildEntryAction` polling for a delta that could never arrive — a full 10s
+`STATE_POLL_TIMEOUT_MS` ending in "the click did nothing", about a postcondition that already held.
+
+A **decrement** never yields `ALREADY_SET`: neither the `"+"` button nor a radio can take anything
+away, so both decline a decrement request and the caller falls through to its DELETE path.
+
+A **checkbox** is the one control that answers both directions, and it answers them by toggling — so
+it is driven only when it is on the wrong side of what was asked. Firing it blind ticked an unticked
+box for a decrement (adding the selection the caller asked to remove) and unticked a ticked one for a
+select (removing the selection the caller asked for); each then waited out its poll for the opposite
+of what it had just caused.
+
+| control | select, already there | decrement, nothing to remove |
+|---|---|---|
+| Spinner | steps up (a count has no "already") | steps down |
+| Button (`"+"`) | fires (adds another) | declines |
+| CheckBox | `ALREADY_SET` | declines (box already unticked) |
+| RadioButton | `ALREADY_SET` | declines |
 
 #### `setSpinnerValueByLabel`
 
@@ -732,6 +817,19 @@ collecting constraint violations.
   ]
   ```
 
+##### What one call remembers
+
+Attributing a single error can cost a reflective walk of the object graph (`collectInstances`) and a
+roster search per candidate constraint (`constraintValuesOf`), and a roster with N errors asks the
+same handful of questions N times over a model that cannot change while the call runs. Both are
+memoized for the duration of ONE `getValidationErrors` call, in `EngineAccessor.ValidationPass`, and
+the memory is dropped when it returns.
+
+Per call rather than per session, deliberately: the roster changes between calls, and an entry that
+is absent now exists after the next selection — a session-scoped "not found" would outlive the fact
+that produced it. `findClass` is the one exception and caches for the session, because a loaded class
+stays loaded; it remembers hits only, since a class not loaded yet may be loaded later.
+
 ---
 
 ### High-Level Action RPCs
@@ -851,6 +949,19 @@ into the timeout message. Pass it wherever the predicate asks a question the sta
 distinguish an action that did nothing from one whose result the predicate did not recognise from
 one that acted somewhere else. Those are different bugs — and on this lane they were two of them
 hiding behind one message. `selectEntryAction` and `selectChildEntryAction` pass one.
+
+### `BS_UI_PANEL_TRACE=1`
+
+Prints one line per labelled edit-panel request naming the control it resolved to and what driving it
+did — `[agent] panel trace: 'Squad Banner' -> CheckBox (DRIVEN)`.
+
+It answers a question nothing else in the driver can: **what shape is this entry rendered as**. A
+passing spec proves the entry was reached, not what was clicked to reach it. That gap is how the
+checkbox branch was written from JavaFX's class list rather than from an observed panel, and went
+unexamined until `protocol-kitchen-sink` was extended to take a boolean option.
+
+`ci.yml`'s smoke step sets it, because that step runs one spec and the log is then a per-push record
+of which control shapes kitchen-sink actually covers.
 
 ### `BS_UI_VALIDATION_TRACE=1`
 

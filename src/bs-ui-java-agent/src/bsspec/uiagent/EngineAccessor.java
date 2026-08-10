@@ -14,6 +14,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -48,8 +49,49 @@ public class EngineAccessor {
     private Class<?> rosterClass;
     private Method getRosterMethod;
 
+    /**
+     * Classes {@link #findClass} has already resolved.
+     *
+     * <p><b>Hits only, never misses.</b> A name that is not loaded yet may be loaded later — the app
+     * loads its model classes as data arrives — so a remembered miss would be a permanent one. The
+     * asymmetry costs nothing: a miss is the case where the scan found no candidate, which is also
+     * the case a cache could not have shortened.
+     */
+    private final Map<String, Class<?>> classesByName = new HashMap<String, Class<?>>();
+
+    /** Per-class field lists for the object-graph walks — see {@link #traversableFieldsOf}. */
+    private final Map<Class<?>, List<Field>> traversableFieldsByClass =
+            new IdentityHashMap<Class<?>, List<Field>>();
+
+    /**
+     * What the {@link #getValidationErrors()} call in progress has already worked out, or null when
+     * no call is in progress. See {@link ValidationPass}.
+     */
+    private ValidationPass validationPass;
+
     public EngineAccessor(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
+    }
+
+    /**
+     * Answers one pass of validation-error collection reuses, rather than recomputing per error.
+     *
+     * <p>Resolving one error's {@code from} can cost a full reflective walk of the object graph and
+     * a roster search, and a roster with N errors asks the same handful of questions N times over a
+     * model that cannot change while the pass runs. Caching per PASS rather than for the session is
+     * the point: the roster does change between passes, and an entry absent now may exist after the
+     * next selection — a session-scoped "not found" would outlive the fact that produced it.
+     *
+     * <p>No locking, and none needed: {@code JsonRpcServer.acceptLoop} calls {@code handleClient}
+     * inline and reads one connection's requests in a loop, and its FX dispatch blocks that thread
+     * until the FX task returns. One request is in flight at a time.
+     */
+    private static final class ValidationPass {
+        /** Instances of a class reachable from the engine and roster — see {@link #collectInstances}. */
+        final Map<Class<?>, List<Object>> instances = new IdentityHashMap<Class<?>, List<Object>>();
+
+        /** An entry's declared constraints as id -> value — see {@link #constraintValuesOf}. */
+        final Map<String, Map<String, Integer>> constraintValues = new HashMap<String, Map<String, Integer>>();
     }
 
     /**
@@ -412,6 +454,8 @@ public class EngineAccessor {
             return errorJson("Engine not found. Call findEngine first.");
         }
 
+        // One pass, one set of answers — and none of them outlive it. See ValidationPass.
+        validationPass = new ValidationPass();
         try {
             Object roster = getCurrentRoster();
             JsonArray errors = new JsonArray();
@@ -426,6 +470,8 @@ public class EngineAccessor {
             return errors.toString();
         } catch (Exception e) {
             return errorJson("getValidationErrors failed: " + buildExceptionMessage(e));
+        } finally {
+            validationPass = null;
         }
     }
 
@@ -1417,21 +1463,31 @@ public class EngineAccessor {
             }
             String entryName = getEntryName(candidateEntryId);
             if (containsIgnoreCase(message, entryName)) {
-                // With more than one candidate constraint, the id list alone cannot say which
-                // fired — they are all "on this entry". The message can, because it renders the
-                // value, so let the message-based resolution answer and only fall back to the
-                // list when it cannot. Picking the first here silently chose between a per-link
-                // maximum and a shared one.
-                if (entry.getValue().size() > 1) {
+                // The id list cannot say which constraint fired, and a SHORT list is not evidence
+                // that it can. It is not per-error: BattleScribe lists ids the ELEMENT knows
+                // about, and one element carries every error raised under it.
+                //
+                // Measured on `constraint-shared-flag`: the force reports exactly one id,
+                // `…::shared-unit::con-max-shared`, while carrying three errors — two of them
+                // raised by `con-max-per-link`, which appears in no list anywhere. Trusting a
+                // one-element list therefore answered `con-max-shared` for a message reading
+                // `(maximum 2)`, naming a constraint whose limit is 3 and which that message
+                // rules out.
+                //
+                // So the rendered VALUE decides whenever it disagrees with the list, at any list
+                // size: a candidate the message contradicts is not a weaker witness than the
+                // message, it is a refuted one.
+                String picked = pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage);
+                if (!constraintValueMatchesMessage(candidateEntryId, picked, lowerMessage)) {
                     ValidationRef byMessage = resolveRefFromMessage(message);
-                    if (byMessage != null) {
+                    if (byMessage != null
+                            && constraintValueMatchesMessage(
+                                    byMessage.entryId, byMessage.constraintId, lowerMessage)) {
                         return byMessage;
                     }
                 }
 
-                return new ValidationRef(
-                        candidateEntryId,
-                        pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage));
+                return new ValidationRef(candidateEntryId, picked);
             }
         }
 
@@ -1535,8 +1591,53 @@ public class EngineAccessor {
         return constraintIds.get(0);
     }
 
-    /** An entry's own constraints as id -> declared value. */
+    /**
+     * Whether the message quotes the limit this constraint actually declares.
+     *
+     * <p>The test a candidate has to survive before it is believed. A message rendering
+     * {@code (maximum 2)} is positive evidence for a constraint whose value is 2 and evidence
+     * AGAINST one whose value is 3 — so this separates "the only candidate offered" from "the
+     * candidate the app's own text supports". Absent a value on either side the answer is false,
+     * which leaves the caller on its existing path rather than inventing a preference.
+     */
+    private boolean constraintValueMatchesMessage(String entryId, String constraintId, String lowerMessage) {
+        if (entryId == null || constraintId == null || lowerMessage == null) {
+            return false;
+        }
+        // A composite entryId names the route; the constraint is declared by one segment of it.
+        Integer value = constraintValuesOf(declaringEntryOf(entryId, constraintId)).get(constraintId);
+        if (value == null) {
+            return false;
+        }
+        return lowerMessage.contains("maximum " + value) || lowerMessage.contains("minimum " + value);
+    }
+
+    /**
+     * An entry's own constraints as id -> declared value.
+     *
+     * <p>Asked repeatedly for the same few ids while resolving one roster's errors — once per
+     * candidate in {@link #pickConstraintId}, once per segment in {@link #declaringEntryOf}, and
+     * again by {@link #constraintValueMatchesMessage} — and every ask is a roster search. Hence the
+     * per-pass memory; see {@link ValidationPass} for why it is per pass and not per session.
+     */
     private Map<String, Integer> constraintValuesOf(String entryId) {
+        ValidationPass pass = validationPass;
+        if (pass != null) {
+            Map<String, Integer> remembered = pass.constraintValues.get(entryId);
+            if (remembered != null) {
+                return remembered;
+            }
+        }
+
+        Map<String, Integer> values = readConstraintValues(entryId);
+        if (pass != null) {
+            pass.constraintValues.put(entryId, values);
+        }
+        return values;
+    }
+
+    /** {@link #constraintValuesOf} without the per-pass memory — the lookup itself. */
+    private Map<String, Integer> readConstraintValues(String entryId) {
         Map<String, Integer> values = new HashMap<String, Integer>();
         try {
             Object entry = findEntryById(entryId);
@@ -1713,10 +1814,28 @@ public class EngineAccessor {
      * be large, so an unbounded walk is a hang rather than an answer.
      */
     private List<Object> collectInstances(Class<?> targetClass) {
-        List<Object> found = new ArrayList<Object>();
         if (targetClass == null) {
-            return found;
+            return new ArrayList<Object>();
         }
+
+        ValidationPass pass = validationPass;
+        if (pass != null) {
+            List<Object> remembered = pass.instances.get(targetClass);
+            if (remembered != null) {
+                return remembered;
+            }
+        }
+
+        List<Object> found = scanInstances(targetClass);
+        if (pass != null) {
+            pass.instances.put(targetClass, found);
+        }
+        return found;
+    }
+
+    /** {@link #collectInstances} without the per-pass memory — the walk itself. */
+    private List<Object> scanInstances(Class<?> targetClass) {
+        List<Object> found = new ArrayList<Object>();
 
         Object roster;
         try {
@@ -1733,7 +1852,12 @@ public class EngineAccessor {
             }
         }
 
-        while (!pending.isEmpty() && visited.size() <= 10000) {
+        while (!pending.isEmpty()) {
+            if (visited.size() > GRAPH_WALK_VISIT_CEILING) {
+                reportWalkTruncated("instance scan for " + targetClass.getName(), visited.size());
+                break;
+            }
+
             Object current = pending.removeFirst();
             if (current == null || isLeafValue(current) || !visited.add(current)) {
                 continue;
@@ -1743,48 +1867,7 @@ public class EngineAccessor {
                 found.add(current);
             }
 
-            if (current instanceof Iterable) {
-                for (Object item : (Iterable<?>) current) {
-                    if (item != null) pending.addLast(item);
-                }
-                continue;
-            }
-            if (current instanceof Map) {
-                for (Object item : ((Map<?, ?>) current).values()) {
-                    if (item != null) pending.addLast(item);
-                }
-                continue;
-            }
-            if (current.getClass().isArray()) {
-                int len = Array.getLength(current);
-                for (int i = 0; i < len; i++) {
-                    Object item = Array.get(current, i);
-                    if (item != null) pending.addLast(item);
-                }
-                continue;
-            }
-            if (!shouldTraverseObject(current.getClass())) {
-                continue;
-            }
-
-            Class<?> c = current.getClass();
-            while (c != null && c != Object.class) {
-                for (Field f : c.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) {
-                        continue;
-                    }
-                    try {
-                        f.setAccessible(true);
-                        Object value = f.get(current);
-                        if (value != null && !isLeafValue(value)) {
-                            pending.addLast(value);
-                        }
-                    } catch (Exception e) {
-                        // ignore inaccessible fields
-                    }
-                }
-                c = c.getSuperclass();
-            }
+            enqueueReferences(current, pending);
         }
         return found;
     }
@@ -1811,61 +1894,131 @@ public class EngineAccessor {
             if (targetClass.isInstance(current) && matchesId(callGetter(current, "getId"), id)) {
                 return current;
             }
-            if (visited.size() > 10000) {
+            if (visited.size() > GRAPH_WALK_VISIT_CEILING) {
+                reportWalkTruncated(
+                        "search for " + targetClass.getName() + " id '" + id + "'", visited.size());
                 return null;
             }
 
-            if (current instanceof Iterable) {
-                for (Object item : (Iterable<?>) current) {
-                    if (item != null) {
-                        pending.addLast(item);
-                    }
-                }
-                continue;
-            }
-            if (current instanceof Map) {
-                for (Object item : ((Map<?, ?>) current).values()) {
-                    if (item != null) {
-                        pending.addLast(item);
-                    }
-                }
-                continue;
-            }
-            if (current.getClass().isArray()) {
-                int len = Array.getLength(current);
-                for (int i = 0; i < len; i++) {
-                    Object item = Array.get(current, i);
-                    if (item != null) {
-                        pending.addLast(item);
-                    }
-                }
-                continue;
-            }
-            if (!shouldTraverseObject(current.getClass())) {
-                continue;
-            }
-
-            Class<?> c = current.getClass();
-            while (c != null && c != Object.class) {
-                for (Field f : c.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers()) || f.getType().isPrimitive()) {
-                        continue;
-                    }
-                    try {
-                        f.setAccessible(true);
-                        Object value = f.get(current);
-                        if (value != null && !isLeafValue(value)) {
-                            pending.addLast(value);
-                        }
-                    } catch (Exception e) {
-                        // ignore inaccessible fields
-                    }
-                }
-                c = c.getSuperclass();
-            }
+            enqueueReferences(current, pending);
         }
 
         return null;
+    }
+
+    /**
+     * The visit ceiling both object-graph walks stop at.
+     *
+     * <p>The graph has cycles and a real data file is large, so an unbounded walk is a hang rather
+     * than an answer. But a walk that stops early is one that may not have reached what it was
+     * asked for, and both walks report that as a plain negative — no instances, or no such id.
+     * Hence {@link #reportWalkTruncated}: the two are different facts and only one of them is
+     * about the roster.
+     */
+    private static final int GRAPH_WALK_VISIT_CEILING = 10000;
+
+    /**
+     * Says that a walk ran out of ceiling rather than out of graph.
+     *
+     * <p>Unconditional, not behind {@code BS_UI_VALIDATION_TRACE}: this is the one event that makes
+     * a negative answer untrustworthy, it is rare, and a trace flag is only ever set by someone who
+     * already suspects the thing this line would have told them.
+     */
+    private void reportWalkTruncated(String what, int visited) {
+        System.err.println("[agent] object-graph walk truncated: " + what + " stopped after "
+                + visited + " objects (ceiling " + GRAPH_WALK_VISIT_CEILING
+                + "); a negative result here may mean 'not reached', not 'not present'");
+    }
+
+    /**
+     * Queues everything {@code current} references, in an order that does not change between runs.
+     *
+     * <p>One implementation for both walks, so they cannot come to disagree about what traversing an
+     * object means — they were two copies of this, and the copies are what let the ceiling check
+     * drift into different places.
+     *
+     * <p><b>Fields are taken in name order</b> because {@link Class#getDeclaredFields()} is
+     * explicitly documented as returning them in no particular order. Both walks then answer
+     * order-sensitive questions off that enumeration — {@link #findObjectById} returns the first
+     * match it reaches, {@link #matchConstraintOwner} keeps the first kind-match as its fallback —
+     * so leaving the order to the JVM leaves those answers to the JVM too, and a run that picked the
+     * right one is no evidence about the next.
+     */
+    private void enqueueReferences(Object current, ArrayDeque<Object> pending) {
+        if (current instanceof Iterable) {
+            for (Object item : (Iterable<?>) current) {
+                if (item != null) {
+                    pending.addLast(item);
+                }
+            }
+            return;
+        }
+        if (current instanceof Map) {
+            for (Object item : ((Map<?, ?>) current).values()) {
+                if (item != null) {
+                    pending.addLast(item);
+                }
+            }
+            return;
+        }
+        if (current.getClass().isArray()) {
+            int len = Array.getLength(current);
+            for (int i = 0; i < len; i++) {
+                Object item = Array.get(current, i);
+                if (item != null) {
+                    pending.addLast(item);
+                }
+            }
+            return;
+        }
+        if (!shouldTraverseObject(current.getClass())) {
+            return;
+        }
+
+        for (Class<?> c = current.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : traversableFieldsOf(c)) {
+                try {
+                    Object value = field.get(current);
+                    if (value != null && !isLeafValue(value)) {
+                        pending.addLast(value);
+                    }
+                } catch (Exception e) {
+                    // ignore inaccessible fields
+                }
+            }
+        }
+    }
+
+    /**
+     * {@code cls}'s own non-static reference fields, name-ordered and already made accessible.
+     *
+     * <p>Remembered per class for the session, which a field list can be: a loaded class does not
+     * grow fields. That makes the sort free after the first visit, and the walks visit the same few
+     * hundred model classes over and over.
+     */
+    private List<Field> traversableFieldsOf(Class<?> cls) {
+        List<Field> remembered = traversableFieldsByClass.get(cls);
+        if (remembered != null) {
+            return remembered;
+        }
+
+        List<Field> fields = new ArrayList<Field>();
+        for (Field field : cls.getDeclaredFields()) {
+            if (Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive()) {
+                continue;
+            }
+            try {
+                field.setAccessible(true);
+            } catch (RuntimeException e) {
+                // Not readable here; keep it anyway so the get() below reports it the same way it
+                // always did, rather than making inaccessibility look like absence.
+            }
+            fields.add(field);
+        }
+        Collections.sort(fields, Comparator.comparing(Field::getName));
+
+        traversableFieldsByClass.put(cls, fields);
+        return fields;
     }
 
     private boolean shouldTraverseObject(Class<?> cls) {
@@ -2107,9 +2260,23 @@ public class EngineAccessor {
         return cls;
     }
 
+    /**
+     * The loaded class with this name, or null.
+     *
+     * <p>A linear scan of every class the JVM has loaded — thousands, in an app the size of this
+     * one. That is affordable at setup and was not on the validation path, where resolving a single
+     * error's {@code from} asks for four classes by name and a roster can carry dozens of errors.
+     * Hence {@link #classesByName}, which remembers what it finds.
+     */
     private Class<?> findClass(String name) {
+        Class<?> cached = classesByName.get(name);
+        if (cached != null) {
+            return cached;
+        }
+
         for (Class<?> cls : instrumentation.getAllLoadedClasses()) {
             if (cls.getName().equals(name)) {
+                classesByName.put(name, cls);
                 return cls;
             }
         }

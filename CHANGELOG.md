@@ -128,6 +128,204 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The roster lane's diagnostics artifact collected nothing** — `BsUiDiagnostics` defaults to
+  `Directory.GetCurrentDirectory()/artifacts/bs-ui-diagnostics`, which is right for the CLI and wrong
+  for the conformance lane: VSTest runs the test host with its working directory set to the test
+  assembly's output folder, so a failing spec wrote its dump to
+  `artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/bs-ui-diagnostics/` while CI's "Upload
+  diagnostics" step looked at the repo root. Measured locally: 19 dumps in the nested path, 1 at the
+  root. The artifact would have been empty for exactly the failures it exists to explain, and
+  `if-no-files-found: ignore` would have kept that quiet. `BsRosterUiFixture` now anchors the
+  directory at the repo root, which is the fix `TelemetryAssemblyFixture` already documents for the
+  telemetry artifact after the same trap; an explicit `BS_UI_DIAGNOSTICS_DIR` still wins.
+- **Label ranking: a longer NAME is not decoration, and the rank is taken over what the caller can
+  drive** — two defects in the ranking added earlier in this stack, both found by an independent
+  review of it rather than by CI. `DECORATED` rejected only a letter-or-digit continuation, and a
+  space is neither, so `Armor Type` ranked as decoration of `Armor` and tied with the real
+  `Armor • 3pts` row — handing the choice back to `lookupAll` order, which is the tie the ranking
+  exists to break. Measured: `Armor`/`Armor Type`, `Trooper`/`Trooper Support` and
+  `Bolter`/`Bolter Modifications` all mis-ranked, and an append-name modifier manufactures the shape
+  from a single entry. `DECORATED` now allows one space and then requires something that is not more
+  name. Separately, the rank was chosen over checkboxes and radios even for callers that scan only
+  labelled rows: because the rank is a hard filter, a self-labelled control could set a rank no
+  reachable candidate matched and turn a spinner that was present into "Spinner not found" — the
+  tree-row bug one population over. `bestLabelMatch` now ranks over the caller's own candidates.
+
+### Removed
+
+- **The unscoped tree-lookup overloads, which nothing called and anything could have** —
+  `waitForTreeItem(selector, id)` and `clickTreeItemById(selector, id, doubleClick)` were left behind
+  when catalogue lookups gained a force scope, as delegators passing `null` for the container. Both
+  had no callers; both were a way to ask the question without the scoping that is the only reason the
+  answer can be trusted, and a click is where losing it is least visible — it lands on a real row, in
+  a real force, and the caller finds out a poll timeout later while looking somewhere else.
+  `clickControlByLabel(text, window, action)` goes with them for the same reason.
+
+### Added
+
+- **`protocol-kitchen-sink` takes a boolean option, and the smoke lane says which controls it drove**
+  — kitchen-sink is the one spec the every-push `smoke` job runs against the real BattleScribe app,
+  and it drove a spinner, an add button and a radio. Never a checkbox. So the driver's checkbox
+  branch — the one control that answers both directions by toggling, and which was wrong in both of
+  them until this stack — had no per-push coverage and, as far as the record goes, had never been
+  observed running at all: it was written from JavaFX's class list rather than from a panel.
+  `se-inf-banner` is max 1, min 0 and costless, which makes it the only child of Infantry Squad that
+  can only be present or absent; the spec now takes it and gives it back, after the byte-compared
+  export rather than before it — a costless option moves no cost VALUE, but BattleScribe rebuilds the
+  roster's cost collection when a selection comes and goes, and it came back `power, pts` where the
+  snapshot records `pts, power`. New `BS_UI_PANEL_TRACE=1` prints the control each labelled request
+  resolved to, and the smoke step sets it — a passing spec proves an entry was reached, not what was
+  clicked to reach it, so without it the coverage claim would be an assumption. It reports
+  `'Squad Banner' -> CheckBox (DRIVEN)` on both directions, which is the first record in this repo of
+  BattleScribe rendering that control at all. `newrecruit-ui` is opted out of the two steps on a
+  measured observation — NR's options panel renders no row for the entry, and that driver already
+  handles checkbox and `boutonSubUnit` rows, so the row is absent rather than unrecognised. Why NR
+  omits it is left open rather than guessed at; the store-direct `newrecruit` engine takes both steps
+  normally, so it is that UI's rendering and not NR's model.
+- **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on
+  `Engine=BsGameDataUi`, so the Data Editor had a lane and the Roster Editor had none: every change to
+  `BsUiRosterEngine` and `RosterActions.java` reached `main` exercised by unit tests and one teardown
+  test. `BsRosterUiConformanceTests` was written to shard on the same trait for exactly this and then
+  held back (#355) until its failures were each fixed or declared, which #354 completed. The job gains
+  a `suite` matrix axis — one job definition, not two, because the halves need identical artifacts,
+  JDK, agent build and `xvfb`, and a copied fifty-line setup block is one that drifts — plus a
+  90-minute ceiling where both halves previously inherited GitHub's six-hour default. Still opt-in on
+  the same four triggers as every thorough lane. The diagnostics upload also stops pointing the
+  gamedata leg at the roster driver's directory, which is what it had been collecting (nothing).
+
+### Fixed
+
+- **An edit-panel control is addressed by the closest spelling of a name, not the first one
+  containing it** — label lookup matched with `contains`, and the spec corpus is full of names inside
+  other names in the same panel: `Armor` inside `Light Armor`, `Heavy Armor` and `Armor Type` (and
+  `Armor` is that group's auto-selected default, so all three are rendered at once); `Trigger` inside
+  `Alpha Trigger` and `Beta Trigger`; `Unit 1` inside `Unit 10`; `HQ` inside `HQ Unit`; `Weapon`
+  inside `Weapon Options`. The control driven was whichever node `lookupAll` yielded first. Candidates
+  are now ranked — the label *is* the name, the name followed by decoration (`Sergeant • 12pts`), or
+  the name somewhere inside — and only the best rank the window offers is considered. The rank is
+  chosen before anything is driven and without consulting the action, so a control that declines to
+  act cannot hand the request down to a worse rank — and only over things that carry a control, since
+  the scene spells an entry's name in places that are not panel rows (the roster tree renders
+  `Trooper` where the panel renders `Trooper • 10pts` beside its spinner). A name with no exact or
+  decorated match and only containing ones now fails with the panel's contents listed, where it used
+  to drive a neighbour.
+- **A call that needs its own timeout passes one instead of re-tuning the shared client** —
+  `AgentClient.CallTimeout` was a property seven call sites assigned, used and restored: the FX-thread
+  probe (2s), both diagnostic captures (5s), and both drivers' action helpers (90s). Every one of
+  them re-tuned a client the rest of the driver shares, for as long as its `finally` took to run —
+  and a diagnostic capture that faulted before restoring would leave every later call on a 5s clock.
+  `CallAsync` now takes an optional `timeout`, `CallTimeout` is documented as the default for calls
+  that name none, and nothing assigns it. The 90s action timeout and the 5s diagnostic timeout become
+  named constants next to the reasoning for their size.
+- **A checkbox-rendered entry is driven towards the state that was asked for, not away from it** —
+  the checkbox branch of `tryClickControlByLabel` never read `action`, so it fired blind and got both
+  directions wrong from the wrong starting state. `deselectSelection` on such an entry **ticked an
+  unticked box** — adding the selection the caller asked to remove — reported success, and thereby
+  skipped the DELETE fallback that would have worked; `selectChildEntry` on an already-ticked one
+  **unticked it**, removing the selection it was asked to make. Each then waited out its 10s poll for
+  the opposite of what it had just caused. A checkbox is now driven only when it is on the wrong side
+  of the request: already-ticked answers `ALREADY_SET` for a select, and already-unticked declines a
+  decrement so the DELETE path runs. This is the rule the `"+"` button branch already had; the
+  checkbox and radio branches sat directly beneath it without it. Also moves a misplaced
+  `@SuppressWarnings("unchecked")` onto the overload that actually casts, which silences a real
+  warning rather than an empty one.
+- **`setSelectionCount` with a count of zero removes the selection instead of decrementing it** — it
+  delegated to `deselectSelection`, and those are not the same operation. `deselectSelection` on a
+  collective child steps the PER-MODEL count: one press takes `number` 6 to 3 and the selection
+  stays, which is what `collective-per-model-operations` asserts and why its wait accepts
+  fewer-than-there-were. Zero instances is not fewer instances, so the delegation reported
+  `count: 0` about a selection sitting in the roster at 3. (Before the wait was relaxed it reached
+  zero by accident — the wait timed out, the action layer retried, and the second press finished the
+  job.) A count of zero now takes the row away through the one control that can, and the DELETE
+  fallback both paths share is one method.
+- **A control that was already in the asked-for state stopped being reported as a click** —
+  grouped-control support gave `tryClickControlByLabel` a radio-button path that returns success
+  without firing when the member is already chosen, on the correct grounds that the postcondition
+  holds. Its caller then waited for a roster change, which could not come: a full 10s
+  `STATE_POLL_TIMEOUT_MS` ending in "clicking control X left parent Y with the same child count" —
+  true, and the opposite of what happened. The helper now answers `NOT_FOUND` / `DRIVEN` /
+  `ALREADY_SET`, and `selectChildEntry` reads the roster once instead of polling for a delta. If the
+  panel says the entry is chosen and the model holds no child for it, that disagreement is thrown
+  rather than returned as a step with no `selectionId`. A decrement can no longer produce
+  `ALREADY_SET` at all: a radio is a choice and not a count, so like the `"+"` button it declines a
+  decrement and lets the DELETE path run.
+- **A catalogue-tree lookup scoped to a force stops at that force's child forces** — confining the
+  search to the target force's subtree fixed the sibling-force case that had 20 specs adding
+  selections to the wrong force. It did not fix the nested case, because a force's subtree *contains*
+  its child forces' subtrees, and each of those offers the same catalogue entries again: with a child
+  force present, `selectEntry` on the parent could still click the child's copy, add the selection
+  there, and time out looking in the parent. Which one it reached was whatever order BattleScribe
+  built the tree in — so `force-nested-parent-child-selections` and the other 13 `addChildForce`
+  specs were passing on tree order rather than on addressing. The search now refuses to descend into
+  a nested force's subtree, with the ids taken from roster state because the tree cannot say which of
+  its nodes is a force: every node renders the same `Name:id:…` shape.
+- **The agent's object-graph walks answer the same way twice, and say when they gave up** — both
+  walks enumerated fields with `Class.getDeclaredFields()`, whose order the JDK documents as
+  unspecified, and both then answered order-sensitive questions off it: `findObjectById` returns the
+  first match it reaches, and `matchConstraintOwner` keeps the first kind-match as its fallback. A
+  run that attributed an error correctly was therefore no evidence about the next run. Fields are now
+  taken in name order. Both walks also stopped at a 10 000-object ceiling and reported that as a
+  plain negative — no instances, or no such id — so "not reached" and "not present" were the same
+  answer; hitting the ceiling now prints which one it was. The two copies of the traversal are one
+  method, which is what let their ceiling checks sit in different places to begin with.
+- **Validation attribution stopped re-deriving the same answers per error** — resolving one error's
+  `from` can reach `resolveRefFromMessage`, which asks for four classes by name and walks the object
+  graph once per class; each ask was a linear scan of every class the JVM has loaded, and each walk
+  was uncached. `constraintValuesOf` was a roster search per candidate constraint, per segment, per
+  message check. A roster with N errors paid all of it N times over a model that cannot change while
+  the call runs. `findClass` now remembers what it finds for the session (hits only — a class not
+  loaded yet may be loaded later); `collectInstances` and `constraintValuesOf` remember for the
+  duration of ONE `getValidationErrors` call and forget when it returns. Per call and not per
+  session, because the roster changes between calls: an entry absent now exists after the next
+  selection, and a session-scoped "not found" would outlive the fact that produced it. Widening the
+  message-resolution fallback from "the id list is ambiguous" to "the message contradicts the id
+  list" is what made this reachable often enough to matter.
+- **A fractional cost limit is refused on both routes into BattleScribe, not one** — the New Roster
+  dialog's spinner already declined a `defaultCostLimit` it could not spell, on the stated grounds
+  that 0.25 entered as 0 puts every selection over a limit the game system never declared. The Edit
+  Roster route reached by `setCostLimit` cast the same kind of value to `int` instead, so the answer
+  the dialog refused to invent was invented the moment a roster already existed. Both now ask one
+  rule, `BsUiCostLimits`, which also refuses a negative limit (the format's "no limit", which an
+  untouched spinner already means, and which the spinner would clamp to a real 0) and a value past
+  `Spinner<Integer>`'s range. A refusal is printed, because its only other symptom is a limit that is
+  simply absent — indistinguishable from BattleScribe ignoring one. No spec sets a fractional limit
+  through `setCostLimit` today; the rule is one file with its own tests precisely so the two routes
+  cannot drift apart again, and so a route later found to carry a fractional or per-type limit is one
+  edit rather than a hunt for call sites.
+- **The BS Roster UI lane's last five failures (#354)** — all five turned out to be defects, not
+  expectations to write down, and the lane reaches 367/367 with **no spec declared
+  `battlescribe-ui: fail` for any of them**.
+  - **Validation attribution stopped trusting an id list the app's own message refutes.**
+    `getValidationErrorIds()` is not per-error — it lists ids an ELEMENT knows about, and one
+    element carries every error raised under it. On `constraint-shared-flag` the force reports a
+    single id naming `con-max-shared` while carrying three errors, two raised by `con-max-per-link`,
+    which appears in no list anywhere. The value tiebreak was gated on `size() > 1`, so a
+    one-element list skipped it and answered `con-max-shared` for a message reading `(maximum 2)` —
+    a constraint whose limit is 3. The rendered value now decides at any list size, and
+    message-resolution only wins when it can point at a constraint whose declared limit the text
+    quotes, so hidden-entry errors (no value on either side) keep their path.
+  - **The in-process adapter had the same defect in the other direction**, and it is fixed rather
+    than documented: `ResolveEntryFromMessage` consulted entry links only when the target carried no
+    kind-matching constraint of its own, so on `constraint-entry-link-merged` it returned the
+    target's `con-shared-max` (value 4) for 3 selections and a `(maximum 2)` message. Links are now
+    asked for a value match first. All three engines agree, so the spec's base expectation becomes
+    the app's answer and the `newrecruit` override that existed to disagree with it is gone.
+  - **`deselectSelection` destroyed what it was asked to decrement.** A collective child's control
+    steps the per-model count, so one press takes `number` 6 to 3 and the selection stays — but the
+    wait demanded it disappear, the action layer retried, and the second press took it to 0. Now the
+    wait ends on gone *or* fewer-than-there-were, and `removed` reports which. The same helper would
+    have fired an instanced entry's "+" for a decrement request, adding one while reporting a
+    removal; it now declines and lets the DELETE fallback run.
+  - **Two entry links onto one shared entry are two rows**, not one. They render spelled identically
+    (BattleScribe labels a control with what a link RESOLVES to) and the panel exposes no id, so
+    label lookup always drove the first. Recorded as possibly unfixable; it is not — the panel
+    offers one row per child in declaration order, so the driver indexes how many earlier siblings
+    share each entry's label and the agent skips that many controls. The `dataSource` path indexes
+    names without tracking parents and keeps first-match behaviour.
+  - **`collective-instance-amount` gains the one genuine expectation**, measured: asked for three of
+    an instanced entry, the app's "+" makes three sibling selections costing 32, and only the
+    COLLECTIVE child rides along into the copies — the gap to the 36 that store-direct semantics
+    predict is exactly the two non-collective Badges it declines to duplicate.
 - **An `expectedFile` step no longer passes when the engine cannot export (#309)** —
   `RosterRunner.ExecuteFileAssertion` opened with `catch (NotSupportedException) { return; }`, so an
   engine reporting no roster export made every byte-compare pass while comparing nothing. #326 fixed

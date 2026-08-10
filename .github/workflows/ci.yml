@@ -313,6 +313,12 @@ jobs:
         # --no-build: reuse the binaries from the Build step above. Without it, `dotnet run`
         # rebuilds with default props (analyzers on), re-doing the whole solution.
         run: xvfb-run -a dotnet run --project src/BattleScribeSpec.Cli --no-build -- run --engine battlescribe --ui protocol-kitchen-sink
+        env:
+          # One spec, so a line per driven control is affordable — and it is the only way this lane
+          # can say WHICH control shapes it covers. A passing spec proves an entry was reached, not
+          # what was clicked to reach it, and that gap is how the driver's checkbox branch survived
+          # without anyone knowing whether BattleScribe renders one at all.
+          BS_UI_PANEL_TRACE: 1
 
   # ── THOROUGH conformance (opt-in): the full offline + frozen-NR suites that the
   #    every-push lanes trim to kitchen-sink. ──
@@ -399,15 +405,35 @@ jobs:
           path: artifacts/telemetry/
           if-no-files-found: ignore
 
-  # ── THOROUGH: full BS GameData UI (opt-in). Warm start + sharded across N jobs.
-  #    The matrix MUST match GameDataConformanceTestBase.ShardCount. ──
+  # ── THOROUGH: the BS desktop UI, BOTH halves of it (opt-in). Warm start + sharded across N jobs.
+  #
+  #    The `suite` axis exists because this job used to run one half. `BsGameDataUiConformanceTests`
+  #    covered the Data Editor; `BsRosterUiConformanceTests` covered the Roster Editor and ran
+  #    nowhere — so every change to BsUiRosterEngine and RosterActions.java reached main having been
+  #    exercised by unit tests and one teardown test. That class was written to be sharded on the
+  #    same trait for exactly this, and then not wired up (#355): the lane was held back until its
+  #    failures were each fixed or declared, which #354 completed at 367/367.
+  #
+  #    A matrix axis and not a second job: the two halves need identical artifacts, JDK, agent build
+  #    and xvfb, and a copy of fifty lines of setup is a copy that drifts. Only the filter and the
+  #    artifact names differ.
+  #
+  #    The shard axis MUST match ConformanceTestBase.ShardCount and
+  #    GameDataConformanceTestBase.ShardCount, which are equal for this reason.
   thorough-ui-bs:
     needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
     runs-on: ubuntu-latest
+    # A ceiling, not a target: the roster lane measures ~13m unsharded and the gamedata lane less,
+    # so anything approaching this is a hang. Without it both inherit GitHub's 6-hour default, and a
+    # wedged JavaFX app is the failure this suite has most often had.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
+        suite:
+          - { name: gamedata, engine: BsGameDataUi, diagnostics: artifacts/bs-gamedata-ui-diagnostics/ }
+          - { name: roster, engine: BsRosterUi, diagnostics: artifacts/bs-ui-diagnostics/ }
         shard: [0, 1]
     steps:
       - uses: actions/checkout@v7
@@ -451,15 +477,18 @@ jobs:
       # "warm start" is ConcurrencyPolicy.For(machine, battlescribe-ui).ReuseGameData — the fixture
       # asks the policy. It used to be BS_UI_KEEP_ALIVE, set here and nowhere else, so this suite ran
       # warm in CI and cold on every developer's machine. Both now run warm, from one decision.
-      - name: BS GameData UI (shard ${{ matrix.shard }}, warm start)
-        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=BsGameDataUi&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+      - name: BS ${{ matrix.suite.name }} UI (shard ${{ matrix.shard }}, warm start)
+        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=${{ matrix.suite.engine }}&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: thorough-ui-bs-diagnostics-${{ matrix.shard }}
+          name: thorough-ui-bs-diagnostics-${{ matrix.suite.name }}-${{ matrix.shard }}
           path: |
-            artifacts/bs-ui-diagnostics/
+            ${{ matrix.suite.diagnostics }}
+          # The gamedata half writes none today — BsGameDataUiDiagnostics has no caller — so an empty
+          # upload there is a fact about that driver, not a broken step.
+          if-no-files-found: ignore
       - name: Upload telemetry
         if: always()
         uses: actions/upload-artifact@v7
