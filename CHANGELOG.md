@@ -128,6 +128,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The frozen NR-UI lane's setup guard stopped one step short of the work it guards** — the
+  sequence-level retry in `NrUiSetup.LoadGameDataAsync` wrapped three steps (be on MySystems, open
+  the install popup, click Add From Folder), but those only establish that the *buttons were
+  pressed*; the wait that says the system actually **installed** sat outside the loop, so a drift
+  into that window — the same "previous spec's navigation lands and takes the page with it" race the
+  loop exists for — was past the guard and unrecoverable. `thorough-conformance` was failing one
+  spec out of 363 in Setup, a different spec each time, roughly one run in two (runs 31409213032 /
+  31415790894, on PRs touching neither this driver nor NR), and re-running green.
+  Measured over a clean 363-spec lane: `load-gamedata/wait-local-library` runs 363 times at avg 67ms
+  / max 5066ms against a 30s ceiling — **six times of headroom**, which rules out the obvious reading
+  that the ceiling is too tight under CI load, and with it both a targeted increase and a
+  retry-on-setup. (It was already raised once, 10s → 30s, for this exact pair of specs.) The same run
+  fires the race four times and the phase counts locate every one: `wait-mysystems-rendered` 367
+  (= 363 + 4 retries), `click-add-more-games` 365, `click-add-from-folder` 363 — so every *local*
+  drift lands during the guarded clicks, which is why the guard has always looked sufficient. Fixed
+  by moving the install-landed wait inside the loop; its discriminator is unchanged, so an NR that
+  genuinely fails to install still fails on the first attempt rather than three times as slowly.
+  Stated as the inference it is: what is measured is the headroom, the race's frequency, and that
+  this was the one step of the sequence outside the retry — the local lane reproduces the *race*
+  several times a run but has never reproduced the *failure*, because locally the drift never lands
+  late enough. Verified to `docs/nr-ui-roster-coverage.md` §5's standard: two consecutive fully-green
+  363-spec lanes after the change.
+- **A frozen NR-UI setup timeout named neither which wait failed nor what the page was doing** — its
+  complete text was `Setup failed: TimeoutException: Timeout 30000ms exceeded.` Playwright names the
+  target of a *locator* wait (which is why the v35 nav-link breakage arrived as
+  `waiting for Locator("a[href*='MySystems']")` and was actionable) but has nothing to name for a
+  `WaitForFunctionAsync`. Setup contains exactly two of those — they are the only two waits in the
+  lane that can produce this message — and they mean opposite things: *the route never arrived*
+  versus *NR never installed the game data*. One is a re-run, the other a regression, and the output
+  distinguished them not at all; `NR_UI_TIMINGS` would have, but it is off in CI by design, and
+  `WithDiagnosticsAsync` wraps the roster-creation and force paths rather than setup, so the one
+  failure the lane kept producing was the one it captured nothing for. Both now report through
+  `NrUiSetup.WaitForSetupConditionAsync`, which reads back the state the condition was testing and
+  prints it with the page URL — `Observed: pathname=/app/MyLists, localLibrary=[],
+  systemsStore=present` is the lost-page race, the same empty library on `/app/MySystems` is NR
+  genuinely failing to install. Kept as a `TimeoutException` deliberately: the retry loop
+  discriminates on that type, so a friendlier exception would have opted these waits out of the guard
+  that makes them survivable. Guarded by `NrUiSetupFailureMessageRegressionTests`.
 - **The roster lane's diagnostics artifact collected nothing** — `BsUiDiagnostics` defaults to
   `Directory.GetCurrentDirectory()/artifacts/bs-ui-diagnostics`, which is right for the CLI and wrong
   for the conformance lane: VSTest runs the test host with its working directory set to the test

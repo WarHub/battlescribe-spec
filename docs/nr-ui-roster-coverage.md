@@ -270,6 +270,119 @@ runs hides from a single pass about a quarter of the time. That rule is why the 
 caught at all: the 20-spec sample used while cutting the sleeps went green twice and was simply too
 small to contain it, and each premature "this is fixed" cost a full lane run to disprove.
 
+### 5b. The fourth race again, one step further along — and why nobody could tell
+
+**Fixing a race by guarding a sequence only works if the guard ends where the work does.** The
+retry added for the fourth race wrapped three steps — be on MySystems, open the install popup,
+choose Add From Folder — and stopped there. But those three only establish that the *buttons were
+pressed*. The thing the caller needs is that the *system is installed*, and that landed one
+statement later, outside the loop. A drift into that window was past the guard and unrecoverable.
+
+It showed up on 2026-08-10 as a `thorough-conformance` failure on two unrelated PRs, one spec out
+of 363 each time, both in Setup, both re-running green:
+
+    run 31409213032 (#392)  ordering/ordering-categories
+    run 31415790894 (#395)  modifier/modifier-conditional-set-name
+
+Different specs, same shape as the four above: **the cause is shared and the victim is whoever
+happens to be next.** Neither PR touched this driver or NR; #395's whole diff is `CHANGELOG.md` plus
+a BS fixture.
+
+**The observed rate is roughly one run in two — two occurrences on 2026-08-10, both re-running
+green — and it does not fall with a bigger ceiling.** (Observed, not measured: the rate comes from
+CI's own history; the numbers below are what was measured locally.) That matters because raising
+the ceiling is the obvious response and had already been tried: this exact
+pair of specs is the pair named in `NrUiTimeouts`' remarks, which failed together at `Timeout
+10000ms exceeded` and prompted 10s → 30s. Tripling it took two failures per run down to about half
+of one — which reads as progress and is really the signature of a bound clipping *two different
+populations*. The slow-but-correct installs stopped being clipped; the ones on a page that had
+already been navigated away never had anything to wait for, and 30s is as useless to them as 10s
+was.
+
+**Measured, over a clean 363-spec lane** (`NR_UI_TIMINGS=1`, 340 passed / 23 expected failures / 0
+failures):
+
+| phase | count | avg | min | max | ceiling |
+|---|---:|---:|---:|---:|---:|
+| `load-gamedata/wait-local-library` | 363 | 67ms | 3ms | 5066ms | 30000ms |
+| `load-gamedata/wait-mysystems-rendered` | 367 | 166ms | 11ms | 20045ms | 30000ms |
+
+**Six times of headroom under the ceiling, against a 67ms average.** Nothing here is running out of
+time, which rules out "30s is too tight for a cold setup under load" — and with it the targeted
+increase and the retry-on-setup. (It also rules out CI contention as the mechanism: each
+`ubuntu-latest` job gets its own runner VM, so `thorough-conformance` never shares CPU with the four
+`thorough-ui-bs` legs or `nr-conformance` in the first place.)
+
+The same run shows the race alive and frequent, and the phase counts say exactly where each
+occurrence landed. Four `navigated to '/app/MyLists' mid-install` retries; `wait-mysystems-rendered`
+ran 367 times (= 363 + those 4), `click-add-more-games` 365, `click-add-from-folder` **363**. So
+every drift observed locally arrived *during* the guarded clicks — which is precisely why the guard
+has always looked sufficient. What walks past it is the same drift arriving in the window *after*
+them: 67ms wide on average, 5s at its worst, and until now unguarded.
+
+That window is the hypothesis, and it is worth being exact about its status: the local lane
+reproduces the *race* four times a run but has not reproduced the *failure*, because locally the
+drift never lands late enough. What is measured is that the ceiling has six times of headroom, that
+the race fires several times per run, and that this is the one step of the sequence outside the
+retry. What is inferred is that the CI failures are that race landing in that window.
+
+The fix is a scope correction, not a bigger number and not a retry-on-setup: the install-landed wait
+moves *inside* the loop that already exists for its cause. The loop's discriminator does the rest
+and is why this stays honest — it re-pushes the route only when the page really has drifted, so an
+NR that genuinely fails to install still fails on the first attempt instead of three times as
+slowly.
+
+**The second half of the fix is that the failure could not be read at all.** Its complete text was:
+
+    Setup failed: TimeoutException: Timeout 30000ms exceeded.
+
+Playwright names the target of a *locator* wait — that is why the v35 nav-link breakage arrived as
+`waiting for Locator("a[href*='MySystems']")` and was actionable — but it has nothing to name for a
+`WaitForFunctionAsync`. Setup contains exactly two of those, they are the only two waits in the lane
+that can produce this message, and they mean opposite things: *the route never arrived* versus *NR
+never installed the game data*. One is a re-run, the other is a regression, and the output
+distinguished them not at all. `NR_UI_TIMINGS` would have, but it is off in CI by design, and
+`WithDiagnosticsAsync` wraps the roster-creation and force paths rather than setup — so the one
+failure the lane kept producing was the one it captured nothing for.
+
+Both now report through `NrUiSetup.WaitForSetupConditionAsync`, which on timeout reads back the
+state the condition was testing and prints it with the page URL:
+
+    Setup failed: TimeoutException: NR UI setup: waited 30000ms for NR installed the game data for
+    system 'ordering-categories' and it did not happen (page: https://www.newrecruit.eu/app/MyLists).
+    Observed: pathname=/app/MyLists, localLibrary=[], systemsStore=present.
+
+`pathname=/app/MyLists` is the lost-page race and a re-run clears it; the same empty library on
+`/app/MySystems` is NR genuinely failing to install and wants a person. That is the whole difference
+between the two runs above and a real regression, and it now fits in the failure message —
+the same lesson §5 already records: *what ended it was not a better hypothesis but a better failure
+message.*
+
+**Verified to this section's own standard** — two consecutive fully-green 363-spec lanes after the
+change, `340 passed / 0 skipped / 23 expected failures / 0 failures` both times, with the race still
+firing three times per run and the retry absorbing every one:
+
+| run | result | `mid-install` retries | `wait-mysystems-rendered` | `wait-local-library` max |
+|---|---|---:|---:|---:|
+| baseline (before) | green | 4 | 367 | 5066ms |
+| verify 1 (after) | green | 3 | 366 | 6152ms |
+| verify 2 (after) | green | 3 | 366 | 5085ms |
+
+The retry count not dropping is the expected result and worth saying plainly: this change does not
+make the race rarer, it makes the last step of the sequence survive it. What would show the fix
+working is a `wait-local-library` count above 363 — a drift caught in the newly-guarded window — and
+neither local run produced one, for the same reason the failure has never reproduced locally.
+
+### What to do when `thorough-conformance` goes red here
+
+Read the `Observed:` clause; it is there to make this a decision rather than a judgement call.
+
+- `pathname=/app/MyLists` (or any non-MySystems route) — the lost-page race. Expected at a low rate,
+  now retried; if it reaches you anyway it means three consecutive drifts on one spec. Re-run.
+- `pathname=/app/MySystems` with `localLibrary=[]` — NR was where it should be and did not install.
+  That is a real regression (driver, HAR, or NR snapshot) and wants a person, not a re-run.
+- `systemsStore=MISSING` — Pinia is not up; suspect the HAR or an NR client bump, not this code.
+
 ## 6. Nothing is outside the lane
 
 The remaining categories — `catalogue/`, `modifier/`, `entry-id/`, `ordering/`, `roster/`, `scope/`,
