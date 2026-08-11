@@ -8,19 +8,20 @@ what it turned into. It is wired in now; see [In CI](#in-ci).
 
 ## Where it went
 
-| | first measurement | now |
+| | first measurement | now (in CI) |
 |---|---:|---:|
 | Specs selected | 367 | 367 |
 | **Passed** | **284 (77%)** | **367 (100%)** |
 | Failed | 83 | 0 |
-| Wall-clock | 29m02s | 10m50s |
+| Wall-clock | 29m02s | 3m55s / 3m36s, 2 shards in parallel (jobs 6m33s / 6m20s) |
 
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
 measurement was reproduced exactly on a second run before anything was changed — which matters more
 than usual here, because a third of those failures were timeouts, and a timeout that moves between
 runs is a different problem from one that does not.
 
-The 18 minutes are almost entirely 10-second state polls that no longer run out.
+The 18 minutes — 29m02s to 10m50s, both measured unsharded, before the lane was split for CI — are
+almost entirely 10-second state polls that no longer run out.
 
 Both figures are from confirmed runs, not computed ones. The 362/5 row this table used to carry was
 re-measured before anything in that session changed — 362 passed, 5 failed, 11m52s — because the
@@ -243,8 +244,11 @@ It is **opt-in**, like every other thorough lane: `workflow_dispatch`, the weekl
 BattleScribe change still merges without it unless someone asks — the difference is that asking is
 now possible, and the weekly run reports drift that previously nothing looked for.
 
-**The table above predates the driver fixes that followed it.** The 367/367 was measured before the
-nested-force scoping, the label ranking, the checkbox direction and the count-of-zero fix landed;
-each of those changes behaviour on paths the corpus exercises. The first opt-in run on this stack is
-the confirming measurement, and the numbers here should be re-recorded from it rather than assumed to
-carry over.
+**The confirming run has happened.** The 367/367 was first measured before the nested-force scoping,
+the label ranking, the checkbox direction and the count-of-zero fix landed, each of which changes
+behaviour on paths the corpus exercises. Run
+[31462320864](https://github.com/WarHub/battlescribe-spec/actions/runs/31462320864), against `main`
+at f7e4223, re-measured it on that stack: **195 passed on shard 0 and 172 on shard 1 — zero failed,
+zero skipped, on either.** It was not a dedicated run: #338 is the NR-snapshot bump, which carries
+the `thorough-ci` label, so the opt-in lanes fired on it and the confirmation arrived as a by-product
+of the bump.
