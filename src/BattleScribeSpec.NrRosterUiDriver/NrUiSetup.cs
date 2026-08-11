@@ -43,11 +43,11 @@ public static class NrUiSetup
         // render satisfies this and did not satisfy the sleep.
         // Install the system from MySystems, retrying the WHOLE sequence if NR navigates away.
         //
-        // The three steps below (be on MySystems, open the install popup, choose Add From Folder)
-        // are one unit of work, and the page can be taken out from under any of them: the previous
-        // spec's navigation is still in flight — its CreateRosterAsync clicked the MyLists nav link —
-        // and when it lands it takes this page with it. The controls used here exist only on
-        // MySystems, so they were visible, then gone.
+        // The four steps below (be on MySystems, open the install popup, choose Add From Folder, and
+        // see the system land in the store) are one unit of work, and the page can be taken out from
+        // under any of them: the previous spec's navigation is still in flight — its
+        // CreateRosterAsync clicked the MyLists nav link — and when it lands it takes this page with
+        // it. The controls used here exist only on MySystems, so they were visible, then gone.
         //
         // That was misread twice, as an animating element and then as a re-render, and "fixed" twice
         // by guarding a single step. Guarding the WAIT was not enough precisely because the drift
@@ -64,6 +64,33 @@ public static class NrUiSetup
         // failed two specs on a Linux/headless CI runner with "Setup failed: Timeout 10000ms
         // exceeded". That is the wrong trade: a ceiling tight enough to fail a slow-but-correct run
         // buys nothing, because nothing is waiting for it when things are healthy.
+        //
+        // ── The FOURTH step, and why it was not always inside this loop ──
+        //
+        // The guarded unit used to end at "Add From Folder was clicked". But that only establishes
+        // that the BUTTONS WERE PRESSED; what the caller needs is that the SYSTEM IS INSTALLED, and
+        // that landed one statement later, outside the loop. A drift into that window was past the
+        // guard and unrecoverable. It presented as `Setup failed: TimeoutException: Timeout 30000ms
+        // exceeded` on a different spec each run, roughly one run in two across the 363-spec lane
+        // (runs 31409213032 and 31415790894, on PRs that touched neither this driver nor NR) — the
+        // same cause as the races above, one step further along.
+        //
+        // Raising the ceiling was the obvious response and the wrong one, and it had already been
+        // tried: this is the exact pair of specs that prompted 10s → 30s (see NrUiTimeouts). That
+        // took two failures per run down to about half of one, which reads as progress and is really
+        // the signature of a bound clipping TWO DIFFERENT POPULATIONS — slow-but-correct installs
+        // stopped being clipped, while a page that has already been navigated away has nothing to
+        // wait for and does not install faster with more patience.
+        //
+        // The measurement settles it. Over a clean 363-spec lane (NR_UI_TIMINGS=1, 340 passed / 23
+        // expected failures / 0 failures), `load-gamedata/wait-local-library` ran 363 times at avg
+        // 67ms, min 3ms, max 5066ms — roughly SIX TIMES of headroom under its 30s ceiling. Nothing
+        // here is running out of time. The same run shows the race alive and frequent, and the phase
+        // counts locate every occurrence: four "navigated to '/app/MyLists' mid-install" retries,
+        // wait-mysystems-rendered 367 (= 363 + those 4), click-add-more-games 365,
+        // click-add-from-folder 363. So every drift observed LOCALLY arrives during the guarded
+        // clicks — which is precisely why the guard has always looked sufficient. What walks past it
+        // is the same drift arriving in the window after them: 67ms wide on average, 5s at its worst.
         var addMoreGames = page.GetByText("Add more games").First;
         var addFromFolder = page.GetByText("Add From Folder").First;
 
@@ -73,10 +100,13 @@ public static class NrUiSetup
             {
                 await NrUiTiming.MeasureAsync("load-gamedata/wait-mysystems-rendered", async () =>
                 {
-                    await page.WaitForFunctionAsync(
+                    await WaitForSetupConditionAsync(
+                        page,
+                        "the MySystems route arrived",
                         "() => location.pathname.includes('MySystems')",
                         null,
-                        new() { Timeout = NrUiTimeouts.Condition });
+                        NrUiTimeouts.Condition,
+                        "() => 'pathname=' + location.pathname");
                     await addMoreGames.WaitForAsync(
                         new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
                     await WaitForTransitionsAsync(page);
@@ -104,6 +134,37 @@ public static class NrUiSetup
                 await NrUiTiming.MeasureAsync("load-gamedata/click-add-from-folder", () =>
                     ClickWhenReadyAsync(page, addFromFolder, "Add From Folder"));
 
+                // Wait for NR to finish loading (system appears marked as local).
+                //
+                // Inside the loop, because this is the step that says the unit of work SUCCEEDED —
+                // everything above it only says the buttons were pressed. Clicking "Add From Folder"
+                // on a page that is about to be replaced is indistinguishable from clicking it on one
+                // that is not, right up until this wait never completes.
+                await NrUiTiming.MeasureAsync("load-gamedata/wait-local-library", () =>
+                    WaitForSetupConditionAsync(
+                        page,
+                        $"NR installed the game data for system '{systemId ?? "(any)"}'",
+                        """
+                        (systemId) => {
+                            const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                            const sysStore = pinia?._s?.get('systemsStore');
+                            if (systemId) return !!sysStore?.localLibrary?.[systemId];
+                            return Object.keys(sysStore?.localLibrary || {}).length > 0;
+                        }
+                        """,
+                        systemId,
+                        NrUiTimeouts.Condition,
+                        """
+                        () => {
+                            const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                            const sysStore = pinia?._s?.get('systemsStore');
+                            const keys = Object.keys(sysStore?.localLibrary || {});
+                            return 'pathname=' + location.pathname
+                                + ', localLibrary=[' + keys.join(', ') + ']'
+                                + ', systemsStore=' + (sysStore ? 'present' : 'MISSING');
+                        }
+                        """));
+
                 break;
             }
             catch (Exception ex) when (attempt < 3 && ex is TimeoutException or InvalidOperationException)
@@ -120,19 +181,6 @@ public static class NrUiSetup
                 await browser.NavigateToRouteAsync("/app/MySystems");
             }
         }
-
-        // Wait for NR to finish loading (system appears marked as local)
-        await NrUiTiming.MeasureAsync("load-gamedata/wait-local-library", () => page.WaitForFunctionAsync(
-            """
-            (systemId) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const sysStore = pinia?._s?.get('systemsStore');
-                if (systemId) return !!sysStore?.localLibrary?.[systemId];
-                return Object.keys(sysStore?.localLibrary || {}).length > 0;
-            }
-            """,
-            systemId,
-            new() { Timeout = NrUiTimeouts.Condition }));
 
         // Close the "Add More Games" popup that's still open.
         //
@@ -177,6 +225,64 @@ public static class NrUiSetup
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="conditionJs"/>, and reports what it was waiting for — and what the
+    /// page looked like instead — when it does not arrive.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Exists because a bare Playwright timeout is anonymous.</b> A locator wait names its target
+    /// ("waiting for Locator(\"a[href*='MySystems']\")"), but <c>WaitForFunctionAsync</c> has no
+    /// locator to name, so every one of them fails with the same seven words:
+    /// <c>Timeout 30000ms exceeded.</c> Setup has two of them, they mean opposite things — "the route
+    /// never arrived" versus "NR never installed the game data" — and for two CI runs there was no
+    /// way to tell which had happened, on a lane where the answer decides between re-run and
+    /// investigate.
+    /// </para>
+    /// <para>
+    /// The observation is the point, not the label. <c>observeJs</c> reads back the very state the
+    /// condition was testing, so the message carries the counter-evidence rather than asserting a
+    /// cause: <c>localLibrary=[]</c> with <c>pathname=/app/MyLists</c> is the lost-page race, while
+    /// the same empty library on <c>/app/MySystems</c> is NR genuinely failing to install. The same
+    /// distinction the retry loop above makes, made legible to whoever reads the failure.
+    /// </para>
+    /// <para>
+    /// Kept as a <see cref="TimeoutException"/> deliberately: the retry loop discriminates on that
+    /// type, so a friendlier exception here would silently opt these waits out of the guard that
+    /// makes them survivable.
+    /// </para>
+    /// </remarks>
+    internal static async Task WaitForSetupConditionAsync(
+        IPage page,
+        string what,
+        string conditionJs,
+        object? arg,
+        int timeoutMs,
+        string observeJs)
+    {
+        try
+        {
+            await page.WaitForFunctionAsync(conditionJs, arg, new() { Timeout = timeoutMs });
+        }
+        catch (TimeoutException)
+        {
+            string observed;
+            try
+            {
+                observed = await page.EvaluateAsync<string>(observeJs) ?? "(no observation)";
+            }
+            catch (Exception ex)
+            {
+                // The page can be gone entirely — that IS the observation.
+                observed = $"(could not be read: {ex.GetType().Name}: {ex.Message})";
+            }
+
+            throw new TimeoutException(
+                $"NR UI setup: waited {timeoutMs}ms for {what} and it did not happen "
+                + $"(page: {page.Url}). Observed: {observed}.");
+        }
     }
 
     /// <summary>
