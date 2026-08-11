@@ -1246,20 +1246,58 @@ public class EngineAccessor {
         }
     }
 
+    /**
+     * Reads {@code ownerId::entryId::constraintId} into entry id → its candidate constraint ids.
+     *
+     * <p><b>This is a HAND-KEPT MIRROR, not a shared implementation.</b> The normative rule and the
+     * reasoning behind it live in {@code src/BattleScribeSpec.TestKit/Roster/BattleScribeErrorIds.cs};
+     * this agent runs inside the BattleScribe JVM and cannot call it, so the only thing keeping the
+     * two together is that someone changes both. Be honest about what that buys: nothing enforces
+     * it at build time. What does exist is {@code tests/Features/BattleScribeErrorIdsTests.cs},
+     * which pins the cases the two are meant to answer identically —
+     *
+     * <ul>
+     *   <li>{@code owner::entry::con} → {@code {entry: [con]}}, the only shape observed in the corpus
+     *   <li>{@code owner::link::entry::con} → {@code {link::entry: [con]}} — the middle segments are
+     *       part of the composite ENTRY id (docs/entry-id-construction.md), so only the LAST segment
+     *       is ever the constraint. Inferred, not observed.
+     *   <li>repeats of one id collapse, and the surviving order is the order first seen
+     *   <li>two constraints on one entry both survive, in listed order
+     *   <li>fewer than three segments, and nulls, are dropped
+     * </ul>
+     *
+     * <p>Two things changed here and both had been silent. The split is now unlimited where it was
+     * {@code split("::", 3)}, which left {@code parts[2]} holding the whole remaining tail — a
+     * four-segment id answered {@code entry::con} as a constraint id. And the dedupe is new; it
+     * matters because the surviving ORDER is what {@link #pickConstraintId} walks when the message
+     * quotes no value to decide on.
+     */
     private Map<String, List<String>> parseValidationErrorIds(List<String> errorIds) {
         Map<String, List<String>> errorIdMap = new HashMap<String, List<String>>();
         for (String errorId : errorIds) {
             if (errorId == null) {
                 continue;
             }
-            String[] parts = errorId.split("::", 3);
+            // -1, not 0: an unlimited split still has to KEEP trailing empty segments, because
+            // C#'s String.Split does and this has to answer the same for `owner::entry::`.
+            String[] parts = errorId.split("::", -1);
             if (parts.length >= 3) {
-                List<String> constraintIds = errorIdMap.get(parts[1]);
+                // parts[0] is the owner and is dropped; parts[1..n-2] rejoined is the entry id;
+                // the last segment alone is the constraint id.
+                StringBuilder entryId = new StringBuilder(parts[1]);
+                for (int i = 2; i < parts.length - 1; i++) {
+                    entryId.append("::").append(parts[i]);
+                }
+                String entryKey = entryId.toString();
+                String constraintId = parts[parts.length - 1];
+                List<String> constraintIds = errorIdMap.get(entryKey);
                 if (constraintIds == null) {
                     constraintIds = new ArrayList<String>();
-                    errorIdMap.put(parts[1], constraintIds);
+                    errorIdMap.put(entryKey, constraintIds);
                 }
-                constraintIds.add(parts[2]);
+                if (!constraintIds.contains(constraintId)) {
+                    constraintIds.add(constraintId);
+                }
             }
         }
         return errorIdMap;

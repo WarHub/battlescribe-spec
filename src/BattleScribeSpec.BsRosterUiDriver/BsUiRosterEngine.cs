@@ -1035,6 +1035,18 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// Spinner`. Trying the outer name first found nothing and reported the entry as missing.
     /// Segments with no name of their own are skipped rather than treated as a match.
     /// </para>
+    /// <para>
+    /// <b>Not a duplicate of <c>NrRosterUiEngine.ResolveEntryName</c>, though it reads like one.</b>
+    /// That method splits the same composite id on <c>::</c> and walks the segments right-to-left
+    /// too, and the two must NOT be unified: they resolve a link's name in opposite directions,
+    /// because their apps do. Here, <see cref="NameOfResolved"/> follows a link to its target and
+    /// takes the TARGET's name — BattleScribe labels the control with what the link resolves to,
+    /// so a link named "Alpha Trigger" onto a shared "Trigger" renders as "Trigger". NR's driver
+    /// indexes the LINK's own name over its target's (see <c>RegisterEntryLink</c> in the same
+    /// file as <c>ResolveEntryName</c>), because NR's UI shows the link's name. Sharing one
+    /// implementation would hand one of the two apps a label its DOM does not contain, and the
+    /// failure would read as "control not found", not as a naming disagreement.
+    /// </para>
     /// </remarks>
     private string ResolveEntryLabel(string entryId)
     {

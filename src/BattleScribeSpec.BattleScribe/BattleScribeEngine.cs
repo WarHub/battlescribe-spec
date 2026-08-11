@@ -6,6 +6,7 @@ using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
 using BsRoster = net.battlescribe.model.roster.Roster;
 using JavaArrayList = java.util.ArrayList;
+using JavaCollection = java.util.Collection;
 using JavaEngine = net.battlescribe.engine.a.f;
 using JavaHashMap = java.util.HashMap;
 using JavaList = java.util.List;
@@ -355,36 +356,10 @@ public sealed class BattleScribeEngine : IDisposable
         // Build cost limit lookup for resolving cost type IDs
         var costLimits = JavaListToList<Cost>(roster.getCostLimits());
 
-        // Build error ID map from roster's validation error IDs (shared entries)
-        // Use a multimap: an entry can have multiple constraints with different IDs.
-        var errorIdMap = new Dictionary<string, List<string>>();
-        var errorIds = ((BaseRosterElement)roster).getValidationErrorIds();
-        if (errorIds is not null)
-        {
-            var idIter = errorIds.iterator();
-            while (idIter.hasNext())
-            {
-                var errorId = idIter.next()?.ToString();
-                if (errorId is null)
-                {
-                    continue;
-                }
-
-                var parts = errorId.Split("::");
-                if (parts.Length >= 3)
-                {
-                    if (!errorIdMap.TryGetValue(parts[1], out var list))
-                    {
-                        list = [];
-                        errorIdMap[parts[1]] = list;
-                    }
-                    if (!list.Contains(parts[2]))
-                    {
-                        list.Add(parts[2]);
-                    }
-                }
-            }
-        }
+        // One parse of `ownerId::entryId::constraintId`, shared with the UI driver's Java agent so
+        // the two BattleScribe engines cannot drift apart on it -- see BattleScribeErrorIds.
+        var errorIdMap = BattleScribeErrorIds.Parse(
+            JavaListToStrings(((BaseRosterElement)roster).getValidationErrorIds()));
 
         var iter = errors.iterator();
         while (iter.hasNext())
@@ -486,37 +461,8 @@ public sealed class BattleScribeEngine : IDisposable
             return;
         }
 
-        // Build a lookup of error IDs on this element (shared entries only)
-        // Format: ownerId::entryId::constraintId
-        // Use a multimap: an entry can have multiple constraints with different IDs.
-        var errorIdMap = new Dictionary<string, List<string>>();
-        var errorIds = element.getValidationErrorIds();
-        if (errorIds is not null)
-        {
-            var idIter = errorIds.iterator();
-            while (idIter.hasNext())
-            {
-                var errorId = idIter.next()?.ToString();
-                if (errorId is null)
-                {
-                    continue;
-                }
-
-                var parts = errorId.Split("::");
-                if (parts.Length >= 3)
-                {
-                    if (!errorIdMap.TryGetValue(parts[1], out var list))
-                    {
-                        list = [];
-                        errorIdMap[parts[1]] = list;
-                    }
-                    if (!list.Contains(parts[2]))
-                    {
-                        list.Add(parts[2]);
-                    }
-                }
-            }
-        }
+        // Same shared parse as CollectRosterErrors -- see BattleScribeErrorIds for the format.
+        var errorIdMap = BattleScribeErrorIds.Parse(JavaListToStrings(element.getValidationErrorIds()));
 
         var iter = errors.iterator();
         while (iter.hasNext())
@@ -579,7 +525,7 @@ public sealed class BattleScribeEngine : IDisposable
     /// Returns null when no value match is found (caller should fall through to other resolution).
     /// </summary>
     private static string? ResolveConstraintFromEntry(
-        SelectionEntry entry, List<string> candidateConstraintIds, string message)
+        SelectionEntry entry, IReadOnlyList<string> candidateConstraintIds, string message)
     {
         // Match by constraint value in message.
         // BS error messages include "(maximum N)" or "(minimum N)" with the constraint value.
@@ -2563,6 +2509,25 @@ public sealed class BattleScribeEngine : IDisposable
         if (!_initialized || _gameSystem is null)
         {
             throw new InvalidOperationException("Engine not initialized. Call Initialize() first.");
+        }
+    }
+
+    /// <summary>
+    /// A Java collection read as strings, tolerating nulls. Unlike <see cref="JavaListToList{T}"/>
+    /// this does not insist on an element type: <c>getValidationErrorIds()</c> is a raw collection
+    /// and its elements are only ever consumed as text.
+    /// </summary>
+    private static IEnumerable<string?> JavaListToStrings(JavaCollection? javaList)
+    {
+        if (javaList is null)
+        {
+            yield break;
+        }
+
+        var iter = javaList.iterator();
+        while (iter.hasNext())
+        {
+            yield return iter.next()?.ToString();
         }
     }
 
