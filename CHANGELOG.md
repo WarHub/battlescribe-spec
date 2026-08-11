@@ -177,11 +177,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   resolved to, and the smoke step sets it — a passing spec proves an entry was reached, not what was
   clicked to reach it, so without it the coverage claim would be an assumption. It reports
   `'Squad Banner' -> CheckBox (DRIVEN)` on both directions, which is the first record in this repo of
-  BattleScribe rendering that control at all. `newrecruit-ui` is opted out of the two steps on a
-  measured observation — NR's options panel renders no row for the entry, and that driver already
-  handles checkbox and `boutonSubUnit` rows, so the row is absent rather than unrecognised. Why NR
-  omits it is left open rather than guessed at; the store-direct `newrecruit` engine takes both steps
-  normally, so it is that UI's rendering and not NR's model.
+  BattleScribe rendering that control at all. `newrecruit-ui` was opted out of the two steps here on
+  the observation that NR's options panel rendered no row for the entry, with why left open; that
+  turned out to be the NR-UI export step unmounting the editor, not anything about the entry, and
+  both steps now run on every engine — see the Fixed entry below.
 - **CI's `thorough-ui-bs` runs both halves of the BattleScribe desktop UI (#355)** — it filtered on
   `Engine=BsGameDataUi`, so the Data Editor had a lane and the Roster Editor had none: every change to
   `BsUiRosterEngine` and `RosterActions.java` reached `main` exercised by unit tests and one teardown
@@ -195,6 +194,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The NR-UI roster export navigated out of the editor, and everything after it in the spec had
+  nowhere to click** — `ExportRosterXmlAsync` ended by going to `/app`, to leave the browser somewhere
+  sane for the next spec. That unmounts NR's roster editor — no `.unitRow`, no `.inputOption` — while
+  the Pinia model stays intact, so state READS kept working and only UI-driven mutations broke.
+  `protocol-kitchen-sink` is the one spec with actions after its `expectedFile` export, and both of
+  them (`selectChildEntry se-inf-banner`, and the `deselectSelection` giving it back) were opted out
+  of `newrecruit-ui` as an NR rendering limitation of a costless max-1 upgrade. The entry's shape was
+  never involved: NR renders it as a checkbox, and a variant catalogue varying one factor at a time
+  (max-1/none/max-2, costed/costless, `upgrade`/`model`, min declared/absent) got a row for all eight
+  variants. Replaying the spec's own steps to the failing step with and without the export step
+  named it in one comparison — `route=/app unitRows=0` against
+  `route=/app/Lists/<id>?view=main` with five rows, `Squad Banner` among them. The export now returns
+  to the route it was invoked from (a Vue Router push, so nothing re-fetches and page globals
+  survive), keeping `/app` only as the fallback for an export invoked from elsewhere; the next spec's
+  clean start never depended on it, since the frozen lane gets that from `Cleanup` and the live lane
+  from `Setup`. It also dismisses NR's export menu, which clicking `.ros` leaves mounted in `#popups`
+  where it swallows every click aimed at the editor beneath — harmless only while the method
+  navigated away afterwards. Both steps now run on every engine.
+- **"Hidden entries cannot be selected via UI interaction" was an accusation, not an observation** —
+  the message `SelectChildEntryByNameAsync` threw when no row carried the entry named a cause it had
+  never checked, against an entry that is not hidden, and that is what kept the export bug above
+  filed as an NR limitation. It now reports what the panel offers, the way `DescribeUnitListAsync`
+  already does: `route=/app unitRows=0 editing=0 rows=[]` — which is the whole diagnosis, on the
+  first run. Fourth occurrence of this defect recorded in `docs/nr-ui-roster-coverage.md`.
 - **An edit-panel control is addressed by the closest spelling of a name, not the first one
   containing it** — label lookup matched with `contains`, and the spec corpus is full of names inside
   other names in the same panel: `Armor` inside `Light Armor`, `Heavy Armor` and `Armor Type` (and

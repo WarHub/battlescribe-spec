@@ -501,6 +501,31 @@ public static class NrUiActions
             """, uid);
 
     /// <summary>
+    /// What the options panel actually offers right now — the route, whether a roster editor is
+    /// mounted at all, and every <c>.inputOption</c> row with its label and its <c>label for</c>.
+    /// </summary>
+    /// <remarks>
+    /// Strictly an observation, and deliberately so. The message this replaced asserted a cause —
+    /// "Hidden entries cannot be selected via UI interaction" — for a condition it had not tested,
+    /// and a costless max-1 upgrade was consequently recorded as an NR rendering limitation and
+    /// opted out of the kitchen-sink spec. The row was there; the whole editor was not, because the
+    /// export step before it had navigated to <c>/app</c>. `unitRows=0 rows=[]` says that in the
+    /// message; "hidden entry" said the opposite. Same lesson as <see cref="DescribeUnitListAsync"/>.
+    /// </remarks>
+    private static Task<string> DescribeOptionsPanelAsync(IPage page)
+        => page.EvaluateAsync<string>("""
+            () => {
+                const rows = [...document.querySelectorAll('.inputOption')].map(el =>
+                    (el.querySelector('label')?.getAttribute('for') ?? '?')
+                    + ':' + (el.querySelector('span.optionLabel')?.textContent?.trim() ?? '?'));
+                return 'route=' + location.pathname + location.search
+                    + ' unitRows=' + document.querySelectorAll('.unitRow').length
+                    + ' editing=' + document.querySelectorAll('.unitRow.editing').length
+                    + ' rows=[' + rows.join(', ') + ']';
+            }
+            """);
+
+    /// <summary>
     /// Resolves <paramref name="entryId"/> to the uid of the child node NR renders for it under
     /// <paramref name="parentSelectionUid"/>, or null when there is none.
     /// </summary>
@@ -552,7 +577,8 @@ public static class NrUiActions
     /// Supports two NR UI styles:
     ///   • numeric (input[type=number]): child has max > 1 → increment value by 1
     ///   • binary (button.boutonSubUnit): child has max = 1 → click the "+" button
-    /// Throws NotSupportedException for hidden entries not visible in the UI.
+    /// Throws NotSupportedException when no visible row carries the entry, reporting what the panel
+    /// does offer (<see cref="DescribeOptionsPanelAsync"/>) rather than naming a cause.
     /// Returns the uid of the child selection.
     /// </summary>
     public static async Task<string?> SelectChildEntryByNameAsync(IPage page, string parentSelectionUid, string entryName, string? entryId = null)
@@ -574,8 +600,8 @@ public static class NrUiActions
         if (!await entryOption.First.IsVisibleAsync())
         {
             throw new NotSupportedException(
-                $"NR UI: child entry '{entryName}' (entryId={entryId}) has no row in the options panel. " +
-                "Hidden entries cannot be selected via UI interaction.");
+                $"NR UI: no visible options-panel row for child entry '{entryName}' (entryId={entryId}) "
+                + $"under selection '{parentSelectionUid}'. {await DescribeOptionsPanelAsync(page)}");
         }
 
         var numInput = entryOption.Locator("input[type='number']");
