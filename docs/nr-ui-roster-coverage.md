@@ -302,3 +302,43 @@ assumed.
 
 The rule that replaces the allow-list: **a failing spec carries its reason, or it is not failing on
 purpose.** There is no longer a place to park a spec nobody has looked at.
+
+## 7. The export that unmounted the editor — a fifth navigation defect
+
+Measured 2026-08-11. `protocol-kitchen-sink` had two steps opted out of this engine — a
+`selectChildEntry` taking a costless max-1 upgrade (`se-inf-banner`, "Squad Banner") and the
+`deselectSelection` giving it back — on the observation that *"NR's options panel renders no row at
+all for this entry"*. The entry's shape was the suspect: a `max: 1` constraint outside a group, no
+costs, `type: upgrade`. **None of it was relevant.**
+
+`ExportRosterXmlAsync` ended by navigating to `/app`, to leave the browser somewhere sane for the
+next spec. That **unmounts the roster editor** — zero `.unitRow`, zero `.inputOption` — while the
+Pinia model stays fully intact. So state reads keep working and only UI-driven mutations break, and
+kitchen-sink is the one spec in the suite with actions after its `expectedFile` export. Every child
+of Infantry Squad was equally unreachable; Squad Banner was simply the first one asked for.
+
+Measured by replaying the spec's own step sequence to the failing step twice, dropping only the
+export step in the second run: with it, `route=/app`, `unitRows=0`, the select throws; without it,
+`route=/app/Lists/<id>?view=main`, five `.inputOption` rows, `Squad Banner` among them carrying an
+`input[type=checkbox]`, and the select succeeds. NR renders that control exactly as BattleScribe
+does. A variant catalogue varying one factor at a time (max-1 vs none vs max-2, costed vs costless,
+`upgrade` vs `model`, min declared vs absent) rendered a row for **all eight** variants — the shape
+never mattered.
+
+Two fixes, both in the export path:
+
+| | |
+|---|---|
+| Route | It now returns to the route it was invoked from (Vue Router push, so nothing re-fetches and page globals survive), falling back to `/app` only when it was not called from an editor. The next spec's clean start never depended on this: frozen gets it from `Cleanup` → `ResetBrowserStateAsync`, live from `Setup`, which navigates whenever `FrozenReady` is false — which, live, it always is. |
+| Popup | Clicking `.ros` does not close NR's export menu. It stays mounted in `#popups` and swallows every click at the editor beneath — invisible while the method navigated away afterwards. Now dismissed with Escape, and waited for. |
+
+**The failure message is what made this look like NR's fault.** It read *"has no row in the options
+panel. Hidden entries cannot be selected via UI interaction"* — naming a cause it had never tested,
+against an entry that is not hidden — and it has said that since the driver's first commit
+(2026-05-23). That is the fourth occurrence of this defect recorded in this document (§5, and the
+two messages named there). It now reports the observation instead:
+
+    NR UI: no visible options-panel row for child entry 'Squad Banner' (entryId=se-inf-banner)
+    under selection 'jzhjg8v'. route=/app unitRows=0 editing=0 rows=[]
+
+`route=/app unitRows=0` is the whole diagnosis, in the message, on the first run.

@@ -2,6 +2,7 @@ using BattleScribeSpec.NewRecruit;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 using BattleScribeSpec.XmlGen;
+using Microsoft.Playwright;
 
 #pragma warning disable IDE0060 // Remove unused parameter — interface implementations and UI stubs
 
@@ -568,6 +569,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private async Task<string> ExportRosterXmlAsync()
     {
         var page = Browser.Page;
+        var returnRoute = RosterEditorRouteOrNull(page.Url);
         string? xml;
         await page.EvaluateAsync(CaptureHookJs);
         try
@@ -616,13 +618,49 @@ public sealed class NrRosterUiEngine : IRosterEngine
         finally
         {
             await page.EvaluateAsync(RestoreHookJs);
-            // Return to the app home so the next spec's setup (which, once frozen, skips navigation)
-            // starts from the expected page rather than this roster's editor. The UI engine shares one
-            // browser across specs, so leaving the editor open would time out the next Setup.
+            // Put the app back where the export found it. `expectedFile` is an ASSERTION, and an
+            // assertion that moves the app out from under the steps after it is not reading the
+            // roster, it is changing what the rest of the spec can reach.
+            //
+            // This used to navigate to the app home unconditionally, with a comment about the next
+            // spec's setup. It leaves the roster editor UNMOUNTED — no `.unitRow`, no `.inputOption`,
+            // `location` back at `/app` — while the Pinia model stays intact, so state READS keep
+            // working and only UI-driven mutations break. kitchen-sink is the one spec with actions
+            // after its export, and both of them (selectChildEntry se-inf-banner, the deselect that
+            // takes it back) failed as "child entry 'Squad Banner' has no row in the options panel"
+            // and were opted out of this engine, on that reading, from the moment they were written.
+            // The entry's shape was never involved: NR renders that row as a checkbox, and the panel
+            // it belongs to was simply no longer on screen.
+            //
+            // The next spec's clean start does not depend on this: the frozen lane gets it from
+            // `Cleanup` → `ResetBrowserStateAsync`, which ends in the same NavigateToApp, and the live
+            // lane from `Setup`, which navigates whenever `FrozenReady` is false — which, live, it
+            // always is. The home fallback below still covers an export invoked from anywhere else.
+
+            // The menu gets its own try, so one that refuses to close cannot cost the navigation
+            // below. The step after would then fail on Playwright's own "intercepts pointer events",
+            // which names the popup precisely — a worse failure than this one, but not a silent one.
             try
             {
-                await Browser.NavigateToAppAsync();
-                await Browser.WaitForPiniaAsync();
+                await CloseExportMenuAsync(page);
+            }
+            catch
+            {
+                // Best-effort.
+            }
+
+            try
+            {
+                if (returnRoute is not null)
+                {
+                    await Browser.NavigateToRouteAsync(returnRoute);
+                    await NrUiSetup.WaitForEditorLoadedAsync(page);
+                }
+                else
+                {
+                    await Browser.NavigateToAppAsync();
+                    await Browser.WaitForPiniaAsync();
+                }
             }
             catch
             {
@@ -638,6 +676,53 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // Re-indent NR's single-line export to a readable, git-diffable layout (adapter feature).
         return NrRosterXml.Pretty(xml);
     }
+
+    /// <summary>
+    /// Dismisses the export menu the way a user does — Escape — and waits for it to be gone.
+    /// </summary>
+    /// <remarks>
+    /// Clicking <c>.ros</c> does not close it: NR leaves <c>#popups &gt; div.exports</c> mounted,
+    /// full-screen, and it swallows every click aimed at the editor underneath. That went unnoticed
+    /// while this method's caller navigated away afterwards, taking the popup with it. Playwright
+    /// names it precisely when it bites — "&lt;div class="exports"&gt; from &lt;div id="popups"&gt;
+    /// subtree intercepts pointer events" — against the <c>.displayName</c> of the very unit row the
+    /// next step wants to open. Measured: Escape empties <c>#popups</c>; so does a click on empty
+    /// canvas; re-clicking the Export button re-opens rather than toggles.
+    /// </remarks>
+    private static async Task CloseExportMenuAsync(IPage page)
+    {
+        var menu = page.Locator("#popups .exports");
+        if (await menu.CountAsync() == 0)
+        {
+            return;
+        }
+
+        await page.Keyboard.PressAsync("Escape");
+
+        // `Condition`, not `OptionalProbe`: the menu being gone is not optional — every click the
+        // rest of the spec makes lands on it otherwise.
+        await menu.First.WaitForAsync(new()
+        {
+            State = WaitForSelectorState.Detached,
+            Timeout = NrUiTimeouts.Condition,
+        });
+    }
+
+    /// <summary>
+    /// The route part of <paramref name="url"/> when it addresses a roster editor, else null.
+    /// </summary>
+    /// <remarks>
+    /// Path AND query: NR carries the open options panel in <c>?view=&lt;uid&gt;</c> (<c>?view=main</c>
+    /// with none open), so dropping the query would return to a different view than the caller had.
+    /// Restoration goes through <see cref="NewRecruitBrowser.NavigateToRouteAsync"/>, a Vue Router
+    /// push — no page load, so nothing re-fetches (frozen replay is untouched) and page globals,
+    /// <c>window.__bsspec</c> among them, survive.
+    /// </remarks>
+    private static string? RosterEditorRouteOrNull(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && uri.AbsolutePath.Contains("/Lists/", StringComparison.OrdinalIgnoreCase)
+            ? uri.PathAndQuery
+            : null;
 
     // Hook Blob to capture the .ros text NR's exporter writes, and swallow the download anchor click.
     private const string CaptureHookJs = """
