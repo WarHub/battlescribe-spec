@@ -11,6 +11,40 @@ namespace BattleScribeSpec.Roster;
 /// returns strings shaped <c>ownerId::entryId::constraintId</c>, listing what the ELEMENT knows
 /// about rather than what any one error was raised by. The three halves are used as follows:
 /// </para>
+/// <para>
+/// <b>What this collection actually is</b>, read out of the engine's bytecode
+/// (<c>net.battlescribe.engine.a.f</c>, BattleScribe 2.03.21) rather than inferred from its name.
+/// It is <b>not</b> an index of errors. It is a DEDUP SET of the
+/// <c>(element, entry, constraint)</c> triples already emitted, and it is written on one code path
+/// only:
+/// </para>
+/// <list type="number">
+/// <item><description>
+/// the engine builds this id from <c>element.getId()</c>, <c>entry.getId()</c> and
+/// <c>constraint.getId()</c> — so at that moment it holds the exact constraint;
+/// </description></item>
+/// <item><description>
+/// it registers the id <b>only if <c>entry.isShared()</c></b>. A non-shared entry contributes
+/// nothing here, ever. That is a property of the data, not a setting, and there is no flag or
+/// alternate call that widens it;
+/// </description></item>
+/// <item><description>
+/// if the id is already present it returns <b>before building the message</b>, so a repeat triple
+/// produces no error at all — the dedup is the collection's actual purpose;
+/// </description></item>
+/// <item><description>
+/// it then constructs the validation error passing <c>(element, id, message)</c> into a funnel
+/// whose body uses only the element and the message. <b>The id parameter is never read.</b>
+/// </description></item>
+/// </list>
+/// <para>
+/// So the constraint identity exists, is computed, and is deliberately discarded at construction.
+/// That is why callers of this type still need message resolution and cannot be rewritten to use
+/// ids alone: the ids cover shared entries only, they are per-triple rather than per-error, and
+/// validation runs concurrently, so nothing correlates this collection positionally with
+/// <c>getValidationErrors()</c>. Anyone arriving here to delete the message matching should read
+/// that list again before starting.
+/// </para>
 /// <list type="bullet">
 /// <item><description>
 /// <c>ownerId</c> — the element the ids were read off. Discarded: the map is already built per
