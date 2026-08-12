@@ -1,0 +1,118 @@
+id: constraint-two-max-equal-limits
+category: constraint
+description: >
+  Two max constraints of the same field and scope on one entry with the SAME
+  limit. 3 selections violate both, and each violation renders the same element
+  name, entry name, kind word and number — so the two errors differ in no
+  character at all. One error per violated constraint, each naming its own, is
+  what the engine knows; the rendered text cannot carry it.
+tags:
+  - validation-errors
+  - structured-errors
+  - engine-limitation
+
+engines:
+  # BattleScribe raises BOTH errors and renders them identically: two copies of "Troops has 1
+  # too many selections of Unit A (maximum 2)". Nothing else is exposed — net.battlescribe.engine.b.a
+  # is constructed as (Object, String) where the Object is the roster element the error hangs on,
+  # and the (element, entry, constraint) id the engine builds while raising each error is
+  # registered only for shared entries and discarded before the error is constructed
+  # (net.battlescribe.engine.a.f, see the getValidationErrorIds notes in BattleScribeEngine).
+  # So the message is the only carrier and here it carries nothing that separates the pair: both
+  # resolvers value-match "maximum 2" and both return the FIRST constraint whose value is 2.
+  # Measured 2026-08-12: 2 errors, both `se-unit-a/con-max-alpha`. Measured alongside it, as the
+  # control: the same entry with limits 2 and 1 instead of 2 and 2 resolves both correctly, so
+  # what defeats resolution is the equality, not the pairing.
+  # Unlike constraint-two-max-one-modified this is not a comparison bug — no rewrite of the
+  # message-matching rule can recover the second id, because the two messages are the same string.
+  # Lifting it needs identity from somewhere other than the text.
+  # `fail` rather than `skip` so the spec still RUNS: a future route to constraint identity would
+  # be reported as an unexpected pass instead of going unnoticed. See issue #403.
+  battlescribe: fail
+
+setup:
+  gameSystem:
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            - id: con-max-alpha
+              type: max
+              value: 2
+              field: selections
+              scope: parent
+            - id: con-max-beta
+              type: max
+              value: 2
+              field: selections
+              scope: parent
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # 2 selections — at both limits, neither exceeded
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+
+  # 3 selections — exceeds both. `messageContains` is the closest the harness comes to asserting
+  # the two texts are the same: it pins both errors to the same quoted limit.
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/con-max-alpha
+          messageContains: maximum 2
+        - on: selection se-unit-a
+          from: se-unit-a/con-max-beta
+          messageContains: maximum 2
+      forces:
+        - selectionCount: 3
+      engines:
+        # NewRecruit names the constraint correctly — it reads e.constraint.id rather than the
+        # text — but emits ONE error for the pair, not two. Measured 2026-08-12: a single
+        # `se-unit-a/con-max-alpha` reading "Troops has 1 selections too many of Unit A (max 2)".
+        # The collapse tracks message identity, not the constraint count: the control run with
+        # limits 2 and 1 on the same entry produced two errors naming both constraints. Which of
+        # the pair survives is not asserted beyond the one NR reports — nothing in the data
+        # privileges alpha over beta except declaration order.
+        newrecruit:
+          errors:
+            - on: selection se-unit-a
+              from: se-unit-a/con-max-alpha
+              messageContains: max 2

@@ -1,0 +1,108 @@
+id: constraint-two-max-one-modified
+category: constraint
+description: >
+  Two max constraints of the same field and scope on one entry, one of them
+  moved by a modifier. con-max-plain (max=9) is never violated; con-max-boosted
+  is authored max=5 and set to 2, so 3 selections exceed the MODIFIED limit and
+  neither authored limit. The violation can therefore only be con-max-boosted's,
+  and the error must name it. NewRecruit does; BattleScribe names con-max-plain.
+tags:
+  - validation-errors
+  - structured-errors
+
+engines:
+  # BattleScribe's message quotes the POST-modifier limit: "Troops has 1 too many selections of
+  # Unit A (maximum 2)" — 2 being what the modifier set, not the authored 5. Read out of
+  # net.battlescribe.engine.a.f: the value printed after `" (maximum "` comes from a resolver
+  # taking the constraint as BaseModifyableData, and Constraint.getValue() is read only in the
+  # isPercentValue() branch.
+  # Both BattleScribe resolvers compare that number against the AUTHORED value instead —
+  # BattleScribeEngine.ResolveEntryFromMessage, and its deliberate port in
+  # EngineAccessor.matchConstraintOwner, which is why battlescribe-ui inherits this rather than
+  # declaring its own. With the authored values 9 and 5 neither candidate matches "maximum 2",
+  # so both fall through to the first kind-match by DECLARATION order and answer con-max-plain —
+  # a constraint whose limit of 9 the message rules out and 3 selections do not reach.
+  # Measured 2026-08-12: `se-unit-a/con-max-plain`. NewRecruit passes on the same data, reading
+  # e.constraint.id structurally rather than off the text.
+  # `fail` rather than `skip` so the spec still RUNS: resolving the modifier-adjusted value is a
+  # fixable defect in our own resolvers, not a property of the app, and the day it is fixed this
+  # is reported as an unexpected pass. Declaring it is the holding position, not the outcome —
+  # see issue #403.
+  battlescribe: fail
+
+setup:
+  gameSystem:
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            # Declaration order is load-bearing: the UNMODIFIED constraint is first, so a
+            # resolver that falls back to iteration order answers with this one. Swapping the
+            # two would let the wrong rule return the right id by luck.
+            - id: con-max-plain
+              type: max
+              value: 9
+              field: selections
+              scope: parent
+            - id: con-max-boosted
+              type: max
+              value: 5
+              field: selections
+              scope: parent
+          modifiers:
+            - type: set
+              field: con-max-boosted
+              value: "2"
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # 2 selections — at the modified limit of con-max-boosted, far under con-max-plain
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+
+  # 3 selections — exceeds the modified max=2 and nothing else. At the authored values
+  # (9 and 5) there would be no error at all, so con-max-boosted is the only possible source.
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/con-max-boosted
+      forces:
+        - selectionCount: 3
