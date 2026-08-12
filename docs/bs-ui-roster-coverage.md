@@ -232,6 +232,139 @@ spec currently needs one.
 The rule that replaces an allow-list, unchanged: **a failing spec carries its reason, or it is not
 failing on purpose.** With all 5 resolved, the lane's blocker on `ci.yml` (#355) is gone.
 
+## Two specs built their rosters on another spec's data
+
+`specs/roster/scope/scope-roster.yaml` passed on its own and failed in an unsharded lane run. It
+declares no `engines:` block and nothing about it had changed — it is expected to pass everywhere.
+What it failed on was a game system belonging to a different spec.
+
+It only became reproducible once a different mistake was cleared out of the way:
+
+> **A measurement can be invalid, and read exactly like a regression.** The first full-lane run
+> showed three failures — `condition-shared-flag-nested`, `constraint-shared-flag` and
+> `collective-per-model-operations` — each reading precisely as a regression of a fix this document
+> records above as landed. None of them was. `src/bs-ui-java-agent/bs-ui-java-agent.jar` is
+> gitignored, and NOTHING in the .NET build rebuilds it: `setup.ps1` builds it once, or
+> `src/bs-ui-java-agent/build.ps1` does. The jar under test was two days older than
+> `RosterActions.java` and `EngineAccessor.java`. Rebuilt from source, all three passed. It had also
+> been hiding the defect being hunted: each of those three failures poisons the engine and forces a
+> cold start, a cold start builds a NEW temp home, and that wiped the accumulated data directory
+> before `scope/scope-roster` was reached. One stale artifact was both the false regression and the
+> reason the real one would not reproduce.
+
+### Four mechanisms, none of them wrong by itself
+
+1. `SpecLoader.ApplySetupDefaults` defaults a spec's game-system **id and name** to the spec id.
+2. `BsUiDataStaging.StageDataFilesAsync` cleared only the CURRENT spec's directory, and
+   `battlescribe-ui` is `ReuseSafeRoster: true` — one JVM and one isolated home span the lane — so
+   the data directory accumulated one game system per spec run since the last cold start.
+3. `RosterActions.createRosterAction` chose the game system with `selectComboBoxItemByText`:
+   `item.toString().contains(text)`, first hit wins.
+4. Spec ids nest. `scope-roster` is a substring of `condition-scope-roster`, which sorts earlier
+   (`c` < `s`) and runs earlier — discovery is alphabetical, `condition/` before `scope/`.
+
+So `scope/scope-roster` built its roster on `condition-scope-roster`'s game system. The three specs
+in that id family declare `fe-patrol`, `cat-1`, `se-target` and `se-trigger` under the same names,
+so the catalogue and force-entry combos found their ids under either one and every step reported
+success. The failure surfaced four steps later, as a value:
+
+    Step 4: force[0].selection[0].name: expected Roster Has Trigger but got Roster Triggered
+
+`Roster Triggered` is `condition-scope-roster`'s modifier value. It appears nowhere in
+`scope-roster`'s own data.
+
+### The shards hid it, by luck
+
+`scope/scope-roster` hashes to shard 0; `condition/condition-scope-roster` and
+`scope/scope-roster-cross-force` both to shard 1. No shard held both, so no CI run ever put the
+decoy in front of the victim — established by enumerating the real test list, not by recomputing the
+hash. That is a property of where the current 2-way boundary happens to fall and of nothing else:
+adding one spec, or changing `ShardCount`, re-rolls every assignment. The lane's green in CI was
+never evidence the defect was absent.
+
+### The second victim passed
+
+The corpus holds 41 spec-id substring collisions, and only two of them have the CONTAINING id
+sorting earlier; the rest are prefix-extensions, where the shorter id wins its own match. The other
+one is `profile-publication` ⊂ `infolink-profile-publication`, and those two specs are
+observationally identical: same `fe-1`, `cat-1` and `se-1` "Marine", same expected
+`Marine Stats`/`pub-1`/M=6, one reaching the profile directly and one through an infoLink.
+
+So `profile-publication` was building on the infoLink spec's data **and passing** — green on a path
+it does not describe, in every green lane run in this repo's history. Every value it asserted was
+correct; only the identity of the data was wrong, and **no `expectedState` can catch that.** Only an
+identity check can. Restoring the pre-fix rule with the new postcondition in place failed it at
+Step 0, naming `infolink-profile-publication`.
+
+### The fix is four commits, and the first three each close it alone
+
+- **The game system is chosen by id, exactly.** `selectComboBoxItemByText` is deleted rather than
+  left unused; its one call site was this bug. The name is still sent and now reaches only the
+  failure message, which lists what the combo was offering as `name (id)`.
+- **The remaining matcher lost its fallback.** `selectComboBoxItemById` matched `getObjectId`
+  exactly and then took the first item whose `toString()` CONTAINED the id. `javap` on the shipped
+  app says why that is dangerous rather than merely loose: those combos hold `BaseData` subclasses
+  and `BaseData.toString()` is `name + ":" + id + ":" + super`, so every item's text contains its
+  own id and `contains("cat-1")` matches `cat-10`. It could never have been load-bearing either —
+  `getObjectId` never fails on those types, so reaching the fallback always meant the wanted item
+  was ABSENT, and the only thing a fallback can do from there is select a DIFFERENT real item. The
+  two matchers are one function now.
+- **A postcondition, not a third mechanism.** `createRosterAction` compares the created roster's own
+  `gameSystemId` against the one requested, which is what keeps working if the dialog flow, the
+  staging or the engine reuse is ever rewritten. Java-side, because a C# check risks comparing a
+  value against itself: `GetRosterState()` falls back to `EmptyRosterState()`, which returns the
+  driver's own `_gameSystemId`.
+- **Staging retires the system it staged last**, so only one is ever on disk. Not a blanket sibling
+  delete: `BsUiOptions.IsolatedHomePath` exists, and under a shared home "delete everything that
+  isn't mine" is one engine destroying another's data mid-run. Decompilation confirms
+  `#cboGameSystem` is rebuilt from a live `data/` walk on every dialog open — the only cache on that
+  path is per file, revalidated against `lastModified()` — so the removal shrinks the combo inside a
+  running JVM rather than only at the next cold start. Confirmed empirically as well: with staging
+  fixed and the PRE-FIX substring rule restored, `profile-publication` passes, because there is no
+  second candidate left for it to match.
+
+That last one is the exception. It removes the ambiguity rather than detecting it, and it cannot
+close the class on its own — a stager the engine does not own can still leave a second game system
+in a shared home, which is exactly what the regression test now does. The mechanism detail is in
+`docs/bs-ui-driver.md`.
+
+**Nothing here earned a declaration.** The app selected what it was asked for every time; the driver
+asked wrong. An `engines:` block would have recorded a limitation that does not exist.
+
+### The runs, and what the wall column is not
+
+Unsharded, complete stack — 368 tests, the 367 specs plus the one new regression test:
+
+| run | result | wall |
+|---|---|---:|
+| on the combo-fallback commit | 368/368 | 8m58s |
+| 1 | 367/368 — `force/force-remove-first-multi-catalogue` state-change timeout | 16m13s |
+| 2 | 368/368 | 15m04s |
+| 3 | 368/368 | 15m23s |
+| 4 | 368/368 | 17m49s |
+
+**Do not read the wall column as a measurement of what the fix cost.** The box was running 18
+concurrent agent processes on 8 cores, and the figure moved between 9 and 18 minutes with no code
+change at all between several of these runs. These timings are not comparable with each other, and
+not with the ones in *Where it went*.
+
+Run 1's single failure is a state-change timeout — `no selection for entryId 'se-beta'; that scope
+holds: (nothing)` — a different shape from this defect, and it did not recur in the three runs after
+it.
+
+### A lead, not a cause: an uncaught exception on the FX thread
+
+The JVM stderr of the GREEN runs carries about 20 uncaught
+`ClassCastException: Integer cannot be cast to Double` per run, thrown from
+`javafx.scene.control.SpinnerValueFactory$DoubleSpinnerValueFactory$1.toString` by way of
+`Spinner.setText`: the driver sets an `int` into a `Double`-backed cost-limit spinner. The value
+still applies, so every spec that hits it passes and nothing in the lane reports it.
+
+An uncaught exception on the JavaFX Application Thread is, however, exactly what produces **an
+action that did nothing** — the shape run 1 failed in. That is the whole of the evidence: a
+mechanism that could produce that failure, and a failure of that shape, with nothing yet tying the
+two together. Recorded as a lead, not diagnosed, and not fixed here.
+
 ## In CI
 
 The lane now runs as the `roster` half of `thorough-ui-bs`, sharded 2 ways on the same `Shard` trait
@@ -252,3 +385,11 @@ at f7e4223, re-measured it on that stack: **195 passed on shard 0 and 172 on sha
 zero skipped, on either.** It was not a dedicated run: #338 is the NR-snapshot bump, which carries
 the `thorough-ci` label, so the opt-in lanes fired on it and the confirmation arrived as a by-product
 of the bump.
+
+That run predates the game-system commits above, and two things about it have moved since. Shard 0
+now selects 196 tests rather than 195, because `BsUiGameSystemSelectionTests` is traited `Shard 0` —
+a test carrying no `Shard` trait matches neither filter and would run nowhere while looking covered.
+And one of the 367 greens was not what it looked like: `profile-publication` passed on
+`infolink-profile-publication`'s data, in that run and in every one before it. The counts stand as
+measured; what one of the passes established does not. No sharded run has been made on the current
+stack — the four unsharded runs above are what confirms it.
