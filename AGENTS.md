@@ -49,7 +49,7 @@ incremental workarounds. When in doubt, choose the cleaner design.
 
 ```bash
 dotnet restore && dotnet build                                                     # first time
-dotnet test -p:TestProfile=pre-push                                                # lint + BS + NR frozen (~40s)
+dotnet test -p:TestProfile=pre-push                                                # offline gate (~4.5 min, no app)
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
 ```
 
@@ -58,11 +58,35 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 noise** — do not revert it. Regenerate with `dotnet restore --force-evaluate` and commit the result;
 `git add` normalises the CRLF that NuGet writes on Windows, so only genuinely-changed files remain.
 
-**Always run `pre-push` before pushing.** It covers lint, BattleScribe conformance, and NR frozen
-(offline HAR replay) in one fast command. Other profiles: `core` (offline suite, no NR engines),
-`lint`, `bs`, `nr-frozen`, `nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`,
-`nr-editor-ui-live`, `bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`,
-`nr-live-visible`. CI runs entirely through these profiles (`.github/workflows/ci.yml`).
+**Always run `pre-push` before pushing.** It is the **offline** gate: lint, the in-process
+BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor
+snapshot, and the two frozen Playwright UI drivers. No network, no desktop app.
+**Measured 2026-08-12 on a 32-core dev box: `Failed: 0, Passed: 2571, Skipped: 0, Total: 2571,
+Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
+`BattleScribeSpec.Cli.Tests` — 5m47s end to end including the build. The critical path is `BsRoster`
+(367 specs, 267s of in-process engine), not any UI lane. It was **11m29s** before #405.
+
+**What `pre-push` deliberately does NOT cover**, so you know when to run something else yourself:
+
+| Not in `pre-push` | Run it with | Covered in CI by |
+|---|---|---|
+| `BsRosterUi`, `BsGameDataUi` — launch the real BattleScribe desktop app | `-p:TestProfile=bs-ui-roster` / `bs-ui-gamedata` | `thorough-ui-bs` (sharded, opt-in) |
+| `LiveNr*` — traffic to a third party's production site | `-p:TestProfile=nr-live*`, `nr-editor-*-live` | `nr-conformance` (opt-in) |
+| `Mode=Sequential` — manual-only, gated behind `NR_SEQUENTIAL` | `NR_SEQUENTIAL=1` + the matching profile | — |
+
+That table is enforced, not aspirational:
+`ConcurrencyConfigurationDriftTests.EveryEngineLane_IsADeliberateDecisionInThePrePushProfile` fails
+if a new `Engine` trait appears that `pre-push.runsettings` neither runs nor explicitly excludes.
+Adding a lane is therefore a decision, not a default — which it was not when `BsRosterUi` arrived and
+quietly spent 688.8s of a 689.2s run driving the desktop app, in a profile advertised here at `~40s`
+(#405). Note the `~40s` had stopped being true well before that: even with no UI lane at all,
+`BsRoster` alone is over three minutes now.
+
+Other profiles: `core` (offline suite, no NR engines), `lint`, `bs`, `nr-frozen`, `nr-ui-frozen`,
+`nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`, `nr-editor-ui-live`, `bs-ui-roster`,
+`bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`, `nr-live-visible`,
+`nr-ui-live`, `nr-ui-live-visible`. CI runs entirely through these profiles
+(`.github/workflows/ci.yml`).
 
 ## NR frozen tests and HAR
 
@@ -83,15 +107,21 @@ substitutes the branch tip. Re-pinning is a deliberate edit to `testdata.json`, 
 `testdata.json` change swaps out what the frozen suites replay, any PR touching that file runs
 the full `thorough-conformance` lane.
 
-## BS GameData UI tests (local)
+## BS desktop UI tests (local)
 
-The `bs-ui-gamedata` profile drives the **BattleScribe desktop Data Editor UI** through the
-Java agent. Mutations go through the real UI; state is read via the Java model. After `setup.ps1`
-(which downloads the BattleScribe app + Liberica full JDK and builds the agent), just run:
+Two profiles drive the **real BattleScribe desktop app** through the Java agent — the Data Editor
+and the Roster Editor. Mutations go through the real UI; state is read via the Java model. After
+`setup.ps1` (which downloads the BattleScribe app + Liberica full JDK and builds the agent), run:
 
 ```bash
-dotnet test -p:TestProfile=bs-ui-gamedata
+dotnet test -p:TestProfile=bs-ui-gamedata   # Data Editor  (Engine=BsGameDataUi)
+dotnet test -p:TestProfile=bs-ui-roster     # Roster Editor (Engine=BsRosterUi) — 367 specs, ~11.5 min
 ```
+
+**Neither is in `pre-push`**, and that is deliberate: they need the app, a display, and minutes.
+CI's `thorough-ui-bs` job runs both halves sharded, but nothing runs them on your machine unless you
+do — so run them when you touch `BsUiRosterEngine`, `BsGameDataUiEngine`, or
+`src/bs-ui-java-agent/`.
 
 The JavaFX-capable JDK is auto-discovered (`BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`),
 so neither local runs nor CI need to set anything. Tests self-skip when BS artifacts are absent.

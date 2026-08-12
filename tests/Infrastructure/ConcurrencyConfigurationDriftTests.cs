@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Tests;
@@ -501,11 +502,6 @@ public sealed class ConcurrencyConfigurationDriftTests
     }
 
     /// <summary>
-    /// Every line of every workflow file, with backslash-continued shell lines joined into the single
-    /// command line they actually form — so a multi-line <c>run:</c> block is scanned as one
-    /// invocation rather than as fragments that individually look flagless.
-    /// </summary>
-    /// <summary>
     /// The CI step named "Full frozen NR UI roster" must actually run the full spec set.
     /// </summary>
     /// <remarks>
@@ -545,6 +541,196 @@ public sealed class ConcurrencyConfigurationDriftTests
         Assert.Contains("NR_UI_ROSTER_FULL", body, StringComparison.Ordinal);
     }
 
+    /// <summary>The profile AGENTS.md tells every contributor to run before pushing.</summary>
+    private const string PrePushProfile = "pre-push";
+
+    /// <summary>
+    /// <b>What <c>pre-push</c> does with every engine lane, and why.</b> One row per <c>Engine</c>
+    /// trait value in the suite; <see cref="EveryEngineLane_IsADeliberateDecisionInThePrePushProfile"/>
+    /// requires this table and the profile's own filter to say the same thing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The costs are MEASURED on this repo's 32-core dev box, 2026-08-12, from the TRX of one
+    /// <c>pre-push</c> run each side of the change. Per lane they are <b>summed test time</b>, which
+    /// is unambiguous; the lanes overlap heavily, so they add to more than the run.
+    /// </para>
+    /// <para>
+    /// <b>They refute the rule everybody reaches for first.</b> "Keep UI lanes out of a fast gate"
+    /// would also have excluded the two frozen Playwright lanes — 22.6s and 51.8s — from a run whose
+    /// critical path is <c>BsRoster</c>: an in-process engine, no UI at all, 266.8s across 367 specs
+    /// and effectively the whole 267.9s wall clock. Excluding them would have bought nothing
+    /// measurable and cost the NR Editor UI driver its only local signal. What was expensive was
+    /// never "a UI"; it was a desktop application. <c>BsRosterUi</c> spanned <b>688.8s of the 689.2s
+    /// run it was in</b> — it WAS the run.
+    /// </para>
+    /// </remarks>
+    private static readonly (string Engine, bool RunsInPrePush, string Why)[] PrePushEngineLaneDecisions =
+    [
+        // ── Runs. Offline, no app, and cheap against a 267.9s profile.
+        ("BsRoster", true, "in-process IKVM reference engine; 266.8s — the critical path, and not a UI"),
+        ("BsGameData", true, "in-process IKVM reference engine; 0.8s"),
+        ("FrozenNrRoster", true, "offline HAR replay, no network; 70.3s"),
+        ("FrozenNrGameData", true, "offline static-file serving, no network; 133.9s"),
+        ("FrozenNrUiRoster", true, "Playwright over the frozen HAR, kitchen-sink only; 22.6s"),
+        ("FrozenNrGameDataUi", true, "Playwright over the frozen NR Editor snapshot; 51.8s"),
+
+        // ── Excluded: needs the BattleScribe desktop app (setup.ps1 artifacts + Java agent + a
+        //    display). CI's `thorough-ui-bs` job runs both halves, sharded.
+        ("BsRosterUi", false, "launches the BattleScribe desktop app; 687.8s, 367 specs, sequential"),
+        ("BsGameDataUi", false, "launches the BattleScribe desktop app"),
+
+        // ── Excluded: opens sessions on somebody else's production website. A pre-push gate is run
+        //    on every push by every contributor; that is the last traffic profile these sites should
+        //    see. See EveryLiveFixture_DrawsItsSessionsFromTheThirdPartyLoadBudget.
+        ("LiveNrRoster", false, "opens sessions on newrecruit.eu"),
+        ("LiveNrUiRoster", false, "opens sessions on newrecruit.eu"),
+        ("LiveNrGameData", false, "opens sessions on the NR Editor deployment"),
+        ("LiveNrGameDataUi", false, "opens sessions on the NR Editor deployment"),
+    ];
+
+    /// <summary>
+    /// <b>An engine lane joins <c>pre-push</c> by DEFAULT, which is how the gate came to cost 2.6x
+    /// what it needed to, running a desktop application nobody chose to put there.</b> Every
+    /// <c>Engine</c> trait value in the suite must appear in
+    /// <see cref="PrePushEngineLaneDecisions"/>, and the profile's filter must agree with it — so the
+    /// next lane cannot arrive without somebody deciding, in writing, whether it belongs there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The defect.</b> <c>pre-push.runsettings</c> excluded <c>BsGameDataUi</c> and said, in its own
+    /// comment, that it ran "all tests except those requiring live NR, sequential mode, or the
+    /// BattleScribe desktop Data Editor". Then <c>BsRosterUi</c> was added (#353) — the OTHER half of
+    /// the same desktop app — and no exclusion followed it, because nothing required one to. The
+    /// filter is a deny-list, so the new lane was opted in by silence: measured
+    /// <c>Failed: 1, Passed: 2936, Skipped: 368, Total: 3305, Duration: 11 m 29 s</c> for a profile
+    /// AGENTS.md advertised at <c>~40s</c>. <c>LiveNrUiRoster</c> had drifted in the same way and was
+    /// only invisible because it self-skips without <c>NR_ENGINE_URL</c> — 368 tests that would have
+    /// opened sessions on newrecruit.eu from a pre-push hook the moment that variable was set.
+    /// </para>
+    /// <para>
+    /// <b>Why a table and not a rule.</b> "Exclude anything with Ui in the name" would have caught
+    /// <c>BsRosterUi</c> and been wrong about the two frozen Playwright lanes, which are UI drivers
+    /// too and are not the cost — see the measurements on the table. No predicate over the name
+    /// separates them; only a measurement does, and a measurement is a decision somebody made. So
+    /// the table records the decision, and this test records that one was made at all.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable, in each of the three ways this can rot</b> (all verified by mutation):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// Add a <c>[Trait("Engine", "…")]</c> lane to the suite without a row here — the arriving-lane
+    /// case, which is #405 itself — and this goes red naming the new value.
+    /// </description></item>
+    /// <item><description>
+    /// Delete <c>Engine!=BsRosterUi</c> from the filter while the row still says excluded — the exact
+    /// state <c>origin/main</c> was in — and this goes red naming the lane and the profile.
+    /// </description></item>
+    /// <item><description>
+    /// Add an <c>Engine!=</c> clause for a lane the table says runs (silently narrowing the gate, the
+    /// mirror-image mistake) and this goes red too.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// <b>This file is excluded from the scan, and the first run is why.</b> The draft was not
+    /// excluded, on the reasoning that the table is tuple syntax and the scan matches attribute
+    /// syntax — true of the table, and false of the prose, which spelled the attribute out as an
+    /// example and thereby invented a thirteenth lane. The gate went red naming it. That is the
+    /// mistake <see cref="EveryTestProject_IsRunBySomeCiStep"/> records having made once already
+    /// ("defeated by the comment three lines above the step it was guarding"), so it is now
+    /// prevented the same way the sibling gates prevent it: a file that documents what it searches
+    /// for cannot also be searched. Nothing is lost — no engine lane lives here.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Lint")]
+    public void EveryEngineLane_IsADeliberateDecisionInThePrePushProfile()
+    {
+        var declared = PrePushEngineLaneDecisions
+            .Select(d => d.Engine)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.True(
+            declared.Count == PrePushEngineLaneDecisions.Length,
+            $"{nameof(PrePushEngineLaneDecisions)} lists an engine twice — two rows can say opposite " +
+            "things and only one of them can be true.");
+
+        // This file is skipped: it spells the attribute out in prose to explain itself, and that
+        // example is not a lane. See the remarks — the first draft learned this the hard way.
+        var thisFile = $"{nameof(ConcurrencyConfigurationDriftTests)}.cs";
+
+        var discovered = Directory
+            .EnumerateFiles(Path.Combine(RepoRoot, "tests"), "*.cs", SearchOption.AllDirectories)
+            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !Path.GetFileName(p).Equals(thisFile, StringComparison.Ordinal))
+            .SelectMany(p => Regex.Matches(File.ReadAllText(p), """\[Trait\("Engine",\s*"(\w+)"\)\]"""))
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(discovered);
+
+        var undecided = discovered.Except(declared).Order(StringComparer.Ordinal).ToArray();
+        var phantom = declared.Except(discovered).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            undecided.Length == 0 && phantom.Length == 0,
+            $"{nameof(PrePushEngineLaneDecisions)} and the suite's Engine traits disagree.\n" +
+            (undecided.Length > 0
+                ? $"  Lanes with no decision recorded: {string.Join(", ", undecided)}\n"
+                : string.Empty) +
+            (phantom.Length > 0
+                ? $"  Decisions for lanes that no longer exist: {string.Join(", ", phantom)}\n"
+                : string.Empty) +
+            $"\n{PrePushProfile} is a DENY-list: a lane with no row here is a lane that joined the gate " +
+            "every contributor is told to run before every push, without anyone choosing that. It is how " +
+            "BsRosterUi came to spend 688.8s of a 689.2s run launching the BattleScribe desktop app in a " +
+            "profile documented as offline and fast. Add a row saying whether the new lane runs there, " +
+            "and put the cost that justifies the answer in it — measured, not guessed.");
+
+        var profilePath = Path.Combine(RepoRoot, "tests", "test-profiles", $"{PrePushProfile}.runsettings");
+        var filter = XDocument.Load(profilePath).Descendants("TestCaseFilter").Single().Value;
+
+        var excludedByFilter = Regex
+            .Matches(filter, """Engine!=(\w+)""")
+            .Select(m => m.Groups[1].Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var excludedByTable = PrePushEngineLaneDecisions
+            .Where(d => !d.RunsInPrePush)
+            .Select(d => d.Engine)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var runsButShouldNot = excludedByTable
+            .Except(excludedByFilter)
+            .Order(StringComparer.Ordinal)
+            .Select(e => $"  {e} — the table says it must not run in {PrePushProfile} " +
+                $"({PrePushEngineLaneDecisions.First(d => d.Engine == e).Why}), but the filter has no " +
+                $"Engine!={e} clause, so it does.")
+            .ToArray();
+
+        var excludedButShould = excludedByFilter
+            .Except(excludedByTable)
+            .Order(StringComparer.Ordinal)
+            .Select(e => $"  {e} — the filter excludes it from {PrePushProfile}, but the table does not " +
+                "say it should be excluded. Either it is not a real Engine trait value, or the gate was " +
+                "narrowed without recording why.")
+            .ToArray();
+
+        Assert.True(
+            runsButShouldNot.Length == 0 && excludedButShould.Length == 0,
+            $"{PrePushProfile}.runsettings and {nameof(PrePushEngineLaneDecisions)} disagree:\n" +
+            string.Join("\n", runsButShouldNot.Concat(excludedButShould)) + "\n\n" +
+            "The filter is the thing that actually runs; this table is the thing that explains it. When " +
+            "they differ, the profile is doing something nobody wrote down — which is the whole of #405.");
+    }
+
+    /// <summary>
+    /// Every line of every workflow file, with backslash-continued shell lines joined into the single
+    /// command line they actually form — so a multi-line <c>run:</c> block is scanned as one
+    /// invocation rather than as fragments that individually look flagless.
+    /// </summary>
     private static List<string> WorkflowCommandLines()
     {
         var workflows = Path.Combine(RepoRoot, ".github", "workflows");

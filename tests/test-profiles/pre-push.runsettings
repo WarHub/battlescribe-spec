@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Run all tests except those requiring live NR, sequential mode, or the BattleScribe
-     desktop Data Editor (BsGameDataUi — slow, needs the BS app + Java agent; run it
-     explicitly via the bs-ui-gamedata profile). -->
+<!-- The gate AGENTS.md tells every contributor to run before every push, so it runs everything that
+     is OFFLINE and CHEAP and nothing else: lint, the in-process BattleScribe engines, and the frozen
+     NR lanes (HAR replay and the local NR Editor snapshot, Playwright included — those cost seconds).
+
+     Excluded, and each exclusion is a decision recorded in
+     ConcurrencyConfigurationDriftTests.PrePushEngineLaneDecisions, which fails if this filter and that
+     table stop agreeing:
+
+       * BsRosterUi / BsGameDataUi — launch the real BattleScribe desktop app. Run them deliberately
+         (bs-ui-roster / bs-ui-gamedata profiles); CI's `thorough-ui-bs` job runs both, sharded.
+       * LiveNr* — open sessions on a third party's production website.
+       * Mode=Sequential — manual-only, gated behind NR_SEQUENTIAL.
+
+     A lane with no clause here RUNS here. That is how BsRosterUi came to spend 688.8s of a 689.2s run
+     driving a desktop app in a profile documented as offline and fast (#405); the drift test named
+     above exists so the next lane has to be a decision instead. -->
 <RunSettings>
   <RunConfiguration>
-    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=LiveNrGameDataUi&amp;Engine!=BsGameDataUi&amp;Mode!=Sequential</TestCaseFilter>
+    <TestCaseFilter>Engine!=LiveNrRoster&amp;Engine!=LiveNrUiRoster&amp;Engine!=LiveNrGameData&amp;Engine!=LiveNrGameDataUi&amp;Engine!=BsRosterUi&amp;Engine!=BsGameDataUi&amp;Mode!=Sequential</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>
