@@ -13,6 +13,10 @@ import java.io.IOException;
 public class BsUiAgent {
 
     public static void premain(String agentArgs, Instrumentation inst) {
+        // Before anything else, and in particular before the FX toolkit exists: an exception the FX
+        // thread never catches is how an action silently half-happens (see FxExceptionMonitor).
+        FxExceptionMonitor.install();
+
         int requestedPort = 0; // 0 = dynamic
         if (agentArgs != null && !agentArgs.isEmpty()) {
             try {

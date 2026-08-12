@@ -1044,18 +1044,10 @@ public class SceneGraphCommands {
         }
         Spinner<Object> spinner = (Spinner<Object>) node;
         if (value >= 0) {
-            // Try direct value factory set
-            SpinnerValueFactory<Object> factory = spinner.getValueFactory();
-            if (factory.getClass().getSimpleName().equals("IntegerSpinnerValueFactory")) {
-                try {
-                    var setValueMethod = factory.getClass().getMethod("setValue", Object.class);
-                    setValueMethod.invoke(factory, value);
-                } catch (Exception e) {
-                    factory.setValue((Object) Integer.valueOf(value));
-                }
-            } else {
-                factory.setValue((Object) Integer.valueOf(value));
-            }
+            // Boxed as the factory's own type — see Spinners. The branch this replaced named
+            // IntegerSpinnerValueFactory but put an Integer in either way, so a Double-backed
+            // spinner threw out of its text-refresh listener while reporting nothing.
+            Spinners.setValue(spinner, value);
         } else if (steps != 0) {
             spinner.getValueFactory().increment(steps);
         }
