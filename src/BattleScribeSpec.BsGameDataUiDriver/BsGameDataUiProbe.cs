@@ -34,6 +34,7 @@ namespace BattleScribeSpec.BsGameDataUiDriver;
 public sealed class BsGameDataUiProbe : IAsyncDisposable
 {
     private readonly BsRosterApp _app;
+    private readonly BsUiDataStaging _dataStaging = new();
     private AgentClient? _client;
 
     public AgentClient Client => _client ?? throw new InvalidOperationException("Not connected.");
@@ -65,7 +66,7 @@ public sealed class BsGameDataUiProbe : IAsyncDisposable
             var files = new List<(string FileName, string Content)> { ("system.gst", gstXml) };
             files.AddRange(catXmls.Select(c => (c.FileName, c.Xml)));
 
-            await BsUiDataStaging.StageDataFilesAsync(
+            await _dataStaging.StageDataFilesAsync(
                 _app.DataDirectoryPath, gameSystem.Id, files);
 
             foreach (var (fileName, _) in files)

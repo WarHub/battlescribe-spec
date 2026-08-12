@@ -104,6 +104,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// </summary>
     private readonly Dictionary<string, int> _labelOccurrenceById = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Per engine, not per <see cref="BsRosterApp"/>: a cold start under an explicit
+    /// <see cref="BsUiOptions.IsolatedHomePath"/> gets a new app on the same data directory.
+    /// </summary>
+    private readonly BsUiDataStaging _dataStaging = new();
+
     private BsRosterApp? _app;
     private AgentClient? _client;
     private ProtocolGameSystem? _gameSystem;
@@ -410,7 +416,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 // Restage data files for the new run.
                 // NOTE: The app's loaded game data is from the previous startup.
                 // Warm start is only reliable for re-running the same game system.
-                await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+                await _dataStaging.StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
 
                 return;
             }
@@ -431,7 +437,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             _options.AgentJarPath,
             _options.IsolatedHomePath);
 
-        await StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+        await _dataStaging.StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
 
         await _app.StartAsync();
         _client = await _app.ConnectAsync();
@@ -799,12 +805,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// </summary>
     private int? ResolveNewRosterCostLimit()
         => BsUiCostLimits.ForNewRoster(_pendingCostLimits, _gameSystem?.CostTypes);
-
-    private static Task StageDataFilesAsync(
-        string dataDirectoryPath,
-        string gameSystemId,
-        IReadOnlyList<(string FileName, string Content)> files)
-        => BsUiDataStaging.StageDataFilesAsync(dataDirectoryPath, gameSystemId, files);
 
     /// <summary>
     /// Builds the entry-name and group-id indexes by reading the staged XML, for the file-based

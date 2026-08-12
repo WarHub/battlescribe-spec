@@ -80,13 +80,47 @@ This prevents interference with the user's real BattleScribe installation.
 `BsUiDataStaging` handles writing game system and catalogue XML files into the isolated
 BS data directory before launch:
 
-1. Creates a subdirectory named by the game system ID under `data/`.
-2. Writes all `.gst` and `.cat` files.
-3. Generates an `index.bsi` file — a BattleScribe data index XML that lists all data files
+1. Removes the game system directory **this stager** put under `data/` for the previous spec.
+2. Creates a subdirectory named by the game system ID under `data/`.
+3. Writes all `.gst` and `.cat` files.
+4. Generates an `index.bsi` file — a BattleScribe data index XML that lists all data files
    with their IDs, names, and types.
 
 The XML files are generated from Protocol types via `CatXmlGenerator` (from the
 `BattleScribeSpec.NewRecruit` project which shares the XML generation logic).
+
+### One game system at a time
+
+Step 1 is why `BsUiDataStaging` is an object held for the life of an engine rather than a static
+method. Staging used to clear only the folder it was about to write, so under `ReuseSafeRoster` the
+data directory ended up holding one game system per spec run since the last cold start — each named
+after its spec id, because `SpecLoader.ApplySetupDefaults` defaults both id and name to it. That is
+what gave `#cboGameSystem` more than one candidate for a lookup to get wrong, and a first-hit
+substring match then built `scope-roster`'s roster from `condition-scope-roster`'s data. Selection is
+id-exact now and has a postcondition, so retiring the old directory is not what stands between the
+lane and that defect — it removes the ambiguity rather than detecting it, and it stops the directory
+every `Setup` rewrites from growing across a 367-spec run.
+
+Two properties are load-bearing and both have tests in `tests/Features/BsUiDataStagingTests.cs`:
+
+- **Only the previous one, never every sibling.** Each stager deletes the one directory it wrote
+  last and leaves the rest alone. `BsUiOptions.IsolatedHomePath` is unset by `HostEngineFactory`
+  today, so every app gets its own temp home — but the field is supported, and a "delete everything
+  that isn't mine" sweep would have one engine destroying another's staged data the first time two
+  of them shared a home, surfacing as an unrelated spec failing.
+- **Best-effort.** BattleScribe keeps handles open on data files it has loaded, and Windows refuses
+  to delete a directory holding one, so retirement logs `[bs-ui] Could not remove the previously
+  staged game system …` and continues. The current spec's staging is the part that has to succeed.
+
+The removal takes effect inside a running JVM, not only at the next cold start. `javap` on
+`RosterEditor.jar` traces the combo to a fresh read of `data/`: `actNewRoster` loads
+`EditRosterWindowController` from FXML into a new `Stage` every time, and that controller fills
+`#cboGameSystem` from a background task — the one whose progress dialog says `Getting game
+systems...` — which walks the data directory with `File.listFiles` looking for `.gst`/`.gstz`. The
+only cache on that path is per **file**, keyed by path and revalidated against the file's
+`lastModified()`, so an entry for a file that no longer exists is never looked up again. (The
+obfuscated names are pinned by the `rosterForceManager.availableGameSystems` null-check literal and
+the `Getting game systems...` dialog string.)
 
 ## Warm Start (KeepAlive)
 
@@ -94,9 +128,14 @@ When `KeepAlive = true`, the adapter preserves the running BattleScribe process 
 spec runs. On subsequent `Setup()` calls:
 
 1. Pings the existing agent to verify it's responsive.
-2. Closes any open roster (dismisses unsaved changes).
-3. Re-stages data files for the new spec.
-4. Skips JVM startup entirely.
+2. Re-stages data files for the new spec, which is also where the previous spec's game system is
+   removed — the data directory outlives every `Setup` on this path, so this is where it accumulated.
+3. Skips JVM startup entirely.
+
+Any open roster is closed on the Java side, by
+`RosterActions.waitForNewRosterWindowDismissingContinuePrompt` answering BattleScribe's "Continue?
+Roster has not been saved" prompt with NO — not by the C# warm-start path, which has no roster-close
+step.
 
 If the ping fails, falls back to a cold start (kills the old process, launches fresh).
 This is useful for iterative debugging where JVM startup time (~5-10s) is significant.
@@ -886,7 +925,7 @@ a flake.
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. A warm-reused app still offers every earlier spec's game system in `#cboGameSystem`, and their ids nest, so `gameSystemName` is diagnostics only — it reaches the failure message and nothing else. **Postcondition:** the finished roster's own `gameSystemId` must equal the one asked for, or the action throws (see below) |
+| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. Staging retires only the game system the same engine staged before it, so `#cboGameSystem` can still offer data from outside this spec, and spec ids nest — `gameSystemName` is therefore diagnostics only, reaching the failure message and nothing else. **Postcondition:** the finished roster's own `gameSystemId` must equal the one asked for, or the action throws (see below) |
 | `addForceAction` | `forceEntryId`, `catalogueId` | Adds a force via Edit Roster dialog |
 | `addChildForceAction` | `parentForceId`, `forceEntryId`, `catalogueId` | Adds a sub-force under an existing force |
 | `removeForceAction` | `forceId` | Removes a force via Edit Roster → X button → confirm |
