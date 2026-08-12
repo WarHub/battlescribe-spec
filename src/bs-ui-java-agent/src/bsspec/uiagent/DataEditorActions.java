@@ -80,10 +80,18 @@ public class DataEditorActions {
      * "Confirm" prompt, answers any modal it provokes internally — this is a defense-in-depth
      * check that every gamedata action, not just loads, returns the app to a stable, dialog-free
      * state.
+     *
+     * <p>And that nothing threw on the FX thread while it ran (see {@link FxExceptionMonitor}) —
+     * the same contract {@code RosterActions.dispatch} enforces, for the same reason: JavaFX
+     * abandons the dispatch that throws without telling the caller, so an action can report success
+     * over a step that did not happen. This editor drives spinners too ({@link #setCost},
+     * {@code spnValue}, {@code spnRevision}), which is exactly where that went unnoticed.
      */
     public String dispatch(String method, String params) {
+        FxExceptionMonitor.beginAction();
         String result = dispatchAction(method, params);
         DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+        FxExceptionMonitor.assertNone(method);
         return result;
     }
 
@@ -1244,20 +1252,11 @@ public class DataEditorActions {
      * {@code ChangeListener<Double>} (cost spinners, modifier/constraint/condition value spinners).
      * The editor-text + commit path is avoided — the value-factory path fires the listener directly.
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
     private void setSpinnerValue(javafx.scene.control.Spinner<?> sp, String value) {
-        javafx.scene.control.SpinnerValueFactory vf = sp.getValueFactory();
-        if (vf == null) {
-            throw new RuntimeException("Spinner has no value factory");
-        }
-        double d = parseDouble(value);
-        // Integer spinners (e.g. spnRevision) reject a Double; match the factory's value type.
-        Object current = vf.getValue();
-        if (current instanceof Integer) {
-            vf.setValue((int) Math.round(d));
-        } else {
-            vf.setValue(d);
-        }
+        // Integer spinners (e.g. spnRevision) reject a Double and Double ones reject an Integer, so
+        // the factory's own type decides — see Spinners, which is where that rule now lives for the
+        // roster actions too, after the reverse mismatch there went unnoticed for want of it.
+        Spinners.setValue(sp, parseDouble(value));
     }
 
     /**

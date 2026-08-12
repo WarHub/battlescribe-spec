@@ -74,16 +74,25 @@ public class RosterActions {
     }
 
     /**
-     * Dispatches a high-level action method by name, then enforces the post-condition that no
-     * unexpected modal dialog is left open (see {@link DialogInspector#assertNoUnexpectedModals}).
-     * Every action here is expected to leave the app back in a stable, dialog-free state; if one
-     * is still up (e.g. an "Error" dialog the action's own flow didn't anticipate), that's a bug
-     * surfaced as a clear failure here rather than silently returning a result while a dialog sits
-     * on screen.
+     * Dispatches a high-level action method by name, then enforces two post-conditions.
+     *
+     * <p>First, that no unexpected modal dialog is left open (see
+     * {@link DialogInspector#assertNoUnexpectedModals}). Every action here is expected to leave the
+     * app back in a stable, dialog-free state; if one is still up (e.g. an "Error" dialog the
+     * action's own flow didn't anticipate), that's a bug surfaced as a clear failure here rather
+     * than silently returning a result while a dialog sits on screen.
+     *
+     * <p>Second, that nothing threw on the FX thread while this action ran (see
+     * {@link FxExceptionMonitor}). Same reasoning one layer down: JavaFX abandons the dispatch that
+     * throws and tells nobody, so an action can return a clean result over a step that did not
+     * happen. Dialogs are checked first — an unexpected one carries a screenshot and the app's own
+     * message, which is the better lead when both fire.
      */
     public String dispatch(String method, String params) {
+        FxExceptionMonitor.beginAction();
         String result = dispatchAction(method, params);
         DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+        FxExceptionMonitor.assertNone(method);
         return result;
     }
 
@@ -1870,6 +1879,14 @@ public class RosterActions {
             // "Error" dialog the triggering action's flow didn't anticipate) instead of spinning
             // out this loop's own timeout.
             DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            // And no uncaught FX exception, for the same reason and with more force: the change
+            // this loop is waiting for is applied BY an FX event dispatch, and an exception abandons
+            // the one it happens in. That is this timeout's most likely cause and the one it is
+            // least able to describe — the state simply never arrives, so the message reports the
+            // absence ("no selection for entryId 'se-beta'") and the action that dropped it goes
+            // unnamed. The action's own post-condition would catch it ten seconds later anyway;
+            // this says it now, and says what it was.
+            FxExceptionMonitor.assertNone("waiting for roster state change");
             sleep(POLL_INTERVAL_MS);
         }
 
@@ -2674,16 +2691,20 @@ public class RosterActions {
     /**
      * Sets the first Spinner found in a window to the given value.
      * Must be called from the FX thread.
+     *
+     * <p>Through {@link Spinners}, because this one is the New Roster dialog's cost limit and its
+     * value factory is a {@code DoubleSpinnerValueFactory}. Setting the {@code int} straight into it
+     * threw a ClassCastException twice over per call — see {@link Spinners} for which two listeners
+     * and what each of them stopped doing — and the lane carried exactly twenty of them per run
+     * while every spec still passed.
      */
-    @SuppressWarnings("unchecked")
     private void setSpinnerInWindow(String windowTitle, int value) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
 
         for (Node node : scene.getRoot().lookupAll("Spinner")) {
             if (node instanceof Spinner) {
-                Spinner<Integer> spinner = (Spinner<Integer>) node;
-                spinner.getValueFactory().setValue(value);
+                Spinners.setValue((Spinner<?>) node, value);
                 return;
             }
         }
