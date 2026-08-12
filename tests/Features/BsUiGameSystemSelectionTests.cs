@@ -1,17 +1,23 @@
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.EngineHost;
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.XmlGen;
 
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// The New Roster dialog must build the roster on the game system the spec asked for, and not on one
-/// whose id merely CONTAINS it.
+/// whose name merely CONTAINS it.
 /// </summary>
 /// <remarks>
-/// Builds its own engine rather than taking the collection's <see cref="BsRosterUiFixture"/>: the
-/// decoy game system stays in the app's data directory for the life of that JVM, so staging it into
-/// the shared instance would hand every later conformance spec an extra system to match against.
+/// The decoy is staged by hand, through a stager this test owns. An engine retires the game system
+/// it staged last, so arranging the decoy through a first <c>Setup</c> on the engine would have the
+/// second <c>Setup</c> delete it again, leaving a combo with one entry and a test that proves
+/// nothing.
+/// <para>
+/// Its own home, never the collection's <see cref="BsRosterUiFixture"/>: nothing retires the decoy,
+/// so a shared home would hand every later conformance spec an extra system to match against.
+/// </para>
 /// <para>
 /// <c>Engine=BsRosterUi</c> is what keeps this out of <c>pre-push</c>, which does not launch the
 /// desktop app. <c>Shard</c> has to be set by hand: CI's <c>thorough-ui-bs</c> matrix filters
@@ -25,7 +31,11 @@ public sealed class BsUiGameSystemSelectionTests
 {
     private const string TargetGameSystemId = "collide-target";
 
-    /// <summary>Staged first, so it is in the combo when the target's roster is created.</summary>
+    /// <summary>
+    /// Staged first, so it is in the combo when the target's roster is created. Its id contains the
+    /// target's and sorts ahead of it — the two conditions a first-hit substring match needs to pick
+    /// the wrong one.
+    /// </summary>
     private const string DecoyGameSystemId = "aa-collide-target";
 
     private const string CatalogueId = "cat-1";
@@ -33,7 +43,7 @@ public sealed class BsUiGameSystemSelectionTests
     private const string ForceEntryId = "fe-patrol";
 
     [Fact]
-    public void CreateRoster_ChoosesTheGameSystemById_NotOneWhoseNameContainsIt()
+    public async Task CreateRoster_ChoosesTheGameSystemById_NotOneWhoseNameContainsIt()
     {
         Assert.Contains(TargetGameSystemId, DecoyGameSystemId, StringComparison.Ordinal);
         Assert.True(
@@ -58,22 +68,65 @@ public sealed class BsUiGameSystemSelectionTests
             return;
         }
 
-        // KeepAlive is the condition under test, not a speed-up: a cold start per Setup would drop
-        // the decoy from the data directory, leaving nothing for the combo to confuse.
-        using var engine = new BsUiRosterEngine(options) { KeepAlive = true };
+        var home = Path.Combine(Path.GetTempPath(), $"bsspec-bs-ui-collide-{Guid.NewGuid():N}");
+        try
+        {
+            // A stager of this test's own: the engine retires what IT staged last, so a decoy it
+            // never staged is one it will never take away.
+            await new BsUiDataStaging().StageDataFilesAsync(
+                Path.Combine(home, "BattleScribe", "data"),
+                DecoyGameSystemId,
+                DecoyFiles());
 
-        Assert.Empty(engine.Setup(GameSystem(DecoyGameSystemId), [Catalogue(DecoyGameSystemId)]));
-        engine.AddForce(ForceEntryId, CatalogueId);
+            using var engine = new BsUiRosterEngine(options with { IsolatedHomePath = home });
 
-        Assert.Empty(engine.Setup(GameSystem(TargetGameSystemId), [Catalogue(TargetGameSystemId)]));
-        engine.AddForce(ForceEntryId, CatalogueId);
+            Assert.Empty(engine.Setup(GameSystem(TargetGameSystemId), [Catalogue(TargetGameSystemId)]));
+            engine.AddForce(ForceEntryId, CatalogueId);
 
-        var state = engine.GetRosterState();
+            var state = engine.GetRosterState();
 
-        // Not redundant: a failed read falls back to an empty state carrying the driver's own
-        // game system id, which would satisfy the assertion below without the app agreeing.
-        Assert.NotEmpty(state.Forces);
-        Assert.Equal(TargetGameSystemId, state.GameSystemId);
+            // Not redundant: a failed read falls back to an empty state carrying the driver's own
+            // game system id, which would satisfy the assertion below without the app agreeing.
+            Assert.NotEmpty(state.Forces);
+            Assert.Equal(TargetGameSystemId, state.GameSystemId);
+        }
+        finally
+        {
+            // The app deletes an isolated home only when it made one, and this one was handed in.
+            if (Directory.Exists(home))
+            {
+                try
+                {
+                    Directory.Delete(home, recursive: true);
+                }
+                catch (Exception)
+                {
+                    // A JVM still shutting down holds its data files open and Windows refuses the
+                    // delete. Not worth failing a passing test over a leaked temp directory.
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Built the way the engine builds a spec's, so BattleScribe indexes the decoy — an unindexed
+    /// one never reaches the combo and the test passes for the wrong reason.
+    /// </summary>
+    private static IReadOnlyList<(string FileName, string Content)> DecoyFiles()
+    {
+        var gameSystem = GameSystem(DecoyGameSystemId);
+        var files = new List<(string FileName, string Content)>
+        {
+            ($"{DecoyGameSystemId}.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)),
+        };
+
+        foreach (var (fileName, xml) in CatXmlGenerator.GenerateAllCatalogueXml(
+            gameSystem, [Catalogue(DecoyGameSystemId)]))
+        {
+            files.Add((fileName, xml));
+        }
+
+        return files;
     }
 
     /// <summary>

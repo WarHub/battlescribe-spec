@@ -57,6 +57,9 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
     private readonly BsUiOptions _options;
 
+    /// <summary>Held for the engine's life; one made per Setup would have nothing to retire.</summary>
+    private readonly BsUiDataStaging _dataStaging = new();
+
     private BsRosterApp? _app;
     private AgentClient? _client;
     private string? _specId;
@@ -285,7 +288,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                     await _client.ProbeFxThreadAsync(FxProbeTimeout);
                     Console.Error.WriteLine("[bs-gamedata-ui] Warm start: reusing existing BattleScribe instance.");
                     var warmFiles = BuildXmlFiles(gameSystem, catalogues);
-                    await BsUiDataStaging.StageDataFilesAsync(
+                    await _dataStaging.StageDataFilesAsync(
                         _app.DataDirectoryPath, gameSystem.Id, warmFiles);
                     await LoadStagedFilesAsync(gameSystem, warmFiles);
                     Console.Error.WriteLine("[bs-gamedata-ui] Warm start: loaded new game data into existing instance.");
@@ -311,7 +314,7 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                 _options.IsolatedHomePath);
 
             var files = BuildXmlFiles(gameSystem, catalogues);
-            await BsUiDataStaging.StageDataFilesAsync(
+            await _dataStaging.StageDataFilesAsync(
                 _app.DataDirectoryPath, gameSystem.Id, files);
 
             await _app.StartAsync();
