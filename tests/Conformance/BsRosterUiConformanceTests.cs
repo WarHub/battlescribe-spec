@@ -21,7 +21,7 @@ namespace BattleScribeSpec.Tests;
 /// <para>
 /// The cost of that gap was concrete. <c>createRosterAction</c> chose a catalogue, slept 300ms, and
 /// chose a force entry — but choosing a catalogue repopulates the force-entry combo asynchronously,
-/// and <c>selectComboBoxItemById</c> falls back to <c>toString().contains(id)</c>. Losing that race
+/// and <c>selectComboBoxItemById</c> fell back to <c>toString().contains(id)</c>. Losing that race
 /// meant selecting from the PREVIOUS catalogue's list, which the spec corpus makes plausible by
 /// reusing ids such as <c>fe-1</c> across catalogues: a wrong roster, reported as success. Nothing
 /// ran that could have caught it.
