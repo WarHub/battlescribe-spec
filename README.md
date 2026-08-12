@@ -1,7 +1,7 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 482 spec files — 369 roster specs
+Any engine, in any language, can validate its behavior against 486 spec files — 373 roster specs
 and 113 GameData specs — covering the complete BattleScribe data model and editing operations.
 
 ## Quick Start
@@ -105,7 +105,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 482 declarative spec files (369 roster + 113 GameData) covering all BattleScribe operations |
+| **YAML Specs** | 486 declarative spec files (373 roster + 113 GameData) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -119,7 +119,7 @@ drive a roster engine — add forces, select entries, assert the resulting roste
 specs (`specs/gamedata/`) drive a catalogue editor — create and edit `.cat`/`.gst` data, assert the
 resulting model or the exact serialized file.
 
-### Roster specs — 369 across 23 categories
+### Roster specs — 373 across 23 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
@@ -127,7 +127,7 @@ resulting model or the exact serialized file.
 | catalogue | 5 | Catalogue-level category/force entries, cost types, profile types, root rules |
 | category | 3 | Category links with modifiers, hidden category entries, uncategorised fallback |
 | condition | 37 | All condition types, groups, scopes, instanceOf, null-childId |
-| constraint | 41 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
+| constraint | 45 | Min/max validation, shared, percent, hidden, cost limits, linked errors |
 | cost | 27 | Calculation, aggregation, limits, multi-type, negative, hidden, fractional |
 | customization | 3 | `customName`/`customNotes` on a force, a selection, and a category |
 | deep-nesting | 6 | Cross-catalogue links, chained entry links, nested constraints |
@@ -178,7 +178,7 @@ resulting model or the exact serialized file.
 
 ```
 battlescribe-spec/
-├── specs/                          # 482 YAML spec files (369 roster + 113 gamedata)
+├── specs/                          # 486 YAML spec files (373 roster + 113 gamedata)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

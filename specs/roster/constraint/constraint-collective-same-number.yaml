@@ -1,0 +1,78 @@
+id: constraint-collective-same-number
+category: constraint
+description: >
+  BattleScribe's collective bookkeeping error: with two Squad selections of one
+  entry and a collective Weapon child added to only one of them, the app
+  reports that all Squads must have the same number of Weapon selections. The
+  error is engine-raised with no authored constraint behind it — the spec pins
+  which element carries it and how it is identified.
+tags:
+  - validation-errors
+  - structured-errors
+  - engine-limitation
+
+engines:
+  # BattleScribe raises exactly this error — measured 2026-08-13: one error,
+  # "All Squads must have the same number of selections from Weapon", hanging on a Squad
+  # selection — but neither lane can currently say WHAT raised it: the message names no
+  # constraint (there is none) and quotes no value, so the value tiebreak and the kind-match
+  # both come up empty and the error is reported with no `from` at all. The identity exists in
+  # the engine: net.battlescribe.engine.a.f builds `<ownerId>::se-weapon::collective` for this
+  # error and discards it before construction, the same discard measured for constraint errors
+  # (see issue #401). `fail` rather than `skip` so the spec still RUNS: the day error identity
+  # is read from the engine instead of the text, this is reported as an unexpected pass.
+  battlescribe: fail
+
+setup:
+  gameSystem:
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              collective: true
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad-1
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectEntry
+    id: select-squad-2
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad-1.selectionId }}
+    entryId: se-weapon
+
+  # The uneven Weapon selection is the violation's source and, canonically, the
+  # error's owner; `collective` is a reserved pseudo-constraint like `hidden` —
+  # the engine raises this bookkeeping error with no authored constraint behind
+  # it. NewRecruit has no equivalent bookkeeping: it raises nothing here,
+  # measured 2026-08-13 — declared as an empty error set rather than left to
+  # look like a missed assertion.
+  - expectedState:
+      errors:
+        - on: selection se-weapon
+          from: se-weapon/collective
+      forces:
+        - selectionCount: 2
+      engines:
+        newrecruit:
+          errors: []

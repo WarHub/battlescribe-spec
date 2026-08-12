@@ -1,0 +1,99 @@
+id: constraint-error-owner-link-reached
+category: constraint
+description: >
+  Which element owns a validation error raised inside a selection reached
+  through an entry link. Gear's min=2 makes BattleScribe auto-add two, its
+  max=1 then fires permanently — a violation raised by the Gear selection
+  inside the link-reached Elite Guard. The canonical owner is the selection
+  that violated (se-gear); today each engine answers with a different element
+  or a different spelling of it, and this spec pins all three. See issue #400.
+tags:
+  - validation-errors
+  - structured-errors
+
+setup:
+  gameSystem:
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      sharedSelectionEntries:
+        - id: sse-unit
+          name: Elite Guard
+          type: unit
+          categoryLinks:
+            - id: cl-sse-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          selectionEntries:
+            # min=2 forces auto-add to two; max=1 then fires. The deliberate
+            # contradiction makes the violation permanent without further steps.
+            - id: se-gear
+              name: Gear
+              type: upgrade
+              constraints:
+                - id: con-gear-min
+                  type: min
+                  value: 2
+                  field: selections
+                  scope: parent
+                - id: con-gear-max
+                  type: max
+                  value: 1
+                  field: selections
+                  scope: parent
+      entryLinks:
+        - id: link-unit
+          name: Elite Guard
+          targetId: sse-unit
+          type: selectionEntry
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-unit
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: link-unit
+
+  # Canonical: the violating selection owns the error — NewRecruit reports it
+  # structurally. Measured 2026-08-13, in-process CLI: `selection se-gear <-
+  # se-gear/con-gear-max`.
+  # BattleScribe hangs the error on the PARENT Elite Guard selection instead
+  # (the constraint's scope element), and its two lanes spell that element
+  # differently:
+  #  - in-process reports the element's raw composite entryId
+  #    `link-unit::sse-unit` (the route through the link, per
+  #    docs/entry-id-construction.md);
+  #  - battlescribe-ui reduces the composite to its target `sse-unit`
+  #    (EngineAccessor.linkTargetOf keeps the last `::` segment).
+  # Three engines, three owners for one error — that disagreement is the
+  # finding, and it is declared per engine rather than papered over. The
+  # violating entry and constraint are not in dispute: every lane answers
+  # `from: se-gear/con-gear-max`.
+  - expectedState:
+      errors:
+        - on: selection se-gear
+          from: se-gear/con-gear-max
+      forces:
+        - selectionCount: 1
+      engines:
+        battlescribe:
+          errors:
+            - on: selection link-unit::sse-unit
+              from: se-gear/con-gear-max
+        battlescribe-ui:
+          errors:
+            - on: selection sse-unit
+              from: se-gear/con-gear-max
