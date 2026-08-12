@@ -849,11 +849,44 @@ All action methods:
   wrong while every step reports success. A missing id fails the action and lists what the combo was
   offering as `name (id)`
 
+##### `createRosterAction`: the roster must be on the game system that was asked for
+
+Exact-id selection is a fix to a *mechanism*, and the wrong game system is only ever detected by the
+mechanism that produced it. So `createRosterAction` also ends by reading the created roster's own
+`gameSystemId` back out of `getRosterState()` and comparing it to the `gameSystemId` parameter — the
+state is already being read there for the force outputs, so this costs no extra RPC.
+
+This catches the case no `expectedState` assertion can. `profile-publication` and
+`infolink-profile-publication` are observationally identical specs — same `fe-1`, `cat-1` and `se-1`
+"Marine", same expected `Marine Stats`/`pub-1`/M=6, one reaching the profile directly and the other
+through an infoLink. The first id is a substring of the second and the second sorts earlier, so under
+the substring match `profile-publication` built its roster from the infoLink spec's data and **passed**
+— green on a route it never exercised. Every value it asserted was correct; only the identity of the
+data was wrong.
+
+The failure names what was asked for, what was built, and what `#cboGameSystem` was offering, all as
+`name (id)`:
+
+```
+rosterCreateRosterAction: asked for game system profile-publication (profile-publication) but the
+roster was built on infolink-profile-publication (infolink-profile-publication). #cboGameSystem was
+offering: [infolink-profile-publication (infolink-profile-publication), profile-publication
+(profile-publication)]. Retrying will report the same thing — this is the roster the app built, not
+a timing failure.
+```
+
+The offered list is captured while the New Roster dialog is still open (in the same FX dispatch that
+does the selection); by the time the postcondition runs, `#btnDone` has closed that window and there
+is no combo left to ask. The closing sentence is there because `BsUiRosterEngine.RunWithRetryAsync`
+treats any `AgentException` as transient and will run the whole action again — a deterministic
+postcondition cannot benefit from that, and the message says so rather than letting the retry read as
+a flake.
+
 #### Available Actions
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. A warm-reused app still offers every earlier spec's game system in `#cboGameSystem`, and their ids nest, so `gameSystemName` is diagnostics only — it reaches the failure message and nothing else |
+| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. A warm-reused app still offers every earlier spec's game system in `#cboGameSystem`, and their ids nest, so `gameSystemName` is diagnostics only — it reaches the failure message and nothing else. **Postcondition:** the finished roster's own `gameSystemId` must equal the one asked for, or the action throws (see below) |
 | `addForceAction` | `forceEntryId`, `catalogueId` | Adds a force via Edit Roster dialog |
 | `addChildForceAction` | `parentForceId`, `forceEntryId`, `catalogueId` | Adds a sub-force under an existing force |
 | `removeForceAction` | `forceId` | Removes a force via Edit Roster → X button → confirm |

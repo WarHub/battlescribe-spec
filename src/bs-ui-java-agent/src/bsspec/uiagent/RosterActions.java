@@ -256,6 +256,9 @@ public class RosterActions {
      * Creates a new roster (first force). Opens the New Roster dialog,
      * selects game system, optionally sets cost limit, adds a force, and closes.
      *
+     * <p>Returns only after the created roster has been asked which game system it is on, and has
+     * answered {@code gameSystemId} — see the postcondition at the end of this method.
+     *
      * @param params JSON: {forceEntryId, catalogueId, gameSystemId, gameSystemName,
      *               costLimit (optional int)} — the system is chosen by {@code gameSystemId};
      *               {@code gameSystemName} only reaches failure messages.
@@ -274,8 +277,14 @@ public class RosterActions {
         waitForNewRosterWindowDismissingContinuePrompt();
 
         // By id, exactly: this combo can hold near-identical ids staged by other specs.
-        runOnFx(() -> {
+        //
+        // The offered list is read here rather than where the postcondition uses it, because
+        // #btnDone has closed this window by then. Inside the selection's own dispatch it costs no
+        // extra FX round trip.
+        String offeredGameSystems = runOnFxGet(() -> {
+            String offered = describeComboBoxItems("#cboGameSystem", NEW_ROSTER_WINDOW);
             selectComboBoxItemById("#cboGameSystem", gameSystemId, gameSystemName, NEW_ROSTER_WINDOW);
+            return offered;
         });
         // No sleep: the game system's effect on this dialog is that #btnAddForce becomes usable,
         // and the Add Force window wait below is the condition that proves it.
@@ -320,6 +329,26 @@ public class RosterActions {
             waitForWindowClose(EDIT_ROSTER_WINDOW);
         }
         JsonObject after = readRosterState();
+
+        // Ask the finished roster which game system it is on rather than trusting that every step
+        // reported success: they can all succeed on the WRONG system, because the combos match by id
+        // and the corpus shares `cat-1`, `fe-1` and `se-1` across specs. Nor is a later assertion
+        // enough — `profile-publication` and `infolink-profile-publication` are observationally
+        // identical, so one ran green on the other's data. Only identity catches that.
+        //
+        // About the roster and not the dialog, so it survives a rewritten dialog flow, a change to
+        // staging, or a second engine reaching this action.
+        String actualGameSystemId = getStringField(after, "gameSystemId");
+        if (!gameSystemId.equals(actualGameSystemId)) {
+            throw new RuntimeException(
+                    "rosterCreateRosterAction: asked for game system "
+                            + describeNameAndId(gameSystemName, gameSystemId)
+                            + " but the roster was built on "
+                            + describeNameAndId(getStringField(after, "gameSystemName"), actualGameSystemId)
+                            + ". #cboGameSystem was offering: " + offeredGameSystems
+                            + ". Retrying will report the same thing — this is the roster the app"
+                            + " built, not a timing failure.");
+        }
 
         // The first force is the only force
         JsonArray forces = after.has("forces") ? after.getAsJsonArray("forces") : new JsonArray();
@@ -2472,8 +2501,18 @@ public class RosterActions {
             // Not every combo holds named objects; toString() is then the text that was on screen.
             name = item.toString();
         }
-        String id = getObjectId(item);
-        return name + " (" + (id == null ? "no id" : id) + ")";
+        return describeNameAndId(name, getObjectId(item));
+    }
+
+    /**
+     * A named, identified thing as {@code name (id)}.
+     *
+     * <p>Shared with {@link #describeComboBoxItem} so the postcondition's "built on X" and its list
+     * of what the combo offered render alike — they are read against each other. An absent half is
+     * spelled out rather than printed as {@code null}, which would look like a formatting slip.
+     */
+    private static String describeNameAndId(String name, String id) {
+        return (name == null ? "(no name)" : name) + " (" + (id == null ? "no id" : id) + ")";
     }
 
     /**
