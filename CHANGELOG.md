@@ -128,6 +128,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **An NR UI action timeout was anonymous, and its diagnostics never left the runner** — the two
+  facts compound, and the NR snapshot bump to `v35.27` is what showed it. `thorough-conformance`
+  failed one spec of 363 (`constraint/constraint-forces-field-on-forceentry`, run 31568343878) and
+  the complete record of it was:
+  `Step 4: TimeoutException: Timeout 20000ms exceeded.` — not which of that step's half-dozen waits,
+  not what page it was on, not whether the roster held the two forces it should have by then. On a
+  HAR bump the question is precisely *did NR change under us*, and that message cannot separate a
+  changed UI from a lost page: a driver fix from a re-run. Three parts:
+  - **The dumps were written to the wrong directory.** `NrUiDiagnostics`/`NrGameDataUiDiagnostics`
+    default to `artifacts/<name>` *relative to the working directory*, which is right for `bs-spec`
+    and wrong under `dotnet test`: VSTest sets the test host's working directory to the test
+    assembly's output folder, so every screenshot, DOM snapshot, Pinia dump and console log landed in
+    `artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/`. The same trap, with the same cause and
+    the same fix, is already written down in `BsRosterUiFixture` and `TelemetryAssemblyFixture`;
+    `UiArtifactPathsAssemblyFixture` now anchors both NR directories at the repo root, leaving an
+    explicit `NR_*_DIAGNOSTICS_DIR` alone. An assembly fixture and not the four NR UI fixtures that
+    need it, because the override is an environment variable: writing one at collection init is a
+    process-wide write landing mid-run, and `DiagnosticsIsolationTests` is a test that clears those
+    exact variables and then reads them — an intermittent introduced by the fix for an intermittent.
+  - **And then not uploaded.** `thorough-conformance` is the only job that runs either NR UI driver
+    over its full spec set and it uploaded telemetry alone, while `thorough-ui-bs` next door
+    uploads its BS equivalents — two jobs writing dumps, one collecting them. It now uploads both NR
+    directories on failure, and `ConcurrencyConfigurationDriftTests.EveryUiLane_UploadsTheDiagnosticsItWrites`
+    holds every UI lane to it.
+  - **The message now carries the observation.** `WithDiagnosticsAsync` describes a bare Playwright
+    timeout the way `NrUiSetup.WaitForSetupConditionAsync` already describes setup's — the action,
+    the page URL, what the editor held instead (`forces=`, `forcesPanel=`, `forceRows=`,
+    `unitRows=`, `popups=`) and the path of the saved report — asserting no cause, only what it read.
+    A timeout that is already described passes through untouched, so a setup wait failing inside an
+    action keeps its own, more specific observation rather than being buried under a second one.
+- **A flake in one `thorough-conformance` lane skipped the two lanes after it** — the job's steps ran
+  on the default `success()`, so the intermittent NR-UI roster failure above also skipped *Full
+  frozen NR Editor GameData* and its UI counterpart. Those replay the NR Editor pin, not the HAR, so
+  a red NR-UI roster lane says nothing about them — yet the v35.27 bump was reported red having
+  never run two of the four lanes the job exists for, and the only way to learn their verdict was
+  another hour of runner time. Both now run on `!cancelled()`; a failing lane still fails the job.
 - **The frozen NR-UI lane's setup guard stopped one step short of the work it guards** — the
   sequence-level retry in `NrUiSetup.LoadGameDataAsync` wrapped three steps (be on MySystems, open
   the install popup, click Add From Folder), but those only establish that the *buttons were

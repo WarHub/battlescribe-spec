@@ -217,6 +217,18 @@ public sealed class NrRosterUiEngine : IRosterEngine
         {
             return await action();
         }
+        catch (TimeoutException ex) when (!NrUiDiagnostics.IsDescribed(ex))
+        {
+            // A timeout is the one failure shape that arrives with nothing in it — see
+            // NrUiDiagnostics.DescribeTimeoutAsync. Every other exception the driver throws already
+            // names what it was doing, so it is rethrown untouched; so is a timeout that has already
+            // been described, which is what a setup wait inside an action throws
+            // (NrUiSetup.WaitForSetupConditionAsync). Describing that one again would bury its
+            // observation behind a second, less specific one.
+            var reportDir = await CaptureFailureDiagnosticsAsync(label);
+            throw new TimeoutException(
+                await NrUiDiagnostics.DescribeTimeoutAsync(Browser.Page, label, ex, reportDir), ex);
+        }
         catch
         {
             await CaptureFailureDiagnosticsAsync(label);
@@ -224,17 +236,22 @@ public sealed class NrRosterUiEngine : IRosterEngine
         }
     }
 
-    private async Task CaptureFailureDiagnosticsAsync(string label)
+    /// <summary>
+    /// Captures a diagnostic report to disk, returning the directory it landed in, or null when the
+    /// capture itself failed.
+    /// </summary>
+    private async Task<string?> CaptureFailureDiagnosticsAsync(string label)
     {
         try
         {
             _diagnostics ??= new NrUiDiagnostics(Browser.Page);
             var report = await _diagnostics.CaptureFullReportAsync();
-            await NrUiDiagnostics.SaveReportAsync(report, $"{_rosterName}-{label}");
+            return await NrUiDiagnostics.SaveReportAsync(report, $"{_rosterName}-{label}");
         }
         catch
         {
             // Best-effort — diagnostics must never mask the original failure.
+            return null;
         }
     }
 

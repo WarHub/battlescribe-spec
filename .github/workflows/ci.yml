@@ -389,14 +389,37 @@ jobs:
         env:
           NR_HEADLESS: true
           NR_UI_ROSTER_FULL: 1
+      # `!cancelled()` on the two lanes after the long one: they replay a DIFFERENT snapshot (the NR
+      # Editor pin) than the step above (the HAR), so a red NR-UI roster lane says nothing about
+      # them — and this job's own history is one flaky NR-UI spec per run, each time a different
+      # one. Default `success()` made that flake skip both, so PR #338 (the v35.27 HAR bump) was
+      # reported red having never run two of the four lanes it exists to verify, and the only way to
+      # learn their verdict was another hour of runner time.
       - name: Full frozen NR Editor GameData
+        if: ${{ !cancelled() }}
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
       - name: Full frozen NR Editor GameData UI (parallelized)
+        if: ${{ !cancelled() }}
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
+      # The NR UI drivers write a screenshot, DOM snapshot, Pinia dump and console log for every
+      # failed action — and this job, the only one that runs either of them over the full spec set,
+      # was throwing all of it away. A `Timeout 20000ms exceeded.` in the log was the whole record
+      # of the failure. `nr-ui-diagnostics*` matches the per-worker suffixes the drivers append.
+      - name: Upload NR UI diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: thorough-conformance-nr-ui-diagnostics
+          path: |
+            artifacts/nr-ui-diagnostics*/
+            artifacts/nr-gamedata-ui-diagnostics*/
+          # A lane can fail without any driver reaching its capture path (a lint or fixture failure),
+          # so an empty upload here is a fact about the failure, not a broken step.
+          if-no-files-found: ignore
       - name: Upload telemetry
         if: always()
         uses: actions/upload-artifact@v7

@@ -124,7 +124,22 @@ On failure, `NrUiDiagnostics` captures:
 - **DOM snapshot** (page HTML)
 - **Pinia state dump** (serialized stores)
 
-Artifacts are saved to `artifacts/nr-ui-diagnostics/`.
+Artifacts are saved to `artifacts/nr-ui-diagnostics/` — relative to the working directory, which is
+the repo root under `bs-spec`. Under `dotnet test` that would be the test assembly's output folder,
+so the fixtures anchor it at the repo root (`TestPaths.AnchorDiagnosticsAtRepoRoot`); an explicit
+`NR_UI_DIAGNOSTICS_DIR` wins over both. CI's `thorough-conformance` job uploads the directory as
+`thorough-conformance-nr-ui-diagnostics` when it fails.
+
+**A timeout inside an action names itself.** Playwright's own message for a `WaitForFunctionAsync` is
+`Timeout 20000ms exceeded.` and nothing more, so `NrRosterUiEngine.WithDiagnosticsAsync` rewrites it
+with the action, the page, an observation read back from the editor, and where the report went:
+
+    NR UI addForce-fe-patrol: Timeout 20000ms exceeded. (page: https://www.newrecruit.eu/app/MyLists).
+    Observed: forces=2 forcesPanel=0 forceRows=0 unitRows=0 popups=1. Report: …/nr-ui-diagnostics/….
+
+Read it the way `docs/nr-ui-roster-coverage.md` §5b reads setup's: the route says whether the driver
+was even on the editor, and the counts say whether the panel it was reaching for had rendered. A
+timeout that already carries such a description (setup's) is passed through unchanged.
 
 ## Probe Mode
 

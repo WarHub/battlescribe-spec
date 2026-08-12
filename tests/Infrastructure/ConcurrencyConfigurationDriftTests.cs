@@ -541,6 +541,82 @@ public sealed class ConcurrencyConfigurationDriftTests
         Assert.Contains("NR_UI_ROSTER_FULL", body, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Where each UI driver dumps its post-mortem, and the CI job that runs that driver and must
+    /// therefore upload it.
+    /// </summary>
+    /// <remarks>
+    /// Paths as the drivers resolve them (repo-root <c>artifacts/</c>, anchored there for the test
+    /// host by <see cref="TestPaths.AnchorDiagnosticsAtRepoRoot"/>); the workflow may match them with
+    /// a trailing wildcard for the drivers' per-worker suffixes.
+    /// </remarks>
+    private static readonly (string Job, string Directory)[] UiDiagnosticsUploads =
+    [
+        ("thorough-conformance", "artifacts/nr-ui-diagnostics"),
+        ("thorough-conformance", "artifacts/nr-gamedata-ui-diagnostics"),
+        ("thorough-ui-bs", "artifacts/bs-ui-diagnostics"),
+        ("thorough-ui-bs", "artifacts/bs-gamedata-ui-diagnostics"),
+    ];
+
+    /// <summary>
+    /// <b>A UI lane's failure diagnostics must leave the runner.</b> Every directory in
+    /// <see cref="UiDiagnosticsUploads"/> must be named inside its job in <c>ci.yml</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The NR UI drivers capture a screenshot, DOM snapshot, Pinia dump and console log for every
+    /// failed action, and <c>thorough-conformance</c> — the only job that runs either of them over
+    /// the full spec set — uploaded none of it. What reached a reader was the exception text, and
+    /// for a Playwright timeout that is <c>Timeout 20000ms exceeded.</c> and nothing else. The
+    /// artifacts existed, on a machine that was about to be deleted.
+    /// </para>
+    /// <para>
+    /// <c>thorough-ui-bs</c> is in the table because it already does this correctly and is the
+    /// reason the gap was visible at all: two jobs writing dumps, one uploading them.
+    /// </para>
+    /// <para>
+    /// <b>Falsifiable:</b> delete either path from the "Upload NR UI diagnostics" step and this goes
+    /// red naming it. It matches within the job block, so an upload wired to the wrong job does not
+    /// satisfy it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Lint")]
+    public void EveryUiLane_UploadsTheDiagnosticsItWrites()
+    {
+        var ci = File.ReadAllLines(Path.Combine(RepoRoot, ".github", "workflows", "ci.yml"));
+
+        var missing = UiDiagnosticsUploads
+            .Where(u => !JobBlock(ci, u.Job).Contains(u.Directory, StringComparison.Ordinal))
+            .Select(u => $"  {u.Job} does not upload {u.Directory}")
+            .ToArray();
+
+        Assert.True(
+            missing.Length == 0,
+            "These CI jobs run a UI driver whose diagnostics they never upload:\n"
+            + string.Join("\n", missing) + "\n\n"
+            + "A driver that dumps a screenshot, DOM and store state into a runner nobody collects "
+            + "from has diagnosed nothing: the reader gets the exception text, which for a Playwright "
+            + "timeout is seven words. Add an `actions/upload-artifact` step for the directory, or — "
+            + "if the job genuinely no longer runs that driver — delete its row from "
+            + nameof(UiDiagnosticsUploads) + ".");
+    }
+
+    /// <summary>
+    /// The lines of one top-level job in a workflow file: from <c>  &lt;job&gt;:</c> to the next
+    /// two-space-indented key, so a match cannot come from a neighbouring job.
+    /// </summary>
+    private static string JobBlock(string[] lines, string job)
+    {
+        var start = Array.FindIndex(lines, l => l.StartsWith($"  {job}:", StringComparison.Ordinal));
+        Assert.True(start >= 0, $"ci.yml has no job named '{job}'. If it was renamed, update the table.");
+
+        var end = Array.FindIndex(lines, start + 1, l =>
+            l.Length > 2 && l[0] == ' ' && l[1] == ' ' && l[2] != ' ' && l.TrimEnd().EndsWith(':'));
+
+        return string.Join("\n", lines[start..(end < 0 ? lines.Length : end)]);
+    }
+
     /// <summary>The profile AGENTS.md tells every contributor to run before pushing.</summary>
     private const string PrePushProfile = "pre-push";
 

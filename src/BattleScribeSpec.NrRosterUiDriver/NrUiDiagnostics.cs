@@ -151,6 +151,77 @@ public sealed class NrUiDiagnostics
         return new DiagnosticReport(screenshot, console, dom, pinia, storeTrace);
     }
 
+    /// <summary>
+    /// How a message this driver has already described starts — both the one
+    /// <see cref="DescribeTimeoutAsync"/> builds and the one
+    /// <c>NrUiSetup.WaitForSetupConditionAsync</c> builds.
+    /// </summary>
+    private const string DescribedPrefix = "NR UI ";
+
+    /// <summary>
+    /// Whether <paramref name="ex"/> already carries a description, and re-describing it would only
+    /// bury the more specific observation under a less specific one.
+    /// </summary>
+    internal static bool IsDescribed(Exception ex)
+        => ex.Message.StartsWith(DescribedPrefix, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Turns an anonymous Playwright timeout into a sentence naming the action, the page it was on,
+    /// what the editor held instead, and where the report landed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The action half of the fix <c>NrUiSetup.WaitForSetupConditionAsync</c> made for setup.</b>
+    /// That one exists because a bare timeout is anonymous — Playwright names the target of a
+    /// <em>locator</em> wait, but has nothing to name for a <c>WaitForFunctionAsync</c>. So does this
+    /// one, and an action step is where this lane's remaining intermittents land. The complete text
+    /// CI produced for the 2026-08-12 failure on
+    /// <c>constraint/constraint-forces-field-on-forceentry</c> — the one that blocked the v35.27 HAR
+    /// bump — was:
+    /// </para>
+    /// <code>Step 4: TimeoutException: Timeout 20000ms exceeded.</code>
+    /// <para>
+    /// Not which of that step's half-dozen waits, not what page it was on, not whether the roster
+    /// held the two forces it should have by then. A snapshot bump's whole question is "did NR change
+    /// under us", and that message cannot separate a changed UI from a lost page — a driver fix from
+    /// a re-run.
+    /// </para>
+    /// <para>
+    /// The observation is the point, not the label: this reports what it read and asserts no cause.
+    /// The type stays <see cref="TimeoutException"/> at the throw site because callers discriminate
+    /// on it.
+    /// </para>
+    /// </remarks>
+    internal static async Task<string> DescribeTimeoutAsync(
+        IPage page, string label, Exception failure, string? reportDir)
+    {
+        string observed;
+        try
+        {
+            observed = await page.EvaluateAsync<string>("""
+                () => {
+                    const count = sel => document.querySelectorAll(sel).length;
+                    const pinia = document.querySelector('#__nuxt')
+                        ?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                    const forces = army ? (army.getForces?.() || []).length : 'no army';
+                    return `forces=${forces} forcesPanel=${count('.forces')} `
+                        + `forceRows=${count('.unit-wrap.force')} unitRows=${count('.unitRow')} `
+                        + `popups=${count('#popups > *')}`;
+                }
+                """) ?? "(no observation)";
+        }
+        catch (Exception observeFailure)
+        {
+            // The page can be gone entirely — that IS the observation, and it must not replace the
+            // timeout with a confusing secondary failure.
+            observed = $"(could not be read: {observeFailure.GetType().Name}: {observeFailure.Message})";
+        }
+
+        return $"{DescribedPrefix}{label}: {failure.Message} (page: {page.Url}). Observed: {observed}."
+            + (reportDir is null ? "" : $" Report: {reportDir}.");
+    }
+
     /// <summary>Where reports land. Mirrors <c>NrGameDataUiDiagnostics</c>, including its worker suffix.</summary>
     public static string DefaultArtifactsDir =>
         Environment.GetEnvironmentVariable("NR_UI_DIAGNOSTICS_DIR")
@@ -167,8 +238,12 @@ public sealed class NrUiDiagnostics
     /// it — so an NR roster UI failure produced no artifacts at all. Seven identical 30s
     /// <c>addForce</c> timeouts while diagnosing #339 wrote nothing to disk.
     /// </para>
+    /// <para>
+    /// Returns the directory it wrote, so the caller can name it in the failure message. A report on
+    /// disk that the failure does not mention is one the reader has to know to go looking for.
+    /// </para>
     /// </summary>
-    public static async Task SaveReportAsync(DiagnosticReport report, string? specId = null)
+    public static async Task<string> SaveReportAsync(DiagnosticReport report, string? specId = null)
     {
         var dir = Path.Combine(
             DefaultArtifactsDir,
@@ -199,6 +274,8 @@ public sealed class NrUiDiagnostics
         {
             await File.WriteAllTextAsync(Path.Combine(dir, "dom.html"), report.DomSnapshot);
         }
+
+        return dir;
     }
 }
 
