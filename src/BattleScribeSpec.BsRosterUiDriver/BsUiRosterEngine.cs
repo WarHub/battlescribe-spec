@@ -1430,6 +1430,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 {
                     ["forceEntryId"] = forceEntryId,
                     ["catalogueId"] = parameters["catalogueId"]?.GetValue<string>(),
+                    // The id selects the system; gameSystemName only reaches failure messages.
+                    ["gameSystemId"] = _gameSystemId!,
                     ["gameSystemName"] = gameSystemName ?? _gameSystemName!,
                     ["rosterName"] = _specId,
                 };

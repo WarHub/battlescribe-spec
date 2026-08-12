@@ -848,7 +848,7 @@ All action methods:
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog |
+| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. `#cboGameSystem` is matched on `gameSystemId` alone — a warm-reused app still offers every earlier spec's game system, and their ids nest, so `gameSystemName` is diagnostics only |
 | `addForceAction` | `forceEntryId`, `catalogueId` | Adds a force via Edit Roster dialog |
 | `addChildForceAction` | `parentForceId`, `forceEntryId`, `catalogueId` | Adds a sub-force under an existing force |
 | `removeForceAction` | `forceId` | Removes a force via Edit Roster → X button → confirm |

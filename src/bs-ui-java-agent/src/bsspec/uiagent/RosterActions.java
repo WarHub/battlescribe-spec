@@ -256,12 +256,15 @@ public class RosterActions {
      * Creates a new roster (first force). Opens the New Roster dialog,
      * selects game system, optionally sets cost limit, adds a force, and closes.
      *
-     * @param params JSON: {forceEntryId, catalogueId, gameSystemName, costLimit (optional int)}
+     * @param params JSON: {forceEntryId, catalogueId, gameSystemId, gameSystemName,
+     *               costLimit (optional int)} — the system is chosen by {@code gameSystemId};
+     *               {@code gameSystemName} only reaches failure messages.
      */
     public String createRosterAction(String params) {
         JsonObject p = parseParams(params);
         String forceEntryId = requireString(p, "forceEntryId");
         String catalogueId = requireString(p, "catalogueId");
+        String gameSystemId = requireString(p, "gameSystemId");
         String gameSystemName = requireString(p, "gameSystemName");
         int costLimit = getIntParam(p, "costLimit", -1);
         String rosterName = getStringParam(p, "rosterName", null);
@@ -270,9 +273,9 @@ public class RosterActions {
         runOnFx(() -> fireButtonAsync("#btnNewRoster", MAIN_WINDOW));
         waitForNewRosterWindowDismissingContinuePrompt();
 
-        // Select game system in the combo
+        // By id, exactly: this combo can hold near-identical ids staged by other specs.
         runOnFx(() -> {
-            selectComboBoxItemByText("#cboGameSystem", gameSystemName, NEW_ROSTER_WINDOW);
+            selectComboBoxItemByExactId("#cboGameSystem", gameSystemId, gameSystemName, NEW_ROSTER_WINDOW);
         });
         // No sleep: the game system's effect on this dialog is that #btnAddForce becomes usable,
         // and the Add Force window wait below is the condition that proves it.
@@ -2424,11 +2427,18 @@ public class RosterActions {
     }
 
     /**
-     * Selects a ComboBox item by matching display text (substring).
+     * Selects a ComboBox item whose {@code getId()} equals {@code targetId}, exactly.
      * Must be called from the FX thread.
+     *
+     * <p>No fallback, unlike {@link #selectComboBoxItemById}: its {@code toString().contains(id)}
+     * would here match a DIFFERENT spec's game system, because #cboGameSystem accumulates every
+     * spec this JVM has run and spec ids nest. A wrong roster is worse than a failed step.
+     *
+     * <p>{@code targetName} is not matched — carried only for the failure message.
      */
     @SuppressWarnings("unchecked")
-    private void selectComboBoxItemByText(String selector, String text, String windowTitle) {
+    private void selectComboBoxItemByExactId(
+            String selector, String targetId, String targetName, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
         Node node = scene.getRoot().lookup(selector);
@@ -2438,12 +2448,21 @@ public class RosterActions {
         ComboBox<Object> combo = (ComboBox<Object>) node;
         for (int i = 0; i < combo.getItems().size(); i++) {
             Object item = combo.getItems().get(i);
-            if (item != null && item.toString().contains(text)) {
+            if (item != null && targetId.equals(getObjectId(item))) {
                 combo.getSelectionModel().select(i);
                 return;
             }
         }
-        throw new RuntimeException("No ComboBox item matching '" + text + "' found in " + combo.getItems().size() + " items");
+
+        StringBuilder offered = new StringBuilder("[");
+        for (Object item : combo.getItems()) {
+            if (offered.length() > 1) offered.append(", ");
+            offered.append(describeComboBoxItem(item));
+        }
+        offered.append("]");
+        throw new RuntimeException(
+                "ComboBox '" + selector + "' in '" + windowTitle + "' has no item with id '"
+                        + targetId + "' (name: '" + targetName + "'). Offered: " + offered);
     }
 
     /**
@@ -2457,6 +2476,25 @@ public class RosterActions {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * One ComboBox item as {@code name (id)}, for failure messages. {@link #describeComboBoxItems}
+     * prints ids alone, which does not separate ids differing only by a prefix.
+     */
+    private String describeComboBoxItem(Object item) {
+        if (item == null) return "null";
+        String name;
+        try {
+            Method getName = item.getClass().getMethod("getName");
+            Object result = getName.invoke(item);
+            name = result != null ? result.toString() : item.toString();
+        } catch (Exception e) {
+            // Not every combo holds named objects; toString() is then the text that was on screen.
+            name = item.toString();
+        }
+        String id = getObjectId(item);
+        return name + " (" + (id == null ? "no id" : id) + ")";
     }
 
     /**
