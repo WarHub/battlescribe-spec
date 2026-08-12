@@ -275,7 +275,7 @@ public class RosterActions {
 
         // By id, exactly: this combo can hold near-identical ids staged by other specs.
         runOnFx(() -> {
-            selectComboBoxItemByExactId("#cboGameSystem", gameSystemId, gameSystemName, NEW_ROSTER_WINDOW);
+            selectComboBoxItemById("#cboGameSystem", gameSystemId, gameSystemName, NEW_ROSTER_WINDOW);
         });
         // No sleep: the game system's effect on this dialog is that #btnAddForce becomes usable,
         // and the Add Force window wait below is the condition that proves it.
@@ -293,13 +293,13 @@ public class RosterActions {
 
         // Select catalogue and force entry in Add Force dialog
         runOnFx(() -> {
-            selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW);
+            selectComboBoxItemById("#cboCatalogue", catalogueId, null, ADD_FORCE_WINDOW);
         });
         // Choosing a catalogue repopulates the force-entry combo asynchronously. Wait for the
         // entry to be OFFERED rather than sleeping — see waitForComboBoxItem.
         waitForComboBoxItem("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
         runOnFx(() -> {
-            selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
+            selectComboBoxItemById("#cboForceEntry", forceEntryId, null, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
         });
         waitForWindowClose(ADD_FORCE_WINDOW, NEW_ROSTER_WINDOW);
@@ -351,11 +351,11 @@ public class RosterActions {
         waitForWindow(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
         // Select catalogue and force entry
-        runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
+        runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, null, ADD_FORCE_WINDOW));
         // See waitForComboBoxItem: the force-entry list is rebuilt from the chosen catalogue.
         waitForComboBoxItem("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
         runOnFx(() -> {
-            selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
+            selectComboBoxItemById("#cboForceEntry", forceEntryId, null, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
         });
         waitForWindowClose(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
@@ -393,11 +393,11 @@ public class RosterActions {
         runOnFx(() -> fireButtonAsync("#btnAddForce", EDIT_ROSTER_WINDOW));
         waitForWindow(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
 
-        runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, ADD_FORCE_WINDOW));
+        runOnFx(() -> selectComboBoxItemById("#cboCatalogue", catalogueId, null, ADD_FORCE_WINDOW));
         // See waitForComboBoxItem: the force-entry list is rebuilt from the chosen catalogue.
         waitForComboBoxItem("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
         runOnFx(() -> {
-            selectComboBoxItemById("#cboForceEntry", forceEntryId, ADD_FORCE_WINDOW);
+            selectComboBoxItemById("#cboForceEntry", forceEntryId, null, ADD_FORCE_WINDOW);
             fireButton("#btnDone", ADD_FORCE_WINDOW);
         });
         waitForWindowClose(ADD_FORCE_WINDOW, EDIT_ROSTER_WINDOW);
@@ -1938,14 +1938,15 @@ public class RosterActions {
      * <p>This exists because selecting a catalogue REPOPULATES the force-entry combo
      * asynchronously, and the driver used to bridge that with {@code sleep(300)}. A fixed sleep
      * there is not merely slow — it is a correctness hazard. If the repopulation has not happened,
-     * {@link #selectComboBoxItemById} runs against the PREVIOUS catalogue's list, and its
-     * {@code toString().contains(targetId)} fallback can match a stale entry: the spec corpus
-     * reuses generic ids such as {@code fe-1} across catalogues, so the wrong force gets selected
-     * and the roster is built wrong while the action reports success.
+     * {@link #selectComboBoxItemById} runs against the PREVIOUS catalogue's list, and an exact id
+     * match on the wrong list is still an exact match: the spec corpus reuses generic ids such as
+     * {@code fe-1} across catalogues, so the wrong force gets selected and the roster is built wrong
+     * while the action reports success. Matching by id is what rules out a NEAR miss; only waiting
+     * rules out a stale one.
      *
      * <p>Waiting for the item to be PRESENT removes the guess. When the item genuinely never
-     * arrives this throws with the ids actually on offer, which is a far better failure than a
-     * roster that is quietly wrong.
+     * arrives this throws with what the combo was actually offering, which is a far better failure
+     * than a roster that is quietly wrong.
      */
     private void waitForComboBoxItem(String selector, String targetId, String windowTitle) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
@@ -2018,18 +2019,25 @@ public class RosterActions {
         return false;
     }
 
-    /** The ids a ComboBox is currently offering — for failure messages. FX thread only. */
+    /** The items {@code selector}'s ComboBox is currently offering — for failure messages. FX thread only. */
     @SuppressWarnings("unchecked")
     private String describeComboBoxItems(String selector, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) return "(window not found)";
         Node node = scene.getRoot().lookup(selector);
         if (!(node instanceof ComboBox)) return "(not a ComboBox)";
-        ComboBox<Object> combo = (ComboBox<Object>) node;
+        return describeComboBoxItems(((ComboBox<Object>) node).getItems());
+    }
+
+    /**
+     * The same list for a ComboBox already in hand, so the two ways a combo lookup can fail — the
+     * wait that times out and the selection that finds nothing — say what was offered in one voice.
+     */
+    private String describeComboBoxItems(Iterable<?> items) {
         StringBuilder sb = new StringBuilder("[");
-        for (Object item : combo.getItems()) {
+        for (Object item : items) {
             if (sb.length() > 1) sb.append(", ");
-            sb.append(item == null ? "null" : String.valueOf(getObjectId(item)));
+            sb.append(describeComboBoxItem(item));
         }
         return sb.append("]").toString();
     }
@@ -2394,50 +2402,26 @@ public class RosterActions {
     }
 
     /**
-     * Selects a ComboBox item by matching the item's getId() method via reflection.
-     * Must be called from the FX thread.
+     * Selects the ComboBox item whose {@code getId()} equals {@code targetId}, and throws — listing
+     * every item on offer — when there is no such item.
+     *
+     * <p>Nothing looser is tried. This used to fall back to {@code toString().contains(targetId)}
+     * and take the first hit, which answers {@code cat-10} when asked for {@code cat-1} because
+     * {@code BaseData.toString()} renders {@code name:id:}. That item is a real member of the combo,
+     * so the selection SUCCEEDS and the roster is quietly built from the wrong catalogue or force
+     * entry — see {@code BsRosterUiFixture}'s class docs for a run where that shipped as a pass.
+     *
+     * <p>The fallback could never have been needed either: every combo driven here holds
+     * {@code BaseData} subclasses with a real {@code getId()}, so no exact match means the item is
+     * genuinely not on offer.
+     *
+     * <p>Must be called from the FX thread.
+     *
+     * @param targetName the name the spec used, or {@code null} when the caller has only an id.
+     *                   Matched against nothing; it exists so a failure can name what was wanted.
      */
     @SuppressWarnings("unchecked")
-    private void selectComboBoxItemById(String selector, String targetId, String windowTitle) {
-        Scene scene = findScene(windowTitle);
-        if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
-        Node node = scene.getRoot().lookup(selector);
-        if (node == null) throw new RuntimeException("ComboBox not found: " + selector + " in " + windowTitle);
-        if (!(node instanceof ComboBox)) throw new RuntimeException("Not a ComboBox: " + selector);
-
-        ComboBox<Object> combo = (ComboBox<Object>) node;
-        for (int i = 0; i < combo.getItems().size(); i++) {
-            Object item = combo.getItems().get(i);
-            if (item == null) continue;
-            String itemId = getObjectId(item);
-            if (targetId.equals(itemId)) {
-                combo.getSelectionModel().select(i);
-                return;
-            }
-        }
-        // Fallback: try toString().contains(targetId)
-        for (int i = 0; i < combo.getItems().size(); i++) {
-            Object item = combo.getItems().get(i);
-            if (item != null && item.toString().contains(targetId)) {
-                combo.getSelectionModel().select(i);
-                return;
-            }
-        }
-        throw new RuntimeException("ComboBox item with id '" + targetId + "' not found in " + selector);
-    }
-
-    /**
-     * Selects a ComboBox item whose {@code getId()} equals {@code targetId}, exactly.
-     * Must be called from the FX thread.
-     *
-     * <p>No fallback, unlike {@link #selectComboBoxItemById}: its {@code toString().contains(id)}
-     * would here match a DIFFERENT spec's game system, because #cboGameSystem accumulates every
-     * spec this JVM has run and spec ids nest. A wrong roster is worse than a failed step.
-     *
-     * <p>{@code targetName} is not matched — carried only for the failure message.
-     */
-    @SuppressWarnings("unchecked")
-    private void selectComboBoxItemByExactId(
+    private void selectComboBoxItemById(
             String selector, String targetId, String targetName, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
@@ -2454,15 +2438,10 @@ public class RosterActions {
             }
         }
 
-        StringBuilder offered = new StringBuilder("[");
-        for (Object item : combo.getItems()) {
-            if (offered.length() > 1) offered.append(", ");
-            offered.append(describeComboBoxItem(item));
-        }
-        offered.append("]");
         throw new RuntimeException(
-                "ComboBox '" + selector + "' in '" + windowTitle + "' has no item with id '"
-                        + targetId + "' (name: '" + targetName + "'). Offered: " + offered);
+                "ComboBox '" + selector + "' in '" + windowTitle + "' has no item with id '" + targetId
+                        + "'" + (targetName == null ? "" : " (name: '" + targetName + "')")
+                        + ". Offered: " + describeComboBoxItems(combo.getItems()));
     }
 
     /**
@@ -2479,8 +2458,8 @@ public class RosterActions {
     }
 
     /**
-     * One ComboBox item as {@code name (id)}, for failure messages. {@link #describeComboBoxItems}
-     * prints ids alone, which does not separate ids differing only by a prefix.
+     * One ComboBox item as {@code name (id)} — the single renderer, so every combo failure reads
+     * alike. Ids alone do not separate ids differing only by a prefix.
      */
     private String describeComboBoxItem(Object item) {
         if (item == null) return "null";

@@ -843,12 +843,17 @@ All action methods:
 - Return JSON with at minimum a `success` field
 - May include `forceId` and/or `selectionId` for entity identification
 - Poll `getRosterState()` after mutations to confirm the state change took effect
+- Choose ComboBox items (`#cboGameSystem`, `#cboCatalogue`, `#cboForceEntry`) on the backing model
+  object's own `getId()`, exactly. There is no substring or display-text fallback: ids nest (`cat-1`
+  sits inside `cat-10`), so a near miss selects a real-but-different item and the roster is built
+  wrong while every step reports success. A missing id fails the action and lists what the combo was
+  offering as `name (id)`
 
 #### Available Actions
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. `#cboGameSystem` is matched on `gameSystemId` alone — a warm-reused app still offers every earlier spec's game system, and their ids nest, so `gameSystemName` is diagnostics only |
+| `createRosterAction` | `forceEntryId`, `catalogueId`, `gameSystemId`, `gameSystemName`, `rosterName`, `costLimit?` | Creates a new roster via New Roster dialog. A warm-reused app still offers every earlier spec's game system in `#cboGameSystem`, and their ids nest, so `gameSystemName` is diagnostics only — it reaches the failure message and nothing else |
 | `addForceAction` | `forceEntryId`, `catalogueId` | Adds a force via Edit Roster dialog |
 | `addChildForceAction` | `parentForceId`, `forceEntryId`, `catalogueId` | Adds a sub-force under an existing force |
 | `removeForceAction` | `forceId` | Removes a force via Edit Roster → X button → confirm |
