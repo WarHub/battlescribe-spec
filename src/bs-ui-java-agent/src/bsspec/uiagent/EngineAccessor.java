@@ -1272,15 +1272,20 @@ public class EngineAccessor {
         if (entryId == null || constraintId == null || !entryId.contains("::")) {
             return entryId;
         }
+        String[] segments = entryId.split("::");
         Set<String> declarers = constraintDeclarers().get(constraintId);
         if (declarers != null) {
-            for (String segment : entryId.split("::")) {
+            for (String segment : segments) {
                 if (declarers.contains(segment)) {
                     return segment;
                 }
             }
         }
-        return entryId;
+        // The map indexes constraints on entries, groups, force-entries and categories from source;
+        // a constraint it does NOT know is one declared on the entry LINK itself (a live EntryLink
+        // does not surface its own constraints the way a source entry does). Its declaring container
+        // is the outermost link -- the first segment -- not the target the link resolves to.
+        return segments[0];
     }
 
     /**
