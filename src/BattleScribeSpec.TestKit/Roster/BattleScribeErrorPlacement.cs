@@ -20,6 +20,14 @@ namespace BattleScribeSpec.Roster;
 /// <c>forces</c>-field violation is a count whose subject is the roster/force, not a selection.
 /// </para>
 /// <para>
+/// <b>What it must not touch.</b> <see cref="ValidationErrorState.RaisedOnType"/> and
+/// <see cref="ValidationErrorState.RaisedOnId"/> record the node the engine actually raised the
+/// error on, written at capture. Placement moves the ATTRIBUTION and leaves that record alone — a
+/// <c>with</c> expression carries unlisted members through, so every moved error still names its
+/// raising node. It used to null the raising node's id on every move instead, which is why a
+/// failure could report an over-limit violation without naming any node at all (issue #421).
+/// </para>
+/// <para>
 /// <b>Why this is shared rather than reimplemented.</b> Both BattleScribe engines read the same
 /// Java model and must answer the same way; the in-process adapter is what every spec's expected
 /// placement was written against. When the UI driver grew its own error reading, it produced the
@@ -53,6 +61,9 @@ public static class BattleScribeErrorPlacement
             // this method with the RAW owner id — the in-process adapter from the live element, the
             // UI driver from the agent's payload — so the two lanes agree by construction, not by
             // keeping two implementations in step. Plain ids pass through unchanged.
+            //
+            // This reduction is for ENTRY ids only. RaisedOnId is a runtime node id, which has no
+            // link-composite form, so it is never fed through here.
             if (e.OwnerEntryId is not null)
             {
                 e = e with { OwnerEntryId = BattleScribeErrorIds.ReduceToTargetEntry(e.OwnerEntryId) };
@@ -74,19 +85,18 @@ public static class BattleScribeErrorPlacement
                 // Hidden-entry errors move too: the category is where BattleScribe noticed the
                 // hidden selection, not what was hidden.
                 "category" when e.ConstraintId == "hidden" || IsOverLimit(e)
-                    => e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = ownerEntry },
+                    => e with { OwnerType = "selection", OwnerEntryId = ownerEntry },
 
                 // A cost-limit violation genuinely belongs to the roster, so `costLimits` stays. A
                 // force-COUNT constraint's subject is the roster, not a selection, and moving it
                 // would invent an owner that does not exist.
                 "roster" when e.EntryId != "costLimits" && IsOverLimit(e) && !IsForceCount(e)
-                    => e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = ownerEntry },
+                    => e with { OwnerType = "selection", OwnerEntryId = ownerEntry },
 
                 "force" when IsOverLimit(e) && !IsForceCount(e)
                     => e with
                     {
                         OwnerType = "selection",
-                        OwnerId = null,
                         OwnerEntryId = resolveLinkTarget?.Invoke(e.EntryId) ?? ownerEntry,
                     },
 

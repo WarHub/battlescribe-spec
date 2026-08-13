@@ -81,6 +81,41 @@ public class ProtocolSerializationRoundTripTests
     }
 
     /// <summary>
+    /// Every field of a validation error survives the wire, by value and not merely by type.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ValidationErrorState"/> is eight consecutive nullable strings, so a field that is
+    /// dropped, renamed or bound to its neighbour still round-trips as the right TYPE. The two
+    /// attributions it carries — the normalized owner and the node the engine raised the error on —
+    /// are the pair most likely to be silently conflated, so this compares values.
+    /// </remarks>
+    [Fact]
+    public void ValidationErrorState_EveryField_SurvivesRoundTrip()
+    {
+        var error = new ValidationErrorState(
+            "Patrol has too many selections of Unit A (maximum 1)",
+            OwnerType: "selection",
+            OwnerEntryId: "se-unit-a",
+            EntryId: "se-unit-a",
+            ConstraintId: "con-max-1",
+            ConstraintType: "max",
+            ConstraintField: "selections",
+            RaisedOnType: "category",
+            RaisedOnId: "cat-node-7ff1");
+
+        var json = ProtocolSerializer.SerializeResponse(new ErrorsResponse { Errors = [error] });
+
+        // The wire names, letter-for-letter: the BS UI agent emits these from Java and the .NET
+        // side binds them case-insensitively with no naming policy, so a rename on one side alone
+        // deserializes to null instead of failing.
+        Assert.Contains("\"raisedOnType\":\"category\"", json);
+        Assert.Contains("\"raisedOnId\":\"cat-node-7ff1\"", json);
+
+        var roundTripped = Assert.IsType<ErrorsResponse>(ProtocolSerializer.DeserializeResponse(json));
+        Assert.Equal(error, Assert.Single(roundTripped.Errors));
+    }
+
+    /// <summary>
     /// Uses the kitchen-sink spec to exercise a realistic SetupCommand with all protocol
     /// data types populated (cost types, profile types, force entries, categories, etc.).
     /// </summary>

@@ -7,21 +7,45 @@ namespace BattleScribeSpec.Roster;
 /// </summary>
 
 /// <remarks>
+/// <para>
+/// <b>Two attributions, named apart.</b> <see cref="RaisedOnType"/> and <see cref="RaisedOnId"/> are
+/// the RUNTIME NODE the engine raised the error on — the element the error was read off, written
+/// once at capture and never rewritten afterwards. <see cref="OwnerType"/> and
+/// <see cref="OwnerEntryId"/> are the NORMALIZED attribution: where the spec corpus reports the
+/// error, which <c>BattleScribeErrorPlacement</c> may move off the raising node onto the selection
+/// responsible. A collective over-limit violation is raised by a category and attributed to a
+/// selection, so the two disagree by design and neither is a substitute for the other.
+/// </para>
+/// <para>
+/// The distinction used to live in one field: <c>OwnerId</c> held the raising node's id while
+/// <c>OwnerType</c> held the post-placement type, and placement nulled the id whenever it moved an
+/// error rather than let the record name one node by type and a different one by id. Nulling threw
+/// away the only thing that identifies a node — <see cref="OwnerEntryId"/> is a CATALOGUE entry id,
+/// and three selections of one entry share it (issue #421).
+/// </para>
+/// <para>
+/// <see cref="RaisedOnId"/> is a runtime node id and is never link-reduced: the
+/// <c>ReduceToTargetEntry</c> rule (#400) applies to entry ids, and applying it here would corrupt
+/// an id that has no link-composite form.
+/// </para>
+/// <para>
 /// <see cref="ConstraintType"/> ("min"/"max") and <see cref="ConstraintField"/>
 /// ("selections"/"forces"/a cost-type id) are read from the live constraint at capture and let
 /// <c>BattleScribeErrorPlacement</c> decide where an error belongs from structural facts instead of
 /// the message prose. Both are null for the id-less paths (roster cost-limit bypass) and the
 /// reserved pseudo-constraints ("hidden"/"collective").
+/// </para>
 /// </remarks>
 public record ValidationErrorState(
     string Message,
     string? OwnerType = null,
-    string? OwnerId = null,
     string? OwnerEntryId = null,
     string? EntryId = null,
     string? ConstraintId = null,
     string? ConstraintType = null,
-    string? ConstraintField = null);
+    string? ConstraintField = null,
+    string? RaisedOnType = null,
+    string? RaisedOnId = null);
 
 public record RosterState(
     string Name,

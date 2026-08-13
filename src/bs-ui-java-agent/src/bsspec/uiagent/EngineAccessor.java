@@ -1367,7 +1367,11 @@ public class EngineAccessor {
     private void collectValidationErrors(Object element, String ownerType, JsonArray errors)
             throws Exception {
         Object elementErrors = callListGetter(element, "getValidationErrors");
-        String ownerId = callGetter(element, "getId");
+        // The RUNTIME NODE the engine raised these errors on. It is reported as raisedOn* rather
+        // than as part of the owner triple because BattleScribeErrorPlacement re-homes an
+        // over-limit violation onto the selection responsible, and the node that noticed it is a
+        // fact about the engine that survives that move (#421).
+        String raisedOnId = callGetter(element, "getId");
         // Shipped RAW, link route and all. Reducing a link-composite owner to the target entry a
         // spec names is BattleScribeErrorPlacement.ReduceToTargetEntry's job on the .NET side --
         // the ONE rule both BattleScribe lanes share (#400) -- not a second implementation here.
@@ -1383,8 +1387,9 @@ public class EngineAccessor {
             JsonObject item = new JsonObject();
             item.addProperty("message", message);
             item.addProperty("ownerType", ownerType);
-            if (ownerId != null) {
-                item.addProperty("ownerId", ownerId);
+            item.addProperty("raisedOnType", ownerType);
+            if (raisedOnId != null) {
+                item.addProperty("raisedOnId", raisedOnId);
             }
             if (ownerEntryId != null) {
                 item.addProperty("ownerEntryId", ownerEntryId);
