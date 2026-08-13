@@ -93,8 +93,8 @@ public class EngineAccessor {
         /** Instances of a class reachable from the engine and roster — see {@link #collectInstances}. */
         final Map<Class<?>, List<Object>> instances = new IdentityHashMap<Class<?>, List<Object>>();
 
-        /** An entry's declared constraints as id -> value — see {@link #constraintValuesOf}. */
-        final Map<String, Map<String, Integer>> constraintValues = new HashMap<String, Map<String, Integer>>();
+        /** constraintId -> source container ids that declare it — see {@link #constraintDeclarers}. */
+        Map<String, Set<String>> constraintDeclarers;
     }
 
     /**
@@ -1257,71 +1257,102 @@ public class EngineAccessor {
     }
 
     /**
-     * Which segment of a composite id actually DECLARES {@code constraintId}.
+     * Which segment of a composite id actually DECLARES {@code constraintId}, matching the in-process
+     * adapter's rule exactly.
      *
-     * <p>A constraint on the link and a constraint on its target are different constraints with
-     * different meanings — per-link versus shared — and a spec asserts which one fired by naming
-     * its owner. Reporting the composite for both loses exactly that distinction, so each segment
-     * is asked whether the constraint is its own.
+     * <p>A constraint on an entry link and one on the link's target are different constraints (per-link
+     * vs shared) and a spec names {@code from} by the declaring one. This must read the SOURCE
+     * declaration, not the live merged entry: a constraint declared on a shared target is MERGED into
+     * every link's expansion, so asking the runtime "does this segment carry the constraint" answers
+     * yes for the outer link too and would pick the route rather than the declarer. So it consults a
+     * map built once from the loaded game data's source containers, and returns the first segment that
+     * genuinely declares the id (falling back to the whole composite when none does).
      */
     private String declaringEntryOf(String entryId, String constraintId) {
         if (entryId == null || constraintId == null || !entryId.contains("::")) {
             return entryId;
         }
-        for (String segment : entryId.split("::")) {
-            if (constraintValuesOf(segment).containsKey(constraintId)) {
-                return segment;
+        Set<String> declarers = constraintDeclarers().get(constraintId);
+        if (declarers != null) {
+            for (String segment : entryId.split("::")) {
+                if (declarers.contains(segment)) {
+                    return segment;
+                }
             }
         }
         return entryId;
     }
 
-
     /**
-     * An entry's own constraints as id -> declared value. Now used only by {@link #declaringEntryOf}
-     * to ask which segment of a composite id owns a constraint (membership, not the value itself);
-     * the per-pass memory still pays off because that question is asked once per segment. See
-     * {@link ValidationPass} for why it is per pass and not per session.
+     * constraintId -> the SOURCE container ids that declare it, read once from the loaded game
+     * system and catalogues. The mirror of {@code BattleScribeEngine}'s constraint-declarer index,
+     * built from the same source shape so both BattleScribe lanes choose the same {@code from} entry.
      */
-    private Map<String, Integer> constraintValuesOf(String entryId) {
+    private Map<String, Set<String>> constraintDeclarers() {
         ValidationPass pass = validationPass;
-        if (pass != null) {
-            Map<String, Integer> remembered = pass.constraintValues.get(entryId);
-            if (remembered != null) {
-                return remembered;
-            }
+        if (pass != null && pass.constraintDeclarers != null) {
+            return pass.constraintDeclarers;
         }
-
-        Map<String, Integer> values = readConstraintValues(entryId);
-        if (pass != null) {
-            pass.constraintValues.put(entryId, values);
-        }
-        return values;
-    }
-
-    /**
-     * {@link #constraintValuesOf} without the per-pass memory — the lookup itself. Only the KEY SET
-     * is consumed now ({@link #declaringEntryOf} asks which segment owns a constraint id), so the
-     * value is a placeholder; the map shape is kept for the per-pass cache.
-     */
-    private Map<String, Integer> readConstraintValues(String entryId) {
-        Map<String, Integer> values = new HashMap<String, Integer>();
+        Map<String, Set<String>> map = new HashMap<String, Set<String>>();
         try {
-            Object entry = findEntryById(entryId);
-            if (entry == null) {
-                return values;
-            }
-            for (Object constraint : toJavaList(callListGetter(entry, "getConstraints"))) {
-                String id = callGetter(constraint, "getId");
-                if (id != null) {
-                    values.put(id, 0);
-                }
+            indexSourceConstraints(getCurrentGameSystem(), map);
+            for (Object catalogue : sourceCatalogues()) {
+                indexSourceConstraints(catalogue, map);
             }
         } catch (Exception e) {
-            // A lookup failure just means the segment cannot be confirmed as the declarer.
+            System.err.println("[bs-ui-agent] could not index source constraint declarers: " + e);
         }
-        return values;
+        if (pass != null) {
+            pass.constraintDeclarers = map;
+        }
+        return map;
     }
+
+    /**
+     * The loaded source catalogues. Found by the object-graph scan rather than a named getter: the
+     * engine's {@code q()} is overridden on the engine class to return validation errors, so a
+     * reflective {@code q()} is ambiguous; {@link #collectInstances} reaches every {@code Catalogue}
+     * referenced from the engine/roster and is cached per pass.
+     */
+    private List<Object> sourceCatalogues() {
+        Class<?> catalogueClass = findClass("net.battlescribe.model.data.Catalogue");
+        return catalogueClass == null ? Collections.<Object>emptyList() : collectInstances(catalogueClass);
+    }
+
+    /**
+     * Walks a game system / catalogue / entry / group / link / force-entry, recording every
+     * constraint id against the SOURCE container that declares it. Recurses the same containers the
+     * in-process walker does (docs/entry-id-construction.md shapes).
+     */
+    private void indexSourceConstraints(Object container, Map<String, Set<String>> map) {
+        if (container == null) {
+            return;
+        }
+        String declarerId = callGetter(container, "getId");
+        for (Object constraint : toJavaList(callListGetter(container, "getConstraints"))) {
+            String id = callGetter(constraint, "getId");
+            if (id != null && declarerId != null) {
+                Set<String> declarers = map.get(id);
+                if (declarers == null) {
+                    declarers = new java.util.HashSet<String>();
+                    map.put(id, declarers);
+                }
+                declarers.add(declarerId);
+            }
+        }
+        for (String getter : SOURCE_CHILD_GETTERS) {
+            for (Object child : toJavaList(callListGetter(container, getter))) {
+                indexSourceConstraints(child, map);
+            }
+        }
+    }
+
+    private static final String[] SOURCE_CHILD_GETTERS = {
+        "getSelectionEntries", "getSharedSelectionEntries",
+        "getSelectionEntryGroups", "getSharedSelectionEntryGroups",
+        "getEntryLinks", "getForceEntries", "getCategoryEntries",
+    };
+
 
     private boolean containsIgnoreCase(String message, String candidate) {
         if (message == null || candidate == null || candidate.isEmpty()) {
