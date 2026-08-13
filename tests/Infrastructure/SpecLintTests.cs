@@ -722,9 +722,10 @@ public sealed class SpecLintTests
 
     /// <summary>
     /// <c>on:</c> names the node the engine raised the error on, so the kind has to be one an engine
-    /// can report, and the two kinds with no addressable id — <c>roster</c> and <c>group</c> — have to
-    /// be written bare. Parsed through <see cref="ErrorAddress"/>, the runner's own parser, so the
-    /// linter cannot drift into accepting a shape the matcher does not.
+    /// can report, the two kinds with no addressable id — <c>roster</c> and <c>group</c> — have to be
+    /// written bare, and an id has to be a <c>${{ steps.… }}</c> reference rather than a literal.
+    /// Parsed through <see cref="ErrorAddress"/>, the runner's own parser, so the linter cannot drift
+    /// into accepting a shape the matcher does not.
     /// </summary>
     private static IEnumerable<string> CheckErrorAssertionAddressShape(SpecFile spec)
     {
@@ -748,6 +749,21 @@ public sealed class SpecLintTests
             {
                 yield return $"{where}: error assertion on='{on}' gives '{address.Type}' an id, " +
                     "but no step output names one — write it bare";
+                continue;
+            }
+
+            // The pre-#419 entry-addressed form. A literal second token names a catalogue ENTRY,
+            // which is a set of nodes, not one — two selections of one entry are indistinguishable
+            // by it, and that is the whole reason `on:` was flipped. Node ids are minted per run, so
+            // the only way to write one is a step reference. Caught here rather than at match time
+            // because the matcher's answer would be "no error on that node", which reads as a
+            // regression in the engine rather than as a spec written in a retired dialect.
+            if (address.IsLiteralId)
+            {
+                yield return $"{where}: error assertion on='{on}' names a catalogue entry, not a " +
+                    "roster node — write the node as a step reference, e.g. " +
+                    $"'{address.Type} ${{{{ steps.<id>.selectionId }}}}' or " +
+                    $"'{address.Type} ${{{{ steps.<id>.selections.<entryId>[n] }}}}'";
             }
         }
     }

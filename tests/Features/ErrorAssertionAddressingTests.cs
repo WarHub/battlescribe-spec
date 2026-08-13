@@ -47,11 +47,6 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         var failure = Assert.Single(wrongNode.Failures);
         output.WriteLine(failure);
         Assert.Contains("sel-node-2", failure, StringComparison.Ordinal);
-
-        // And the legacy form cannot tell the two apart — which is why the flip exists. Both
-        // selections are `se-unit-a`, so the entry-addressed assertion matches either way.
-        AssertPassed(Run(errors: [Error("selection", "sel-node-1")], on: "selection se-unit-a"));
-        AssertPassed(Run(errors: [Error("selection", "sel-node-2")], on: "selection se-unit-a"));
     }
 
     [Fact]
@@ -151,31 +146,36 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         AssertPassed(Run(errors: [identical, identical], on: "roster", secondOn: "roster"));
     }
 
-    // ── TRANSIENT: the legacy entry-addressed branch (#424) ──────────
+    // ── The retired entry-addressed form ─────────────────────────────
 
+    /// <summary>
+    /// The form #419 removed, gone rather than tolerated: a literal second token names a catalogue
+    /// entry, and a catalogue entry is a SET of nodes. It matches nothing now — the corpus is
+    /// migrated, and <see cref="SpecLintTests"/> rejects the spec before it runs so the failure
+    /// names the dialect instead of reading as a missing error.
+    /// </summary>
     [Fact]
-    public void LegacyForm_StillMatchesTheOwnerAttribution_WhileTheCorpusMigrates()
+    public void LiteralSecondToken_MatchesNothing_EvenWhenTheOwnerAttributionAgrees()
     {
-        // Placement moved this off its raising node, so the two attributions disagree — exactly the
-        // 27 corpus assertions #424 has yet to migrate. The legacy form reads the owner pair.
+        // Placement moved this off its raising node, so the two attributions disagree — the shape
+        // that used to make `on: selection se-unit-a` pass by reading the owner pair.
         var error = Error("category", "cat-node-1") with { OwnerType = "selection", OwnerEntryId = "se-unit-a" };
 
-        AssertPassed(Run(errors: [error], on: "selection se-unit-a"));
-        Assert.Single(Run(errors: [error], on: "selection se-other").Failures);
+        var failure = Assert.Single(Run(errors: [error], on: "selection se-unit-a").Failures);
+        output.WriteLine(failure);
     }
 
     [Fact]
     public void TheDiscriminatorIsTheExpression_NotTheKind()
     {
-        var address = ErrorAddress.Parse("selection se-unit-a");
-        Assert.True(address.IsLegacyEntryAddressed);
+        Assert.True(ErrorAddress.Parse("selection se-unit-a").IsLiteralId);
 
         var resolved = ErrorAddress.Parse("selection ${{ steps.select-first.selectionId }}", _ => "sel-node-1");
-        Assert.False(resolved.IsLegacyEntryAddressed);
+        Assert.False(resolved.IsLiteralId);
         Assert.Equal("sel-node-1", resolved.NodeId);
 
-        Assert.False(ErrorAddress.Parse("roster").IsLegacyEntryAddressed);
-        Assert.False(ErrorAddress.Parse("group").IsLegacyEntryAddressed);
+        Assert.False(ErrorAddress.Parse("roster").IsLiteralId);
+        Assert.False(ErrorAddress.Parse("group").IsLiteralId);
     }
 
     // ── Siblings of one entry (#428) ─────────────────────────────────

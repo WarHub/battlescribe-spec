@@ -287,11 +287,11 @@ public sealed class ErrorAssertionDef
     /// The roster node the engine raised the error on. Format: "{nodeType} ${{ steps.… }}", or
     /// "{nodeType}" bare for the two kinds with no addressable id (<c>roster</c>, <c>group</c>).
     /// Examples: "roster", "group", "category ${{ steps.add-patrol.categories.cat-troops }}",
-    /// "force ${{ steps.add-army.forceId }}", "selection ${{ steps.select-parent.selectionId }}".
+    /// "force ${{ steps.add-army.forceId }}", "selection ${{ steps.select-parent.selectionId }}",
+    /// "selection ${{ steps.add-patrol.selections.se-unit-a[1] }}" for the second node one step
+    /// minted from one entry.
     /// <para>
-    /// TRANSIENT: a literal second token is still read as the pre-#423 catalogue entry id, matching
-    /// the normalized owner attribution. See <see cref="ErrorAddress.IsLegacyEntryAddressed"/>;
-    /// removed by #424.
+    /// A literal second token is a spec error — see <see cref="ErrorAddress.IsLiteralId"/>.
     /// </para>
     /// </summary>
     public required string On { get; set; }
