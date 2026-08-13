@@ -1,8 +1,8 @@
 # Error Assertions
 
 Spec YAML files can assert validation errors produced by the engine after each step.
-Error assertions verify that the correct constraint violations, cost limit errors,
-and hidden-entry errors are reported on the correct roster elements.
+An error assertion names **the roster node the engine raised the error on**, the constraint it came
+from, and optionally part of its message.
 
 ## Quick Reference
 
@@ -11,8 +11,8 @@ and hidden-entry errors are reported on the correct roster elements.
 | `errors:` | `expectedState` | Exact-set match: every assertion must match, no extras allowed |
 | `errorsContain:` | `expectedState` | Subset match: listed errors must match, extras are allowed |
 | `errorCount:` | `expectedState` | Count-only: asserts the total number of errors |
-| `on:` | error assertion item | Identifies the roster element that owns the error |
-| `from:` | error assertion item | Identifies the source entry and constraint (required) |
+| `on:` | error assertion item | The roster **node** the engine raised the error on |
+| `from:` | error assertion item | The source entry and constraint (required) |
 | `messageContains:` | error assertion item | Optional substring match on the error message text |
 
 ## Implicit Zero-Errors Default
@@ -23,24 +23,78 @@ there are **zero** validation errors. This default is skipped for `dataSource` s
 
 To explicitly expect zero errors, use `errors: []`.
 
-## Error Assertion Item Format
+## `on:` — the raising node
 
-Each item in `errors:` or `errorsContain:` has the following fields:
+`on:` names a **roster node**: the element the engine was looking at when it raised the error. It is
+matched against `raisedOnType` + `raisedOnId`, which every engine reports and which nothing in the
+pipeline rewrites.
 
-### `on:` (required)
+Node ids are minted at run time and are per-session on every lane — NewRecruit mints short uids,
+BattleScribe mints GUIDs, and both regenerate on every run. **A node id is therefore always written
+as a `${{ steps.… }}` reference**, resolved against the outputs of the step that created the node.
+A literal id can never be correct and is not read as one.
 
-Identifies the roster element that owns the error.
+| Kind | Form | Example |
+|------|------|---------|
+| `force` | `force ${{ steps.<id>.forceId }}` | `force ${{ steps.add-army.forceId }}` |
+| `category` | `category ${{ steps.<id>.categories.<categoryEntryId> }}` | `category ${{ steps.add-patrol.categories.cat-troops }}` |
+| `selection` | `selection ${{ steps.<id>.selectionId }}` | `selection ${{ steps.select-parent.selectionId }}` |
+| `selection` (auto-selected) | `selection ${{ steps.<id>.selections.<entryId> }}` | `selection ${{ steps.add-patrol.selections.se-unit-a }}` |
+| `roster` | `roster` — **bare** | `roster` |
+| `group` | `group` — **bare** | `group` |
 
-| Format | Example | Matches |
-|--------|---------|---------|
-| `{ownerType}` | `roster` | Any error on the roster |
-| `{ownerType}` | `force` | Any error on a force |
-| `{ownerType} {ownerEntryId}` | `category cat-troops` | Error on the specific category |
-| `{ownerType} {ownerEntryId}` | `selection se-unit-a` | Error on the specific selection |
+`roster` and `group` are written bare because **neither node has an id a spec can name**:
+`RosterState` exposes none on any of the four lanes, and a `selectionEntryGroup` node — which
+NewRecruit materialises with its own errors — appears in no engine's state model at all. Both are
+matched on kind alone, which measurement says is never ambiguous: across the whole corpus, on both
+lanes, no step has more than one roster-raised or more than one group-raised error.
 
-Valid owner types: `roster`, `force`, `category`, `selection`.
+`ownerType` / `ownerEntryId` are **no longer what `on:` matches**. They remain on the error record as
+the normalized post-placement attribution (a *catalogue entry* id, which several roster nodes share),
+they are printed in failure output, and nothing asserts them.
 
-### `from:` (required)
+### Where the engines disagree, the spec says so
+
+BattleScribe and NewRecruit raise the same violation on different nodes, and they do it often — on
+**24 of the 38 assertions both lanes evaluate**. A collective over-limit violation is raised by
+BattleScribe on the container that counted it (the category, the force, or the roster) and by
+NewRecruit on one violating selection. Entry-group constraints are raised by NewRecruit on the group
+node and by BattleScribe on the enclosing selection.
+
+Neither answer is reconstructed into the other. The spec records both, as a base assertion plus an
+`engines:` block:
+
+```yaml
+- expectedState:
+    errors:
+      - on: category ${{ steps.add-patrol.categories.cat-troops }}
+        from: se-unit-a/con-max-boosted
+    engines:
+      newrecruit:
+        errors:
+          - on: selection ${{ steps.select-first.selectionId }}
+            from: se-unit-a/con-max-boosted
+```
+
+An `engines:` key replaces the base list wholesale for that engine; other `expectedState` fields are
+inherited. A UI lane inherits its base engine's block unless it declares its own
+(`newrecruit-ui` falls back to `newrecruit`).
+
+### Transitional: the entry-addressed form
+
+While the corpus migrates (issue #424), a second token that is **not** a `${{ … }}` expression is
+still read the old way — as a catalogue entry id matched against `ownerType` + `ownerEntryId`:
+
+```yaml
+- on: selection se-unit-a       # legacy: the catalogue entry, post-placement attribution
+- on: selection ${{ steps.select-first.selectionId }}   # the node
+```
+
+The discriminator is the presence of `${{`, and it is exact rather than a guess: a node id can only
+ever be written as a step reference, and a catalogue entry id never is. This form is removed when the
+migration finishes; do not write new assertions with it.
+
+## `from:` (required)
 
 Identifies the source entry and constraint that caused the error.
 Format: `{entryId}/{constraintId}`.
@@ -51,7 +105,7 @@ Format: `{entryId}/{constraintId}`.
 | `costLimits/{costTypeId}` | `costLimits/pts` | Cost limit violation for cost type `pts` |
 | `{entryId}/hidden` | `se-unit-a/hidden` | Hidden entry error for entry `se-unit-a` |
 
-### `messageContains:` (optional)
+## `messageContains:` (optional)
 
 When set, the actual error's message text must contain this substring
 (case-insensitive). Useful for distinguishing between errors that share the same
@@ -59,7 +113,7 @@ When set, the actual error's message text must contain this substring
 
 ```yaml
 errors:
-  - on: category cat-troops
+  - on: category ${{ steps.add-patrol.categories.cat-troops }}
     from: se-unit-a/con-min-1
     messageContains: "at least 1"
 ```
@@ -74,13 +128,23 @@ The `errors:` field requires an **exact-set match**:
 ```yaml
 - expectedState:
     errors:
-      - on: category cat-troops
+      - on: category ${{ steps.add-patrol.categories.cat-troops }}
         from: se-unit-a/con-min-troops
-      - on: category cat-hq
+      - on: category ${{ steps.add-patrol.categories.cat-hq }}
         from: se-hq/con-min-hq
 ```
 
 An empty list `errors: []` explicitly asserts zero errors.
+
+### One assertion consumes one error
+
+Matching is **one-to-one and consume-once**: each assertion claims one unmatched error, and no error
+can satisfy two assertions. Node addressing narrows what an assertion names; it does not make one
+individually identifying, and some errors are genuinely indistinguishable. BattleScribe evaluates a
+`field: forces` constraint once per force instance and hangs every result on the roster, so
+`constraint-forces-field-on-forceentry` step 5 produces **three byte-identical errors** sharing
+raising node, `from:` and message. NewRecruit reports nothing at that step, so the fact that would
+tell them apart exists on neither lane. Three assertions are written, and three errors are consumed.
 
 ## Subset Matching (`errorsContain:`)
 
@@ -94,7 +158,7 @@ the full error set.
 ```yaml
 - expectedState:
     errorsContain:
-      - on: category cat-troops
+      - on: selection ${{ steps.select-parent.selectionId }}
         from: se-unit-a/con-min-1
 ```
 
@@ -113,38 +177,34 @@ without matching specifics. Useful for smoke tests.
 
 **Cannot** be combined with `errorsContain:` or `errors:` — all three are mutually exclusive.
 
-## Per-Engine Overrides
+## Examples
 
-Error expectations can vary by engine using the `engines:` override mechanism.
-Each engine key provides a partial `expectedState` whose non-null fields replace
-the base values for that engine.
+### A collective violation, recorded on both engines
+
+Three selections of one entry exceed a max. BattleScribe raises it on the force's Troops category;
+NewRecruit raises it on the first of the three selections.
 
 ```yaml
+- action: addForce
+  id: add-patrol
+  forceEntryId: fe-patrol
+
+- action: selectEntry
+  id: select-first
+  forceId: ${{ steps.add-patrol.forceId }}
+  entryId: se-unit-a
+
+# … two more selections …
+
 - expectedState:
     errors:
-      - on: category cat-troops
-        from: se-unit-a/con-min-1
+      - on: category ${{ steps.add-patrol.categories.cat-troops }}
+        from: se-unit-a/con-max-boosted
     engines:
       newrecruit:
         errors:
-          - on: selection se-squad
-            from: se-squad/hidden
-```
-
-In this example, BattleScribe expects a min-constraint error, while NewRecruit
-expects a hidden-entry error instead.
-
-## Examples
-
-### Constraint violation
-
-```yaml
-- expectedState:
-    forces:
-      - selectionCount: 0
-    errors:
-      - on: category cat-troops
-        from: se-unit-a/con-min-1
+          - on: selection ${{ steps.select-first.selectionId }}
+            from: se-unit-a/con-max-boosted
 ```
 
 ### Cost limit exceeded
@@ -159,27 +219,37 @@ expects a hidden-entry error instead.
         from: costLimits/pts
 ```
 
+### A constraint scoped across child forces
+
+The error belongs to the force whose scope did the counting, not to the force holding the extra
+selection.
+
+```yaml
+- expectedState:
+    errors:
+      - on: force ${{ steps.add-army.forceId }}
+        from: se-squad/con-1
+```
+
+### An entry-group constraint
+
+```yaml
+- expectedState:
+    errorsContain:
+      - on: selection ${{ steps.select-parent.selectionId }}
+        from: seg-weapons/con-max-1
+    engines:
+      newrecruit:
+        errorsContain:
+          - on: group
+            from: seg-weapons/con-max-1
+```
+
 ### Hidden entry error
 
 ```yaml
 - expectedState:
-    forces:
-      - selectionCount: 1
-        selections:
-          - name: Hidden Unit
-            hidden: true
     errors:
-      - on: selection se-1
+      - on: selection ${{ steps.select-unit.selectionId }}
         from: se-1/hidden
-```
-
-### Multiple errors
-
-```yaml
-- expectedState:
-    errors:
-      - on: category cat-troops
-        from: se-unit-a/con-min-troops
-      - on: category cat-hq
-        from: se-hq/con-min-hq
 ```

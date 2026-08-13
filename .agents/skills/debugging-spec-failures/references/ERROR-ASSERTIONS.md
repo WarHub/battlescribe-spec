@@ -13,23 +13,33 @@
 
 ```yaml
 errors:
-  - on: category cat-troops        # WHO has the error
+  - on: category ${{ steps.add-patrol.categories.cat-troops }}   # WHICH NODE raised it
     from: se-unit/con-min-1         # WHAT caused the error
     messageContains: "at least"     # Optional: substring match on message
 ```
 
-### `on` field — error owner
+### `on` field — the raising node
 
-Format: `{ownerType}` or `{ownerType} {ownerEntryId}`
+`on` names the roster NODE the engine raised the error on (`raisedOnType` + `raisedOnId`), not
+the catalogue entry it was attributed to. Node ids are minted per run on every lane, so they are
+always written as `${{ steps.… }}` references.
 
 | Example | Meaning |
 |---------|---------|
-| `roster` | Error on the roster itself |
-| `force` | Error on a force (first force if multiple) |
-| `category cat-troops` | Error on a category with entryId `cat-troops` |
-| `selection se-unit` | Error on a selection with entryId `se-unit` |
+| `roster` | Raised on the roster — **bare**, `RosterState` has no id to name |
+| `group` | Raised on a selectionEntryGroup node — **bare**, no state model carries one |
+| `force ${{ steps.add-army.forceId }}` | Raised on that force node |
+| `category ${{ steps.add-patrol.categories.cat-troops }}` | Raised on that category node |
+| `selection ${{ steps.select-parent.selectionId }}` | Raised on that selection node |
 
-The `ownerType` is one of: `roster`, `force`, `category`, `selection`.
+The node kind is one of: `roster`, `force`, `category`, `selection`, `group`.
+
+**The two engines often raise on different nodes** — BattleScribe on the counting container,
+NewRecruit on the violating selection — so a spec carries a base assertion plus an `engines:` block
+rather than one answer bent to fit both.
+
+**Transitional:** a literal second token (`selection se-unit`) is still read the old way, matching
+`ownerType` + `ownerEntryId`, until #424 finishes migrating the corpus.
 
 ### `from` field — error source
 
@@ -55,10 +65,11 @@ matching is ambiguous.
 ### Exact match (`errors`)
 
 1. For each expected error, find an actual error where:
-   - `on` matches: ownerType and ownerEntryId
+   - `on` matches: raisedOnType and raisedOnId (or ownerType/ownerEntryId on the transitional form)
    - `from` matches: entryId and constraintId
    - `messageContains` (if specified) is a substring of actual message
-2. Each actual error can only match one expected error
+2. Each actual error can only match one expected error — **consume-once**, and some steps really do
+   produce several byte-identical errors that nothing can tell apart
 3. Any unmatched expected errors → failure
 4. Any unmatched actual errors → failure
 
@@ -75,8 +86,12 @@ BattleScribe distributes validation errors across roster elements:
 - **Category-level:** Category min/max constraints
 - **Selection-level:** Entry min/max constraints
 
-The `on` field in error assertions targets the roster element that owns the error,
-not the element that caused the constraint to be defined.
+NewRecruit does not: it raises a collective over-limit violation on the violating **selection**, and
+entry-group constraints on the **group** node. That divergence is asserted, not normalized — see
+`docs/error-assertions.md`.
+
+The `on` field targets the node the error was raised ON, not the entry that declared the constraint;
+`from:` is what names the constraint's source entry.
 
 ## Tips
 
