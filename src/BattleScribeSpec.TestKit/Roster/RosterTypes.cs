@@ -29,19 +29,21 @@ namespace BattleScribeSpec.Roster;
 /// was a normalization for a matcher that no longer reads the field.
 /// </para>
 /// <para>
-/// <see cref="ConstraintType"/> ("min"/"max") and <see cref="ConstraintField"/>
-/// ("selections"/"forces"/a cost-type id) are read from the live constraint at capture, so a
-/// consumer can tell an over-limit violation from an unmet minimum without parsing message prose.
-/// Both are null for the id-less paths (roster cost-limit bypass) and the reserved pseudo-constraints
-/// ("hidden"/"collective").
+/// <b>The constraint is named, not described.</b> <see cref="ConstraintId"/> is the whole of what
+/// the record says about which rule failed. It also carried the constraint's own kind ("min"/"max")
+/// and counted field ("selections"/"forces"/a cost-type id), copied off the live constraint at
+/// capture so the retired placement pass could scope an error structurally instead of matching
+/// message prose. Placement went with #426 and nothing replaced it as a reader, so the copies went
+/// with it (#437). A consumer that wants the kind reads it from the constraint the id names, where
+/// it is authored once; two lanes were maintaining an index to republish it per error, and the
+/// third never bothered — which is the shape of a fact that belongs on the constraint, not on
+/// every error the constraint raises.
 /// </para>
 /// </remarks>
 public record ValidationErrorState(
     string Message,
     string? EntryId = null,
     string? ConstraintId = null,
-    string? ConstraintType = null,
-    string? ConstraintField = null,
     string? RaisedOnType = null,
     string? RaisedOnId = null,
     string? RaisedOnEntryId = null);

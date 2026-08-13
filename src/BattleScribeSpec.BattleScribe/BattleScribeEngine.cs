@@ -419,8 +419,8 @@ public sealed class BattleScribeEngine : IDisposable
     /// <summary>
     /// Turns the engine's captured <c>ownerId::entryId::constraintId</c> (now carried on the error
     /// via the bs-engine-patch field) into a structured error state: entry and constraint split by
-    /// the shared rule, the collective/hidden pseudo-constraint disambiguated, and the constraint's
-    /// kind/field attached. No message text is parsed for attribution.
+    /// the shared rule, and the collective/hidden pseudo-constraint disambiguated. No message text
+    /// is parsed for attribution.
     /// </summary>
     /// <remarks>
     /// All three raisedOn values describe the ONE element the errors were read off: its kind, its
@@ -446,13 +446,10 @@ public sealed class BattleScribeEngine : IDisposable
             constraintId = "hidden";
         }
 
-        var (type, field) = ConstraintMetaFor(constraintId);
         return new ValidationErrorState(
             message,
             EntryId: entryId,
             ConstraintId: constraintId,
-            ConstraintType: type,
-            ConstraintField: field,
             RaisedOnType: raisedOnType,
             RaisedOnId: raisedOnId,
             RaisedOnEntryId: raisedOnEntryId);
@@ -471,12 +468,6 @@ public sealed class BattleScribeEngine : IDisposable
         }
         return (null, null);
     }
-
-    /// <summary>A constraint's kind and field by id, or (null, null) for a pseudo/unknown id.</summary>
-    private (string? type, string? field) ConstraintMetaFor(string? constraintId)
-        => constraintId is not null && _constraintMeta.TryGetValue(constraintId, out var meta)
-            ? (meta.type, meta.field)
-            : (null, null);
 
     private static InvalidOperationException NoErrorId(string raisedOnType, string message)
         => new($"BattleScribe validation error on {raisedOnType} carried no bsspecErrorId: \"{message}\". " +
@@ -568,10 +559,6 @@ public sealed class BattleScribeEngine : IDisposable
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = [];
     private readonly Dictionary<string, SelectionEntryGroup> _groupLookup = [];
-    // Every constraint's kind and field by id, so a captured error is placed from structural facts
-    // (max vs min; forces vs selections/cost) rather than message prose. Built at setup from all
-    // constraint-bearing containers; a shared constraint id repeats with identical kind/field.
-    private readonly Dictionary<string, (string type, string field)> _constraintMeta = [];
     // constraintId -> the container ids that declare it, for DeclaringEntryOf.
     private readonly Dictionary<string, HashSet<string>> _constraintDeclarers = [];
     // Cached reflection handle for the patched engine's bsspecErrorId field (see ReadErrorId).
@@ -1524,7 +1511,6 @@ public sealed class BattleScribeEngine : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
         _groupLookup.Clear();
-        _constraintMeta.Clear();
         _constraintDeclarers.Clear();
 
         foreach (var catSpec in catalogues)
@@ -1654,9 +1640,9 @@ public sealed class BattleScribeEngine : IDisposable
             }
         }
 
-        // Constraint kind/field by id, from every constraint-bearing container in the setup data, so
-        // a captured error carries the constraint's kind without anyone parsing its message text.
-        IndexConstraintMetaTree(gameSystem, catalogues);
+        // Which container declares each constraint id, from every constraint-bearing container in
+        // the setup data, so a captured error names the declaring entry without parsing its message.
+        IndexConstraintDeclarersTree(gameSystem, catalogues);
 
         // Default active catalogue is the first loaded catalogue.
         _setupCatalogue = _setupCatalogues.Count > 0 ? _setupCatalogues[0] : null;
@@ -1684,16 +1670,18 @@ public sealed class BattleScribeEngine : IDisposable
         return initErrors;
     }
 
-    // ===== Constraint-meta indexing =====
-    // Two indexes, both keyed by constraint id and built once from the setup data:
-    //   _constraintMeta      : constraintId -> (kind, field), for structural placement.
+    // ===== Constraint-declarer indexing =====
+    // One index, keyed by constraint id and built once from the setup data:
     //   _constraintDeclarers : constraintId -> the container ids that DECLARE it, for choosing which
     //                          segment of a composite entry id is the `from` entry (a link's own
     //                          constraint declares on the LINK, not its target -- see DeclaringEntryOf).
+    // The same walk used to build a second index of each constraint's kind and field. Nothing read
+    // it after placement was retired (#426), so it went (#437); the walk itself stayed, because
+    // DeclaringEntryOf is a live reader and every spec's `from:` on a link-reached error rides on it.
 
-    private void IndexConstraintMeta(string declarerId, IEnumerable<ProtocolConstraint>? constraints)
+    private void IndexConstraintDeclarers(string declarerId, IEnumerable<ProtocolConstraint>? constraints)
     {
-        if (constraints is null)
+        if (constraints is null || string.IsNullOrEmpty(declarerId))
         {
             return;
         }
@@ -1703,22 +1691,16 @@ public sealed class BattleScribeEngine : IDisposable
             {
                 continue;
             }
-            // A shared constraint id repeats across the entries that share it with identical
-            // kind/field, so first-wins is fine and last-wins would be identical.
-            _constraintMeta.TryAdd(c.Id, (c.Type, c.Field));
-            if (!string.IsNullOrEmpty(declarerId))
+            if (!_constraintDeclarers.TryGetValue(c.Id, out var declarers))
             {
-                if (!_constraintDeclarers.TryGetValue(c.Id, out var declarers))
-                {
-                    declarers = [];
-                    _constraintDeclarers[c.Id] = declarers;
-                }
-                declarers.Add(declarerId);
+                declarers = [];
+                _constraintDeclarers[c.Id] = declarers;
             }
+            declarers.Add(declarerId);
         }
     }
 
-    private void IndexConstraintMetaTree(ProtocolGameSystem gs, IEnumerable<ProtocolCatalogue> catalogues)
+    private void IndexConstraintDeclarersTree(ProtocolGameSystem gs, IEnumerable<ProtocolCatalogue> catalogues)
     {
         WalkForceEntries(gs.ForceEntries);
         WalkCategoryEntries(gs.CategoryEntries);
@@ -1747,7 +1729,7 @@ public sealed class BattleScribeEngine : IDisposable
         }
         foreach (var fe in forceEntries)
         {
-            IndexConstraintMeta(fe.Id, fe.Constraints);
+            IndexConstraintDeclarers(fe.Id, fe.Constraints);
             WalkForceEntries(fe.ForceEntries);
         }
     }
@@ -1760,7 +1742,7 @@ public sealed class BattleScribeEngine : IDisposable
         }
         foreach (var ce in categoryEntries)
         {
-            IndexConstraintMeta(ce.Id, ce.Constraints);
+            IndexConstraintDeclarers(ce.Id, ce.Constraints);
         }
     }
 
@@ -1772,7 +1754,7 @@ public sealed class BattleScribeEngine : IDisposable
         }
         foreach (var se in entries)
         {
-            IndexConstraintMeta(se.Id, se.Constraints);
+            IndexConstraintDeclarers(se.Id, se.Constraints);
             WalkSelectionEntries(se.SelectionEntries);
             WalkGroups(se.SelectionEntryGroups);
             WalkEntryLinks(se.EntryLinks);
@@ -1787,7 +1769,7 @@ public sealed class BattleScribeEngine : IDisposable
         }
         foreach (var g in groups)
         {
-            IndexConstraintMeta(g.Id, g.Constraints);
+            IndexConstraintDeclarers(g.Id, g.Constraints);
             WalkSelectionEntries(g.SelectionEntries);
             WalkGroups(g.SelectionEntryGroups);
             WalkEntryLinks(g.EntryLinks);
@@ -1802,7 +1784,7 @@ public sealed class BattleScribeEngine : IDisposable
         }
         foreach (var el in links)
         {
-            IndexConstraintMeta(el.Id, el.Constraints);
+            IndexConstraintDeclarers(el.Id, el.Constraints);
             WalkSelectionEntries(el.SelectionEntries);
             WalkGroups(el.SelectionEntryGroups);
         }
@@ -2408,7 +2390,6 @@ public sealed class BattleScribeEngine : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
         _groupLookup.Clear();
-        _constraintMeta.Clear();
         _constraintDeclarers.Clear();
         GC.SuppressFinalize(this);
     }

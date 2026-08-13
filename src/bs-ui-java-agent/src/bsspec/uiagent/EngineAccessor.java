@@ -1430,12 +1430,6 @@ public class EngineAccessor {
             }
             item.addProperty("entryId", entryId);
             item.addProperty("constraintId", constraintId);
-
-            String[] meta = constraintMetaOf(entryId, constraintId);
-            if (meta != null) {
-                item.addProperty("constraintType", meta[0]);
-                item.addProperty("constraintField", meta[1]);
-            }
             errors.add(item);
         }
     }
@@ -1486,27 +1480,6 @@ public class EngineAccessor {
             entryId.append("::").append(parts[i]);
         }
         return new String[] {entryId.toString(), parts[parts.length - 1]};
-    }
-
-    /** A constraint's {kind, field} on its declaring entry, or null for a pseudo/unknown id. */
-    private String[] constraintMetaOf(String entryId, String constraintId) {
-        if (entryId == null || constraintId == null) {
-            return null;
-        }
-        try {
-            Object entry = findEntryById(entryId);
-            if (entry == null) {
-                return null;
-            }
-            for (Object constraint : toJavaList(callListGetter(entry, "getConstraints"))) {
-                if (constraintId.equals(callGetter(constraint, "getId"))) {
-                    return new String[] {callGetter(constraint, "getType"), callGetter(constraint, "getField")};
-                }
-            }
-        } catch (Exception e) {
-            // A lookup failure just means placement falls back to leaving the error where it is.
-        }
-        return null;
     }
 
     /** The roster cost-limit overrun's {entryId, constraintId}, matched by cost name. */
