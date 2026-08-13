@@ -418,7 +418,7 @@ Each validation error is a structured object with the following fields:
 | `constraintId` | string? | ID of the constraint that failed, the cost type ID for cost limit errors, or `"hidden"` for hidden entry errors |
 | `constraintType` | string? | The constraint's kind: `"min"` or `"max"` |
 | `constraintField` | string? | What the constraint counts: `"selections"`, `"forces"`, or a cost-type ID |
-| `raisedOnType` | string? | Type of the roster element the engine RAISED the error on |
+| `raisedOnType` | string? | Type of the roster element the engine RAISED the error on. NOT limited to `ownerType`'s four values — an engine may raise on a node its state has no place for, and NewRecruit reports `"group"` for a `selectionEntryGroup` constraint |
 | `raisedOnId` | string? | Runtime node ID of that element |
 
 Null fields are omitted from the JSON.
@@ -435,6 +435,11 @@ Only the raisedOn pair identifies a **node**. `ownerEntryId` is a catalogue entr
 selections of one entry share it. An adapter that can report the runtime node should: it is what a
 failing assertion prints, and what tooling joins errors to parsed roster nodes by. An adapter that
 cannot may omit both — nothing in the assertion contract requires them today.
+
+Report the node the engine actually raised on, even when the roster state has no node for it —
+NewRecruit raises `selectionEntryGroup` constraints on the group, which `getSelections()` flattens
+away. Substituting the nearest node that IS in the state would make the pair a reconstruction of the
+owner attribution rather than an independent answer, which is the whole reason it exists.
 
 #### Cost limit errors
 

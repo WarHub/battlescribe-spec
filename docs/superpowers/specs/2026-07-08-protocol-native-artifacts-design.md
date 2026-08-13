@@ -203,9 +203,11 @@ Assertions (`ErrorAssertionDef` "on"/"from") match on `OwnerType`/`OwnerEntryId`
 - **force / selection owner** → `RaisedOnId` = instance uid → direct join to the
   parsed node's `id`. Precise even with duplicate entries (uid is unique).
   (Written as `OwnerId` when this design was drafted; #421 split that field's two
-  meanings apart and the instance uid is the raisedOn half. Note the join is only
-  available where the engine populates it — both BattleScribe lanes do, NR does
-  not yet, #422.)
+  meanings apart and the instance uid is the raisedOn half. All four lanes
+  populate it since #422 — on NewRecruit the uid IS the instance uid, so the join
+  is the same one. The exception is a `selectionEntryGroup` constraint, which
+  NewRecruit raises on the group node: a real node with a uid, but one no parsed
+  roster node carries, so that error has no join.)
 - **roster / cost-limit owner** → reserved pseudo-addresses (`"roster"`,
   `"costLimits/{costTypeId}"`), already how `ErrorAssertionDef.From` works.
 - **category owner** → composite `(parent uid + category entryId)`, because

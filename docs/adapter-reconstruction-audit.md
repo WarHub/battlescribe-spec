@@ -138,9 +138,10 @@ validation-errors notes.
 
 | site | what it reconstructs | status |
 |---|---|---|
-| `entryId` back-search (`JsHelpers.cs`, `extractErrors`, `:424`–`:470`) | NR errors carry no `entryId`; the extractor scans four tiers of candidate `source.constraints[]` for the matching constraint id | structural, correct today, and the sole remaining *derivation* of an identity field on the NR side — #283 finding 1, landed here |
-| roster-level non-`max` drop (`JsHelpers.cs:472`–`:483`) | roster-scope errors that are not a `max` cost limit end in an unconditional `return` — an `exactly` cost limit would vanish rather than fail | known hole; wants its own issue the day a spec needs one |
-| cost-limit constraint id (`JsHelpers.cs:479`) | `costLimits`/`e.constraint.field` pseudo-entry convention, mirroring the BattleScribe shape | convention, kept deliberately so both engines report cost-limit errors in one shape |
+| `entryId` back-search (`JsHelpers.cs`, `extractErrors`, `:531`–`:577`) | NR errors carry no `entryId`; the extractor scans four tiers of candidate `source.constraints[]` for the matching constraint id | structural, correct today, and the sole remaining *derivation* of an identity field on the NR side — #283 finding 1, landed here |
+| roster-level non-`max` drop (`JsHelpers.cs:579`–`:590`) | roster-scope errors that are not a `max` cost limit end in an unconditional `return` — an `exactly` cost limit would vanish rather than fail | known hole; wants its own issue the day a spec needs one |
+| cost-limit constraint id (`JsHelpers.cs:587`) | `costLimits`/`e.constraint.field` pseudo-entry convention, mirroring the BattleScribe shape | convention, kept deliberately so both engines report cost-limit errors in one shape |
+| owner walk on the flat merge (`JsHelpers.cs:657`–`:675`) | errors reached only through `army.getErrors()` have no owner in hand, so `ownerType`/`ownerEntryId` are rebuilt by walking `e.parent.parent` upward for the first node with a source id | still a reconstruction, and #422 measured what it stands in for: those errors are raised on a `selectionEntryGroup` node, which the walk replaces with the enclosing selection. The raising node beside it is now read, not rebuilt |
 
 ### Cost value conversions — the `double ↔ decimal` boundary
 
