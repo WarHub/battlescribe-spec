@@ -276,7 +276,7 @@ public sealed class ExpectedStateDef
 
 /// <summary>
 /// Structured error assertion using compact "on"/"from" format.
-/// <para>"on" identifies the roster element: "roster", "force", "category cat-troops", "selection se-unit-a"</para>
+/// <para>"on" identifies the roster NODE the engine raised the error on — see <see cref="ErrorAddress"/></para>
 /// <para>"from" identifies the source as "{entryId}/{constraintId}" with reserved pseudo-values:</para>
 /// <para>  - "costLimits/{costTypeId}" for cost limit errors (pseudo-entry)</para>
 /// <para>  - "{entryId}/hidden" for hidden entry errors (pseudo-constraint)</para>
@@ -284,9 +284,15 @@ public sealed class ExpectedStateDef
 public sealed class ErrorAssertionDef
 {
     /// <summary>
-    /// The roster element that owns the error.
-    /// Format: "{ownerType}" or "{ownerType} {ownerEntryId}".
-    /// Examples: "roster", "force", "category cat-troops", "selection se-unit-a".
+    /// The roster node the engine raised the error on. Format: "{nodeType} ${{ steps.… }}", or
+    /// "{nodeType}" bare for the two kinds with no addressable id (<c>roster</c>, <c>group</c>).
+    /// Examples: "roster", "group", "category ${{ steps.add-patrol.categories.cat-troops }}",
+    /// "force ${{ steps.add-army.forceId }}", "selection ${{ steps.select-parent.selectionId }}".
+    /// <para>
+    /// TRANSIENT: a literal second token is still read as the pre-#423 catalogue entry id, matching
+    /// the normalized owner attribution. See <see cref="ErrorAddress.IsLegacyEntryAddressed"/>;
+    /// removed by #424.
+    /// </para>
     /// </summary>
     public required string On { get; set; }
 
