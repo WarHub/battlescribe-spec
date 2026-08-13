@@ -294,6 +294,43 @@ if (Test-Path $configPath) {
     }
 }
 
+# --- ASM (vendored) ---
+# Pinned by version and SHA-256, mirroring the download-then-verify contract the rest of this script
+# uses for frozen fixtures: a bad or substituted download is a hard failure, never a silent build
+# against unexpected bytecode. Vendored BEFORE anything that consumes it: the bs-ui-java-agent build
+# below shades ASM into the agent jar, and the bs-engine-patch build after that compiles against it
+# (both serve the engine-jar patch of issue #401 -- see src/bs-engine-patch). Not gated by
+# -SkipJavaAgent: the offline lanes that skip the agent still build the .NET engine, whose patch
+# step needs ASM.
+
+Write-Host ""
+Write-Host "Vendoring ASM..." -ForegroundColor Cyan
+
+$asmVersion = '9.7'
+$asmSha256 = 'ADF46D5E34940BDF148ECDD26A9EE8EEA94496A72034FF7141066B3EEA5C4E9D'
+$asmDir = Join-Path $repoRoot 'lib/asm'
+$asmJar = Join-Path $asmDir "asm-$asmVersion.jar"
+$asmUrl = "https://repo1.maven.org/maven2/org/ow2/asm/asm/$asmVersion/asm-$asmVersion.jar"
+
+$asmOk = (Test-Path $asmJar) -and
+    ((Get-FileHash $asmJar -Algorithm SHA256).Hash -eq $asmSha256)
+if (-not $Force -and $asmOk) {
+    Write-Host "  [OK] ASM $asmVersion already vendored" -ForegroundColor Green
+} else {
+    if (Test-Path $asmDir) { Remove-Item $asmDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $asmDir -Force | Out-Null
+    Write-Host "  Downloading asm-$asmVersion.jar..." -ForegroundColor Yellow
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $asmUrl -OutFile $asmJar -UseBasicParsing
+    $ProgressPreference = 'Continue'
+    $actual = (Get-FileHash $asmJar -Algorithm SHA256).Hash
+    if ($actual -ne $asmSha256) {
+        Remove-Item $asmJar -Force
+        throw "ASM $asmVersion checksum mismatch: expected $asmSha256, got $actual. Refusing to build against it."
+    }
+    Write-Host "  [OK] ASM $asmVersion vendored to $asmJar" -ForegroundColor Green
+}
+
 # --- Liberica JDK + bs-ui-java-agent build ---
 # Skipped in CI (env var CI=true) because CI provisions Java via actions/setup-java.
 # Also skipped if -SkipJavaAgent switch is passed.
@@ -375,46 +412,18 @@ if ($SkipJavaAgent -or $env:CI -eq 'true') {
     Write-Host "[OK] bs-ui-java-agent.jar built" -ForegroundColor Green
 }
 
-# --- ASM (vendored) + bs-engine-patch tool ---
+# --- bs-engine-patch tool ---
 # The in-process BattleScribe engine is IKVM-compiled from a COPY of BattleScribeEngine.jar that the
 # PatchBattleScribeEngineJar MSBuild target rewrites so validation errors carry their constraint id
 # (see src/bs-engine-patch and issue #401). That target runs `java PatchJarMain`, which needs the
-# patch tool compiled and ASM on the classpath — both produced here so a plain `dotnet build` has
-# them. Not gated by -SkipJavaAgent: every lane that builds the .NET engine needs the patched jar,
+# patch tool compiled against the ASM vendored above — produced here so a plain `dotnet build` has
+# it. Not gated by -SkipJavaAgent: every lane that builds the .NET engine needs the patched jar,
 # including CI's offline `checks` lane. It only needs a plain JDK (no JavaFX); resolve one below.
 
 Write-Host ""
-Write-Host "Vendoring ASM + building bs-engine-patch tool..." -ForegroundColor Cyan
+Write-Host "Building bs-engine-patch tool..." -ForegroundColor Cyan
 
-# ASM, pinned by version and SHA-256. Mirrors the download-then-verify contract the rest of this
-# script uses for frozen fixtures: a bad or substituted download is a hard failure, never a
-# silent build against unexpected bytecode.
-$asmVersion = '9.7'
-$asmSha256 = 'ADF46D5E34940BDF148ECDD26A9EE8EEA94496A72034FF7141066B3EEA5C4E9D'
-$asmDir = Join-Path $repoRoot 'lib/asm'
-$asmJar = Join-Path $asmDir "asm-$asmVersion.jar"
-$asmUrl = "https://repo1.maven.org/maven2/org/ow2/asm/asm/$asmVersion/asm-$asmVersion.jar"
-
-$asmOk = (Test-Path $asmJar) -and
-    ((Get-FileHash $asmJar -Algorithm SHA256).Hash -eq $asmSha256)
-if (-not $Force -and $asmOk) {
-    Write-Host "  [OK] ASM $asmVersion already vendored" -ForegroundColor Green
-} else {
-    if (Test-Path $asmDir) { Remove-Item $asmDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $asmDir -Force | Out-Null
-    Write-Host "  Downloading asm-$asmVersion.jar..." -ForegroundColor Yellow
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $asmUrl -OutFile $asmJar -UseBasicParsing
-    $ProgressPreference = 'Continue'
-    $actual = (Get-FileHash $asmJar -Algorithm SHA256).Hash
-    if ($actual -ne $asmSha256) {
-        Remove-Item $asmJar -Force
-        throw "ASM $asmVersion checksum mismatch: expected $asmSha256, got $actual. Refusing to build against it."
-    }
-    Write-Host "  [OK] ASM $asmVersion vendored to $asmJar" -ForegroundColor Green
-}
-
-# Compile the patch tool. Resolve a JDK: the in-repo Liberica if the Java-agent block installed it,
+# Resolve a JDK: the in-repo Liberica if the Java-agent block installed it,
 # else JAVA_HOME (CI's offline lanes provision one via actions/setup-java). No JavaFX needed.
 $patchJdk = if (Test-Path (Join-Path $repoRoot 'lib/liberica-jdk/bin')) {
     Join-Path $repoRoot 'lib/liberica-jdk'
