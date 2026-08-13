@@ -126,6 +126,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **`modifier-field-constraint-value` enhanced** — now selects 3 times to verify the
   constraint value change from max=2 to max=5 is actually observable (no error at 3).
 
+### Changed
+
+- **The .NET SDK feature band is now a decision this repo makes, not one the runner image makes for
+  it (#312)** — `global.json` moves from `rollForward: latestFeature` to `latestPatch` pinned at
+  `10.0.300`, all six `actions/setup-dotnet` steps swap `dotnet-version: '10.0.x'` for
+  `global-json-file: global.json`, and a new `dotnet-sdk` Dependabot ecosystem owns moving the band.
+  The combination that made this urgent is `AnalysisLevel=latest-recommended` +
+  `TreatWarningsAsErrors=true`: the set of CA rules able to fail the build was resolved from
+  whatever SDK the runner fetched, so a stricter band arrives as a red build on a commit that
+  changed nothing. **It had already happened, unnoticed** — SDK 10.0.400 shipped 2026-08-11 and CI
+  built on it from 2026-08-13 onward (run 31746128450), on a feature band that appears in no commit
+  and no review. That run was green, which is why nobody found out. Note what this deliberately does
+  *not* do: `AnalysisLevel` stays `latest-recommended` rather than gaining a second pinned number
+  free to drift from the first — with the SDK pinned, `latest` already resolves to a version we
+  chose. The band still moves, through a Dependabot PR that CI builds; a widening rule set now lands
+  as a reviewable diff. `ToolchainPinDriftTests` fails if a workflow step goes back to picking its
+  own SDK, if `rollForward` loosens, or if the Dependabot entry is dropped, since a pin without a
+  bump path is a slow leak rather than a fix.
+
 ### Fixed
 
 - **An NR UI action timeout was anonymous, and its diagnostics never left the runner** — the two

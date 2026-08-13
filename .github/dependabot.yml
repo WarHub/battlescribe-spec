@@ -17,3 +17,31 @@ updates:
       all-actions:
         patterns:
           - "*"
+
+  # THIS ENTRY IS WHAT MAKES global.json's PIN AFFORDABLE. `rollForward: latestPatch` holds the SDK
+  # to one feature band, which is the point — `AnalysisLevel=latest-recommended` +
+  # `TreatWarningsAsErrors=true` mean the enabled CA rule set is a function of the installed SDK, so
+  # an unpinned band lets a toolchain we never chose turn untouched code into build errors. It has
+  # already happened once without anyone deciding it: 10.0.400 shipped 2026-08-11 and CI built on it
+  # from the next run onward, because every setup-dotnet step asked for a floating '10.0.x'. That run
+  # was green. Nothing about the repo made it so, and nothing recorded that the band had moved.
+  #
+  # A pin with no bump path is just a slower version of the same problem, so the band has to keep
+  # moving — as a PR, tested, with a diff. That is this entry. Dependabot's dotnet-sdk updater
+  # rewrites `sdk.version` in global.json and does cross feature bands (dependabot-core#11668:
+  # 9.0.102 -> 9.0.200), which is the case that matters; it reads `version` and ignores
+  # `rollForward`, so `latestPatch` narrows what the SDK resolver accepts without narrowing what
+  # Dependabot offers.
+  #
+  # Ungrouped deliberately. The nuget and actions groups exist to collapse a dozen routine bumps into
+  # one PR; this ecosystem has exactly one dependency, and it is the one whose PR most needs to be
+  # read on its own — a red build here is the analyzer band tightening, which is a decision, not
+  # noise to be batched with a JSON serializer bump.
+  #
+  # Two SDK-derived pins do NOT move with this and stay manual: `Directory.Build.targets`'
+  # KnownILLinkPack (see the comment there — dependabot cannot see an implicit reference) and the
+  # `mcr.microsoft.com/dotnet/sdk` tags in docker/.
+  - package-ecosystem: "dotnet-sdk"
+    directory: "/"
+    schedule:
+      interval: "weekly"
