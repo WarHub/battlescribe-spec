@@ -45,6 +45,51 @@ guarantee** — breaking changes are not just allowed but actively encouraged wh
 improve architecture, code quality, or reduce tech debt. Prefer bold restructuring over
 incremental workarounds. When in doubt, choose the cleaner design.
 
+## Issues and the backlog
+
+The backlog lives on the [Conformance Spec board](https://github.com/orgs/WarHub/projects/2). All
+open issues are on it; the board adds no work of its own.
+
+**Four things are fields, not labels.** Read and write them through the API — a label that looks
+like one of these is legacy and does not feed the board.
+
+| | Where it lives | Values |
+|---|---|---|
+| **Type** | repo issue type | `Epic`, `Feature`, `Task`, `Bug` |
+| **Priority** | org issue field | `Urgent`, `High`, `Medium`, `Low` |
+| **Size** | org issue field | `XS`, `S`, `M`, `L`, `XL` |
+| **Parent** | sub-issue link | see below |
+
+`Priority` and `Size` are **organization-level issue fields**, shared across every WarHub repo. They
+are not project fields — a project-field query returns them with an empty option list, which reads
+as "unconfigured" and is not. Read them from the issue:
+
+```bash
+gh api graphql -f query='query{repository(owner:"WarHub",name:"battlescribe-spec"){issue(number:419){ issueType{name} parent{number} issueFieldValues(first:10){nodes{... on IssueFieldSingleSelectValue{name field{... on IssueFieldCommon{name}}}}} }}}'
+```
+
+Write with the `updateIssueIssueType` and `setIssueFieldValue` GraphQL mutations. `gh issue edit`
+cannot set any of them.
+
+**Parentage is a real link.** Writing `Part of #N` in an issue body creates no link — the issue
+stays unparented in the API and on the board. Use the sub-issue API, and note that `sub_issue_id`
+is the child's **database id**, not its number:
+
+```bash
+gh api --method POST repos/WarHub/battlescribe-spec/issues/419/sub_issues -F sub_issue_id=$(gh api repos/WarHub/battlescribe-spec/issues/421 --jq .id)
+```
+
+Children keep insertion order, so add them in the order they should read. Link a new child **at
+creation time**, and **delete the body-text equivalents** — the `Part of #N` line on the child and
+any `## Children` checklist on the parent. Prose and metadata drift apart, and only the metadata
+drives the hierarchy and the progress rollup. See `.squad/decisions/decisions.md` — "Sub-issue
+parentage is a real link, not body prose".
+
+**Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `go:*`,
+`release:*`, `thorough-ci`, `scheduled-ci-failure`. The `type:*` and `priority:*` label sets were
+deleted on 2026-08-13 after their values were migrated into the fields above — do not recreate them.
+A label that restates a field is a second record that drifts from the first.
+
 ## Build & test
 
 ```bash

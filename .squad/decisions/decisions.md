@@ -83,9 +83,14 @@ No labels were removed; only additions were made to maintain traceability.
 
 ## Decision: GitHub Sub-Issue Parentage Applied
 
+> ⚠️ **SUPERSEDED 2026-08-13 — the "Learnings" below are wrong.** The sub-issues API works fine on
+> this repository; the 404 was a caller error, not a capability limit. Writing `Part of #N` in an
+> issue body creates **no** parent link, so issues parented this way appear unparented on the board.
+> See "Decision: Sub-issue parentage is a real link, not body prose" at the end of this file.
+
 **Author:** Alex (Tester / QA)  
 **Date:** 2026-05-08  
-**Status:** Complete  
+**Status:** Complete (method since corrected)  
 **Scope:** GitHub issue link management
 
 ### Summary
@@ -100,6 +105,9 @@ Applied GitHub sub-issue parentage relationships to the WarHub/battlescribe-spec
 - Method 2 (edit issue body) succeeded for all 12 issues
 
 Each child issue body was updated with a prepended "Part of #{PARENT}" marker.
+
+> ⚠️ The 404 was caused by passing the issue **number** as `sub_issue_id`. That parameter takes the
+> issue's **database id** (e.g. `5138734670`), not its number (`421`). Method 1 works.
 
 ### Parentage Applied
 
@@ -133,15 +141,19 @@ Each child issue body was updated with a prepended "Part of #{PARENT}" marker.
 
 ### Learnings
 
-- GitHub sub-issues REST API (Method 1) not applicable for this repository
-- "Part of #{parent}" marker method (Method 2) is reliable and widely supported
-- All 12 issues updated successfully with zero failures
-- Method 2 provides an explicit, queryable link in issue body that's visible to all users
+> ⚠️ Every bullet in this section is wrong. Corrected 2026-08-13 — see the superseding entry.
+
+- ~~GitHub sub-issues REST API (Method 1) not applicable for this repository~~ — it is; the 404 was
+  a wrong `sub_issue_id` (issue number instead of database id).
+- ~~"Part of #{parent}" marker method (Method 2) is reliable and widely supported~~ — it is prose.
+  GitHub does not read it. It creates no link, and the board's Parent field stays empty.
+- ~~Method 2 provides an explicit, queryable link in issue body that's visible to all users~~ — it is
+  not queryable: `parent`/`subIssues` in the API and the board's Parent field both stay null.
 
 ### Next Steps
 
-- Monitor GitHub for any UI features that might auto-detect the "Part of" marker
-- Consider using Project Board v2 fields as a complementary parent field (Method 3) if more structured metadata is needed
+- ~~Monitor GitHub for any UI features that might auto-detect the "Part of" marker~~ — there are
+  none and there will be none; use the sub-issue API.
 
 ---
 
@@ -584,6 +596,55 @@ The decision doc claimed required-field detection used reflection-based nullabil
 ### Decision
 
 Update the decision doc to describe the actual implementation: named hard-coded lists, the specific nullable fields included in each, and the rationale (kitchen-sink must demonstrate observability of all fields, not just non-nullable ones).
+
+---
+
+## Decision: Sub-issue parentage is a real link, not body prose
+
+**Date:** 2026-08-13  
+**Source:** Board grooming review of [Conformance Spec (project 2)](https://github.com/orgs/WarHub/projects/2)  
+**Supersedes:** "Decision: GitHub Sub-Issue Parentage Applied" (2026-05-08)
+
+### What was wrong
+
+That entry recorded a "learning" that the GitHub sub-issues API is *"not applicable for this
+repository"*, and established writing `Part of #{parent}` in the issue body as the house method.
+
+Both halves are false, and the second one is the expensive one. `Part of #N` is prose. GitHub does
+not parse it. An issue parented that way has `parent: null` in the API and an empty **Parent** field
+on the board — so it is, by every mechanical measure, unparented. The convention silently produced
+the exact defect a later audit went looking for.
+
+The 404 that caused it was a caller error: `sub_issue_id` takes the issue's **database id**, not its
+number. Verified working on this repository on 2026-08-13.
+
+### The rule
+
+**Parentage is set through the API, and the body-text equivalents are deleted** — the `Part of #N`
+line on the child and any `## Children` checklist on the parent. Keeping both means keeping two
+records that drift, and only one of them drives the hierarchy.
+
+```bash
+# read a parent's children
+gh api repos/WarHub/battlescribe-spec/issues/419/sub_issues --jq '.[] | "\(.number) \(.title)"'
+```
+
+```bash
+# link child 421 under parent 419 — note: database id, not issue number
+gh api --method POST repos/WarHub/battlescribe-spec/issues/419/sub_issues -F sub_issue_id=5138734670
+```
+
+Get a child's database id with
+`gh api repos/WarHub/battlescribe-spec/issues/421 --jq .id`. The GraphQL `addSubIssue` mutation is
+equivalent and takes node ids (`issueId`, `subIssueId`). Children keep insertion order, so add them
+in the order they should read, and link a new child at creation time rather than writing prose that
+someone has to migrate later.
+
+### Why it matters beyond tidiness
+
+An epic's sub-issue list is what makes "is this epic done?" answerable without reading it. #15, #16,
+#18 and #73 all report progress from that list. A child linked only in prose is invisible to it, so
+the epic reports itself more complete than it is.
 
 ---
 
