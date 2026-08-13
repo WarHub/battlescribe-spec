@@ -85,9 +85,10 @@ any `## Children` checklist on the parent. Prose and metadata drift apart, and o
 drives the hierarchy and the progress rollup. See `.squad/decisions/decisions.md` — "Sub-issue
 parentage is a real link, not body prose".
 
-**Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `thorough-ci`,
-`scheduled-ci-failure`. `type:*` labels predate the Type field and are being retired; do not add new
-ones.
+**Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `go:*`,
+`release:*`, `thorough-ci`, `scheduled-ci-failure`. The `type:*` and `priority:*` label sets were
+deleted on 2026-08-13 after their values were migrated into the fields above — do not recreate them.
+A label that restates a field is a second record that drifts from the first.
 
 ## Build & test
 
