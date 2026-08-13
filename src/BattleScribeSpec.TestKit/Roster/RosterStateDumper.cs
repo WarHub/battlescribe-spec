@@ -108,9 +108,16 @@ public static class StateDumper
                     parts.Add($"owner={ot}");
                 }
 
-                if (err.OwnerId is { } oid)
+                // The node the engine raised the error on, which placement may have moved the
+                // attribution off. `owner` above is where the error is reported, not where it arose.
+                if (err.RaisedOnType is { } rt)
                 {
-                    parts.Add($"ownerId={oid}");
+                    parts.Add($"raisedOnType={rt}");
+                }
+
+                if (err.RaisedOnId is { } rid)
+                {
+                    parts.Add($"raisedOnId={rid}");
                 }
 
                 if (err.EntryId is { } eid)

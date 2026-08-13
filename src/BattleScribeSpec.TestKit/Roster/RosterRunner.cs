@@ -773,6 +773,16 @@ public sealed class RosterRunner
         }
     }
 
+    /// <summary>
+    /// One error as a failing assertion shows it: the attribution a spec's <c>on:</c> matches, the
+    /// node the engine raised it on, and the <c>from:</c> pair.
+    /// </summary>
+    /// <remarks>
+    /// The attribution names a CATALOGUE entry, which several roster nodes can share, so on its own
+    /// it cannot say which node the engine meant — and when placement moved the error it names a
+    /// different element from the one that raised it. The bracketed raising node is the engine's own
+    /// answer and is omitted entirely when no engine reported one (issue #421).
+    /// </remarks>
     private static string FormatError(ValidationErrorState e)
     {
         var on = e.OwnerType ?? "?";
@@ -781,9 +791,23 @@ public sealed class RosterRunner
             on += $" {e.OwnerEntryId}";
         }
 
+        if (RaisedOn(e) is { } raisedOn)
+        {
+            on += $" [raised on {raisedOn}]";
+        }
+
         var from = e.EntryId is not null && e.ConstraintId is not null ? $"{e.EntryId}/{e.ConstraintId}" : null;
         return from is not null ? $"{on} <- {from}: {e.Message}" : $"{on}: {e.Message}";
     }
+
+    /// <summary>The raising node as "type id", or null when the engine named no node.</summary>
+    private static string? RaisedOn(ValidationErrorState e) => (e.RaisedOnType, e.RaisedOnId) switch
+    {
+        ({ } type, { } id) => $"{type} {id}",
+        ({ } type, null) => type,
+        (null, { } id) => id,
+        _ => null,
+    };
 
     private static (string ownerType, string? ownerEntryId) ParseOn(string on)
     {

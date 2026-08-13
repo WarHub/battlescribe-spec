@@ -546,12 +546,23 @@ public sealed class TimelineReport
         builder.AppendLine($"{indent}  <ul class=\"error-list\">");
         foreach (var error in errors)
         {
-            var owner = error.OwnerType is null
-                ? null
-                : error.OwnerId is null
-                    ? error.OwnerType
-                    : $"{error.OwnerType} {error.OwnerId}";
-            var detail = owner is null ? error.Message : $"{error.Message} ({owner})";
+            // Two different answers, both worth a reader's time: the owner is where the error is
+            // reported after placement, the raising node is what the engine actually hung it on.
+            var annotations = new List<string>();
+            if (error.OwnerType is { } ownerType)
+            {
+                annotations.Add(ownerType);
+            }
+
+            if (error.RaisedOnType is not null || error.RaisedOnId is not null)
+            {
+                var node = string.Join(' ', new[] { error.RaisedOnType, error.RaisedOnId }.OfType<string>());
+                annotations.Add($"raised on {node}");
+            }
+
+            var detail = annotations.Count == 0
+                ? error.Message
+                : $"{error.Message} ({string.Join(", ", annotations)})";
             builder.AppendLine($"{indent}    <li>{Encode(detail)}</li>");
         }
 
