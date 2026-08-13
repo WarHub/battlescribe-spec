@@ -984,7 +984,11 @@
       "required": ["on", "from"],
       "additionalProperties": false,
       "properties": {
-        "on": { "type": "string" },
+        "on": {
+          "description": "The roster NODE the engine raised the error on. '<kind> ${{ steps.<id>.<field> }}' for force/category/selection — node ids are minted per run, so a literal id is never valid. 'roster' and 'group' are written bare: neither has an id a spec can name. The legacy '<kind> <catalogueEntryId>' form is still accepted while the corpus migrates (#424).",
+          "type": "string",
+          "pattern": "^(roster|group)$|^(force|category|selection)( \\S.*)?$"
+        },
         "from": { "type": "string" },
         "messageContains": { "type": "string" }
       }
