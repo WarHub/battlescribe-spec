@@ -53,7 +53,12 @@ if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
 $sources = Get-ChildItem -Path $SrcDir -Filter '*.java' -Recurse | ForEach-Object { $_.FullName }
-& $javac -encoding UTF-8 -classpath $AsmJar -d $OutDir @sources
+# --release 11: the PatchBattleScribeEngineJar MSBuild target runs these classes with WHATEVER JDK
+# it resolves (JAVA_HOME or lib/liberica-jdk, a Java 11 in CI), which need not be the JDK that
+# compiled them here. Targeting Java 11 bytecode keeps the tool loadable regardless of the compiler
+# -- otherwise a newer compile JDK (e.g. the runner default) yields a class version the runtime JDK
+# rejects. ASM 9.7 and the tool use only Java 11-compatible APIs.
+& $javac --release 11 -encoding UTF-8 -classpath $AsmJar -d $OutDir @sources
 if ($LASTEXITCODE -ne 0) { throw 'javac failed' }
 
 Write-Host "[bs-engine-patch] Built classes in $OutDir (ASM: $(Split-Path $AsmJar -Leaf))"
