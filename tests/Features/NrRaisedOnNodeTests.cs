@@ -183,8 +183,8 @@ internal static class NrRaisedOnNodeContract
         // Empty the first force so its Troops category raises the min violation while the second
         // force keeps the Gear one — three kinds of raising node alive at the same time.
         Assert.NotNull(first.Selections);
-        var trooper = Assert.Contains(TrooperEntryId, first.Selections!);
-        engine.DeselectSelection(first.ForceId!, trooper);
+        var troopers = Assert.Contains(TrooperEntryId, first.Selections!);
+        engine.DeselectSelection(first.ForceId!, troopers[0]);
 
         // The entry-group violation, which arrives only through the flat merge.
         engine.SelectEntry(second.ForceId!, GroupOwnerEntryId);

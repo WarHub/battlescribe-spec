@@ -438,13 +438,13 @@
         "selectionId": { "type": "string" },
         "selections": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "Map of entryId → selectionId for auto-selected child selections."
+          "additionalProperties": { "type": "array", "items": { "type": "string" } },
+          "description": "Map of entryId → the selection node ids the action minted from that entry, in roster order. A list, not a single id: one action routinely creates two selections of one entry (a min=2 auto-add), and reporting one of them leaves the other unnameable. Index 0 is what ${{ steps.X.selections.<entryId> }} resolves to."
         },
         "categories": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "description": "Map of categoryEntryId → category node id for the categories the created force owns. Returned by addForce, addChildForce and duplicateForce; duplicateForce returns the copy's own nodes, which are freshly minted."
+          "additionalProperties": { "type": "array", "items": { "type": "string" } },
+          "description": "Map of categoryEntryId → the category node ids the created force owns, in force order. Returned by addForce, addChildForce and duplicateForce; duplicateForce returns the copy's own nodes, which are freshly minted. A list for the same reason selections is one: a force entry can link one category entry twice."
         }
       }
     },

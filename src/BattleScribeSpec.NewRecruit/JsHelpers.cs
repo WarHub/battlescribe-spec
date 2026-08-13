@@ -135,8 +135,10 @@ internal static class JsHelpers
                 return { army: live?.army ?? spec.army, book: live?.book ?? spec.book, row: spec.row };
             };
 
-            // entryId → category NODE id for one force's categories. Backs the `categories` step
-            // output; reads the same nodes the state reader reports, through the same list.
+            // entryId → category NODE ids for one force's categories, in force order. Backs the
+            // `categories` step output; reads the same nodes the state reader reports, through the
+            // same list. A list per entry so a force that links one category entry twice reports
+            // both nodes — see ActionOutputs.Categories.
             window.__bsspec_forceCategoryIds = function(forceUid) {
                 const army = window.__bsspec_list()?.army;
                 if (!army) return '{}';
@@ -147,11 +149,11 @@ internal static class JsHelpers
                     // Same accessors the state reader uses: `uid` is the node, `source` the entry.
                     const entryId = c.source?.targetId || c.source?.id || c.getId?.() || null;
                     const uid = c.uid || null;
-                    // First node wins — see ActionOutputs.Categories.
-                    if (entryId && uid && !(entryId in map)) map[entryId] = uid;
+                    if (entryId && uid) (map[entryId] ??= []).push(uid);
                 }
                 return JSON.stringify(map);
             };
+
 
             // --- State reader (used by NewRecruitStateReader.cs) ---
 

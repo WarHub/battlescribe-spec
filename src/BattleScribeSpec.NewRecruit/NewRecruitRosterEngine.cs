@@ -415,7 +415,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     }
 
     /// <summary>The new force's own category nodes, or null when the action minted no force.</summary>
-    private Dictionary<string, string>? ReadCategoryIds(string? forceId)
+    private Dictionary<string, List<string>>? ReadCategoryIds(string? forceId)
         => forceId is null
             ? null
             : NewRecruitStateReader.ReadForceCategoryIdsAsync(Browser.Page, forceId)

@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 
 import javafx.application.Platform;
 import javafx.scene.Node;
@@ -2911,7 +2912,7 @@ public class RosterActions {
     }
 
     /**
-     * Adds the force's own categoryEntryId → category node id map, if it has any. A force mints
+     * Adds the force's own categoryEntryId → category node ids map, if it has any. A force mints
      * its categories when it is created, so every action that creates a force reports them.
      */
     private void addForceCategoryOutputs(JsonObject result, JsonObject force) {
@@ -2923,28 +2924,39 @@ public class RosterActions {
             JsonObject category = el.getAsJsonObject();
             String id = getStringField(category, "id");
             String entryId = getStringField(category, "entryId");
-            // First node wins: one force can link the same category entry twice.
-            if (id != null && entryId != null && !map.has(entryId)) {
-                map.addProperty(entryId, id);
-            }
+            // A list per entry: one force can link the same category entry twice, and dropping the
+            // second node left it unnameable (#428).
+            addNode(map, entryId, id);
         }
         if (map.entrySet().size() > 0) {
             result.add("categories", map);
         }
     }
 
+    /**
+     * Appends one node id to its entry's list in an ActionOutputs map, creating the list on first
+     * sight. Order is the order nodes are visited, which is roster order.
+     */
+    private void addNode(JsonObject map, String entryId, String nodeId) {
+        if (entryId == null || nodeId == null) return;
+        JsonArray ids = map.has(entryId) ? map.getAsJsonArray(entryId) : null;
+        if (ids == null) {
+            ids = new JsonArray();
+            map.add(entryId, ids);
+        }
+        // JsonPrimitive, not the String overload: the app ships an older Gson without it.
+        ids.add(new JsonPrimitive(nodeId));
+    }
+
     private void collectAllSelectionEntryIds(JsonObject scope, JsonObject result) {
         JsonArray selections = scope.has("selections") ? scope.getAsJsonArray("selections") : null;
-        if (selections == null) return;
-        for (JsonElement el : selections) {
-            if (!el.isJsonObject()) continue;
-            JsonObject sel = el.getAsJsonObject();
-            String id = getStringField(sel, "id");
-            String entryId = getStringField(sel, "entryId");
-            if (id != null && entryId != null && !result.has(entryId)) {
-                result.addProperty(entryId, id);
+        if (selections != null) {
+            for (JsonElement el : selections) {
+                if (!el.isJsonObject()) continue;
+                JsonObject sel = el.getAsJsonObject();
+                addNode(result, getStringField(sel, "entryId"), getStringField(sel, "id"));
+                collectAllSelectionEntryIds(sel, result);
             }
-            collectAllSelectionEntryIds(sel, result);
         }
         // Also collect from children field
         JsonArray children = scope.has("children") ? scope.getAsJsonArray("children") : null;
@@ -2952,11 +2964,7 @@ public class RosterActions {
             for (JsonElement el : children) {
                 if (!el.isJsonObject()) continue;
                 JsonObject child = el.getAsJsonObject();
-                String id = getStringField(child, "id");
-                String entryId = getStringField(child, "entryId");
-                if (id != null && entryId != null && !result.has(entryId)) {
-                    result.addProperty(entryId, id);
-                }
+                addNode(result, getStringField(child, "entryId"), getStringField(child, "id"));
                 collectAllSelectionEntryIds(child, result);
             }
         }
@@ -3096,11 +3104,8 @@ public class RosterActions {
             if (!child.isJsonObject()) continue;
             JsonObject childObj = child.getAsJsonObject();
             String id = getStringField(childObj, "id");
-            String entryId = getStringField(childObj, "entryId");
-            if (id != null && entryId != null && !beforeIds.contains(id)) {
-                if (!result.has(entryId)) {
-                    result.addProperty(entryId, id);
-                }
+            if (id != null && !beforeIds.contains(id)) {
+                addNode(result, getStringField(childObj, "entryId"), id);
             }
             collectNewChildSelectionIds(childObj, beforeIds, result);
         }

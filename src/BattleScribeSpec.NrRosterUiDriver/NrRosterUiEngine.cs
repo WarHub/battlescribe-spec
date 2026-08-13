@@ -333,7 +333,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // the lane — and not one of those specs declares a `min` constraint, so the early break
         // could never fire. The engine now asks NR which of the three states it is in and stops as
         // soon as the answer is settled. The 8s stays as a CEILING, not a cost.
-        Dictionary<string, string> selections = [];
+        Dictionary<string, List<string>> selections = [];
         if (uid is not null)
         {
             var deadline = DateTime.UtcNow.AddSeconds(8);
@@ -385,7 +385,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// same rule <see cref="GetRosterState"/> follows, and the reason a step output and the state
     /// read after it name the same nodes.
     /// </summary>
-    private async Task<Dictionary<string, string>?> ReadCategoryIdsAsync(string? forceUid)
+    private async Task<Dictionary<string, List<string>>?> ReadCategoryIdsAsync(string? forceUid)
         => forceUid is null
             ? null
             : await NewRecruitStateReader.ReadForceCategoryIdsAsync(Browser.Page, forceUid);

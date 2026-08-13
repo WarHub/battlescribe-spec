@@ -1393,10 +1393,24 @@ public static class NrUiActions
     // ===== Internal: uid diffing =====
 
     /// <summary>
-    /// Returns a mapping of entryId → selectionUid for all direct (top-level) selections
-    /// in the specified force. Used to capture auto-added selections after addForce.
+    /// How settled a force's selections are, for callers that must wait for NR to finish adding
+    /// them. <c>NoForce</c>/<c>Unresolved</c> mean "not done yet"; <c>Empty</c> means this force has
+    /// no auto-added selections and never will.
     /// </summary>
-    public static async Task<Dictionary<string, string>> GetForceSelectionsAsync(IPage page, string forceUid)
+    internal enum ForceSelectionState
+    {
+        NoForce,
+        Unresolved,
+        Empty,
+        Resolved,
+    }
+
+    /// <summary>
+    /// entryId → the uids of the direct (top-level) selections of one force, in roster order, plus
+    /// how settled NR is about them. Used to capture auto-added selections after addForce.
+    /// </summary>
+    internal static async Task<(ForceSelectionState State, Dictionary<string, List<string>> Map)>
+        GetForceSelectionsWithStateAsync(IPage page, string forceUid)
     {
         // Return JSON.stringify instead of raw object to avoid Playwright's structured-clone
         // serialization issues with Vue reactive proxies wrapping uid strings.
@@ -1420,54 +1434,9 @@ public static class NrUiActions
                     raw++;
                     // Use || (not ??) so empty strings also fall through to the next option.
                     const entryId = s.id || s.entryId || s.getEntryId?.();
-                    if (entryId && s.uid) {
-                        out[entryId] = s.uid;
-                    } else {
-                        unresolved++;
-                    }
-                }
-                return JSON.stringify({
-                    state: unresolved > 0 ? 'unresolved' : (raw > 0 ? 'resolved' : 'empty'),
-                    map: out,
-                });
-            }
-            """, new object[] { forceUid });
-
-        return ParseForceSelections(json).Map;
-    }
-
-    /// <summary>
-    /// How settled a force's selections are, for callers that must wait for NR to finish adding
-    /// them. <c>NoForce</c>/<c>Unresolved</c> mean "not done yet"; <c>Empty</c> means this force has
-    /// no auto-added selections and never will.
-    /// </summary>
-    internal enum ForceSelectionState
-    {
-        NoForce,
-        Unresolved,
-        Empty,
-        Resolved,
-    }
-
-    /// <summary>As <see cref="GetForceSelectionsAsync"/>, but also reporting how settled NR is.</summary>
-    internal static async Task<(ForceSelectionState State, Dictionary<string, string> Map)>
-        GetForceSelectionsWithStateAsync(IPage page, string forceUid)
-    {
-        var json = await page.EvaluateAsync<string>("""
-            ([forceUid]) => {
-                const pinia = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia;
-                const army = pinia?._s?.get('lists')?.currentList?.army
-                    ?? window.__bsspec?.army;
-                if (!army) return JSON.stringify({ state: 'no-army', map: {} });
-                const force = (army.getForces?.() || []).find(f => f.uid === forceUid);
-                if (!force) return JSON.stringify({ state: 'no-force', map: {} });
-                const out = {};
-                let raw = 0, unresolved = 0;
-                for (const s of (force.getSelections?.() || [])) {
-                    raw++;
-                    const entryId = s.id || s.entryId || s.getEntryId?.();
-                    if (entryId && s.uid) { out[entryId] = s.uid; } else { unresolved++; }
+                    // A list per entry: a min=2 auto-add mints two nodes of one entry, and keeping
+                    // one of them is the defect #428 removes.
+                    if (entryId && s.uid) { (out[entryId] ??= []).push(s.uid); } else { unresolved++; }
                 }
                 return JSON.stringify({
                     state: unresolved > 0 ? 'unresolved' : (raw > 0 ? 'resolved' : 'empty'),
@@ -1479,7 +1448,7 @@ public static class NrUiActions
         return ParseForceSelections(json);
     }
 
-    private static (ForceSelectionState State, Dictionary<string, string> Map) ParseForceSelections(string? json)
+    private static (ForceSelectionState State, Dictionary<string, List<string>> Map) ParseForceSelections(string? json)
     {
         if (string.IsNullOrEmpty(json))
         {
@@ -1489,7 +1458,7 @@ public static class NrUiActions
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var state = doc.RootElement.TryGetProperty("state", out var s) ? s.GetString() : null;
         var map = doc.RootElement.TryGetProperty("map", out var m)
-            ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(m.GetRawText()) ?? []
+            ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(m.GetRawText()) ?? []
             : [];
 
         return (state switch

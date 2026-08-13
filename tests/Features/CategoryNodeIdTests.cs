@@ -90,14 +90,19 @@ internal static class CategoryNodeIdContract
         Assert.NotEmpty(categories);
 
         // What the state model says, in the shape the step output claims to be in. Built the same
-        // way the engines build theirs (first node wins a repeated entry id) so a disagreement is
-        // about the IDS, not about how the map was folded.
-        var fromState = new Dictionary<string, string>(StringComparer.Ordinal);
+        // way the engines build theirs (every node of a repeated entry id, in force order) so a
+        // disagreement is about the IDS, not about how the map was folded.
+        var fromState = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var category in categories)
         {
             if (category is { EntryId: { Length: > 0 } entryId, Id: { Length: > 0 } id })
             {
-                fromState.TryAdd(entryId, id);
+                if (!fromState.TryGetValue(entryId, out var ids))
+                {
+                    fromState[entryId] = ids = [];
+                }
+
+                ids.Add(id);
             }
         }
 
@@ -109,9 +114,9 @@ internal static class CategoryNodeIdContract
                 $"id={category.Id ?? "(null)"} name={category.Name}");
         }
 
-        foreach (var (entryId, id) in outputs.Categories ?? [])
+        foreach (var (entryId, ids) in outputs.Categories ?? [])
         {
-            output.WriteLine($"[{engineName}]   output: categories.{entryId} = {id}");
+            output.WriteLine($"[{engineName}]   output: categories.{entryId} = [{string.Join(", ", ids)}]");
         }
 
         // Every category the force owns has a node id. This is the claim that fails first if a
@@ -128,7 +133,7 @@ internal static class CategoryNodeIdContract
 
         // And the ids are NODE ids, not the entry ids they are keyed by — the specific way this
         // goes wrong on NewRecruit, where `id`/`getId()` on a category return `cat-troops`.
-        Assert.All(outputs.Categories!, kv => Assert.NotEqual(kv.Key, kv.Value));
+        Assert.All(outputs.Categories!, kv => Assert.All(kv.Value, id => Assert.NotEqual(kv.Key, id)));
 
         // Both categories the force entry links, addressable by name.
         Assert.Contains("cat-troops", outputs.Categories!.Keys);
@@ -138,7 +143,7 @@ internal static class CategoryNodeIdContract
         var resolver = new ExpressionResolver();
         resolver.StoreOutputs("add-detachment", outputs);
         Assert.Equal(
-            fromState["cat-troops"],
+            fromState["cat-troops"][0],
             resolver.Resolve("${{ steps.add-detachment.categories.cat-troops }}"));
     }
 }

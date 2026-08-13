@@ -178,6 +178,43 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         Assert.False(ErrorAddress.Parse("group").IsLegacyEntryAddressed);
     }
 
+    // ── Siblings of one entry (#428) ─────────────────────────────────
+
+    /// <summary>
+    /// #428's whole point, at the level a spec writes: ONE step mints TWO selections of ONE entry,
+    /// and each is separately nameable. Before the shape change the outputs map held one node per
+    /// entry id, so one of these two existed in the roster with nothing able to name it.
+    /// </summary>
+    [Fact]
+    public void TwoSelectionsOfOneEntryFromOneStep_AreIndividuallyNameable()
+    {
+        AssertPassed(Run(
+            errors: [Error("selection", "auto-node-1")],
+            on: "selection ${{ steps.add-force.selections.se-auto }}"));
+
+        AssertPassed(Run(
+            errors: [Error("selection", "auto-node-2")],
+            on: "selection ${{ steps.add-force.selections.se-auto[1] }}"));
+    }
+
+    /// <summary>
+    /// And the addresses are not interchangeable — otherwise the index would be decoration. Each
+    /// sibling rejects the error raised on the other.
+    /// </summary>
+    [Fact]
+    public void PointingAtTheWrongSiblingOfOneEntry_Fails()
+    {
+        var first = Assert.Single(Run(
+            errors: [Error("selection", "auto-node-2")],
+            on: "selection ${{ steps.add-force.selections.se-auto }}").Failures);
+        output.WriteLine(first);
+
+        var second = Assert.Single(Run(
+            errors: [Error("selection", "auto-node-1")],
+            on: "selection ${{ steps.add-force.selections.se-auto[1] }}").Failures);
+        output.WriteLine(second);
+    }
+
     // ── Harness ──────────────────────────────────────────────────────
 
     private static ValidationErrorState Error(string raisedOnType, string raisedOnId) => new(
@@ -261,8 +298,8 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         public ActionOutputs AddForce(string forceEntryId, string catalogueId) => new()
         {
             ForceId = "force-node-1",
-            Categories = new Dictionary<string, string> { ["cat-troops"] = "cat-node-1" },
-            Selections = new Dictionary<string, string> { ["se-auto"] = "auto-node-1" },
+            Categories = new Dictionary<string, List<string>> { ["cat-troops"] = ["cat-node-1"] },
+            Selections = new Dictionary<string, List<string>> { ["se-auto"] = ["auto-node-1", "auto-node-2"] },
         };
 
         public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
@@ -405,4 +442,141 @@ public class ErrorAssertionWrongNodeTests(ITestOutputHelper output)
         using var engine = new BattleScribeRosterEngine();
         return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
     }
+}
+
+/// <summary>
+/// #428, against the real in-process BattleScribe engine: ONE step mints TWO selections of ONE
+/// catalogue entry, and a spec can name each of them.
+/// <para>
+/// <c>min: 2, scope: force</c> makes <c>addForce</c> auto-add two Unit A. Each carries a Gear child
+/// whose <c>min: 2</c>/<c>max: 1</c> contradiction fires permanently, so the engine raises one error
+/// per Unit A — two errors identical in owner type, owner entry id, <c>from:</c> and message, and
+/// distinguishable only by the node they were raised on. Before this the outputs map held one node
+/// per entry id, so the second Unit A sat in the roster with nothing able to name it, and the two
+/// errors could not be told apart at all.
+/// </para>
+/// </summary>
+[Trait("Category", "Unit")]
+public class SiblingSelectionAddressingTests(ITestOutputHelper output)
+{
+    private const string SpecTemplate = """
+        id: sibling-node-proof
+        category: constraint
+        description: harness
+
+        setup:
+          gameSystem:
+            categoryEntries:
+              - id: cat-troops
+                name: Troops
+            forceEntries:
+              - id: fe-patrol
+                name: Patrol
+                categoryLinks:
+                  - id: cl-fe-troops
+                    targetId: cat-troops
+                    name: Troops
+          catalogues:
+            - id: cat-1
+              selectionEntries:
+                - id: se-unit-a
+                  name: Unit A
+                  type: unit
+                  categoryLinks:
+                    - id: cl-sea-troops
+                      targetId: cat-troops
+                      name: Troops
+                      primary: true
+                  constraints:
+                    - id: con-min-force
+                      type: min
+                      value: 2
+                      field: selections
+                      scope: force
+                  selectionEntries:
+                    - id: se-gear
+                      name: Gear
+                      type: upgrade
+                      constraints:
+                        - id: con-gear-min
+                          type: min
+                          value: 2
+                          field: selections
+                          scope: parent
+                        - id: con-gear-max
+                          type: max
+                          value: 1
+                          field: selections
+                          scope: parent
+
+        steps:
+          - action: addForce
+            id: add-patrol
+            forceEntryId: fe-patrol
+
+          - expectedState:
+              errors:
+                - on: selection ${{ steps.add-patrol.selections.se-unit-a FIRST }}
+                  from: se-gear/con-gear-max
+                - on: selection ${{ steps.add-patrol.selections.se-unit-a SECOND }}
+                  from: se-gear/con-gear-max
+
+        """;
+
+    /// <summary>
+    /// Both siblings are nameable, and the bare form is the first — so the address the corpus has
+    /// always written keeps meaning the node it has always meant.
+    /// </summary>
+    [Fact]
+    public void EachOfTwoSelectionsOfOneEntry_IsNameableSeparately()
+    {
+        AssertPassed(Run(first: "", second: "[1]"));
+
+        // …and the bare form is exactly [0], not merely "one of them".
+        AssertPassed(Run(first: "[0]", second: "[1]"));
+    }
+
+    /// <summary>
+    /// Pointed at the wrong sibling, the assertion fails. Consume-once means naming ONE node twice
+    /// leaves the other error unclaimed, which is only true if the two addresses really are
+    /// different nodes — the claim the entry-addressed form could not make.
+    /// </summary>
+    [Fact]
+    public void PointingBothAssertionsAtOneSibling_Fails()
+    {
+        var result = Run(first: "", second: "");
+
+        Assert.NotEmpty(result.Failures);
+        foreach (var failure in result.Failures)
+        {
+            output.WriteLine(failure);
+        }
+
+        Assert.Contains(result.Failures, f => f.Contains("not found in", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// And an index past the end says so, naming the count, rather than resolving to nothing and
+    /// reporting a missing error.
+    /// </summary>
+    [Fact]
+    public void NamingAThirdSiblingOfTwo_ReportsTheCount()
+    {
+        var failure = Assert.Single(Run(first: "", second: "[2]").Failures);
+        output.WriteLine(failure);
+
+        Assert.Contains("2 node(s)", failure, StringComparison.Ordinal);
+    }
+
+    private static SpecResult Run(string first, string second)
+    {
+        var yaml = SpecTemplate
+            .Replace(" FIRST ", $"{first} ", StringComparison.Ordinal)
+            .Replace(" SECOND ", $"{second} ", StringComparison.Ordinal);
+        using var engine = new BattleScribeRosterEngine();
+        return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
+    }
+
+    private static void AssertPassed(SpecResult result)
+        => Assert.True(result.Failures.Count == 0, string.Join("\n", result.Failures));
 }

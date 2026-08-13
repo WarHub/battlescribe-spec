@@ -171,7 +171,8 @@ public sealed class ProtocolSchemaTests
             {
                 ForceId = "f1",
                 SelectionId = "s1",
-                Selections = new Dictionary<string, string> { ["e1"] = "s2" },
+                Selections = new Dictionary<string, List<string>> { ["e1"] = ["s2", "s3"] },
+                Categories = new Dictionary<string, List<string>> { ["cat1"] = ["c1"] },
             },
         }));
 

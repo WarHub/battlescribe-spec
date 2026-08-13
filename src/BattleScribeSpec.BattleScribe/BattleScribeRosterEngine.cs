@@ -495,9 +495,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     }
 
     /// <summary>
-    /// Collect entryId → selectionId map for all child selections (auto-selected defaults).
+    /// Collect entryId → selection node ids for all child selections (auto-selected defaults),
+    /// each list in roster order.
     /// </summary>
-    private static Dictionary<string, string>? CollectChildSelectionIds(
+    private static Dictionary<string, List<string>>? CollectChildSelectionIds(
         net.battlescribe.model.roster.Selection selection)
     {
         var children = JavaListToList<net.battlescribe.model.roster.Selection>(selection.getSelections());
@@ -506,7 +507,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             return null;
         }
 
-        var map = new Dictionary<string, string>();
+        var map = new Dictionary<string, List<string>>();
         foreach (var child in children)
         {
             CollectSelectionIdsRecursive(child, map);
@@ -516,12 +517,15 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     }
 
     private static void CollectSelectionIdsRecursive(
-        net.battlescribe.model.roster.Selection sel, Dictionary<string, string> map)
+        net.battlescribe.model.roster.Selection sel, Dictionary<string, List<string>> map)
     {
         var entryId = sel.getEntryId();
         if (entryId is not null)
         {
-            map[entryId] = sel.getId();
+            // Append, never overwrite. A step that mints two selections of one entry used to keep
+            // whichever this walk reached last, leaving a real node in the roster that nothing
+            // could name — the defect #428 exists to remove.
+            Add(map, entryId, sel.getId());
         }
 
         foreach (var child in JavaListToList<net.battlescribe.model.roster.Selection>(sel.getSelections()))
@@ -531,10 +535,10 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     }
 
     /// <summary>
-    /// Collect entryId → selectionId map for all selections in a force (top-level + nested).
+    /// Collect entryId → selection node ids for all selections in a force (top-level + nested).
     /// Used to expose auto-selected entries after AddForce.
     /// </summary>
-    private static Dictionary<string, string>? CollectForceSelectionIds(
+    private static Dictionary<string, List<string>>? CollectForceSelectionIds(
         net.battlescribe.model.roster.Force force)
     {
         var selections = JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections());
@@ -543,7 +547,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             return null;
         }
 
-        var map = new Dictionary<string, string>();
+        var map = new Dictionary<string, List<string>>();
         foreach (var sel in selections)
         {
             CollectSelectionIdsRecursive(sel, map);
@@ -553,26 +557,35 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     }
 
     /// <summary>
-    /// Collect categoryEntryId → category node id for a force's own categories.
+    /// Collect categoryEntryId → category node ids for a force's own categories, in force order.
     /// A force mints these when it is created, so this is what <c>addForce</c> reports.
     /// </summary>
-    private static Dictionary<string, string>? CollectForceCategoryIds(
+    private static Dictionary<string, List<string>>? CollectForceCategoryIds(
         net.battlescribe.model.roster.Force force)
     {
-        var map = new Dictionary<string, string>();
+        var map = new Dictionary<string, List<string>>();
         foreach (var c in JavaListToList<net.battlescribe.model.roster.Category>(force.getCategories()))
         {
             var entryId = c.getEntryId();
             var id = c.getId();
             if (!string.IsNullOrEmpty(entryId) && !string.IsNullOrEmpty(id))
             {
-                // First node wins: a force that links one category entry twice has two nodes for
-                // one key, and this map has no way to say which. See ActionOutputs.Categories.
-                map.TryAdd(entryId, id);
+                Add(map, entryId, id);
             }
         }
 
         return map.Count > 0 ? map : null;
+    }
+
+    /// <summary>Append a node id to its entry's list, creating the list on first sight.</summary>
+    private static void Add(Dictionary<string, List<string>> map, string key, string nodeId)
+    {
+        if (!map.TryGetValue(key, out var ids))
+        {
+            map[key] = ids = [];
+        }
+
+        ids.Add(nodeId);
     }
 
     /// <summary>

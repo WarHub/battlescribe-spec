@@ -81,7 +81,7 @@ and referenced via `${{ steps.<id>.<field> }}`.
 | `deselectSelection` | `forceId`, `selectionId` | — |
 | `setSelectionCount` | `forceId`, `selectionId`, `count` | — |
 | `duplicateSelection` | `forceId`, `selectionId` | `selectionId` |
-| `duplicateForce` | `forceId` | `forceId` |
+| `duplicateForce` | `forceId` | `forceId`, `categories` |
 | `setCostLimit` | `costTypeId`, `value` | — |
 | `dump` | (none) — triggers state dump in debugger; no-op in test runner | — |
 
@@ -90,6 +90,11 @@ and referenced via `${{ steps.<id>.<field> }}`.
 Steps that need their outputs referenced must have an `id` field. Later steps use
 `${{ steps.<id>.<field> }}` to refer to outputs like `forceId`, `selectionId`, or
 entries in the `selections` map (e.g., `${{ steps.add-patrol.selections.se-required }}`).
+
+`selections` and `categories` are keyed by **catalogue entry id**, and each key holds every node the
+step minted from that entry, in roster order. The bare form is the first; add `[n]` for the rest —
+`${{ steps.add-patrol.selections.se-unit-a[1] }}` is the second Unit A a `min: 2` auto-add created.
+An index past the end fails and says how many there are.
 
 ```yaml
 # Add a force and name the step
