@@ -428,11 +428,10 @@ public sealed class BattleScribeEngine : IDisposable
 
         // The `from` entry a spec asserts is the one that DECLARES the constraint -- the link for a
         // link's own constraint, the target for a constraint on the target -- which is not always
-        // the last segment of the composite path (DeclaringEntryOf). The `on` owner is the element
-        // the error hung on, addressed by its own target entry (its innermost segment); no spec
-        // asserts a composite id on either side.
+        // the last segment of the composite path (DeclaringEntryOf). The owner id is passed RAW:
+        // reducing a link-composite owner to its target entry is BattleScribeErrorPlacement's one
+        // shared rule (#400), applied identically to both BattleScribe lanes in ApplyTo.
         entryId = DeclaringEntryOf(entryId, constraintId);
-        ownerEntryId = BattleScribeErrorIds.ReduceToTargetEntry(ownerEntryId);
 
         // The engine writes the SAME third id-segment "collective" for both a hidden-entry error and
         // a collective (same-number) bookkeeping error; the id cannot tell them apart. The one

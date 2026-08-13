@@ -46,6 +46,19 @@ public static class BattleScribeErrorPlacement
         for (var i = 0; i < errors.Count; i++)
         {
             var e = errors[i];
+
+            // THE owner reduction, for both BattleScribe lanes (#400): an element reached through an
+            // entry link reports its entryId as the composite route (linkId::…::targetId), and specs
+            // address the owner by the target entry. Both engines feed their captured errors through
+            // this method with the RAW owner id — the in-process adapter from the live element, the
+            // UI driver from the agent's payload — so the two lanes agree by construction, not by
+            // keeping two implementations in step. Plain ids pass through unchanged.
+            if (e.OwnerEntryId is not null)
+            {
+                e = e with { OwnerEntryId = BattleScribeErrorIds.ReduceToTargetEntry(e.OwnerEntryId) };
+                errors[i] = e;
+            }
+
             if (e.EntryId is null)
             {
                 continue;

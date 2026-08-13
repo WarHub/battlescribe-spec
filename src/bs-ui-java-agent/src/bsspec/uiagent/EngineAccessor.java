@@ -1240,23 +1240,6 @@ public class EngineAccessor {
     }
 
     /**
-     * What a selection made through an entry link IS, as specs name it.
-     *
-     * <p>Such a selection reports its entryId as the composite {@code linkId::targetId}. That is
-     * the right answer to "how did this get here" and the wrong one to "what is it": specs address
-     * the error's owner by the ENTRY, {@code shared-unit}, not by the route taken to it. The route
-     * still matters for {@code from}, which is why only the owner is reduced — see
-     * {@link #declaringEntryOf}.
-     */
-    private String linkTargetOf(String entryId) {
-        if (entryId == null || !entryId.contains("::")) {
-            return entryId;
-        }
-        String[] parts = entryId.split("::");
-        return parts[parts.length - 1];
-    }
-
-    /**
      * Which segment of a composite id actually DECLARES {@code constraintId}, matching the in-process
      * adapter's rule exactly.
      *
@@ -1358,52 +1341,6 @@ public class EngineAccessor {
         "getEntryLinks", "getForceEntries", "getCategoryEntries",
     };
 
-
-    private boolean containsIgnoreCase(String message, String candidate) {
-        if (message == null || candidate == null || candidate.isEmpty()) {
-            return false;
-        }
-        return message.toLowerCase(Locale.ROOT).contains(candidate.toLowerCase(Locale.ROOT));
-    }
-
-    private String getEntryName(String entryId) {
-        try {
-            Object entry = findEntryById(entryId);
-            return entry != null ? callGetter(entry, "getName") : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String getCostTypeName(String costTypeId) {
-        try {
-            Object costType = findCostTypeById(costTypeId);
-            return costType != null ? callGetter(costType, "getName") : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractCostTypeIdFromMessage(String lowerMessage) {
-        // Search gameSystem costTypes for one whose name appears in the message
-        try {
-            Object gs = getCurrentGameSystem();
-            if (gs == null) return null;
-            Object costTypes = callListGetter(gs, "getCostTypes");
-            if (costTypes == null) return null;
-            for (Object ct : toJavaList(costTypes)) {
-                String id = callGetter(ct, "getId");
-                String name = callGetter(ct, "getName");
-                if (name != null && lowerMessage.contains(name.toLowerCase(Locale.ROOT))) {
-                    return id;
-                }
-            }
-        } catch (Exception e) {
-            // ignore
-        }
-        return null;
-    }
-
     private void collectForceValidationErrors(Object force, JsonArray errors) throws Exception {
         collectValidationErrors(force, "force", errors);
         for (Object category : toJavaList(callListGetter(force, "getCategories"))) {
@@ -1431,8 +1368,10 @@ public class EngineAccessor {
             throws Exception {
         Object elementErrors = callListGetter(element, "getValidationErrors");
         String ownerId = callGetter(element, "getId");
-        // The owner as a spec names it: the element's own target entry, not the link route to it.
-        String ownerEntryId = linkTargetOf(callGetter(element, "getEntryId"));
+        // Shipped RAW, link route and all. Reducing a link-composite owner to the target entry a
+        // spec names is BattleScribeErrorPlacement.ReduceToTargetEntry's job on the .NET side --
+        // the ONE rule both BattleScribe lanes share (#400) -- not a second implementation here.
+        String ownerEntryId = callGetter(element, "getEntryId");
         List<Object> costLimits = "roster".equals(ownerType)
                 ? toJavaList(callListGetter(element, "getCostLimits"))
                 : null;
