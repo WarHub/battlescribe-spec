@@ -86,7 +86,9 @@ public static class NewRecruitStateReader
             Page: f.Page,
             EntryId: f.EntryId,
             Categories: [.. f.Categories.Select(c => new CategoryState(
-                c.Name, c.EntryId, c.Primary,
+                Name: c.Name,
+                EntryId: c.EntryId,
+                Primary: c.Primary,
                 PublicationId: c.PublicationId,
                 Page: c.Page))],
             Publications: f.Publications?.Select(p => new PublicationState(p.Id, p.Name)).ToList(),
@@ -118,7 +120,9 @@ public static class NewRecruitStateReader
             ))],
             Rules: [.. sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId))],
             Categories: [.. sel.Categories.Select(c => new CategoryState(
-                c.Name, c.EntryId, c.Primary,
+                Name: c.Name,
+                EntryId: c.EntryId,
+                Primary: c.Primary,
                 Profiles: [.. c.Profiles.Select(p => new ProfileState(
                     p.Name, p.TypeId, p.TypeName, p.Hidden,
                     [.. p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value))],

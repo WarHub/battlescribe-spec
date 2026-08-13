@@ -1266,7 +1266,9 @@ public sealed class BsUiRosterEngine : IRosterEngine
         => new(dto.Name ?? string.Empty, dto.TypeId ?? string.Empty, dto.Value, dto.Hidden);
 
     private static CategoryState MapCategoryState(AgentCategoryState dto)
-        => new(dto.Name ?? string.Empty, dto.EntryId, dto.Primary,
+        => new(Name: dto.Name ?? string.Empty,
+            EntryId: dto.EntryId,
+            Primary: dto.Primary,
             CustomName: string.IsNullOrEmpty(dto.CustomName) ? null : dto.CustomName,
             CustomNotes: string.IsNullOrEmpty(dto.CustomNotes) ? null : dto.CustomNotes,
             PublicationId: string.IsNullOrEmpty(dto.PublicationId) ? null : dto.PublicationId,

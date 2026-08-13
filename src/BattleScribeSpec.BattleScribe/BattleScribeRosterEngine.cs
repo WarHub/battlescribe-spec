@@ -625,7 +625,9 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catCustomName = c.getCustomName();
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
-                    c.getName() ?? "", c.getEntryId(), c.isPrimary(),
+                    Name: c.getName() ?? "",
+                    EntryId: c.getEntryId(),
+                    Primary: c.isPrimary(),
                     PublicationId: string.IsNullOrEmpty(catPubId) ? null : catPubId,
                     Page: c.getPage(),
                     CustomName: string.IsNullOrEmpty(catCustomName) ? null : catCustomName,
@@ -676,7 +678,9 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catCustomName = c.getCustomName();
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
-                    c.getName() ?? "", c.getEntryId(), c.isPrimary(),
+                    Name: c.getName() ?? "",
+                    EntryId: c.getEntryId(),
+                    Primary: c.isPrimary(),
                     Profiles: [.. catProfiles.Select(CaptureProfile)],
                     Rules: [.. catRules.Select(r => new RuleState(r.getName() ?? "", r.getDescription() ?? "", r.isHidden(), r.getPage(),
                         string.IsNullOrEmpty(r.getPublicationId()) ? null : r.getPublicationId()))],
