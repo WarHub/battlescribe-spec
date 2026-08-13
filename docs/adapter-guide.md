@@ -76,15 +76,15 @@ instance IDs (e.g., `forceId`, `selectionId`) are returned in action outputs.
 
 | Action | Description |
 |--------|-------------|
-| `addForce` | Add a force by `forceEntryId`. Optional: `catalogueId`. Returns `forceId` and auto-selected `selections`. |
-| `addChildForce` | Add a child force under `forceId` by `forceEntryId`. Returns `forceId`. |
+| `addForce` | Add a force by `forceEntryId`. Optional: `catalogueId`. Returns `forceId`, auto-selected `selections`, and the force's `categories`. |
+| `addChildForce` | Add a child force under `forceId` by `forceEntryId`. Returns `forceId` and `categories`. |
 | `removeForce` | Remove the force identified by `forceId` |
 | `selectEntry` | Select an entry by `entryId` in the force `forceId`. Returns `selectionId`. |
 | `selectChildEntry` | Select a child entry by `entryId` under `selectionId` in `forceId`. Returns `selectionId`. |
 | `deselectSelection` | Deselect a selection by `forceId` and `selectionId` |
 | `setSelectionCount` | Set quantity on `selectionId` in `forceId` with `count` |
 | `duplicateSelection` | Duplicate a selection. Returns new `selectionId`. |
-| `duplicateForce` | Duplicate a force (deep copy). Returns new `forceId`. Not supported by BattleScribe Java engine. |
+| `duplicateForce` | Duplicate a force (deep copy). Returns the new `forceId` and the copy's own `categories` — duplicating a force mints fresh category nodes. Not supported by BattleScribe Java engine. |
 | `setCostLimit` | Set a cost limit by `costTypeId` and `value` |
 | `loadRoster` | Replace the roster wholesale from the `.ros` XML in `xml`, re-linked against the setup data. Answer `{"ok":false,"error":…}` if your engine cannot load — never a silent success. |
 | `reload` | Serialize the current roster and load it straight back. Round-trip specs assert the same state either side of it. |
@@ -95,8 +95,9 @@ full parameter reference and output fields.
 ```json
 // Input — add a force, then select an entry using the returned forceId
 {"type":"action","action":"addForce","forceEntryId":"fe-battalion"}
-// Output — includes the force instance ID for use in subsequent actions
-{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123"}}
+// Output — the force instance ID, plus the category nodes the force just minted
+// (keyed by catalogue category entry id) for later steps to name one by
+{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","categories":{"cat-troops":"cat-node-1"}}}
 
 // Input — use the returned forceId to select an entry
 {"type":"action","action":"selectEntry","forceId":"abc-123","entryId":"se-infantry"}

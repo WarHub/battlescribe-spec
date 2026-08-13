@@ -112,8 +112,8 @@ public class StateDumperTests
     {
         var cats = new List<CategoryState>
         {
-            new("Troops", "ce-1", Primary: true),
-            new("Infantry", "ce-2", Primary: false)
+            new(Id: "cat-node-1", Name: "Troops", EntryId: "ce-1", Primary: true),
+            new(Id: "cat-node-2", Name: "Infantry", EntryId: "ce-2", Primary: false)
         };
         var sel = new SelectionState(Id: null, "Marine", "se-1", "unit", 1, false, [], [],
             Categories: cats);

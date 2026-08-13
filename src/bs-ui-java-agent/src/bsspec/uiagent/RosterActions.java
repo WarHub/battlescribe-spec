@@ -194,6 +194,8 @@ public class RosterActions {
         JsonObject duplicated = findDuplicatedForce(before, after, forceId);
         JsonObject result = new JsonObject();
         result.addProperty("forceId", duplicated.get("id").getAsString());
+        // The COPY's category nodes, not the source's — a duplicated force owns its own.
+        addForceCategoryOutputs(result, duplicated);
         return result.toString();
     }
 
@@ -2891,7 +2893,8 @@ public class RosterActions {
     }
 
     /**
-     * Builds the ActionOutputs JSON for a created force (forceId + child selections map).
+     * Builds the ActionOutputs JSON for a created force (forceId + child selections map +
+     * category nodes).
      */
     private JsonObject buildForceOutputs(JsonObject force) {
         JsonObject result = new JsonObject();
@@ -2903,7 +2906,31 @@ public class RosterActions {
         if (selections.entrySet().size() > 0) {
             result.add("selections", selections);
         }
+        addForceCategoryOutputs(result, force);
         return result;
+    }
+
+    /**
+     * Adds the force's own categoryEntryId → category node id map, if it has any. A force mints
+     * its categories when it is created, so every action that creates a force reports them.
+     */
+    private void addForceCategoryOutputs(JsonObject result, JsonObject force) {
+        JsonArray categories = force.has("categories") ? force.getAsJsonArray("categories") : null;
+        if (categories == null) return;
+        JsonObject map = new JsonObject();
+        for (JsonElement el : categories) {
+            if (!el.isJsonObject()) continue;
+            JsonObject category = el.getAsJsonObject();
+            String id = getStringField(category, "id");
+            String entryId = getStringField(category, "entryId");
+            // First node wins: one force can link the same category entry twice.
+            if (id != null && entryId != null && !map.has(entryId)) {
+                map.addProperty(entryId, id);
+            }
+        }
+        if (map.entrySet().size() > 0) {
+            result.add("categories", map);
+        }
     }
 
     private void collectAllSelectionEntryIds(JsonObject scope, JsonObject result) {

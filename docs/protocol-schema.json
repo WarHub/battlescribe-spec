@@ -440,6 +440,11 @@
           "type": "object",
           "additionalProperties": { "type": "string" },
           "description": "Map of entryId → selectionId for auto-selected child selections."
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of categoryEntryId → category node id for the categories the created force owns. Returned by addForce, addChildForce and duplicateForce; duplicateForce returns the copy's own nodes, which are freshly minted."
         }
       }
     },
@@ -680,6 +685,10 @@
       "required": ["name", "primary"],
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Runtime node id of the category. Present for a FORCE's categories, which are roster nodes; a SELECTION's categories are the tags it counts against and may have no node identity (they do not on NewRecruit). Distinct from entryId, which several nodes can share."
+        },
         "name": { "type": "string" },
         "entryId": { "type": "string" },
         "primary": { "type": "boolean" },

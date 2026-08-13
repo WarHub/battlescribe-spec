@@ -121,7 +121,28 @@ public record RuleState(
     string? Page = null,
     string? PublicationId = null);
 
+/// <remarks>
+/// <para>
+/// <b>One record, two different things.</b> A FORCE's categories
+/// (<c>force.getCategories()</c>) are roster NODES: the engine mints one per category link when it
+/// creates the force, gives it a runtime identity, and raises collective over-limit violations on
+/// it. A SELECTION's categories (<c>selection.getSelectionCategories()</c>) are the category TAGS
+/// that selection counts against — what it is, not where it lives. Both map here, so
+/// <see cref="Id"/> is the node's id for the first and is often absent for the second.
+/// </para>
+/// <para>
+/// <see cref="Id"/> is a RUNTIME node id, not <see cref="EntryId"/>: a force with two links to one
+/// category entry has two nodes sharing an entry id, and an error is raised on one of them. On
+/// BattleScribe it is <c>Category.getId()</c> for both kinds. On NewRecruit a force category is a
+/// full instance node and its identity is <c>uid</c> — <c>id</c>/<c>getId()</c> there return the
+/// CATALOGUE entry id, which looks plausible and is wrong — while a selection category is a plain
+/// object literal with no node identity at all, so <see cref="Id"/> is null for it. That asymmetry
+/// is the engines', not ours; it is reported rather than papered over, and no spec assertion reads
+/// this field, so it cannot fail a spec on the engine that has less to say (issue #420).
+/// </para>
+/// </remarks>
 public record CategoryState(
+    string? Id,
     string Name,
     string? EntryId,
     bool Primary,

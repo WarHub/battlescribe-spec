@@ -35,6 +35,25 @@ public static class NewRecruitStateReader
     }
 
     /// <summary>
+    /// Read categoryEntryId → category node id for one force, for the <c>categories</c> step
+    /// output. Shared by both NR lanes: a category id is a state read, and reading it any other way
+    /// in the UI driver would risk answering from a different object graph than
+    /// <see cref="ReadRosterStateAsync"/> reports.
+    /// </summary>
+    public static async Task<Dictionary<string, string>?> ReadForceCategoryIdsAsync(IPage page, string forceUid)
+    {
+        var json = await page.EvaluateAsync<string?>(
+            "(uid) => window.__bsspec_forceCategoryIds(uid)", forceUid);
+        if (string.IsNullOrEmpty(json))
+        {
+            return null;
+        }
+
+        var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions);
+        return map is { Count: > 0 } ? map : null;
+    }
+
+    /// <summary>
     /// Read validation errors from NR's store.
     /// </summary>
     public static async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync(IPage page)
@@ -86,7 +105,10 @@ public static class NewRecruitStateReader
             Page: f.Page,
             EntryId: f.EntryId,
             Categories: [.. f.Categories.Select(c => new CategoryState(
-                c.Name, c.EntryId, c.Primary,
+                Id: c.Id,
+                Name: c.Name,
+                EntryId: c.EntryId,
+                Primary: c.Primary,
                 PublicationId: c.PublicationId,
                 Page: c.Page))],
             Publications: f.Publications?.Select(p => new PublicationState(p.Id, p.Name)).ToList(),
@@ -118,7 +140,12 @@ public static class NewRecruitStateReader
             ))],
             Rules: [.. sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId))],
             Categories: [.. sel.Categories.Select(c => new CategoryState(
-                c.Name, c.EntryId, c.Primary,
+                // Null on NR, and correctly so — see NrCategorySnapshot.Id. Read through rather
+                // than hardcoded so the day NR gives these an identity, it arrives.
+                Id: c.Id,
+                Name: c.Name,
+                EntryId: c.EntryId,
+                Primary: c.Primary,
                 Profiles: [.. c.Profiles.Select(p => new ProfileState(
                     p.Name, p.TypeId, p.TypeName, p.Hidden,
                     [.. p.Characteristics.Select(ch => new CharacteristicState(ch.Name, ch.TypeId, ch.Value))],
@@ -233,6 +260,14 @@ public static class NewRecruitStateReader
 
     internal record NrCategorySnapshot
     {
+        /// <summary>
+        /// The category NODE's uid — present for a force's categories, absent for a selection's,
+        /// which NR represents as plain tag objects with no node identity. A field missing from
+        /// this DTO is dropped from the payload silently, so this is the only thing standing
+        /// between <c>id</c> being read and <c>id</c> quietly never arriving.
+        /// </summary>
+        public string? Id { get; init; }
+
         public string Name { get; init; } = "";
         public string? EntryId { get; init; }
         public bool Primary { get; init; }

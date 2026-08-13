@@ -361,7 +361,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
             }
         }
 
-        return new ActionOutputs { ForceId = uid, Selections = selections.Count > 0 ? selections : null };
+        return new ActionOutputs
+        {
+            ForceId = uid,
+            Selections = selections.Count > 0 ? selections : null,
+            Categories = await ReadCategoryIdsAsync(uid),
+        };
     }
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
@@ -371,8 +376,19 @@ public sealed class NrRosterUiEngine : IRosterEngine
     {
         var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
         var uid = await NrUiActions.AddChildForceByNameAsync(Browser.Page, parentForceId, name, forceEntryId, catalogueId);
-        return new ActionOutputs { ForceId = uid };
+        return new ActionOutputs { ForceId = uid, Categories = await ReadCategoryIdsAsync(uid) };
     }
+
+    /// <summary>
+    /// The new force's own category nodes, or null when the action minted no force. A state read,
+    /// so it goes through the shared reader rather than this driver's UI-mutation helpers — the
+    /// same rule <see cref="GetRosterState"/> follows, and the reason a step output and the state
+    /// read after it name the same nodes.
+    /// </summary>
+    private async Task<Dictionary<string, string>?> ReadCategoryIdsAsync(string? forceUid)
+        => forceUid is null
+            ? null
+            : await NewRecruitStateReader.ReadForceCategoryIdsAsync(Browser.Page, forceUid);
 
     public void RemoveForce(string forceId)
         => NrUiActions.RemoveForceAsync(Browser.Page, forceId).GetAwaiter().GetResult();
@@ -482,7 +498,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private async Task<ActionOutputs> DuplicateForceAsync(string forceId)
     {
         var uid = await NrUiActions.DuplicateForceAsync(Browser.Page, forceId);
-        return new ActionOutputs { ForceId = uid };
+        // The COPY's categories — duplicating a force mints fresh category nodes.
+        return new ActionOutputs { ForceId = uid, Categories = await ReadCategoryIdsAsync(uid) };
     }
 
     public void SetCostLimit(string costTypeId, decimal value)

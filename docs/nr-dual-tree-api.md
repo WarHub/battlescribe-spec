@@ -133,6 +133,34 @@ selection in the roster with a count, costs, modifiers applied, etc.
 - `getName()` always returns the **definition** name, NOT the custom name
 - See [nr-custom-name-notes.md](nr-custom-name-notes.md) for full investigation
 
+### Force Category Nodes
+
+`force.getCategories()` returns **instance nodes** — the same prototype as forces and selections,
+with `isCategory() === true`. So a force category has a durable `uid`, exactly like a selection
+does, and that uid is its node identity.
+
+**Do not read `id` or `getId()` on one.** Both return the **catalogue entry** id (`cat-troops`),
+and `source.id` is the categoryLink's id while `source.targetId` is the entry's. Each of those is a
+real value that identifies a definition, not a node, so using one where a node id belongs produces
+something that looks right and is wrong. Two links to the same category entry give one force two
+category nodes that agree on all three.
+
+Corroboration, measured 2026-08-13:
+
+- NR keys its own validation-error identity on the uid — every error's `hash` is
+  `"<categoryUid>::<constraintId>"`.
+- NR's exported roster XML writes it as the `id` attribute:
+  `<category name="Troops" id="ig1q6t7" primary="false" entryId="cat-troops"/>` — the same
+  id/entryId split BattleScribe uses.
+- Stable across repeated reads (same object reference), across `deselectSelection` and
+  `selectEntry`. `duplicateForce` mints **fresh** category uids for the copy, which is correct: the
+  copy is a different force and owns different nodes.
+
+`selection.getSelectionCategories()` is a different thing despite the similar name. It returns
+plain object literals — keys `["id", "entryId", "name", "primary"]`, no prototype, no methods, no
+uid — because a selection's categories are the tags it counts against, not nodes in the tree. Its
+`id` key is a catalogue id and is **not** a node identity.
+
 ## addInstance() Category Relocation
 
 When `addInstance()` is called on a selector, NR creates the instance under the
