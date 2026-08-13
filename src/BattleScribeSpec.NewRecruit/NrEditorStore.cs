@@ -89,6 +89,35 @@ public static class NrEditorStore
     // ===== Frozen static-file serving =====
 
     /// <summary>
+    /// Whether a resolved request path stays inside the served root — the directory-escape guard for
+    /// <see cref="SetupStaticFileRoutingAsync"/>, extracted so it is testable rather than argued about.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Neither casing rule is correct on both platforms, so neither is hard-coded.</b> This used to
+    /// be <c>fullPath.StartsWith(root, OrdinalIgnoreCase)</c>, which is right on NTFS and
+    /// over-permissive on ext4 — there <c>/tmp/STATIC/x</c> is a genuinely different directory that a
+    /// guard rooted at <c>/tmp/static/</c> waves straight through (#311). Switching to
+    /// <c>Ordinal</c> is the mirror-image bug: on Windows those two strings name one directory, and a
+    /// legitimate request would 403.
+    /// </para>
+    /// <para>
+    /// <see cref="Path.GetRelativePath"/> applies the running platform's own rule, and "outside" is
+    /// then spelled as what it means — a relative path that has to climb out, or one that could not be
+    /// made relative at all (a different Windows volume comes back rooted).
+    /// </para>
+    /// </remarks>
+    /// <param name="root">The served directory, absolute and ending in a directory separator.</param>
+    /// <param name="fullPath">The absolute path a request resolved to.</param>
+    internal static bool IsInsideRoot(string root, string fullPath)
+    {
+        var relative = Path.GetRelativePath(root, fullPath);
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Sets up Playwright route interception to serve NR Editor static files from a local directory.
     /// Strips the /nr-editor/ URL prefix when mapping to file paths, handles SPA fallback.
     /// </summary>
@@ -123,7 +152,7 @@ public static class NrEditorStore
             }
 
             var fullPath = Path.GetFullPath(Path.Combine(normalizedDir, path.Replace('/', Path.DirectorySeparatorChar)));
-            if (!fullPath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase))
+            if (!IsInsideRoot(normalizedDir, fullPath))
             {
                 await route.FulfillAsync(new RouteFulfillOptions { Status = 403, ContentType = "text/plain", Body = "Forbidden" });
                 return;

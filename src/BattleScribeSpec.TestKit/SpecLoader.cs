@@ -50,14 +50,17 @@ public static class SpecLoader
 
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
         {
-            var dir = Path.GetDirectoryName(file);
-            // Skip files in the root specs directory
-            if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
+            // Skip files sitting directly in the root — they have no category folder. Asked as
+            // "is there a folder between the root and the file", which needs no path comparison and
+            // therefore no casing rule; the previous OrdinalIgnoreCase full-path compare could not
+            // actually differ from Ordinal here (both operands derive from `specsDir`), but it was
+            // one more hand-rolled path casing decision in the code that decides which specs exist.
+            if (!Path.GetRelativePath(specsDir, file).Contains(Path.DirectorySeparatorChar))
             {
                 continue;
             }
 
-            var category = Path.GetFileName(dir) ?? "unknown";
+            var category = Path.GetFileName(Path.GetDirectoryName(file)) ?? "unknown";
             var id = Path.GetFileNameWithoutExtension(file);
             yield return (file, id, category);
         }
@@ -173,13 +176,13 @@ public static class SpecLoader
 
         foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
         {
-            var dir = Path.GetDirectoryName(file);
-            if (string.Equals(Path.GetFullPath(dir!), Path.GetFullPath(specsDir), StringComparison.OrdinalIgnoreCase))
+            // Same root-level skip as DiscoverSpecs — see the comment there.
+            if (!Path.GetRelativePath(specsDir, file).Contains(Path.DirectorySeparatorChar))
             {
                 continue;
             }
 
-            var category = Path.GetFileName(dir) ?? "unknown";
+            var category = Path.GetFileName(Path.GetDirectoryName(file)) ?? "unknown";
             var id = Path.GetFileNameWithoutExtension(file);
             yield return (file, id, category);
         }
