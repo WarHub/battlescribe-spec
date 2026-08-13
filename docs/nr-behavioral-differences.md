@@ -225,8 +225,29 @@ the element the engine itself attached the error to.
 
 | Case | BattleScribe | NewRecruit |
 |------|--------------|------------|
+| A collective over-limit or hidden violation (every over-limit spec in `constraint/`) | the CONTAINER that counted — the category, the force or the roster, matching the constraint's scope | one violating SELECTION |
 | A child's over-limit inside a link-reached parent (`constraint/constraint-error-owner-link-reached`) | the counting PARENT selection (`sse-unit`) | the violating CHILD selection (`se-gear`) |
 | A constraint on a `selectionEntryGroup` (`selection/selection-entry-group-constraint`, `selection/collective-group-constraint-per-model`, `selection/selection-entry-group-default-with-max`, both `real-world/wh40k-10e-*`) | the owning selection — BattleScribe materialises no group node | the GROUP node, which no engine's state model represents |
+
+The first row is the corpus's largest divergence and the reason most `constraint/` specs carry an
+`engines: newrecruit:` block: BattleScribe's answer follows the constraint's scope (`parent` → the
+category node, `force` → the force node, `roster` → the roster), NewRecruit's is always a selection.
+
+**Which selection NewRecruit picks is the FIRST sibling, and the siblings are the violating entry's
+— not the counted set's.** Measured across `constraint/` on 2026-08-13:
+
+- with three selections of one entry over a max, it names the first
+  (`constraint-two-max-one-modified`, `constraint-two-max-equal-limits`, `constraint-min-and-max` —
+  there the first is the one auto-select created with the force);
+- with a `shared: true` constraint counting across two entry links, it still names the first
+  selection of the link that violated, not of the set that was counted. In
+  `constraint-entry-link-shared-counting` the fourth selection — made from `link-beta` — is what
+  pushes the shared count over 3, and NewRecruit raises the error on the first `link-alpha`
+  selection. `constraint-shared-flag` shows the same node absorbing both the per-link and the
+  shared violation across five assertions.
+
+Neither engine's answer is reconstructed into the other's; the specs record both (issue #419
+decision 2, as amended after measurement).
 
 The first is the same divergence the spec's own `engines: newrecruit:` block already pins for
 `on:`, seen one layer down: BattleScribe owns group/child constraints on the element that counts
