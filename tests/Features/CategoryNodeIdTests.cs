@@ -188,6 +188,49 @@ public class CategoryNodeIdTests(ITestOutputHelper output)
 }
 
 /// <summary>
+/// See <see cref="CategoryNodeIdContract"/> — the BattleScribe desktop UI lane.
+/// <para>
+/// The one lane whose category ids travel as JSON from a Java agent, and the one nothing else
+/// checks: `pre-push` excludes it deliberately, so without this the agent could stop emitting the
+/// field and every offline gate would stay green. No corpus spec asserts a category id, so a spec
+/// run here proves only that nothing broke.
+/// </para>
+/// </summary>
+[Collection("BsRosterUi")]
+[Trait("Category", "Conformance")]
+[Trait("Engine", "BsRosterUi")]
+public sealed class BsRosterUiCategoryNodeIdTests(ITestOutputHelper output, BsRosterUiFixture fixture)
+{
+    [Fact]
+    public void AddForce_CategoryOutputs_NameTheSameNodesTheStateReports()
+    {
+        Assert.SkipWhen(!fixture.Available,
+            "BS UI artifacts not found (run setup.ps1) or BS_UI_SKIP=true — skipping BS Roster UI tests");
+
+        var engine = fixture.Engine!;
+        engine.SetTestContext(nameof(AddForce_CategoryOutputs_NameTheSameNodesTheStateReports));
+
+        try
+        {
+            var setupErrors = engine.Setup(CategoryNodeIdContract.GameSystem(), CategoryNodeIdContract.Catalogues());
+            Assert.True(setupErrors.Count == 0, $"Setup failed: {string.Join("; ", setupErrors)}");
+
+            // The first addForce in this lane is the New Roster dialog, not the Add Force one — a
+            // different Java action that builds its outputs through the same helper.
+            var outputs = engine.AddForce(CategoryNodeIdContract.ForceEntryId, CategoryNodeIdContract.CatalogueId);
+
+            CategoryNodeIdContract.AssertOutputsMatchState(
+                "battlescribe-ui", outputs, engine.GetRosterState(), output);
+        }
+        finally
+        {
+            // One desktop app, shared across every spec in this collection.
+            engine.Cleanup();
+        }
+    }
+}
+
+/// <summary>
 /// See <see cref="CategoryNodeIdContract"/> — the NewRecruit lane, over the frozen HAR.
 /// <para>
 /// <c>Category=Conformance</c> despite not being a spec: this drives a real Chromium, and
@@ -225,6 +268,50 @@ public sealed class FrozenNrCategoryNodeIdTests(ITestOutputHelper output, Frozen
         {
             // The pooled engine is shared: leaving this spec's list behind is what
             // NrListCleanupRegressionTests exists to prevent.
+            engine.Cleanup();
+        }
+    }
+}
+
+/// <summary>
+/// See <see cref="CategoryNodeIdContract"/> — the NewRecruit UI lane, over the frozen HAR.
+/// <para>
+/// It shares the state reader with the store-direct NR engine, but not the path that produces the
+/// output: this driver mints its force through NR's own Create List / Add Force UI and reads the
+/// categories afterwards. "Shares the reader" is a reason to expect agreement, not a measurement of
+/// it, and the failure this guards — an output read from a re-hydrated `currentList.army` while the
+/// state came from the captured `__bsspec.army`, or the reverse — produces two sets of real ids
+/// that simply are not each other's.
+/// </para>
+/// </summary>
+[Collection("FrozenNrUiRoster")]
+[Trait("Category", "Conformance")]
+[Trait("Engine", "FrozenNrUiRoster")]
+public sealed class FrozenNrUiCategoryNodeIdTests(ITestOutputHelper output, FrozenNrUiRosterFixture fixture)
+{
+    [Fact]
+    public void AddForce_CategoryOutputs_NameTheSameNodesTheStateReports()
+    {
+        Assert.SkipWhen(!fixture.Available,
+            "Frozen HAR file not found, NR_UI_FROZEN_SKIP=true, or Playwright browsers missing "
+            + "— skipping frozen NR UI tests");
+
+        var engine = fixture.Engine!;
+        engine.SetTestContext(nameof(AddForce_CategoryOutputs_NameTheSameNodesTheStateReports));
+
+        try
+        {
+            var setupErrors = engine.Setup(CategoryNodeIdContract.GameSystem(), CategoryNodeIdContract.Catalogues());
+            Assert.True(setupErrors.Count == 0, $"Setup failed: {string.Join("; ", setupErrors)}");
+
+            var outputs = engine.AddForce(CategoryNodeIdContract.ForceEntryId, CategoryNodeIdContract.CatalogueId);
+
+            CategoryNodeIdContract.AssertOutputsMatchState(
+                "newrecruit-ui", outputs, engine.GetRosterState(), output);
+        }
+        finally
+        {
+            // One browser context for the whole collection — see FrozenNrUiRosterFixture.
             engine.Cleanup();
         }
     }
