@@ -100,7 +100,9 @@ internal static class CompareCommand
                 "reuse=on|off, reuse-roster=on|off, reuse-gamedata=on|off. This is the axis that lets " +
                 "`compare` ablate a policy decision (e.g. reuse=on vs reuse=off) and still assert " +
                 "verdict-equality; --config-a/--config-b remain a separate axis for genuine " +
-                "environment experiments. Without this, arm A uses whatever ConcurrencyPolicy.For " +
+                "environment experiments. Forcing reuse on an engine not declared reuse-safe is " +
+                "allowed HERE and rejected in `run`: here the other arm is the control and a changed " +
+                "verdict is caught. Without this, arm A uses whatever ConcurrencyPolicy.For " +
                 "picks for this machine and engine.",
         };
         var policyB = new Option<string?>("--policy-b")
@@ -152,14 +154,22 @@ internal static class CompareCommand
                 // change where the arm's engine points (NR_ENGINE_URL) and therefore what its base plan
                 // and its allowed worker ceiling are. Applied the other way round, an arm sent live by
                 // --config-a would have had its plan computed against a frozen HAR's measured optimum.
+                // UnsafeReuse.AllowForAblation is what makes `compare` the ablation channel, and it is
+                // the reason `run` can refuse the same override outright (#313). Forcing reuse on an
+                // engine that has not earned a ReuseSafe* flag is the experiment here, the other arm is
+                // the control, and this command asserts per-spec verdict-equality before reporting any
+                // timing — so a divergence is a finding rather than a corrupted result nobody sees.
+                // Reuse-safety is claimed only on evidence, and this is where the evidence comes from.
                 var selectionA = RunCommand.ApplyPolicyOverride(
                     selection with { ChildEnvironment = ParseConfig(parseResult.GetValue(configA), "--config-a") },
                     parseResult.GetValue(policyA),
-                    Ui.Warn);
+                    Ui.Warn,
+                    UnsafeReuse.AllowForAblation);
                 var selectionB = RunCommand.ApplyPolicyOverride(
                     selection with { ChildEnvironment = ParseConfig(parseResult.GetValue(configB), "--config-b") },
                     parseResult.GetValue(policyB),
-                    Ui.Warn);
+                    Ui.Warn,
+                    UnsafeReuse.AllowForAblation);
 
                 var options = new CompareOptions(
                     selection,

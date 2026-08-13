@@ -128,6 +128,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`run --policy reuse=on` is refused on an engine that has not earned reuse-safety, instead of
+  warned about (#313)** — `EngineProfile.ReuseSafeRoster`/`ReuseSafeGameData` are claims `bs-spec
+  compare` has demonstrated against a cold arm, and `newrecruit-ui` declares its roster domain unsafe
+  because enabling reuse there once silently changed **six** spec verdicts while a stopwatch reported
+  success. `run --all --engine newrecruit-ui --roster --policy reuse=on` reproduced that exact
+  configuration and emitted a warning, which is close enough to silence to count. Ask what forcing an
+  unearned reuse is *for*: the only legitimate purpose is ablation — finding out whether verdicts
+  change — and that requires two arms, which `run` does not have. So `run` now errors (exit 1),
+  naming the engine, the domains, and the `compare` invocation that answers the question. **`compare`
+  keeps allowing it**, deliberately: there the forced arm is the experiment, the other is the control,
+  and per-spec verdict-equality is asserted before any timing is reported — closing that channel would
+  leave no way for an engine to ever earn a `ReuseSafe*` flag. `--policy reuse=off` stays legal in
+  every verb, since turning reuse off cannot invent a verdict. The allow/refuse choice is now an
+  explicit `UnsafeReuse` argument at each of the four call sites rather than an implicit property of
+  the shared helper, so a new verb has to state which it is.
 - **The .NET SDK feature band is now a decision this repo makes, not one the runner image makes for
   it (#312)** — `global.json` moves from `rollForward: latestFeature` to `latestPatch` pinned at
   `10.0.300`, all six `actions/setup-dotnet` steps swap `dotnet-version: '10.0.x'` for
