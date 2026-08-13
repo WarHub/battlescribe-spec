@@ -50,7 +50,7 @@ steps:
 
   - expectedState:
       errors:
-        - on: category cat-troops
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-cost-min
       forces:
         - selectionCount: 0
@@ -62,7 +62,7 @@ steps:
 
   - expectedState:
       errors:
-        - on: category cat-troops
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-cost-min
       forces:
         - selections:

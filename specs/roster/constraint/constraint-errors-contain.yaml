@@ -68,7 +68,7 @@ steps:
   # errorsContain: assert only one of the two errors, ignoring the other
   - expectedState:
       errorsContain:
-        - on: category cat-troops
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-min-troops
       forces:
         - selectionCount: 0

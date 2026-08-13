@@ -76,9 +76,9 @@ steps:
 
   - expectedState:
       errors:
-        - on: category cat-troops
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-min-a
-        - on: category cat-troops
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-b/con-min-b
       forces:
         - selectionCount: 0
