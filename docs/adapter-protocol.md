@@ -177,15 +177,15 @@ use BattleScribe data model IDs from the setup data. Instance references (e.g., 
 
 | Action | Required Fields | Outputs | Description |
 |--------|----------------|---------|-------------|
-| `addForce` | `forceEntryId` | `forceId`, `selections` | Add a top-level force. Optional: `catalogueId` |
-| `addChildForce` | `forceId`, `forceEntryId` | `forceId`, `selections` | Add a child force under an existing force. Optional: `catalogueId` |
+| `addForce` | `forceEntryId` | `forceId`, `selections`, `categories` | Add a top-level force. Optional: `catalogueId` |
+| `addChildForce` | `forceId`, `forceEntryId` | `forceId`, `selections`, `categories` | Add a child force under an existing force. Optional: `catalogueId` |
 | `removeForce` | `forceId` | — | Remove a force by instance ID |
 | `selectEntry` | `forceId`, `entryId` | `selectionId`, `selections` | Add a selection to a force |
 | `selectChildEntry` | `forceId`, `selectionId`, `entryId` | `selectionId`, `selections` | Add a child selection under an existing selection |
 | `deselectSelection` | `forceId`, `selectionId` | — | Remove a selection |
 | `setSelectionCount` | `forceId`, `selectionId`, `count` | — | Set selection quantity |
 | `duplicateSelection` | `forceId`, `selectionId` | `selectionId` | Duplicate a selection |
-| `duplicateForce` | `forceId` | `forceId` | Duplicate a force (deep copy with all selections). Not supported by BattleScribe Java engine. |
+| `duplicateForce` | `forceId` | `forceId`, `categories` | Duplicate a force (deep copy with all selections). Not supported by BattleScribe Java engine. |
 | `setCostLimit` | `costTypeId`, `value` | — | Set cost limit for a cost type |
 | `loadRoster` | `xml` | — | Load a `.ros` XML payload, replacing the current roster wholesale and re-linking it against the setup data. Adapters that cannot load a roster must return `{"ok":false,"error":...}` — never a silent success |
 | `reload` | — | — | Serialize the current roster and load it straight back. Round-trip specs assert the same `expectedState` before and after |
@@ -203,6 +203,17 @@ later steps reference that value as `${{ steps.add-patrol.forceId }}` (not
 | `forceId` | string | `addForce`, `addChildForce`, `duplicateForce` |
 | `selectionId` | string | `selectEntry`, `selectChildEntry`, `duplicateSelection` |
 | `selections` | map(entryId → selectionId) | `addForce`, `addChildForce`, `selectEntry`, `selectChildEntry` — auto-selected child entries |
+| `categories` | map(categoryEntryId → category node id) | `addForce`, `addChildForce`, `duplicateForce` — the categories the created force owns |
+
+`categories` is a map for the reason `selections` is: nothing creates a category. A force mints
+all of its own at once from its force entry's category links, so there is no action to hang a
+`categoryId` on and nothing to name one by except the catalogue entry it came from. The VALUES are
+runtime node ids — the same ids `categoryState.id` reports — so
+`${{ steps.add-patrol.categories.cat-troops }}` names one specific category node in one specific
+force. When a force links the same category entry twice, the first node wins the key.
+
+`duplicateForce` returns the COPY's categories. Duplicating a force mints fresh category nodes, so
+returning the source force's would hand the spec ids for a force the step did not create.
 
 #### ID-based addressing
 
@@ -321,7 +332,7 @@ For `screenshot` and `record` that costs you an artifact and the client moves on
 ### `actionResult`
 
 ```json
-{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","selections":{"se-required":"sel-789"}}}
+{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","selections":{"se-required":"sel-789"},"categories":{"cat-troops":"cat-node-1"}}}
 {"type":"actionResult","ok":true,"outputs":{"selectionId":"sel-456"}}
 {"type":"actionResult","ok":true}
 {"type":"actionResult","ok":false,"error":"Force not found with id 'xyz'"}
@@ -341,18 +352,24 @@ flattens each `outputs` property onto the step's expression namespace — e.g.,
   "gameSystemId": "test-gs",
   "forces": [
     {
+      "id": "abc-123",
       "name": "Patrol",
       "catalogueId": "cat-1",
       "selections": [
         {
+          "id": "sel-789",
           "name": "Unit",
           "entryId": "se-1",
           "type": "unit",
           "number": 1,
           "hidden": false,
           "costs": [{ "name": "pts", "typeId": "ct-pts", "value": 50 }],
-          "children": []
+          "children": [],
+          "categories": [{ "name": "Troops", "entryId": "cat-troops", "primary": true }]
         }
+      ],
+      "categories": [
+        { "id": "cat-node-1", "name": "Troops", "entryId": "cat-troops", "primary": false }
       ],
       "childForces": []
     }
@@ -371,6 +388,24 @@ flattens each `outputs` property onto the step's expression namespace — e.g.,
   ]
 }
 ```
+
+#### Categories: two things, one shape
+
+`categories` appears on both a force and a selection and does not mean the same thing in each.
+
+A FORCE's categories are roster **nodes**. The force mints one per category link when it is
+created, and that node is what a collective over-limit violation is raised on — it is the
+`raisedOnId` of an error whose `raisedOnType` is `category`. Report its runtime id as `id`, and
+report the same id in the `categories` map of the action that created the force.
+
+A SELECTION's categories are the **tags** that selection counts against — what it is, not where it
+lives. An error is never raised on one. If your engine models them as nodes with identities, send
+`id`; if it models them as plain tags, omit it. Both are accepted, and no spec assertion reads the
+field, so an engine with less to say here is not at a disadvantage.
+
+`id` is never `entryId`. `entryId` is the catalogue category entry, which every force linking that
+entry shares; `id` names one node in one force. An adapter that has only the entry id available
+should omit `id` rather than send the entry id under its name.
 
 Each validation error is a structured object with the following fields:
 

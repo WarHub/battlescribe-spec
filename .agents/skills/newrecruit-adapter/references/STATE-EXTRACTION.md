@@ -69,6 +69,23 @@ order. See [NR Ordering Analysis](../../../docs/nr-ordering-analysis.md).
 | extractRules(f) | Rules[] | Force-level rules |
 | `f.source?.publication?.id` | PublicationId | Via resolved `.publication` object on source |
 | `f.source?.page` | Page | Number in NR, must stringify |
+| extractForceCategories(f) | Categories[] | Instance nodes — see below |
+
+## Category state mapping
+
+A FORCE's categories are instance nodes; a SELECTION's are plain tag objects. They map to the same
+`CategoryState`, and only the first has a node identity.
+
+| NR accessor | CategoryState field | Notes |
+|------------|--------------------|-------|
+| `c.uid` | Id | Force categories only. **Not `c.id` and not `c.getId()`** — those return the catalogue ENTRY id, and `c.source.id` is the categoryLink's. `uid` is the only node identity, and it is what NR keys its own error hashes on (`"<categoryUid>::<constraintId>"`) and writes as `id` in exported roster XML. |
+| `c.source?.targetId ?? c.source?.id` | EntryId | The category ENTRY — shared by every force linking it |
+| `c.getName?.()` | Name | |
+| `c.isPrimary?.()` | Primary | |
+| *(none)* | Id, for a selection's categories | `sel.getSelectionCategories()` returns object literals with no prototype and no uid. Null is the honest answer; the `id` key on them is a catalogue id, not a node. |
+
+See [nr-dual-tree-api.md](../../../docs/nr-dual-tree-api.md#force-category-nodes) for the full
+measurement, including that `duplicateForce` mints fresh category uids for the copy.
 
 ## Cost state mapping
 
