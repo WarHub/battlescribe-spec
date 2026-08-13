@@ -107,9 +107,15 @@ steps:
     selectionId: ${{ steps.select-trooper.selectionId }}
     entryId: se-sword
 
+  # Two engines, two kinds of node, both recorded. BattleScribe has no group in its
+  # error model, so a group constraint is raised on the parent that owns the
+  # per-model count — the Trooper. NewRecruit materialises the selectionEntryGroup
+  # as a real node and raises it there; `on: group` is bare because no engine's
+  # state model carries that node and no step output can mint it (same shape as
+  # selection-entry-group-constraint).
   - expectedState:
       errors:
-        - on: selection se-trooper
+        - on: selection ${{ steps.select-trooper.selectionId }}
           from: seg-weapons/con-max-2
       forces:
         - selections:
@@ -122,3 +128,8 @@ steps:
                       number: 3
                     - name: Sword
                       number: 6
+      engines:
+        newrecruit:
+          errors:
+            - on: group
+              from: seg-weapons/con-max-2
