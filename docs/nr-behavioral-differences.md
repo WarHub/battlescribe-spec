@@ -400,7 +400,9 @@ roster node, then reading the node's error arrays. Key findings:
 - `checkConstraints()` must be called explicitly per node
 - Can crash with undefined reference errors — wrapped in try-catch
 - Errors on army node are cost limit violations
-- Error structure: `{message, constraintId?, ownerType, ownerEntryId}`
+- Error structure: `{message, ownerType, ownerEntryId, entryId, constraintId}` — five fields;
+  `entryId` is reconstructed by a candidate-constraint back-search (see
+  [adapter-reconstruction-audit.md](adapter-reconstruction-audit.md))
 - ConstraintId format: NR now maps cost limit errors to the `costLimits/`
   pseudo-entry convention (matching BattleScribe's format)
 - Max constraint errors go on the selection (both BS BattleScribe adapter and NR now agree)
@@ -600,7 +602,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 | SelectChildEntry flattening | `FlattenChildEntries` resolves EntryLinks and nested SelectionEntryGroups | 6 |
 | FindEntryById scope | `FindEntryById` now searches GameSystem entries in addition to catalogue | 2 |
 | Force-catalogue map state leak | `_forceCatalogueMap.Clear()` in Setup prevents cross-test contamination | 1 |
-| NR cost limit false positives | Parse NR error messages + compare vs configured `defaultCostLimit` from spec | ~65 |
+| NR cost limit false positives | Structural read: `e.constraint.type === 'max'` + `.field` names the cost type — no message parsing | ~65 |
 | NR generic hidden errors | Suppress "cannot be selected while hidden" without `constraint.id` | 4 |
 | Publication field extraction | Use `.publication?.id` object pattern instead of `.publicationId` string | 7 |
 | Selection page/pub on source | Read from `sel.source?.page` / `sel.source?.publication` instead of `sel` directly | 4 |
