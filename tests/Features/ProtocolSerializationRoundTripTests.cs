@@ -84,24 +84,23 @@ public class ProtocolSerializationRoundTripTests
     /// Every field of a validation error survives the wire, by value and not merely by type.
     /// </summary>
     /// <remarks>
-    /// <see cref="ValidationErrorState"/> is eight consecutive nullable strings, so a field that is
-    /// dropped, renamed or bound to its neighbour still round-trips as the right TYPE. The two
-    /// attributions it carries — the normalized owner and the node the engine raised the error on —
-    /// are the pair most likely to be silently conflated, so this compares values.
+    /// <see cref="ValidationErrorState"/> is seven consecutive nullable strings, so a field that is
+    /// dropped, renamed or bound to its neighbour still round-trips as the right TYPE. The three
+    /// raisedOn fields are the ones most likely to be silently conflated — two of them name the same
+    /// node by different identities — so this compares values.
     /// </remarks>
     [Fact]
     public void ValidationErrorState_EveryField_SurvivesRoundTrip()
     {
         var error = new ValidationErrorState(
-            "Patrol has too many selections of Unit A (maximum 1)",
-            OwnerType: "selection",
-            OwnerEntryId: "se-unit-a",
+            "Troops has too many selections of Unit A (maximum 1)",
             EntryId: "se-unit-a",
             ConstraintId: "con-max-1",
             ConstraintType: "max",
             ConstraintField: "selections",
             RaisedOnType: "category",
-            RaisedOnId: "cat-node-7ff1");
+            RaisedOnId: "cat-node-7ff1",
+            RaisedOnEntryId: "cat-troops");
 
         var json = ProtocolSerializer.SerializeResponse(new ErrorsResponse { Errors = [error] });
 
@@ -110,6 +109,7 @@ public class ProtocolSerializationRoundTripTests
         // deserializes to null instead of failing.
         Assert.Contains("\"raisedOnType\":\"category\"", json);
         Assert.Contains("\"raisedOnId\":\"cat-node-7ff1\"", json);
+        Assert.Contains("\"raisedOnEntryId\":\"cat-troops\"", json);
 
         var roundTripped = Assert.IsType<ErrorsResponse>(ProtocolSerializer.DeserializeResponse(json));
         Assert.Equal(error, Assert.Single(roundTripped.Errors));

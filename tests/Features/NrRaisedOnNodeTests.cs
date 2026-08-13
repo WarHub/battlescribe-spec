@@ -253,8 +253,8 @@ internal static class NrRaisedOnNodeContract
         foreach (var error in state.ValidationErrors)
         {
             output.WriteLine(
-                $"[{engineName}] owner={error.OwnerType} {error.OwnerEntryId} " +
-                $"raisedOn={error.RaisedOnType} {error.RaisedOnId} :: {error.Message}");
+                $"[{engineName}] raisedOn={error.RaisedOnType} {error.RaisedOnId} " +
+                $"({error.RaisedOnEntryId}) :: {error.Message}");
         }
 
         Assert.NotEmpty(state.ValidationErrors);
@@ -294,21 +294,26 @@ internal static class NrRaisedOnNodeContract
 
         // The entry-group violation, and the only error here that reaches the adapter through the
         // flat `army.getErrors()` merge instead of the node walk. Its raising node is a group node:
-        // real in NewRecruit, absent from every engine's state model, and NOT the parent selection
-        // the owner attribution reconstructs. Typed `group` because the node was asked what it is —
-        // there is no fifth kind to guess from the error alone.
+        // real in NewRecruit, absent from every engine's state model. Typed `group` because the node
+        // was asked what it is — there is no fifth kind to guess from the error alone.
         var groupErrors = state.ValidationErrors.Where(e => e.RaisedOnType == "group").ToList();
         var groupError = Assert.Single(groupErrors);
         Assert.All(byKind, kv => Assert.DoesNotContain(groupError.RaisedOnId!, kv.Value));
-        Assert.NotEqual(groupError.OwnerEntryId, groupError.RaisedOnId);
+
+        // And it is reported as ITSELF. The adapter used to walk up from the group to the enclosing
+        // selection and report that as the error's owner — the last reconstruction on the error
+        // record, substituting a node the state model does have for the one NR actually named. The
+        // entry id here is the GROUP's (`seg-weapons`), not the parent unit's (#426).
+        Assert.Equal("seg-weapons", groupError.RaisedOnEntryId);
+        Assert.NotEqual(GroupOwnerEntryId, groupError.RaisedOnEntryId);
 
         // The payoff. Two forces built from ONE force entry each raise the min-forces violation, so
-        // every field a spec can match on today is identical between them — this is exactly the
-        // "three selections of se-unit-a are one and the same thing to the matcher" of #419, and the
-        // raising node is what separates them.
+        // every field a spec could match on before #419 is identical between them — this is exactly
+        // the "three selections of se-unit-a are one and the same thing to the matcher" of #419, and
+        // the raising node is what separates them.
         var forceErrors = state.ValidationErrors.Where(e => e.RaisedOnType == "force").ToList();
         Assert.Equal(2, forceErrors.Count);
-        Assert.Single(forceErrors.Select(e => (e.OwnerType, e.OwnerEntryId)).Distinct());
+        Assert.Single(forceErrors.Select(e => e.RaisedOnEntryId).Distinct());
         Assert.Equal(2, forceErrors.Select(e => e.RaisedOnId).Distinct().Count());
     }
 }

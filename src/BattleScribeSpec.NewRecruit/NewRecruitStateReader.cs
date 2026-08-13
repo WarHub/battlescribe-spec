@@ -100,12 +100,11 @@ public static class NewRecruitStateReader
             costs,
             [.. snapshot.ValidationErrors.Select(e => new ValidationErrorState(
                 e.Message,
-                OwnerType: e.OwnerType,
-                OwnerEntryId: e.OwnerEntryId,
                 EntryId: e.EntryId,
                 ConstraintId: e.ConstraintId,
                 RaisedOnType: e.RaisedOnType,
-                RaisedOnId: e.RaisedOnId))],
+                RaisedOnId: e.RaisedOnId,
+                RaisedOnEntryId: e.RaisedOnEntryId))],
             CostLimits: costLimits,
             GameSystemName: snapshot.GameSystemName);
     }
@@ -199,22 +198,23 @@ public static class NewRecruitStateReader
     internal record NrErrorSnapshot
     {
         public string Message { get; init; } = "";
-        public string? OwnerType { get; init; }
-        public string? OwnerEntryId { get; init; }
         public string? EntryId { get; init; }
         public string? ConstraintId { get; init; }
 
         /// <summary>
-        /// The roster node NR raised the error on — its kind, and its <c>uid</c>. Distinct from
-        /// <see cref="OwnerType"/>/<see cref="OwnerEntryId"/>, which name a CATALOGUE entry and, on
-        /// the entry-group path, a node other than the one that raised it. Like every other field
-        /// here, a name that does not match the JS payload's key is dropped silently with no error;
-        /// <c>NrRaisedOnNodeTests</c> is what notices.
+        /// The roster node NR raised the error on — its kind, its <c>uid</c>, and its CATALOGUE
+        /// entry id. The last is a different fact from the uid, not a weaker version of it: several
+        /// nodes share one entry. Like every other field here, a name that does not match the JS
+        /// payload's key is dropped silently with no error; <c>NrRaisedOnNodeTests</c> is what
+        /// notices.
         /// </summary>
         public string? RaisedOnType { get; init; }
 
         /// <inheritdoc cref="RaisedOnType"/>
         public string? RaisedOnId { get; init; }
+
+        /// <inheritdoc cref="RaisedOnType"/>
+        public string? RaisedOnEntryId { get; init; }
     }
 
     internal record NrForceSnapshot

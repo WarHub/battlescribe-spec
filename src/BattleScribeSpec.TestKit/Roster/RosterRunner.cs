@@ -784,22 +784,19 @@ public sealed class RosterRunner
 
     /// <summary>
     /// One error as a failing assertion shows it: the node the engine raised it on — what a spec's
-    /// <c>on:</c> matches — then the normalized attribution, then the <c>from:</c> pair.
+    /// <c>on:</c> matches — then the <c>from:</c> pair.
     /// </summary>
     /// <remarks>
-    /// The raising node leads because that is what the assertion compares against. The bracketed
-    /// attribution behind it names a CATALOGUE entry, which several roster nodes can share, and when
-    /// placement moved the error it names a different element from the one that raised it; it is kept
-    /// in the line because the corpus still carries not-yet-migrated assertions that match on it
-    /// (#424), and because a divergence between the two is worth seeing at a glance.
+    /// The raising node is a runtime id minted per run, so it is unrecognisable on its own. Its
+    /// catalogue entry rides along in brackets to make the line readable: it says WHAT was selected
+    /// where the id says WHICH one, and a reader comparing a failure against a spec needs both.
     /// </remarks>
     private static string FormatError(ValidationErrorState e)
     {
         var on = RaisedOn(e) ?? "?";
-        if (e.OwnerType is not null)
+        if (e.RaisedOnEntryId is not null)
         {
-            var owner = e.OwnerEntryId is not null ? $"{e.OwnerType} {e.OwnerEntryId}" : e.OwnerType;
-            on += $" [owner {owner}]";
+            on += $" [{e.RaisedOnEntryId}]";
         }
 
         var from = e.EntryId is not null && e.ConstraintId is not null ? $"{e.EntryId}/{e.ConstraintId}" : null;
