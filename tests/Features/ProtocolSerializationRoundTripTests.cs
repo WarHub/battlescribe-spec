@@ -84,7 +84,7 @@ public class ProtocolSerializationRoundTripTests
     /// Every field of a validation error survives the wire, by value and not merely by type.
     /// </summary>
     /// <remarks>
-    /// <see cref="ValidationErrorState"/> is seven consecutive nullable strings, so a field that is
+    /// <see cref="ValidationErrorState"/> is five consecutive nullable strings, so a field that is
     /// dropped, renamed or bound to its neighbour still round-trips as the right TYPE. The three
     /// raisedOn fields are the ones most likely to be silently conflated — two of them name the same
     /// node by different identities — so this compares values.
@@ -96,8 +96,6 @@ public class ProtocolSerializationRoundTripTests
             "Troops has too many selections of Unit A (maximum 1)",
             EntryId: "se-unit-a",
             ConstraintId: "con-max-1",
-            ConstraintType: "max",
-            ConstraintField: "selections",
             RaisedOnType: "category",
             RaisedOnId: "cat-node-7ff1",
             RaisedOnEntryId: "cat-troops");

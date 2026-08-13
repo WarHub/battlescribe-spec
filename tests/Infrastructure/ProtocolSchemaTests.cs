@@ -229,8 +229,6 @@ public sealed class ProtocolSchemaTests
                     "Too few selections",
                     EntryId: "e1",
                     ConstraintId: "c1",
-                    ConstraintType: "min",
-                    ConstraintField: "selections",
                     RaisedOnType: "category",
                     RaisedOnId: "cat-node-1",
                     RaisedOnEntryId: "cat1")

@@ -93,7 +93,7 @@ the next section). What died, defect by defect:
 | `_linkConstraintLookup` (was `BattleScribeEngine.cs:715`) | constraint values for link-reached entries | stored `cSpec.Value` raw off the spec YAML, which never sees a modifier at all — the same defect in a third shape |
 | `ResolveForceEntryFromMessage` (was `BattleScribeEngine.cs:430`) | force-entry constraint identity | matched on constraint KIND alone — any same-kind sibling answered |
 | `EngineAccessor.matchConstraintOwner` (was `EngineAccessor.java:1428`) | the same tiebreak, desktop lane | deliberate port of `ResolveEntryFromMessage`, defects included — byte-identical failure text was the measured evidence for treating the lanes as one |
-| `BattleScribeErrorPlacement`'s `" forces from "` probe (was `:82`) | which errors are force-count errors | the engine also renders `" forces of "`, which the probe missed; placement was moved onto `ConstraintType`/`ConstraintField`, captured from the live constraint into `ValidationErrorState` (`src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs`) — and then retired outright by #426, below |
+| `BattleScribeErrorPlacement`'s `" forces from "` probe (was `:82`) | which errors are force-count errors | the engine also renders `" forces of "`, which the probe missed; placement was moved onto constraint kind/field captured from the live constraint into `ValidationErrorState` — and then retired outright by #426, below, leaving those two captured fields with no reader at all, so #437 deleted them and the per-lane indexes that filled them |
 | `linkTargetOf` + four orphaned helpers (`containsIgnoreCase`, `getEntryName`, `getCostTypeName`, `extractCostTypeIdFromMessage`), agent | the agent's own copy of owner reduction and its message-probing support | two implementations of one reduction is how the lanes drifted (#400); the survivor is below |
 
 The declarations the defects forced are gone with them: `constraint-two-max-one-modified` lost
@@ -181,8 +181,11 @@ work. #270 closed against this list.
 
 - [x] Constraint/hidden/collective error identity, both BattleScribe lanes — **deleted** in
   #416; read from the funnel-patched `bsspecErrorId`.
-- [x] Placement's force-count prose probe — **deleted** in #416; structural
-  `ConstraintType`/`ConstraintField`.
+- [x] Placement's force-count prose probe — **deleted** in #416, which replaced it with the
+  constraint's kind and field captured onto each error. Those captures outlived their only reader by
+  one PR and were **deleted** in #437, along with the in-process index and the desktop agent's
+  per-error constraint lookup that fed them. The constraint's kind and field are still authored on
+  the constraint itself; what went is the copy taken per error.
 - [x] Owner reduction duplicated per lane (#400) — **deleted** in #416; collapsed to one
   implementation, `ReduceToTargetEntry`, applied in shared placement — and then deleted with it.
 - [x] **The placement pass itself** (`BattleScribeErrorPlacement`, both callers, the link-target

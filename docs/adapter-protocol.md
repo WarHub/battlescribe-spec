@@ -420,8 +420,6 @@ Each validation error is a structured object with the following fields:
 | `message` | string | Human-readable error message (always present) |
 | `entryId` | string? | ID of the entry whose constraint was violated, or `"costLimits"` for cost limit errors |
 | `constraintId` | string? | ID of the constraint that failed, the cost type ID for cost limit errors, or `"hidden"` for hidden entry errors |
-| `constraintType` | string? | The constraint's kind: `"min"` or `"max"` |
-| `constraintField` | string? | What the constraint counts: `"selections"`, `"forces"`, or a cost-type ID |
 | `raisedOnType` | string? | Type of the roster element the engine RAISED the error on: `"roster"`, `"force"`, `"category"`, `"selection"` — and not limited to those, since an engine may raise on a node its state has no place for. NewRecruit reports `"group"` for a `selectionEntryGroup` constraint |
 | `raisedOnId` | string? | Runtime node ID of that element |
 | `raisedOnEntryId` | string? | Catalogue entry ID of that same element (omitted for the roster, which has none) |
