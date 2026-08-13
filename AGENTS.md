@@ -79,8 +79,11 @@ is the child's **database id**, not its number:
 gh api --method POST repos/WarHub/battlescribe-spec/issues/419/sub_issues -F sub_issue_id=$(gh api repos/WarHub/battlescribe-spec/issues/421 --jq .id)
 ```
 
-Keep the `Part of #N` line as prose if it helps a reader; it is never the link. See
-`.squad/decisions/decisions.md` — "Sub-issue parentage is a real link, not body prose".
+Children keep insertion order, so add them in the order they should read. Link a new child **at
+creation time**, and **delete the body-text equivalents** — the `Part of #N` line on the child and
+any `## Children` checklist on the parent. Prose and metadata drift apart, and only the metadata
+drives the hierarchy and the progress rollup. See `.squad/decisions/decisions.md` — "Sub-issue
+parentage is a real link, not body prose".
 
 **Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `thorough-ci`,
 `scheduled-ci-failure`. `type:*` labels predate the Type field and are being retired; do not add new

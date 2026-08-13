@@ -620,8 +620,9 @@ number. Verified working on this repository on 2026-08-13.
 
 ### The rule
 
-**Parentage is set through the API. `Part of #N` in the body is optional prose for human readers and
-is never the link itself.**
+**Parentage is set through the API, and the body-text equivalents are deleted** — the `Part of #N`
+line on the child and any `## Children` checklist on the parent. Keeping both means keeping two
+records that drift, and only one of them drives the hierarchy.
 
 ```bash
 # read a parent's children
@@ -635,7 +636,9 @@ gh api --method POST repos/WarHub/battlescribe-spec/issues/419/sub_issues -F sub
 
 Get a child's database id with
 `gh api repos/WarHub/battlescribe-spec/issues/421 --jq .id`. The GraphQL `addSubIssue` mutation is
-equivalent and takes node ids (`issueId`, `subIssueId`).
+equivalent and takes node ids (`issueId`, `subIssueId`). Children keep insertion order, so add them
+in the order they should read, and link a new child at creation time rather than writing prose that
+someone has to migrate later.
 
 ### Why it matters beyond tidiness
 
