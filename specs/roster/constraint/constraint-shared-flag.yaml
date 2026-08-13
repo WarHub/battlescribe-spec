@@ -49,8 +49,12 @@ steps:
     id: add-patrol
     forceEntryId: fe-1
 
-  # Select 2 from link-alpha: per-link alpha=2/2 at limit, shared=2/3
+  # Select 2 from link-alpha: per-link alpha=2/2 at limit, shared=2/3.
+  # The first Alpha Squad is named: NewRecruit raises every error in this spec on
+  # it, the per-link one and the shared one alike, even after Beta Squads join
+  # the shared count.
   - action: selectEntry
+    id: select-alpha-1
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-alpha
 
@@ -69,13 +73,20 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-alpha
 
-  # Only per-link constraint fires (3 > max 2)
+  # Only per-link constraint fires (3 > max 2). Both constraints are scope=force,
+  # so BattleScribe raises everything here on the FORCE that counted; NewRecruit
+  # names the first Alpha Squad instead.
   - expectedState:
       errors:
-        - on: selection shared-unit
+        - on: force ${{ steps.add-patrol.forceId }}
           from: shared-unit/con-max-per-link
       forces:
         - selectionCount: 3
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-alpha-1.selectionId }}
+              from: shared-unit/con-max-per-link
 
   # Select 1 from link-beta: per-link beta=1/2 OK
   # shared total=4 exceeds max=3 → shared constraint fires too
@@ -83,15 +94,25 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-beta
 
-  # Both constraints now fire: per-link (max 2) and shared (max 3)
+  # Both constraints now fire: per-link (max 2) and shared (max 3).
+  # The shared one counts the Beta Squad too, but neither engine raises it on a
+  # Beta node: BattleScribe hangs both on the force, NewRecruit hangs both on the
+  # first Alpha Squad.
   - expectedState:
       errors:
-        - on: selection shared-unit
+        - on: force ${{ steps.add-patrol.forceId }}
           from: shared-unit/con-max-per-link
-        - on: selection shared-unit
+        - on: force ${{ steps.add-patrol.forceId }}
           from: shared-unit/con-max-shared
       forces:
         - selectionCount: 4
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-alpha-1.selectionId }}
+              from: shared-unit/con-max-per-link
+            - on: selection ${{ steps.select-alpha-1.selectionId }}
+              from: shared-unit/con-max-shared
 
   # Select 1 more from link-beta: per-link beta=2/2, shared=5
   - action: selectEntry
@@ -102,9 +123,16 @@ steps:
   # Per-link beta now at limit (2/2), no additional per-link error for beta
   - expectedState:
       errors:
-        - on: selection shared-unit
+        - on: force ${{ steps.add-patrol.forceId }}
           from: shared-unit/con-max-per-link
-        - on: selection shared-unit
+        - on: force ${{ steps.add-patrol.forceId }}
           from: shared-unit/con-max-shared
       forces:
         - selectionCount: 5
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-alpha-1.selectionId }}
+              from: shared-unit/con-max-per-link
+            - on: selection ${{ steps.select-alpha-1.selectionId }}
+              from: shared-unit/con-max-shared
