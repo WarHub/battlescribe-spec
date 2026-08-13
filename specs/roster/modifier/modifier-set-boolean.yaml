@@ -45,14 +45,24 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-agent
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
 
+  # Both engines' raising nodes are recorded. BattleScribe generates hidden errors
+  # only inside category validation, so it raises this on the force's Troops
+  # CATEGORY; NewRecruit checks hidden per selection and raises it on the Secret
+  # Agent selection.
   - expectedState:
       errors:
-        - on: selection se-1
+        - on: category ${{ steps.add-detachment.categories.ce-troops }}
           from: se-1/hidden
       forces:
         - selections:
             - name: Secret Agent
               hidden: true
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-agent.selectionId }}
+              from: se-1/hidden

@@ -44,14 +44,25 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-unit
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
 
+  # The two engines raise this on different nodes and the spec records both.
+  # BattleScribe only generates a hidden error inside category validation, so the
+  # raising node is the force's Troops CATEGORY — the container that counted a
+  # selection it may not have ("Troops cannot have any selections of Stealth Unit").
+  # NewRecruit checks hidden on the selection itself and raises it there.
   - expectedState:
       errors:
-        - on: selection se-1
+        - on: category ${{ steps.add-detachment.categories.ce-troops }}
           from: se-1/hidden
       forces:
         - selections:
             - name: Stealth Unit
               hidden: true
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-unit.selectionId }}
+              from: se-1/hidden

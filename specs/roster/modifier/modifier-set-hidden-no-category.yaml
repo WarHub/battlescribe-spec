@@ -40,12 +40,16 @@ steps:
     forceEntryId: fe-patrol
 
   - action: selectEntry
+    id: select-hidden
     forceId: ${{ steps.add-force.forceId }}
     entryId: se-hidden
 
+  # NewRecruit's node, because it is the only engine that raises here: BattleScribe's
+  # hidden check runs inside category validation and this selection has no category,
+  # which is the design difference the spec exists for.
   - expectedState:
       errors:
-        - on: selection se-hidden
+        - on: selection ${{ steps.select-hidden.selectionId }}
           from: se-hidden/hidden
       forces:
         - selections:
