@@ -108,6 +108,7 @@ public sealed class SpecLintTests
             violations.AddRange(CheckEverySpecHasSetup(entry.Spec));
             violations.AddRange(CheckLastStepIsExpectedState(entry.Spec));
             violations.AddRange(CheckAllErrorAssertionsHaveFrom(entry.Spec));
+            violations.AddRange(CheckErrorAssertionAddressShape(entry.Spec));
             violations.AddRange(CheckNoRedundantCountAssertions(entry.Spec));
         }
 
@@ -662,45 +663,91 @@ public sealed class SpecLintTests
 
     // ── Structure: error assertions have 'from' ──────────────────────
 
-    private static IEnumerable<string> CheckAllErrorAssertionsHaveFrom(SpecFile spec)
+    /// <summary>
+    /// Every error assertion a step can carry, with a label saying where it came from: the base
+    /// <c>errors:</c>/<c>errorsContain:</c> lists and the same two inside each <c>engines:</c>
+    /// override. Anything that lints an assertion has to see all four, because the runner does.
+    /// </summary>
+    private static IEnumerable<(string Where, ErrorAssertionDef Err)> AllErrorAssertions(SpecFile spec)
     {
-        if (spec.Steps is null)
+        foreach (var step in spec.Steps ?? [])
         {
-            yield break;
-        }
-
-        foreach (var step in spec.Steps)
-        {
-            if (step.ExpectedState?.Errors is not { } errors)
+            if (step.ExpectedState is not { } expected)
             {
                 continue;
             }
 
-            foreach (var err in errors)
+            foreach (var err in expected.Errors ?? [])
             {
-                if (string.IsNullOrEmpty(err.From))
-                {
-                    yield return $"error assertion on='{err.On}' is missing 'from:' field";
-                }
+                yield return ("errors", err);
             }
 
-            if (step.ExpectedState.Engines is { } engines)
+            foreach (var err in expected.ErrorsContain ?? [])
             {
-                foreach (var (_, over) in engines)
-                {
-                    if (over.Errors is not { } overErrors)
-                    {
-                        continue;
-                    }
+                yield return ("errorsContain", err);
+            }
 
-                    foreach (var err in overErrors)
-                    {
-                        if (err.On is null)
-                        {
-                            yield return $"engine override error assertion is missing 'on:' field";
-                        }
-                    }
+            foreach (var (engine, over) in expected.Engines ?? [])
+            {
+                foreach (var err in over.Errors ?? [])
+                {
+                    yield return ($"engines.{engine}.errors", err);
                 }
+
+                foreach (var err in over.ErrorsContain ?? [])
+                {
+                    yield return ($"engines.{engine}.errorsContain", err);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> CheckAllErrorAssertionsHaveFrom(SpecFile spec)
+    {
+        foreach (var (where, err) in AllErrorAssertions(spec))
+        {
+            if (err.On is null)
+            {
+                yield return $"{where}: error assertion is missing 'on:' field";
+            }
+
+            if (string.IsNullOrEmpty(err.From))
+            {
+                yield return $"{where}: error assertion on='{err.On}' is missing 'from:' field";
+            }
+        }
+    }
+
+    // ── Structure: 'on:' names a roster node (#423) ──────────────────
+
+    /// <summary>
+    /// <c>on:</c> names the node the engine raised the error on, so the kind has to be one an engine
+    /// can report, and the two kinds with no addressable id — <c>roster</c> and <c>group</c> — have to
+    /// be written bare. Parsed through <see cref="ErrorAddress"/>, the runner's own parser, so the
+    /// linter cannot drift into accepting a shape the matcher does not.
+    /// </summary>
+    private static IEnumerable<string> CheckErrorAssertionAddressShape(SpecFile spec)
+    {
+        foreach (var (where, err) in AllErrorAssertions(spec))
+        {
+            if (err.On is not { Length: > 0 } on)
+            {
+                continue;
+            }
+
+            var address = ErrorAddress.Parse(on);
+            if (!ErrorAddress.KnownTypes.Contains(address.Type))
+            {
+                yield return $"{where}: error assertion on='{on}' names unknown node kind " +
+                    $"'{address.Type}' (expected one of: " +
+                    $"{string.Join(", ", ErrorAddress.KnownTypes.Order(StringComparer.Ordinal))})";
+                continue;
+            }
+
+            if (ErrorAddress.IdLessTypes.Contains(address.Type) && on.Trim() != address.Type)
+            {
+                yield return $"{where}: error assertion on='{on}' gives '{address.Type}' an id, " +
+                    "but no step output names one — write it bare";
             }
         }
     }

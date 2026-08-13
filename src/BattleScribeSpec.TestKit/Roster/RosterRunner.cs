@@ -716,18 +716,28 @@ public sealed class RosterRunner
     }
 
     /// <summary>
-    /// Matches expected error assertions against actual errors.
-    /// With 'from' required on every assertion, patterns are non-overlapping
-    /// and matching is fully order-independent.
+    /// Matches expected error assertions against actual errors. Each assertion names a roster node
+    /// (<see cref="ErrorAddress"/>) and a <c>from:</c> pair, so patterns are non-overlapping and
+    /// matching is fully order-independent.
     /// When <paramref name="exactSet"/> is true, also asserts that no extra unmatched errors remain.
     /// </summary>
+    /// <remarks>
+    /// <b>One assertion consumes one error, and never a second time.</b> That is measured, not
+    /// stylistic. <c>constraint-forces-field-on-forceentry</c> step 5 produces three byte-identical
+    /// errors sharing raising node <em>and</em> <c>from:</c> — BattleScribe evaluates a
+    /// <c>field: forces</c> constraint once per force instance and hangs all three on the roster —
+    /// and <c>constraint-forces-field-per-type</c> step 7 produces two. NewRecruit reports nothing at
+    /// either step, so the fact that would tell them apart exists on neither lane. Node addressing
+    /// narrows what an assertion names; it does not make one individually identifying. Rewriting this
+    /// as "find the error with this node id" would let two assertions silently match one error.
+    /// </remarks>
     private void MatchErrors(int stepIndex, List<ErrorAssertionDef> assertions,
         IReadOnlyList<ValidationErrorState> actualErrors, bool exactSet)
     {
         var consumed = new HashSet<int>();
         foreach (var ea in assertions)
         {
-            var (expectedOwnerType, expectedOwnerEntryId) = ParseOn(ea.On);
+            var expectedNode = ParseOn(ea.On);
             var (expectedEntryId, expectedConstraintId) = ParseFrom(ea.From);
 
             var matchIndex = -1;
@@ -739,8 +749,7 @@ public sealed class RosterRunner
                 }
 
                 var ae = actualErrors[i];
-                if (ae.OwnerType == expectedOwnerType &&
-                    (expectedOwnerEntryId is null || ae.OwnerEntryId == expectedOwnerEntryId) &&
+                if (expectedNode.Matches(ae) &&
                     ae.EntryId == expectedEntryId &&
                     ae.ConstraintId == expectedConstraintId &&
                     (ea.MessageContains is null || (ae.Message?.Contains(ea.MessageContains, StringComparison.OrdinalIgnoreCase) ?? false)))
@@ -755,7 +764,7 @@ public sealed class RosterRunner
             }
             else
             {
-                var desc = $"on='{ea.On}', from='{ea.From}'";
+                var desc = $"on='{expectedNode}', from='{ea.From}'";
                 if (ea.MessageContains is not null)
                 {
                     desc += $", messageContains='{ea.MessageContains}'";
@@ -774,26 +783,23 @@ public sealed class RosterRunner
     }
 
     /// <summary>
-    /// One error as a failing assertion shows it: the attribution a spec's <c>on:</c> matches, the
-    /// node the engine raised it on, and the <c>from:</c> pair.
+    /// One error as a failing assertion shows it: the node the engine raised it on — what a spec's
+    /// <c>on:</c> matches — then the normalized attribution, then the <c>from:</c> pair.
     /// </summary>
     /// <remarks>
-    /// The attribution names a CATALOGUE entry, which several roster nodes can share, so on its own
-    /// it cannot say which node the engine meant — and when placement moved the error it names a
-    /// different element from the one that raised it. The bracketed raising node is the engine's own
-    /// answer and is omitted entirely when no engine reported one (issue #421).
+    /// The raising node leads because that is what the assertion compares against. The bracketed
+    /// attribution behind it names a CATALOGUE entry, which several roster nodes can share, and when
+    /// placement moved the error it names a different element from the one that raised it; it is kept
+    /// in the line because the corpus still carries not-yet-migrated assertions that match on it
+    /// (#424), and because a divergence between the two is worth seeing at a glance.
     /// </remarks>
     private static string FormatError(ValidationErrorState e)
     {
-        var on = e.OwnerType ?? "?";
-        if (e.OwnerEntryId is not null)
+        var on = RaisedOn(e) ?? "?";
+        if (e.OwnerType is not null)
         {
-            on += $" {e.OwnerEntryId}";
-        }
-
-        if (RaisedOn(e) is { } raisedOn)
-        {
-            on += $" [raised on {raisedOn}]";
+            var owner = e.OwnerEntryId is not null ? $"{e.OwnerType} {e.OwnerEntryId}" : e.OwnerType;
+            on += $" [owner {owner}]";
         }
 
         var from = e.EntryId is not null && e.ConstraintId is not null ? $"{e.EntryId}/{e.ConstraintId}" : null;
@@ -809,16 +815,18 @@ public sealed class RosterRunner
         _ => null,
     };
 
-    private static (string ownerType, string? ownerEntryId) ParseOn(string on)
-    {
-        var spaceIdx = on.IndexOf(' ');
-        if (spaceIdx < 0)
-        {
-            return (on, null);
-        }
-
-        return (on[..spaceIdx], on[(spaceIdx + 1)..]);
-    }
+    /// <summary>
+    /// The roster node an <c>on:</c> names — resolving its <c>${{ steps.… }}</c> reference against
+    /// this run's step outputs.
+    /// </summary>
+    /// <remarks>
+    /// The resolver ran on action inputs only until #423. It has to run here because a node id is
+    /// minted at run time and is per-session on every lane (NewRecruit short uids, BattleScribe
+    /// GUIDs, both regenerated each run), so without this a node-addressed assertion could not be
+    /// written at all. An unresolvable reference throws, and the step loop turns that into a failure
+    /// naming the step and field — the same treatment an action input gets.
+    /// </remarks>
+    private ErrorAddress ParseOn(string on) => ErrorAddress.Parse(on, _exprResolver.Resolve);
 
     private static (string entryId, string constraintId) ParseFrom(string from)
     {

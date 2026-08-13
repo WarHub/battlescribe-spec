@@ -60,9 +60,13 @@ steps:
 
   # 1 in Army + 2 in Detachment = 3 total — exceeds max=2.
   # includeChildForces traverses into Detachment to count its Squads too.
+  # The error is raised on the ARMY force — the node whose scope did the counting — and not
+  # on the Detachment that holds the third Squad, which is the distinction an entry-addressed
+  # `on: selection se-squad` could not make: three Squad selections share that entry id, and
+  # two forces are in play.
   - expectedState:
       errors:
-        - on: selection se-squad
+        - on: force ${{ steps.add-army.forceId }}
           from: se-squad/con-1
       forces:
         - name: Army

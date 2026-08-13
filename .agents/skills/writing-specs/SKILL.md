@@ -119,7 +119,7 @@ entries in the `selections` map (e.g., `${{ steps.add-patrol.selections.se-requi
 
 ```yaml
 errors:          # exact match — every error must be listed, no extras allowed
-  - on: category cat-troops
+  - on: category ${{ steps.add-patrol.categories.cat-troops }}
     from: se-unit/con-min-1
 
 errorsContain:   # subset match — extra actual errors are OK
@@ -129,8 +129,14 @@ errorsContain:   # subset match — extra actual errors are OK
 errorCount: 3    # just count, no specifics
 ```
 
-`on` format: `{ownerType}` or `{ownerType} {ownerEntryId}` — e.g. `roster`, `force`,
-`category cat-troops`, `selection se-unit`.
+`on` names the roster NODE the engine raised the error on. Node ids are minted per run, so they
+are always written as `${{ steps.… }}` references: `force ${{ steps.<id>.forceId }}`,
+`category ${{ steps.<id>.categories.<categoryEntryId> }}`,
+`selection ${{ steps.<id>.selectionId }}`. `roster` and `group` are written **bare** — neither node
+has an id a spec can name. Where the two engines raise on different nodes (they do, on 24 of the 38
+assertions both evaluate) the spec records both, base plus an `engines:` block.
+A literal second token is the pre-#423 entry-addressed form, still accepted while the corpus
+migrates (#424) — do not write new ones. Full contract: `docs/error-assertions.md`.
 
 `from` format: `{entryId}/{constraintId}` — pseudo-values: `costLimits/{costTypeId}`,
 `{entryId}/hidden`.

@@ -61,8 +61,10 @@ steps:
       forces:
         - selectionCount: 0
 
-  # 2 selections — at the modified limit of con-max-boosted, far under con-max-plain
+  # 2 selections — at the modified limit of con-max-boosted, far under con-max-plain.
+  # The first one is named because NewRecruit raises the violation on it; see the last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
@@ -80,9 +82,20 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # The two engines raise this on different nodes, and the spec says so instead of
+  # normalizing one into the other. BattleScribe raises a collective over-limit violation
+  # on the container that counted it — the force's Troops CATEGORY node. NewRecruit names
+  # a violator — the FIRST of the three Unit A selections. Neither is a reconstruction of
+  # the other, and the entry-addressed `on: selection se-unit-a` this used to carry was
+  # true of neither: it named a catalogue entry that all three selections share.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-max-boosted
       forces:
         - selectionCount: 3
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-first.selectionId }}
+              from: se-unit-a/con-max-boosted
