@@ -48,22 +48,23 @@ steps:
             - name: Unit A
             - name: Unit A
 
-  # Remove one auto-selected entry (need 2, have 1 → violation)
+  # Remove one auto-selected entry (need 2, have 1 → violation). Both Unit A
+  # nodes came from ONE entry in ONE step, so [0] and [1] are the only things
+  # that tell them apart — written out here rather than left bare, because which
+  # of the two this removes is exactly what the assertion below depends on.
   - action: deselectSelection
     forceId: ${{ steps.add-patrol.forceId }}
-    selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
+    selectionId: ${{ steps.add-patrol.selections.se-unit-a[0] }}
 
   # BattleScribe raises the force-scoped min on the force that counted, and so
   # does NewRecruit — but NewRecruit also raises it a second time on the Unit A
   # that is left, which BattleScribe does not. The override exists for that extra
   # error, not for a disagreement about the first one.
   #
-  # That second assertion is entry-addressed, and cannot yet be anything else:
-  # the surviving Unit A is one of two the force auto-added, and
-  # ActionOutputs.Selections holds one node per entry id (last one wins) — the
-  # very id this spec then deselects. So the node that remains is the one no step
-  # output names. Same shape as the caveat on ActionOutputs.Categories: a map
-  # keyed by catalogue entry id cannot address two nodes that share one.
+  # That surviving Unit A is [1]: the step auto-added two, the step above removed
+  # [0]. Naming it was impossible until #428 — the outputs map held one node per
+  # entry id, and the one it held was the one this spec deselects, so the node
+  # that remains was the one no step output could name.
   - expectedState:
       errors:
         - on: force ${{ steps.add-patrol.forceId }}
@@ -75,5 +76,5 @@ steps:
           errors:
             - on: force ${{ steps.add-patrol.forceId }}
               from: se-unit-a/con-min-force
-            - on: selection se-unit-a
+            - on: selection ${{ steps.add-patrol.selections.se-unit-a[1] }}
               from: se-unit-a/con-min-force
