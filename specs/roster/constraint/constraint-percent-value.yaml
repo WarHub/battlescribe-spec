@@ -55,16 +55,24 @@ steps:
         - selectionCount: 0
 
   - action: selectEntry
+    id: select-elite
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
 
   # percentValue=true: max = 50% of parent selections.
   # With 1 total selection: threshold = 1/100*50 = 0.5.
-  # 1 selection > 0.5 → both engines produce an error.
+  # 1 selection > 0.5 → both engines produce an error, and they hang it on
+  # different nodes: BattleScribe on the Troops category that counted, NewRecruit
+  # on the Elite selection that violated. Both are recorded.
   - expectedState:
       errors:
-        - on: selection se-1
+        - on: category ${{ steps.add-detachment.categories.cat-troops }}
           from: se-1/c1
       forces:
         - selections:
             - name: Elite
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-elite.selectionId }}
+              from: se-1/c1

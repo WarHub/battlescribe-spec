@@ -60,12 +60,22 @@ steps:
   # 1 selection — exceeds 50% of 1 = 0.50, and nothing else. con-max-plain's
   # limit of 9 is not approached, so con-max-percent is the only possible source.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # Which constraint is named is the claim; where it is raised is the other half.
+  # BattleScribe raises it on the Troops category that counted, NewRecruit on the
+  # one Unit A selection. Both name con-max-percent, which is the thing under
+  # test, and the two nodes are recorded rather than normalised.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-max-percent
       forces:
         - selectionCount: 1
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-first.selectionId }}
+              from: se-unit-a/con-max-percent
