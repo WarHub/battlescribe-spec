@@ -64,8 +64,10 @@ steps:
       forces:
         - selectionCount: 0
 
-  # 2 selections — at the modified limit of con-max-boosted, far under con-max-plain
+  # 2 selections — at the modified limit of con-max-boosted, far under con-max-plain.
+  # The first one is named because NewRecruit raises the violation on it; see the last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
@@ -84,9 +86,18 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # BattleScribe raises this on the ROSTER — the constraint's scope, and the node that
+  # counted. `on: roster` is written bare because there is no id to name: RosterState carries
+  # none on any of the four lanes, and there is exactly one roster, so the kind alone is
+  # unambiguous. NewRecruit names a violator instead — the first of the three selections.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: roster
           from: se-unit-a/con-max-boosted
       forces:
         - selectionCount: 3
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-first.selectionId }}
+              from: se-unit-a/con-max-boosted

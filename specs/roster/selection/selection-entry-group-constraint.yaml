@@ -72,10 +72,16 @@ steps:
     selectionId: ${{ steps.select-parent.selectionId }}
     entryId: se-axe
 
-  # Two selections exceed max=1 constraint — error expected.
+  # Two selections exceed max=1 constraint — error expected, on two different kinds of node.
+  # BattleScribe has no group concept in its error model and raises this on the Parent Unit
+  # SELECTION. NewRecruit materialises the selectionEntryGroup as a real node with its own
+  # errors and raises it there — a node no engine's state model has, and which reaches the
+  # adapter only through the flat `army.getErrors()` merge. `on: group` is therefore written
+  # bare: no step output mints a group node, so there is nothing to name it by, and measurement
+  # says at most one group-raised error exists per step anywhere in the corpus.
   - expectedState:
       errorsContain:
-        - on: selection se-parent
+        - on: selection ${{ steps.select-parent.selectionId }}
           from: seg-weapons/con-max-1
       forces:
         - selections:
@@ -83,3 +89,8 @@ steps:
               children:
                 - name: Axe
                 - name: Sword
+      engines:
+        newrecruit:
+          errorsContain:
+            - on: group
+              from: seg-weapons/con-max-1
