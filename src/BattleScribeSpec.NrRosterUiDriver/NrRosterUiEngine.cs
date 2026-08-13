@@ -408,6 +408,18 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// to its display name by checking <see cref="_entryNames"/> from right-to-left on each
     /// "::" segment. Falls back to the raw entry ID if no match is found.
     /// </summary>
+    /// <remarks>
+    /// <b>Not a duplicate of <c>BsUiRosterEngine.ResolveEntryLabel</c>, though it reads like one.</b>
+    /// That method splits the same composite id on <c>::</c> and walks the segments right-to-left
+    /// too, and the two must NOT be unified: they resolve a link's name in opposite directions,
+    /// because their apps do. Here <see cref="RegisterEntryLink"/> stores the LINK's own name
+    /// against the link id and only falls back to the target's when the link is unnamed — NR's UI
+    /// shows the link's name. BattleScribe's driver does the reverse: its <c>NameOfResolved</c>
+    /// follows the link to its target and takes the TARGET's name, because BattleScribe labels the
+    /// control with what the link resolves to. Sharing one implementation would hand one of the two
+    /// apps a label its DOM does not contain, and the failure would read as "entry not found", not
+    /// as a naming disagreement.
+    /// </remarks>
     private string ResolveEntryName(string entryId)
     {
         if (_entryNames.TryGetValue(entryId, out var name))
