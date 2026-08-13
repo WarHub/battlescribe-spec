@@ -48,6 +48,7 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-commander
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
 
@@ -68,5 +69,5 @@ steps:
                     - name: HQ
                       primary: true
           errors:
-            - on: selection se-1
+            - on: selection ${{ steps.select-commander.selectionId }}
               from: se-1/hidden

@@ -36,12 +36,16 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-squad
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-squad
 
+  # NewRecruit's node is the base assertion because it is the only engine that
+  # raises here — BattleScribe's hidden check runs inside category validation and
+  # this entry has no categoryLinks, which is the design difference under test.
   - expectedState:
       errors:
-        - on: selection se-squad
+        - on: selection ${{ steps.select-squad.selectionId }}
           from: se-squad/hidden
       forces:
         - selections:

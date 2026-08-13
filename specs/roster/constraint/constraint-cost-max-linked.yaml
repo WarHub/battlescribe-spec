@@ -54,13 +54,22 @@ steps:
 
   # Unit A costs 100 pts, exceeding max cost constraint of 50
   - action: selectEntry
+    id: select-unit
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # A cost constraint over its limit is placed like any other over-limit
+  # violation: BattleScribe raises it on the category that counted the cost,
+  # NewRecruit on the selection that carries it. Both are recorded.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-cost-max
       forces:
         - selections:
             - name: Unit A
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-unit.selectionId }}
+              from: se-unit-a/con-cost-max

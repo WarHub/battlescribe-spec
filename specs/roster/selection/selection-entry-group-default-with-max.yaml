@@ -43,14 +43,20 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-parent
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-parent
 
   # min=2 causes Sword to be auto-selected with number=2.
-  # This exceeds max=1, producing a validation error.
+  # This exceeds max=1, producing a validation error — on two kinds of node.
+  # BattleScribe has no group in its error model and raises it on the enclosing
+  # Parent Unit SELECTION; NewRecruit materialises the selectionEntryGroup as a
+  # real node and raises it there. `on: group` is bare because no engine's state
+  # model carries that node and no step output can mint it (same shape as
+  # selection-entry-group-constraint).
   - expectedState:
       errorsContain:
-        - on: selection se-parent
+        - on: selection ${{ steps.select-parent.selectionId }}
           from: seg-weapons/con-max
       forces:
         - selections:
@@ -58,3 +64,8 @@ steps:
               children:
                 - name: Sword
                   number: 2
+      engines:
+        newrecruit:
+          errorsContain:
+            - on: group
+              from: seg-weapons/con-max

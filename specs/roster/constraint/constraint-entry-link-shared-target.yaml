@@ -43,7 +43,10 @@ steps:
     id: add-patrol
     forceEntryId: fe-1
 
+  # The first is named because NewRecruit raises the over-limit on it; see the
+  # last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-1
 
@@ -62,10 +65,18 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-1
 
-  # Three selections — exceeds max=2, constraint fires
+  # Three selections — exceeds max=2, constraint fires. It is scope=roster, so
+  # BattleScribe raises it on the ROSTER that counted, written bare because
+  # nothing gives that node an id a spec can name. NewRecruit names a violator —
+  # the first of the three Elite Guards.
   - expectedState:
       errors:
-        - on: selection shared-unit
+        - on: roster
           from: shared-unit/con-max
       forces:
         - selectionCount: 3
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-first.selectionId }}
+              from: shared-unit/con-max

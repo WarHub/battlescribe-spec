@@ -68,24 +68,32 @@ steps:
     entryId: link-unit
 
   # Where a link-reached child's over-limit hangs. The two engines genuinely
-  # disagree (issue #400), and that disagreement is the finding this spec pins:
-  #  - BattleScribe owns it on the PARENT selection, consistent with how it owns
-  #    every group/child constraint — the element counting the children. That
-  #    parent is the link-reached Elite Guard, addressed by its target entry
-  #    sse-unit (the link route is reduced away, the one shared reduction both
-  #    lanes apply). Measured 2026-08-13: `selection sse-unit <-
-  #    se-gear/con-gear-max`.
-  #  - NewRecruit owns it on the violating child selection se-gear. Measured
-  #    2026-08-13: `selection se-gear <- se-gear/con-gear-max`.
+  # disagree (issue #400), and node addressing sharpens that disagreement from a
+  # difference of spelling into a difference of NODE — parent versus child:
+  #  - BattleScribe raises it on the PARENT selection, consistent with how it
+  #    counts every group/child constraint — the element counting the children.
+  #    That parent is the link-reached Elite Guard, the node select-unit created.
+  #    Measured 2026-08-13.
+  #  - NewRecruit raises it on the violating CHILD selection, the auto-added Gear
+  #    inside that Elite Guard. Measured 2026-08-13.
   # The `from` — the constraint and its declaring entry — is not in dispute:
-  # both answer se-gear/con-gear-max. Only the owner differs, and it is declared
-  # per engine rather than normalised, because the corpus convention (owner =
-  # the counting parent, see collective-constraint-per-model) is BattleScribe's,
-  # and moving BattleScribe's owner onto the child to match NewRecruit would
-  # contradict every other group/child spec.
+  # both answer se-gear/con-gear-max. Only the raising node differs, and it is
+  # declared per engine rather than normalised, because the corpus convention
+  # (owner = the counting parent, see collective-constraint-per-model) is
+  # BattleScribe's, and moving BattleScribe's answer onto the child to match
+  # NewRecruit would contradict every other group/child spec.
+  #
+  # The NewRecruit assertion is the ONE literal in constraint/ still written the
+  # entry-addressed way, and not by choice: the Gear node is auto-added, and
+  # NewRecruitRosterEngine.SelectEntry returns only SelectionId — it never fills
+  # the `selections` map its BattleScribe counterpart does, so
+  # `${{ steps.select-unit.selections.se-gear }}` resolves against an empty map
+  # on that lane ("Available: []"). No step id can name a node the adapter does
+  # not report. Migrating it needs that parity gap closed first (#422's remit),
+  # not a spec change.
   - expectedState:
       errors:
-        - on: selection sse-unit
+        - on: selection ${{ steps.select-unit.selectionId }}
           from: se-gear/con-gear-max
       forces:
         - selectionCount: 1

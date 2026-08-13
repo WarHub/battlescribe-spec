@@ -47,8 +47,10 @@ steps:
     id: add-patrol
     forceEntryId: fe-1
 
-  # Select 2 from first entry link (link-alpha = entryIndex 0)
+  # Select 2 from first entry link (link-alpha = entryIndex 0). The first is
+  # named: NewRecruit raises the shared over-limit on it — see the last step.
   - action: selectEntry
+    id: select-alpha-1
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-alpha
 
@@ -76,10 +78,20 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-beta
 
-  # 4 total — shared counting exceeds max=3, constraint fires
+  # 4 total — shared counting exceeds max=3, constraint fires.
+  # The constraint is scope=roster, and BattleScribe raises it on the ROSTER, the
+  # node whose scope did the counting. `on: roster` is bare: RosterState carries
+  # no id on any lane, and there is exactly one roster.
+  # NewRecruit names a violator, and it is the first ALPHA selection — not the
+  # Beta one whose arrival broke the limit.
   - expectedState:
       errors:
-        - on: selection shared-unit
+        - on: roster
           from: shared-unit/con-max-shared
       forces:
         - selectionCount: 4
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-alpha-1.selectionId }}
+              from: shared-unit/con-max-shared

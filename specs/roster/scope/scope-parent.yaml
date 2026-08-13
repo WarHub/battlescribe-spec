@@ -26,7 +26,10 @@ steps:
     id: add-patrol
     forceEntryId: fe-patrol
 
+  # Named because NewRecruit raises the over-limit on the FIRST of the four Unit A
+  # selections; nothing else distinguishes them.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
@@ -47,10 +50,12 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
-  # 4 selections exceeds max=3 — constraint violation
+  # 4 selections exceeds max=3 — constraint violation. NewRecruit names one
+  # violator out of four identical Unit A selections and it is the first of them;
+  # the old entry-addressed form was true whichever of the four had raised it.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: selection ${{ steps.select-first.selectionId }}
           from: se-unit-a/con-max-3
       forces:
         - selectionCount: 4

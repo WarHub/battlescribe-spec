@@ -107,10 +107,14 @@ steps:
     selectionId: ${{ steps.select-weapon.selectionId }}
     count: 3
 
-  # Engine sets weapon to 9 (3 per model × 3) and reports validation error
+  # Engine sets weapon to 9 (3 per model × 3) and reports validation error.
+  # Both raising nodes are recorded. BattleScribe hangs a per-model over-limit on
+  # the parent that owns the per-model count — the Trooper — and says so in the
+  # message ("3x Trooper has 1 too many selections of Weapon"). NewRecruit raises
+  # it on the collective Weapon selection that broke the limit.
   - expectedState:
       errors:
-        - on: selection se-trooper
+        - on: selection ${{ steps.select-trooper.selectionId }}
           from: se-weapon/con-max-2
       forces:
         - selections:
@@ -124,5 +128,5 @@ steps:
       engines:
         newrecruit:
           errors:
-            - on: selection se-weapon
+            - on: selection ${{ steps.select-weapon.selectionId }}
               from: se-weapon/con-max-2

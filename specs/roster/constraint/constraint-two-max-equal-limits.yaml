@@ -54,8 +54,10 @@ steps:
       forces:
         - selectionCount: 0
 
-  # 2 selections — at both limits, neither exceeded
+  # 2 selections — at both limits, neither exceeded. The first is named because
+  # NewRecruit raises its one error on it; see the last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
@@ -73,12 +75,16 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # BattleScribe raises both on the SAME node — the force's Troops category, the
+  # container that counted — so the two errors are separated by their constraint
+  # ids alone. That is the point of the spec, and it is why node addressing does
+  # not make every error individually identifying.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-max-alpha
           messageContains: maximum 2
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-max-beta
           messageContains: maximum 2
       forces:
@@ -91,8 +97,10 @@ steps:
         # limits 2 and 1 on the same entry produced two errors naming both constraints. Which of
         # the pair survives is not asserted beyond the one NR reports — nothing in the data
         # privileges alpha over beta except declaration order.
+        # It raises that one on the first of the three Unit A selections, not on
+        # the category BattleScribe answers with.
         newrecruit:
           errors:
-            - on: selection se-unit-a
+            - on: selection ${{ steps.select-first.selectionId }}
               from: se-unit-a/con-max-alpha
               messageContains: max 2

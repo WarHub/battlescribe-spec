@@ -51,14 +51,25 @@ steps:
 
   # Selecting a hidden entry — engine allows it but produces validation error
   - action: selectEntry
+    id: select-unit
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # A hidden violation is placed like an over-limit one, and the engines split
+  # the same way: BattleScribe raises it on the force's Troops category — the
+  # container that counted a selection it may not have — and NewRecruit on the
+  # hidden selection itself ("Unit A cannot be selected while hidden"). Both are
+  # recorded rather than one reconstructed into the other.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/hidden
       forces:
         - selections:
             - name: Unit A
               hidden: true
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-unit.selectionId }}
+              from: se-unit-a/hidden

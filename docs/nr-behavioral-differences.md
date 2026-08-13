@@ -225,23 +225,69 @@ the element the engine itself attached the error to.
 
 | Case | BattleScribe | NewRecruit |
 |------|--------------|------------|
+| A collective over-limit or hidden violation (every over-limit spec in `constraint/`, and the whole hidden family in `modifier/`) | the CONTAINER that counted — the category, the force or the roster, matching the constraint's scope | one violating SELECTION |
+| A per-model constraint on a nested collective child (`selection/collective-constraint-per-model`) | the PARENT selection that owns the per-model count (`se-trooper`) — here the container is a selection, not a category | the collective CHILD selection that broke the limit (`se-weapon`) |
 | A child's over-limit inside a link-reached parent (`constraint/constraint-error-owner-link-reached`) | the counting PARENT selection (`sse-unit`) | the violating CHILD selection (`se-gear`) |
 | A constraint on a `selectionEntryGroup` (`selection/selection-entry-group-constraint`, `selection/collective-group-constraint-per-model`, `selection/selection-entry-group-default-with-max`, both `real-world/wh40k-10e-*`) | the owning selection — BattleScribe materialises no group node | the GROUP node, which no engine's state model represents |
 
-The first is the same divergence the spec's own `engines: newrecruit:` block already pins for
-`on:`, seen one layer down: BattleScribe owns group/child constraints on the element that counts
+The first row is the corpus's largest divergence and the reason most `constraint/` specs carry an
+`engines: newrecruit:` block: BattleScribe's answer follows the constraint's scope (`parent` → the
+category node, `force` → the force node, `roster` → the roster), NewRecruit's is always a selection.
+
+`parent` resolves to a category only while the counted selections sit directly under a force — the
+force's category is what BattleScribe iterates there. One level down, the parent is an ordinary
+selection and BattleScribe names it, which is the second row: `collective-constraint-per-model`
+counts Weapons inside a Trooper and gets `3x Trooper has 1 too many selections of Weapon`. The rule
+is "the node that did the counting", not "always a category".
+
+BattleScribe's hidden errors are a special case of the same rule for a structural reason: the
+hidden-error generator runs **only inside category validation** (`f.java` L444, decompiled in
+`docs/hidden-validation-analysis.md`), so BattleScribe's raising node for a hidden violation is
+always a category and never the hidden selection. NewRecruit checks hidden per selection. The
+consequence is visible in `modifier/modifier-set-hidden-no-category` and
+`selection/selection-hidden-entry`: with no categoryLink there is no category to validate, so
+BattleScribe reports nothing at all and NewRecruit's node is the only one the spec can record.
+
+**Which selection NewRecruit picks is the FIRST sibling, and the siblings are the violating entry's
+— not the counted set's.** Measured across `constraint/` on 2026-08-13:
+
+- with three selections of one entry over a max, it names the first
+  (`constraint-two-max-one-modified`, `constraint-two-max-equal-limits`, `constraint-min-and-max` —
+  there the first is the one auto-select created with the force);
+- with a `shared: true` constraint counting across two entry links, it still names the first
+  selection of the link that violated, not of the set that was counted. In
+  `constraint-entry-link-shared-counting` the fourth selection — made from `link-beta` — is what
+  pushes the shared count over 3, and NewRecruit raises the error on the first `link-alpha`
+  selection. `constraint-shared-flag` shows the same node absorbing both the per-link and the
+  shared violation across five assertions.
+
+Re-measured outside `constraint/` on 2026-08-13 and unchanged: `scope/scope-parent` puts four
+identical Unit A selections over a max of 3 and NewRecruit names the first. That spec is also where
+the old entry-addressed form was weakest — four nodes shared the entry id it named, so the
+assertion held whichever of them had raised.
+
+Neither engine's answer is reconstructed into the other's; the specs record both (issue #419
+decision 2, as amended after measurement).
+
+The link-reached row is the same divergence the spec's own `engines: newrecruit:` block already pins
+for `on:`, seen one layer down: BattleScribe owns group/child constraints on the element that counts
 the children, NewRecruit on the element that broke the limit. Curiously NewRecruit *does* carry
 BattleScribe's answer, in the error's `hash` prefix — the node it counts over — so the two engines
 disagree about which of two nodes they both know to name.
 
-The second has no BattleScribe counterpart at all. NR's group node is a real roster node
-(`isGroup() === true`, its own `uid`, its own `errors` array), it is what NR raises the group's
-constraint on, and it is the one raising node the state model cannot resolve — `getSelections()`
-flattens groups away, and `SelectionState` records only the group's catalogue `entryGroupId`. Such
-errors report `raisedOnType: "group"` with a uid no `ForceState`/`SelectionState`/`CategoryState`
-carries. They are also the only errors that reach the adapter through the flat `army.getErrors()`
-merge rather than the node walk. The owner attribution is unaffected: it still reconstructs the
-parent selection, which is what the corpus asserts.
+The `selectionEntryGroup` row has no BattleScribe counterpart at all. NR's group node is a real
+roster node (`isGroup() === true`, its own `uid`, its own `errors` array), it is what NR raises the
+group's constraint on, and it is the one raising node the state model cannot resolve —
+`getSelections()` flattens groups away, and `SelectionState` records only the group's catalogue
+`entryGroupId`. Such errors report `raisedOnType: "group"` with a uid no
+`ForceState`/`SelectionState`/`CategoryState` carries. They are also the only errors that reach the
+adapter through the flat `army.getErrors()` merge rather than the node walk.
+
+The owner attribution still reconstructs the parent selection, and that reconstruction is exactly
+why the divergence went unrecorded for so long: while `on:` matched `ownerType`/`ownerEntryId`,
+`on: selection se-parent` passed on both lanes and the group node was invisible. Node-addressed
+`on:` splits them, so all three group specs now carry a bare `on: group` under
+`engines: newrecruit:`.
 
 ### Selection Number with Min
 | Spec | Issue |

@@ -42,7 +42,10 @@ steps:
     id: add-patrol
     forceEntryId: fe-1
 
+  # The first is named because NewRecruit raises the over-limit on it; see the
+  # last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-1
 
@@ -72,9 +75,18 @@ steps:
   # the link, so it named a limit the message rules out. Fixed 2026-08-09 alongside the same
   # defect in the UI driver; `newrecruit` had always reported the link and needed the override
   # that is now gone.
+  #
+  # The constraint is scope=force, and BattleScribe raises it on the FORCE whose
+  # scope did the counting. NewRecruit names a violator — the first of the three
+  # Heavy Support selections. Both are recorded.
   - expectedState:
       errors:
-        - on: selection shared-unit
+        - on: force ${{ steps.add-patrol.forceId }}
           from: link-1/con-link-max
       forces:
         - selectionCount: 3
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-first.selectionId }}
+              from: link-1/con-link-max

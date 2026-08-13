@@ -44,8 +44,10 @@ steps:
       forces:
         - selectionCount: 0
 
-  # 1 selection — at max=1 limit, no error
+  # 1 selection — at max=1 limit, no error. Named because NewRecruit raises the
+  # over-limit on the first of the two Unit A selections; see the last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
@@ -58,9 +60,18 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # The engines raise this on different nodes and the spec records both.
+  # BattleScribe raises a collective over-limit on the container that counted —
+  # the force's Troops category. NewRecruit names a violator — the first of the
+  # two Unit A selections. Neither is a reconstruction of the other.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-max-1
       forces:
         - selectionCount: 2
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-first.selectionId }}
+              from: se-unit-a/con-max-1

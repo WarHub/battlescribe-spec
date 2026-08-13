@@ -61,16 +61,23 @@ steps:
     forceEntryId: fe-1
 
   - action: selectEntry
+    id: select-elite
     forceId: ${{ steps.add-detachment.forceId }}
     entryId: se-1
 
-  # 1 Elite of 1 total = 100% > 50% → error
+  # 1 Elite of 1 total = 100% > 50% → error, on the counting category for
+  # BattleScribe and on the violating selection for NewRecruit.
   - expectedState:
       errors:
-        - on: selection se-1
+        - on: category ${{ steps.add-detachment.categories.cat-troops }}
           from: se-1/c1
       forces:
         - selectionCount: 1
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-elite.selectionId }}
+              from: se-1/c1
 
   - action: selectEntry
     forceId: ${{ steps.add-detachment.forceId }}

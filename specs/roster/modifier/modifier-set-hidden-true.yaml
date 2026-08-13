@@ -59,6 +59,7 @@ steps:
     forceEntryId: fe-patrol
 
   - action: selectEntry
+    id: select-hidden
     forceId: ${{ steps.add-force.forceId }}
     entryId: se-hidden
 
@@ -66,12 +67,21 @@ steps:
     forceId: ${{ steps.add-force.forceId }}
     entryId: se-normal
 
+  # Both engines' raising nodes are recorded. BattleScribe generates hidden errors
+  # only inside category validation, so it raises this on the force's Troops
+  # CATEGORY — the one both units link to — while NewRecruit raises it on the
+  # Hidden Unit selection.
   - expectedState:
       errors:
-        - on: selection se-hidden
+        - on: category ${{ steps.add-force.categories.ce-troops }}
           from: se-hidden/hidden
       forces:
         - selections:
             - name: Hidden Unit
               hidden: true
             - name: Normal Unit
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-hidden.selectionId }}
+              from: se-hidden/hidden
