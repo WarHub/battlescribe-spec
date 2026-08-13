@@ -375,7 +375,13 @@ public sealed class BattleScribeEngine : IDisposable
                 var (clEntry, clConstraint) = ResolveRosterCostLimit(message, costLimits);
                 if (clEntry is not null)
                 {
-                    result.Add(new ValidationErrorState(message, "roster", roster.getId(), null, clEntry, clConstraint));
+                    result.Add(new ValidationErrorState(
+                        message,
+                        OwnerType: "roster",
+                        OwnerId: roster.getId(),
+                        OwnerEntryId: null,
+                        EntryId: clEntry,
+                        ConstraintId: clConstraint));
                     continue;
                 }
                 throw NoErrorId("roster", message);
@@ -443,7 +449,15 @@ public sealed class BattleScribeEngine : IDisposable
         }
 
         var (type, field) = ConstraintMetaFor(constraintId);
-        return new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId, type, field);
+        return new ValidationErrorState(
+            message,
+            OwnerType: ownerType,
+            OwnerId: ownerId,
+            OwnerEntryId: ownerEntryId,
+            EntryId: entryId,
+            ConstraintId: constraintId,
+            ConstraintType: type,
+            ConstraintField: field);
     }
 
     /// <summary>The roster cost-limit overrun's (entryId, constraintId), matched by cost name.</summary>
