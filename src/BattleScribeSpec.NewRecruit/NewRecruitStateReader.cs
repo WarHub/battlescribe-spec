@@ -47,6 +47,21 @@ public static class NewRecruitStateReader
         return DeserializeNodeMap(json);
     }
 
+    /// <summary>
+    /// Read entryId → selection node ids for every auto-selected descendant of one selection, for
+    /// the <c>selections</c> step output of <c>selectEntry</c>/<c>selectChildEntry</c>. The
+    /// BattleScribe adapter has always reported these; NewRecruit reported nothing, so a spec could
+    /// not name a node NR auto-added under the selection it just made (#428).
+    /// </summary>
+    public static async Task<Dictionary<string, List<string>>?> ReadSelectionDescendantIdsAsync(
+        IPage page, string forceUid, string selectionUid)
+    {
+        var json = await page.EvaluateAsync<string?>(
+            "([forceUid, selectionUid]) => window.__bsspec_selectionDescendantIds(forceUid, selectionUid)",
+            new object[] { forceUid, selectionUid });
+        return DeserializeNodeMap(json);
+    }
+
     /// <summary>A <c>{ entryId: [nodeId, …] }</c> blob from the page, or null when it named nothing.</summary>
     private static Dictionary<string, List<string>>? DeserializeNodeMap(string? json)
     {

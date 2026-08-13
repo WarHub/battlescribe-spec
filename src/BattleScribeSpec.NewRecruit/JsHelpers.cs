@@ -154,6 +154,33 @@ internal static class JsHelpers
                 return JSON.stringify(map);
             };
 
+            // entryId → selection NODE ids for every descendant of one selection, in roster order.
+            // Backs the `selections` step output of selectEntry/selectChildEntry, matching what the
+            // BattleScribe adapter reports for the same actions: the auto-selected children a
+            // selection brings with it, which are otherwise unnameable because no step created them
+            // directly.
+            //
+            // The amount > 0 filter is not an optimization: NR pre-creates a template instance for
+            // every possible child entry, and without it this map would name nodes that are not in
+            // the roster at all. Same rule the state reader applies (extractSelections).
+            window.__bsspec_selectionDescendantIds = function(forceUid, selectionUid) {
+                const army = window.__bsspec_list()?.army;
+                if (!army) return '{}';
+                const force = getForceByUid(army, forceUid);
+                if (!force) return '{}';
+                const selection = getSelectionByUid(force, selectionUid);
+                if (!selection) return '{}';
+                const map = {};
+                (function walk(node) {
+                    for (const child of (node.getSelections?.() || [])) {
+                        if (typeof child.getAmount !== 'function' || child.getAmount() <= 0) continue;
+                        const entryId = child.getId?.() || null;
+                        if (entryId && child.uid) (map[entryId] ??= []).push(child.uid);
+                        walk(child);
+                    }
+                })(selection);
+                return JSON.stringify(map);
+            };
 
             // --- State reader (used by NewRecruitStateReader.cs) ---
 
