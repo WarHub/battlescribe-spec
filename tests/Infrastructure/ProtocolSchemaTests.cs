@@ -224,13 +224,26 @@ public sealed class ProtocolSchemaTests
             CostLimits = [new CostState("Points", "pts", 2000m)],
             ValidationErrors =
             [
-                new ValidationErrorState("Too few selections", OwnerType: "selection", OwnerId: "s1", OwnerEntryId: "e1", EntryId: "e1", ConstraintId: "c1")
+                new ValidationErrorState(
+                    "Too few selections",
+                    OwnerType: "selection",
+                    OwnerEntryId: "e1",
+                    EntryId: "e1",
+                    ConstraintId: "c1",
+                    ConstraintType: "min",
+                    ConstraintField: "selections",
+                    RaisedOnType: "category",
+                    RaisedOnId: "cat-node-1")
             ],
         }));
 
         yield return ("errors", SerializeResponse(new ErrorsResponse
         {
-            Errors = [new ValidationErrorState("Minimum not met", OwnerType: "force", OwnerId: "f1")],
+            Errors =
+            [
+                new ValidationErrorState(
+                    "Minimum not met", OwnerType: "force", RaisedOnType: "force", RaisedOnId: "f1")
+            ],
         }));
 
         yield return ("teardownResult", SerializeResponse(new TeardownResult()));

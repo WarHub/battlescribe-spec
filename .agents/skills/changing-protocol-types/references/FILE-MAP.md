@@ -31,7 +31,7 @@ These types define game system and catalogue data for spec setup.
 | ProtocolPublication | CreatePublication() | Publication |
 | ProtocolCostValue | *(inline in factory)* | Cost |
 
-## State types (EngineTypes.cs ↔ SpecFileModels.cs ↔ SpecRunner.cs)
+## State types (Roster/RosterTypes.cs ↔ Roster/RosterSpecModels.cs ↔ Roster/RosterRunner.cs)
 
 These types define what specs can assert on in `expectedState`.
 
@@ -54,9 +54,9 @@ These types define what specs can assert on in `expectedState`.
 1. `ProtocolMessages.cs` — add property to Protocol* class
 2. `JavaModelFactory.cs` — add parameter and setter to Create* method
 3. *(only if field appears in roster state):*
-   - `EngineTypes.cs` — add to State record
-   - `SpecFileModels.cs` — add to Expected* class
-   - `SpecRunner.cs` — add assertion
+   - `Roster/RosterTypes.cs` — add to State record
+   - `Roster/RosterSpecModels.cs` — add to Expected* class
+   - `Roster/RosterRunner.cs` — add assertion
 
 ### Adding a new setup type
 
@@ -67,9 +67,9 @@ These types define what specs can assert on in `expectedState`.
 
 ### Adding a field to roster state only
 
-1. `EngineTypes.cs` — add to State record
-2. `SpecFileModels.cs` — add to Expected* class
-3. `SpecRunner.cs` — add assertion
+1. `Roster/RosterTypes.cs` — add to State record
+2. `Roster/RosterSpecModels.cs` — add to Expected* class
+3. `Roster/RosterRunner.cs` — add assertion
 
 ### Adding a new action
 

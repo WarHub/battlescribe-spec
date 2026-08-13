@@ -168,6 +168,34 @@ public class StateDumperTests
         Assert.Contains("entryId=costLimits", output);
     }
 
+    /// <summary>
+    /// A moved error is dumped with BOTH attributions, because they are different answers: the
+    /// owner is where the corpus reports the error, the raising node is what the engine hung it on.
+    /// The owner names a catalogue entry that several nodes share; only the raising node is a node.
+    /// </summary>
+    [Fact]
+    public void DumpTree_MovedValidationError_WritesTheRaisingNodeAndTheOwner()
+    {
+        var state = MinimalRoster();
+        var errors = new List<ValidationErrorState>
+        {
+            new(
+                "Troops has too many selections of Unit A (maximum 1)",
+                OwnerType: "selection",
+                OwnerEntryId: "se-unit-a",
+                EntryId: "se-unit-a",
+                ConstraintId: "con-max-1",
+                RaisedOnType: "category",
+                RaisedOnId: "cat-node-7ff1")
+        };
+
+        var output = DumpToString(state, errors);
+
+        Assert.Contains("owner=selection", output);
+        Assert.Contains("raisedOnType=category", output);
+        Assert.Contains("raisedOnId=cat-node-7ff1", output);
+    }
+
     [Fact]
     public void DumpTree_NoErrors_WritesNone()
     {

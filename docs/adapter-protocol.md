@@ -362,10 +362,11 @@ flattens each `outputs` property onto the step's expression namespace — e.g.,
     {
       "message": "Patrol must have 1 more selections of Unit A (minimum 1)",
       "ownerType": "category",
-      "ownerId": "abc-123",
       "ownerEntryId": "cat-troops",
       "entryId": "se-unit-a",
-      "constraintId": "con-min-1"
+      "constraintId": "con-min-1",
+      "raisedOnType": "category",
+      "raisedOnId": "abc-123"
     }
   ]
 }
@@ -376,13 +377,29 @@ Each validation error is a structured object with the following fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `message` | string | Human-readable error message (always present) |
-| `ownerType` | string? | Type of roster element: `"roster"`, `"force"`, `"category"`, `"selection"` |
-| `ownerId` | string? | Runtime ID of the owning roster element |
+| `ownerType` | string? | Type of roster element the error is ATTRIBUTED to: `"roster"`, `"force"`, `"category"`, `"selection"` |
 | `ownerEntryId` | string? | Catalogue entry ID of the owner (for force/category/selection) |
 | `entryId` | string? | ID of the entry whose constraint was violated, or `"costLimits"` for cost limit errors |
 | `constraintId` | string? | ID of the constraint that failed, the cost type ID for cost limit errors, or `"hidden"` for hidden entry errors |
+| `constraintType` | string? | The constraint's kind: `"min"` or `"max"` |
+| `constraintField` | string? | What the constraint counts: `"selections"`, `"forces"`, or a cost-type ID |
+| `raisedOnType` | string? | Type of the roster element the engine RAISED the error on |
+| `raisedOnId` | string? | Runtime node ID of that element |
 
 Null fields are omitted from the JSON.
+
+#### Two attributions, and why they differ
+
+`ownerType`/`ownerEntryId` say where the error is **reported**; `raisedOnType`/`raisedOnId` say
+which node the engine **raised** it on. They are frequently not the same element. A collective
+over-limit violation is raised by the category, force or roster that noticed the overrun — the
+engine never names one selection as the culprit — while the spec corpus attributes it to the
+selection responsible.
+
+Only the raisedOn pair identifies a **node**. `ownerEntryId` is a catalogue entry id, and three
+selections of one entry share it. An adapter that can report the runtime node should: it is what a
+failing assertion prints, and what tooling joins errors to parsed roster nodes by. An adapter that
+cannot may omit both — nothing in the assertion contract requires them today.
 
 #### Cost limit errors
 
@@ -412,7 +429,9 @@ When a hidden entry is selected, the error uses:
   "ownerType": "category",
   "ownerEntryId": "cat-troops",
   "entryId": "se-unit-a",
-  "constraintId": "hidden"
+  "constraintId": "hidden",
+  "raisedOnType": "category",
+  "raisedOnId": "abc-123"
 }
 ```
 
@@ -425,10 +444,11 @@ When a hidden entry is selected, the error uses:
     {
       "message": "Patrol must have 1 more selections of Unit A (minimum 1)",
       "ownerType": "category",
-      "ownerId": "abc-123",
       "ownerEntryId": "cat-troops",
       "entryId": "se-unit-a",
-      "constraintId": "con-min-1"
+      "constraintId": "con-min-1",
+      "raisedOnType": "category",
+      "raisedOnId": "abc-123"
     }
   ]
 }

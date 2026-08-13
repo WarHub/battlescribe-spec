@@ -375,18 +375,26 @@ public sealed class BattleScribeEngine : IDisposable
                 var (clEntry, clConstraint) = ResolveRosterCostLimit(message, costLimits);
                 if (clEntry is not null)
                 {
-                    result.Add(new ValidationErrorState(message, "roster", roster.getId(), null, clEntry, clConstraint));
+                    result.Add(new ValidationErrorState(
+                        message,
+                        OwnerType: "roster",
+                        OwnerEntryId: null,
+                        EntryId: clEntry,
+                        ConstraintId: clConstraint,
+                        RaisedOnType: "roster",
+                        RaisedOnId: roster.getId()));
                     continue;
                 }
                 throw NoErrorId("roster", message);
             }
 
-            result.Add(BuildErrorState(rawId, message, "roster", roster.getId(), null));
+            result.Add(BuildErrorState(
+                rawId, message, ownerType: "roster", raisedOnId: roster.getId(), ownerEntryId: null));
         }
     }
 
     private void CollectElementErrors(
-        BaseRosterElement element, string ownerType, string? ownerId, string? ownerEntryId,
+        BaseRosterElement element, string ownerType, string? raisedOnId, string? ownerEntryId,
         List<ValidationErrorState> result)
     {
         var errors = element.getValidationErrors();
@@ -411,7 +419,7 @@ public sealed class BattleScribeEngine : IDisposable
             // the Roster, not on a force/category/selection -- so here a missing id is a bug.
             var rawId = ReadErrorId(item) ?? throw NoErrorId(ownerType, message);
 
-            result.Add(BuildErrorState(rawId, message, ownerType, ownerId, ownerEntryId));
+            result.Add(BuildErrorState(rawId, message, ownerType, raisedOnId, ownerEntryId));
         }
     }
 
@@ -421,8 +429,14 @@ public sealed class BattleScribeEngine : IDisposable
     /// the shared rule, the collective/hidden pseudo-constraint disambiguated, and the constraint's
     /// kind/field attached for placement. No message text is parsed for attribution.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="ownerType"/> and <paramref name="raisedOnId"/> both describe the element the
+    /// errors were READ OFF, and are written to both attributions here — but only the raisedOn pair
+    /// stays that way. <c>BattleScribeErrorPlacement</c> may rewrite <c>OwnerType</c> to "selection"
+    /// afterwards; it never touches the raising node.
+    /// </remarks>
     private ValidationErrorState BuildErrorState(
-        string rawId, string message, string ownerType, string? ownerId, string? ownerEntryId)
+        string rawId, string message, string ownerType, string? raisedOnId, string? ownerEntryId)
     {
         var (entryId, constraintId) = BattleScribeErrorIds.ParseOne(rawId);
 
@@ -443,7 +457,16 @@ public sealed class BattleScribeEngine : IDisposable
         }
 
         var (type, field) = ConstraintMetaFor(constraintId);
-        return new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId, type, field);
+        return new ValidationErrorState(
+            message,
+            OwnerType: ownerType,
+            OwnerEntryId: ownerEntryId,
+            EntryId: entryId,
+            ConstraintId: constraintId,
+            ConstraintType: type,
+            ConstraintField: field,
+            RaisedOnType: ownerType,
+            RaisedOnId: raisedOnId);
     }
 
     /// <summary>The roster cost-limit overrun's (entryId, constraintId), matched by cost name.</summary>

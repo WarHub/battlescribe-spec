@@ -71,7 +71,7 @@ New responses:
 
 **`src/BattleScribeSpec.TestKit/DataEditorTypes.cs`** — state records for assertion.
 
-Parallel to `EngineTypes.cs` which defines `RosterState`, `ForceState`, `SelectionState`, etc.
+Parallel to `Roster/RosterTypes.cs` which defines `RosterState`, `ForceState`, `SelectionState`, etc.
 
 ```csharp
 public record DataFileState(
@@ -89,7 +89,7 @@ public record DataEntryState(
 
 ### Spec Models (extend existing)
 
-**`src/BattleScribeSpec.TestKit/SpecFileModels.cs`** — add data editor step/assertion types.
+**`src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs`** — add data editor step/assertion types.
 
 The existing `StepDef` (line 111) handles roster actions. Options:
 1. **Extend `StepDef`** with data-editor fields (simpler, less clean)
@@ -99,7 +99,7 @@ Likely approach: new `DataSpecFile` model or a `mode: dataEditor` field on `Spec
 
 ### Runner (new or extend)
 
-**`src/BattleScribeSpec.TestKit/DataEditorRunner.cs`** — parallel to `SpecRunner.cs`.
+**`src/BattleScribeSpec.TestKit/DataEditorRunner.cs`** — parallel to `Roster/RosterRunner.cs`.
 
 The existing `SpecRunner` is 260 lines, dispatches to `IRosterEngine`. A `DataEditorRunner` would dispatch to `IDataEditor` with its own action vocabulary.
 
@@ -239,10 +239,10 @@ Similar pattern to existing `BattleScribeSpec.NewRecruit` which drives roster bu
 | Concern | Roster equivalent | Data editor parallel |
 |---------|------------------|---------------------|
 | Engine interface | `IRosterEngine.cs` | `IDataEditor.cs` |
-| State types | `EngineTypes.cs` (RosterState) | `DataEditorTypes.cs` (DataFileState) |
+| State types | `Roster/RosterTypes.cs` (RosterState) | `DataEditorTypes.cs` (DataFileState) |
 | Protocol types | `ProtocolMessages.cs` | Same file or new section |
 | Setup data types | `ProtocolGameSystem`/`ProtocolCatalogue` | Reuse (they ARE the data) |
-| Runner | `SpecRunner.cs` | `DataEditorRunner.cs` |
+| Runner | `Roster/RosterRunner.cs` | `DataEditorRunner.cs` |
 | BS adapter | `BattleScribeEngine.cs` | `BattleScribeDataEditor.cs` |
 | NR adapter | `NewRecruitRosterEngine.cs`* | `NewRecruitDataEditor.cs` |
 | Spec category | `specs/selection/`, `specs/force/` | `specs/data-editor/` |

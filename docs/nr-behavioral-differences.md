@@ -400,9 +400,12 @@ roster node, then reading the node's error arrays. Key findings:
 - `checkConstraints()` must be called explicitly per node
 - Can crash with undefined reference errors — wrapped in try-catch
 - Errors on army node are cost limit violations
-- Error structure: `{message, ownerType, ownerEntryId, entryId, constraintId}` — five fields;
-  `entryId` is reconstructed by a candidate-constraint back-search (see
+- Error structure: `{message, ownerType, ownerEntryId, entryId, constraintId}` — five of the
+  record's fields; `entryId` is reconstructed by a candidate-constraint back-search (see
   [adapter-reconstruction-audit.md](adapter-reconstruction-audit.md))
+- **Not reported: the raising node.** `raisedOnType`/`raisedOnId` name the runtime node the
+  engine raised the error on. Both BattleScribe lanes populate them; NR leaves them null, so a
+  NewRecruit failure names only a catalogue entry, which several roster nodes can share (#422)
 - ConstraintId format: NR now maps cost limit errors to the `costLimits/`
   pseudo-entry convention (matching BattleScribe's format)
 - Max constraint errors go on the selection (both BS BattleScribe adapter and NR now agree)

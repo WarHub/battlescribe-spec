@@ -107,9 +107,17 @@ the roster hierarchy:
 Each detected violation is mapped to `ValidationErrorState` with:
 - `Message` — error text
 - `OwnerType` — roster/force/category/selection
-- `OwnerId` — ID of the owning roster element
+- `OwnerEntryId` — catalogue entry id of the owning roster element
 - `EntryId` — entry that defines the constraint
 - `ConstraintId` — specific constraint ID
+
+**NR does not report the raising node.** `RaisedOnType`/`RaisedOnId` — the runtime
+node the engine raised the error on — are left null by this adapter, so a
+NewRecruit failure shows no `[raised on …]` and cannot distinguish two selections
+of one entry. Both BattleScribe lanes populate them. Issue #422 is the parity
+work. (An earlier version of this file listed an `OwnerId` field here; the
+adapter never populated it, and the field no longer exists — issue #421 replaced
+it with the raisedOn pair.)
 
 ## Publication ID resolution
 
