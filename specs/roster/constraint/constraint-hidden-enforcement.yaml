@@ -45,9 +45,11 @@ steps:
 
   # Hidden Unit auto-selected (min=1 constraint) — hidden from user but enforced by engine.
   # The hidden entry error is produced immediately because the constraint is unsatisfied.
+  # BattleScribe raises it on the force's Troops CATEGORY — the container that
+  # counted the selections it may not have — not on the hidden selection itself.
   - expectedState:
       errors:
-        - on: selection se-hidden
+        - on: category ${{ steps.add-patrol.categories.ce-troops }}
           from: se-hidden/hidden
       forces:
         - selections:
@@ -67,7 +69,7 @@ steps:
 
   - expectedState:
       errors:
-        - on: selection se-hidden
+        - on: category ${{ steps.add-patrol.categories.ce-troops }}
           from: se-hidden/hidden
       forces:
         - selections:

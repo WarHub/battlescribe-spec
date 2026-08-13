@@ -65,9 +65,18 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
+  # Two engines, two raising nodes, both recorded. BattleScribe raises the
+  # over-limit on the container that counted — the force's Troops category.
+  # NewRecruit names a violator — the first of the three Unit A selections, which
+  # is the one auto-select created when the force was added.
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: category ${{ steps.add-patrol.categories.cat-troops }}
           from: se-unit-a/con-max-2
       forces:
         - selectionCount: 3
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.add-patrol.selections.se-unit-a }}
+              from: se-unit-a/con-max-2
