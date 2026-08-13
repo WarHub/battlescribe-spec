@@ -195,13 +195,17 @@ display) — never on the assertion path, so nothing is remapped twice.
 
 ### 4. Errors — association by uid
 
-The errors channel carries `ValidationErrorState (Message, OwnerType, OwnerId,
-OwnerEntryId, EntryId, ConstraintId)` unchanged. Assertions
-(`ErrorAssertionDef` "on"/"from") match on `OwnerType`/`OwnerEntryId`/`EntryId`/
-`ConstraintId` as today. Association to parsed nodes in the `StateView`:
+The errors channel carries `ValidationErrorState (Message, OwnerType,
+OwnerEntryId, EntryId, ConstraintId, RaisedOnType, RaisedOnId)` unchanged.
+Assertions (`ErrorAssertionDef` "on"/"from") match on `OwnerType`/`OwnerEntryId`/
+`EntryId`/`ConstraintId` as today. Association to parsed nodes in the `StateView`:
 
-- **force / selection owner** → `OwnerId` = instance uid → direct join to the
+- **force / selection owner** → `RaisedOnId` = instance uid → direct join to the
   parsed node's `id`. Precise even with duplicate entries (uid is unique).
+  (Written as `OwnerId` when this design was drafted; #421 split that field's two
+  meanings apart and the instance uid is the raisedOn half. Note the join is only
+  available where the engine populates it — both BattleScribe lanes do, NR does
+  not yet, #422.)
 - **roster / cost-limit owner** → reserved pseudo-addresses (`"roster"`,
   `"costLimits/{costTypeId}"`), already how `ErrorAssertionDef.From` works.
 - **category owner** → composite `(parent uid + category entryId)`, because
