@@ -1,6 +1,7 @@
 using BattleScribeSpec.BsGameDataUiDriver;
 using BattleScribeSpec.BsRosterUiDriver;
 using BattleScribeSpec.NrGameDataUiDriver;
+using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Protocol;
 
 namespace BattleScribeSpec.Tests.Features;
@@ -108,6 +109,89 @@ public sealed class DiagnosticsIsolationTests
         {
             Environment.SetEnvironmentVariable("BSSPEC_WORKER_INDEX", savedWorkerIndex);
             Environment.SetEnvironmentVariable(overrideEnvVar, savedOverride);
+        }
+    }
+
+    /// <summary>
+    /// The anchoring the NR UI fixtures apply must produce an ABSOLUTE path under the repo root.
+    /// </summary>
+    /// <remarks>
+    /// Relative is the whole defect: <c>artifacts/nr-ui-diagnostics</c> resolves against the
+    /// process's working directory, which VSTest sets to the test assembly's output folder — so the
+    /// dumps landed in <c>artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/…</c>, three levels
+    /// below where every CI upload step looks. Asserting "absolute, under the repo root" fails for
+    /// that path and passes for the fix, which "ends with the folder name" would not.
+    /// </remarks>
+    [Fact]
+    public void AnchorDiagnosticsAtRepoRoot_ResolvesUnderTheRepoRoot_NotTheTestHostsWorkingDirectory()
+    {
+        const string Variable = "NR_UI_DIAGNOSTICS_DIR_TEST_PROBE";
+        var saved = Environment.GetEnvironmentVariable(Variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(Variable, null);
+            TestPaths.AnchorDiagnosticsAtRepoRoot(Variable, "nr-ui-diagnostics");
+
+            var anchored = Environment.GetEnvironmentVariable(Variable);
+            Assert.SkipWhen(
+                TestPaths.RepoRootDirectory is null,
+                "Test binaries are not inside a checkout, so there is no repo root to anchor at.");
+
+            Assert.NotNull(anchored);
+            Assert.True(Path.IsPathRooted(anchored), $"'{anchored}' is not an absolute path.");
+            Assert.Equal(
+                Path.Combine(TestPaths.RepoRootDirectory!, "artifacts", "nr-ui-diagnostics"),
+                anchored);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Variable, saved);
+        }
+    }
+
+    /// <summary>
+    /// Inside a test run, both NR UI directories must ALREADY be absolute — which is the whole job
+    /// of <see cref="UiArtifactPathsAssemblyFixture"/>, and nothing else would notice it stopping.
+    /// </summary>
+    /// <remarks>
+    /// The two tests above prove the helper does what it says; this proves it was called. A relative
+    /// path here means dumps are landing under the test host's own output folder again, where no CI
+    /// upload step looks — silently, on exactly the runs that produce them.
+    /// </remarks>
+    [Fact]
+    public void InsideATestRun_BothNrUiDiagnosticsDirectories_AreAbsolute()
+    {
+        Assert.True(
+            Path.IsPathRooted(NrUiDiagnostics.DefaultArtifactsDir),
+            $"NR roster UI diagnostics resolve to '{NrUiDiagnostics.DefaultArtifactsDir}', which is "
+            + "relative — under dotnet test that is the test assembly's output folder, not the repo "
+            + $"root. Is {nameof(UiArtifactPathsAssemblyFixture)} still registered?");
+
+        Assert.True(
+            Path.IsPathRooted(NrGameDataUiDiagnostics.DefaultArtifactsDir),
+            $"NR GameData UI diagnostics resolve to '{NrGameDataUiDiagnostics.DefaultArtifactsDir}', "
+            + $"which is relative. Is {nameof(UiArtifactPathsAssemblyFixture)} still registered?");
+    }
+
+    /// <summary>
+    /// Anchoring replaces the DEFAULT only: whoever set the variable meant it (the CLI, a developer
+    /// pointing a run at a scratch directory), and a fixture must not overrule them.
+    /// </summary>
+    [Fact]
+    public void AnchorDiagnosticsAtRepoRoot_LeavesAnExplicitOverrideAlone()
+    {
+        const string Variable = "NR_UI_DIAGNOSTICS_DIR_TEST_PROBE";
+        var saved = Environment.GetEnvironmentVariable(Variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(Variable, "/somewhere/else");
+            TestPaths.AnchorDiagnosticsAtRepoRoot(Variable, "nr-ui-diagnostics");
+
+            Assert.Equal("/somewhere/else", Environment.GetEnvironmentVariable(Variable));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Variable, saved);
         }
     }
 

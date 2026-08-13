@@ -383,6 +383,25 @@ Read the `Observed:` clause; it is there to make this a decision rather than a j
   That is a real regression (driver, HAR, or NR snapshot) and wants a person, not a re-run.
 - `systemsStore=MISSING` — Pinia is not up; suspect the HAR or an NR client bump, not this code.
 
+Those three are `Setup failed:`. A failure reported as `Step N:` is an **action**, and until the
+v35.27 HAR bump it arrived with nothing in it at all — `Step 4: TimeoutException: Timeout 20000ms
+exceeded.` was the complete record of `constraint/constraint-forces-field-on-forceentry` failing in
+run 31568343878, on a PR whose entire question was whether NR had changed under the driver. Actions
+now describe themselves the same way (`NrRosterUiEngine.WithDiagnosticsAsync`, `docs/nr-ui-driver.md`
+§Diagnostics), and the same decision applies:
+
+- The `page:` is not the roster editor — the drift race again, one step further along than §5b's.
+  Re-run; a driver that is on `/app/MyLists` is not being told anything about NR's UI.
+- The page is the editor and the counts are zero (`forceRows=0`, `unitRows=0`) — the panel the action
+  reached for did not render. That is a driver-or-NR question and wants a person: pair it with the
+  screenshot and DOM in the run's `thorough-conformance-nr-ui-diagnostics` artifact.
+- The counts look right — the timeout is downstream of rendering; the store trace in the same
+  artifact is the next thing to read.
+
+Both halves of that used to be missing, and they were missing together: the artifact was never
+uploaded, so the message *was* the diagnosis. One flaky spec per run is this lane's known shape (§5,
+§5b) — the point is that telling it apart from a regression should not cost an hour of runner time.
+
 ## 6. Nothing is outside the lane
 
 The remaining categories — `catalogue/`, `modifier/`, `entry-id/`, `ordering/`, `roster/`, `scope/`,
