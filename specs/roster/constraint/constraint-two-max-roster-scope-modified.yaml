@@ -1,0 +1,108 @@
+id: constraint-two-max-roster-scope-modified
+category: constraint
+description: >
+  The two-max-one-modified shape at roster scope with shared constraints: two
+  max constraints of the same field and scope on one entry, one moved by a
+  modifier. con-max-plain (max=9) is never violated; con-max-boosted is
+  authored max=5 and set to 2, so 3 selections exceed the MODIFIED limit and
+  neither authored limit. The error hangs on the ROSTER element (the scope of
+  the constraint) before placement re-homes it, which is the corner where the
+  engines' error machinery has the least coverage.
+tags:
+  - validation-errors
+  - structured-errors
+
+engines:
+  # Same defect as constraint-two-max-one-modified, at the least-covered owner. The error is
+  # raised on the ROSTER element (the constraints' scope), the message quotes the POST-modifier
+  # limit — "…has 1 too many selections of Unit A (maximum 2)" — and placement re-homes it to
+  # the selection. Both BattleScribe resolvers then compare AUTHORED values (9 and 5) against
+  # "maximum 2", match neither, and fall through to the first kind-match by declaration order:
+  # con-max-plain, whose limit of 9 three selections do not reach.
+  # Measured 2026-08-13: `se-unit-a/con-max-plain`. NewRecruit passes on the same data
+  # (`se-unit-a/con-max-boosted`), reading e.constraint.id structurally.
+  # Shared roster-scope constraints are also the one place getValidationErrorIds() genuinely
+  # lists candidate ids — and it lists only the VIOLATED constraint, whose authored value still
+  # contradicts the rendered text, so the id list does not save the tiebreak either.
+  # `fail` rather than `skip` so the spec still RUNS and a fixed resolver reports an unexpected
+  # pass. See issues #403 and #401.
+  battlescribe: fail
+
+setup:
+  gameSystem:
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            # Declaration order is load-bearing, as in constraint-two-max-one-modified:
+            # the unmodified constraint is first so an iteration-order fallback answers it.
+            - id: con-max-plain
+              type: max
+              value: 9
+              field: selections
+              scope: roster
+              shared: true
+            - id: con-max-boosted
+              type: max
+              value: 5
+              field: selections
+              scope: roster
+              shared: true
+          modifiers:
+            - type: set
+              field: con-max-boosted
+              value: "2"
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # 2 selections — at the modified limit of con-max-boosted, far under con-max-plain
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      forces:
+        - selectionCount: 2
+
+  # 3 selections — exceeds the modified max=2 and nothing else. At the authored
+  # values (9 and 5) there would be no error at all, so con-max-boosted is the
+  # only possible source.
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/con-max-boosted
+      forces:
+        - selectionCount: 3

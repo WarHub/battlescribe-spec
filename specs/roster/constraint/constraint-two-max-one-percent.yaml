@@ -1,0 +1,84 @@
+id: constraint-two-max-one-percent
+category: constraint
+description: >
+  Two max constraints of the same field and scope on one entry, one of them a
+  percentValue. con-max-plain (max=9) is never violated; con-max-percent is 50%
+  of parent selections, so a single selection exceeds its threshold of 0.50.
+  The violation can therefore only be con-max-percent's, and the error must
+  name it.
+tags:
+  - validation-errors
+  - structured-errors
+
+engines:
+  # BattleScribe's message quotes the RESOLVED absolute threshold, not the authored percent:
+  # "Troops has 0.50 too many selections of Unit A (maximum 0.50 / 50% of Selections)". Both
+  # BattleScribe resolvers compare the authored value truncated to int against the text —
+  # con-max-plain looks for "maximum 9", con-max-percent for "maximum 50" — and neither string
+  # occurs, so both fall through to the first kind-match by DECLARATION order and answer
+  # con-max-plain: a constraint whose limit of 9 one selection cannot approach.
+  # Measured 2026-08-13: `se-unit-a/con-max-plain`. NewRecruit passes on the same data, reading
+  # e.constraint.id structurally rather than off the text.
+  # `fail` rather than `skip` so the spec still RUNS, and the day the resolvers stop guessing
+  # from the text this is reported as an unexpected pass. See issues #403 and #401.
+  battlescribe: fail
+
+setup:
+  gameSystem:
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-patrol
+        name: Patrol
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      selectionEntries:
+        - id: se-unit-a
+          name: Unit A
+          type: unit
+          categoryLinks:
+            - id: cl-sea-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          constraints:
+            # Declaration order is load-bearing: the plain constraint is first, so a
+            # resolver that falls back to iteration order answers with this one.
+            - id: con-max-plain
+              type: max
+              value: 9
+              field: selections
+              scope: parent
+            - id: con-max-percent
+              type: max
+              value: 50
+              field: selections
+              scope: parent
+              percentValue: true
+
+steps:
+  - action: addForce
+    id: add-patrol
+    forceEntryId: fe-patrol
+
+  - expectedState:
+      forces:
+        - selectionCount: 0
+
+  # 1 selection — exceeds 50% of 1 = 0.50, and nothing else. con-max-plain's
+  # limit of 9 is not approached, so con-max-percent is the only possible source.
+  - action: selectEntry
+    forceId: ${{ steps.add-patrol.forceId }}
+    entryId: se-unit-a
+
+  - expectedState:
+      errors:
+        - on: selection se-unit-a
+          from: se-unit-a/con-max-percent
+      forces:
+        - selectionCount: 1
