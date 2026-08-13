@@ -10,19 +10,6 @@ tags:
   - validation-errors
   - structured-errors
 
-engines:
-  # BattleScribe's message quotes the RESOLVED absolute threshold, not the authored percent:
-  # "Troops has 0.50 too many selections of Unit A (maximum 0.50 / 50% of Selections)". Both
-  # BattleScribe resolvers compare the authored value truncated to int against the text —
-  # con-max-plain looks for "maximum 9", con-max-percent for "maximum 50" — and neither string
-  # occurs, so both fall through to the first kind-match by DECLARATION order and answer
-  # con-max-plain: a constraint whose limit of 9 one selection cannot approach.
-  # Measured 2026-08-13: `se-unit-a/con-max-plain`. NewRecruit passes on the same data, reading
-  # e.constraint.id structurally rather than off the text.
-  # `fail` rather than `skip` so the spec still RUNS, and the day the resolvers stop guessing
-  # from the text this is reported as an unexpected pass. See issues #403 and #401.
-  battlescribe: fail
-
 setup:
   gameSystem:
     categoryEntries:

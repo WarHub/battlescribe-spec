@@ -10,26 +10,6 @@ tags:
   - validation-errors
   - structured-errors
 
-engines:
-  # BattleScribe's message quotes the POST-modifier limit: "Troops has 1 too many selections of
-  # Unit A (maximum 2)" — 2 being what the modifier set, not the authored 5. Read out of
-  # net.battlescribe.engine.a.f: the value printed after `" (maximum "` comes from a resolver
-  # taking the constraint as BaseModifyableData, and Constraint.getValue() is read only in the
-  # isPercentValue() branch.
-  # Both BattleScribe resolvers compare that number against the AUTHORED value instead —
-  # BattleScribeEngine.ResolveEntryFromMessage, and its deliberate port in
-  # EngineAccessor.matchConstraintOwner, which is why battlescribe-ui inherits this rather than
-  # declaring its own. With the authored values 9 and 5 neither candidate matches "maximum 2",
-  # so both fall through to the first kind-match by DECLARATION order and answer con-max-plain —
-  # a constraint whose limit of 9 the message rules out and 3 selections do not reach.
-  # Measured 2026-08-12: `se-unit-a/con-max-plain`. NewRecruit passes on the same data, reading
-  # e.constraint.id structurally rather than off the text.
-  # `fail` rather than `skip` so the spec still RUNS: resolving the modifier-adjusted value is a
-  # fixable defect in our own resolvers, not a property of the app, and the day it is fixed this
-  # is reported as an unexpected pass. Declaring it is the holding position, not the outcome —
-  # see issue #403.
-  battlescribe: fail
-
 setup:
   gameSystem:
     categoryEntries:

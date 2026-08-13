@@ -18,6 +18,21 @@ if (!(Test-Path $GsonJar)) {
     throw "gson dependency not found: $GsonJar"
 }
 
+# The agent registers the SAME engine-jar transform the in-process build applies, from its own
+# premain (no second -javaagent). It shares the source with src/bs-engine-patch and needs ASM at
+# RUNTIME inside the BattleScribe JVM, so ASM is compiled against and shaded into the agent jar.
+$EnginePatchSrc = Join-Path $ScriptDir '../bs-engine-patch/src'
+$AsmDir = Join-Path $ScriptDir '../../lib/asm'
+$AsmJar = if (Test-Path $AsmDir) {
+    Get-ChildItem $AsmDir -Filter 'asm-*.jar' | Select-Object -First 1 -ExpandProperty FullName
+} else { $null }
+if (!(Test-Path $EnginePatchSrc)) {
+    throw "bs-engine-patch sources not found: $EnginePatchSrc"
+}
+if (-not $AsmJar) {
+    throw "ASM jar not found under lib/asm — run setup.ps1 first (it vendors ASM with a checksum)."
+}
+
 if ($JavaHome) {
     # Explicit parameter — use as-is
 } elseif ($env:JAVA_HOME) {
@@ -55,21 +70,39 @@ if (Test-Path $OutDir) {
 }
 New-Item -ItemType Directory -Path (Join-Path $OutDir 'classes') -Force | Out-Null
 
-$sources = Get-ChildItem -Path $SrcDir -Filter '*.java' -Recurse | ForEach-Object { $_.FullName }
+$sources = Get-ChildItem -Path $SrcDir, $EnginePatchSrc -Filter '*.java' -Recurse | ForEach-Object { $_.FullName }
 
 # -encoding UTF-8 is not optional: the sources are UTF-8 (box-drawing characters in comments) and
 # javac otherwise decodes them with the platform default charset, which on a Windows machine is
 # typically windows-1252 — 100 "unmappable character" errors and no jar. CI runs on Linux, where the
 # default already is UTF-8, so the flag's absence only ever broke local Windows setup.
-& $javac -encoding UTF-8 --add-modules javafx.controls -classpath $GsonJar -d (Join-Path $OutDir 'classes') @sources
+$classesDir = Join-Path $OutDir 'classes'
+& $javac -encoding UTF-8 --add-modules javafx.controls -classpath "$GsonJar$([System.IO.Path]::PathSeparator)$AsmJar" -d $classesDir @sources
 if ($LASTEXITCODE -ne 0) {
     throw 'javac failed'
+}
+
+# Shade ASM into the classes dir so the transformer can run inside the app JVM without ASM on the
+# classpath. Extract asm-*.jar's org/objectweb/asm/** over our classes (drop its META-INF).
+Write-Host '[bs-ui-java-agent] Shading ASM...'
+$asmExtract = Join-Path $OutDir 'asm-extract'
+if (Test-Path $asmExtract) { Remove-Item $asmExtract -Recurse -Force }
+New-Item -ItemType Directory -Path $asmExtract -Force | Out-Null
+Push-Location $asmExtract
+try {
+    & $jar xf $AsmJar
+    if ($LASTEXITCODE -ne 0) { throw 'ASM extract failed' }
+} finally {
+    Pop-Location
+}
+Copy-Item (Join-Path $asmExtract 'org') $classesDir -Recurse -Force
+if (-not (Test-Path (Join-Path $classesDir 'org/objectweb/asm/ClassReader.class'))) {
+    throw 'ASM shading failed: org/objectweb/asm not present in classes'
 }
 
 Write-Host "[bs-ui-java-agent] Packaging $JarName..."
 $jarPath = Join-Path $ScriptDir $JarName
 $manifestPath = Join-Path $ScriptDir 'MANIFEST.MF'
-$classesDir = Join-Path $OutDir 'classes'
 
 & $jar cfm $jarPath $manifestPath -C $classesDir .
 if ($LASTEXITCODE -ne 0) {

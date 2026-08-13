@@ -6,7 +6,6 @@ using net.battlescribe.model.data;
 using net.battlescribe.model.roster;
 using BsRoster = net.battlescribe.model.roster.Roster;
 using JavaArrayList = java.util.ArrayList;
-using JavaCollection = java.util.Collection;
 using JavaEngine = net.battlescribe.engine.a.f;
 using JavaHashMap = java.util.HashMap;
 using JavaList = java.util.List;
@@ -353,13 +352,10 @@ public sealed class BattleScribeEngine : IDisposable
             return;
         }
 
-        // Build cost limit lookup for resolving cost type IDs
+        // The roster's cost-limit overrun ("Roster is over the X limit by Y") is the ONE funneled
+        // error the engine builds with no id: a.f#v() constructs it directly, bypassing the
+        // id-building funnel. Resolve it by cost name -- the one documented prose path.
         var costLimits = JavaListToList<Cost>(roster.getCostLimits());
-
-        // One parse of `ownerId::entryId::constraintId`, shared with the UI driver's Java agent so
-        // the two BattleScribe engines cannot drift apart on it -- see BattleScribeErrorIds.
-        var errorIdMap = BattleScribeErrorIds.Parse(
-            JavaListToStrings(((BaseRosterElement)roster).getValidationErrorIds()));
 
         var iter = errors.iterator();
         while (iter.hasNext())
@@ -372,83 +368,21 @@ public sealed class BattleScribeEngine : IDisposable
             }
             dynamic error = item;
             var message = (string?)error.b() ?? "(null error)";
+            var rawId = ReadErrorId(item);
 
-            string? entryId = null;
-            string? constraintId = null;
-
-            // 1. Try cost limit resolution (cost limit errors mention the cost name)
-            foreach (var limit in costLimits)
+            if (rawId is null)
             {
-                var costName = limit.getName();
-                if (costName is not null && message.Contains(costName))
+                var (clEntry, clConstraint) = ResolveRosterCostLimit(message, costLimits);
+                if (clEntry is not null)
                 {
-                    entryId = "costLimits";
-                    constraintId = limit.getTypeId();
-                    break;
+                    result.Add(new ValidationErrorState(message, "roster", roster.getId(), null, clEntry, clConstraint));
+                    continue;
                 }
+                throw NoErrorId("roster", message);
             }
 
-            // 2. Try shared entry error IDs (roster-scoped shared constraints)
-            if (entryId is null)
-            {
-                foreach (var kvp in errorIdMap)
-                {
-                    var entry = GetEntryById(kvp.Key);
-                    if (entry is not null && message.Contains(entry.getName()))
-                    {
-                        entryId = kvp.Key;
-                        constraintId = ResolveConstraintFromEntry(entry, kvp.Value, message);
-                        break;
-                    }
-                }
-            }
-
-            // 3. Try ForceEntry constraint resolution (field=forces constraints)
-            if (entryId is null)
-            {
-                (entryId, constraintId) = ResolveForceEntryFromMessage(message);
-            }
-
-            // 4. Fall back to SelectionEntry constraint resolution
-            if (entryId is null || constraintId is null)
-            {
-                var (resolvedEntryId, resolvedConstraintId) = ResolveEntryFromMessage(message);
-                entryId ??= resolvedEntryId;
-                constraintId ??= resolvedConstraintId;
-            }
-
-            result.Add(new ValidationErrorState(message, "roster", roster.getId(), null,
-                entryId, constraintId));
+            result.Add(BuildErrorState(rawId, message, "roster", roster.getId(), null));
         }
-    }
-
-    /// <summary>
-    /// Resolve entryId and constraintId for roster-level errors by matching
-    /// ForceEntry names in the message and looking up their constraints.
-    /// Handles field=forces constraints on ForceEntry definitions.
-    /// </summary>
-    private (string? entryId, string? constraintId) ResolveForceEntryFromMessage(string message)
-    {
-        foreach (var fe in _setupForceEntries)
-        {
-            var feName = fe.getName();
-            if (feName is null || !message.Contains(feName))
-            {
-                continue;
-            }
-
-            var constraints = JavaListToList<Constraint>(fe.getConstraints());
-            foreach (var c in constraints)
-            {
-                var type = c.getType();
-                if ((type == "min" && (message.Contains("must have") || message.Contains("must spend"))) ||
-                    (type == "max" && (message.Contains("too many") || message.Contains("too much"))))
-                {
-                    return (fe.getId(), c.getId());
-                }
-            }
-        }
-        return (null, null);
     }
 
     private void CollectElementErrors(
@@ -461,9 +395,6 @@ public sealed class BattleScribeEngine : IDisposable
             return;
         }
 
-        // Same shared parse as CollectRosterErrors -- see BattleScribeErrorIds for the format.
-        var errorIdMap = BattleScribeErrorIds.Parse(JavaListToStrings(element.getValidationErrorIds()));
-
         var iter = errors.iterator();
         while (iter.hasNext())
         {
@@ -476,176 +407,93 @@ public sealed class BattleScribeEngine : IDisposable
 
             dynamic error = item;
             var message = (string?)error.b() ?? "(null error)";
+            // Only the roster cost-limit overrun is allowed to be id-less, and that error hangs on
+            // the Roster, not on a force/category/selection -- so here a missing id is a bug.
+            var rawId = ReadErrorId(item) ?? throw NoErrorId(ownerType, message);
 
-            string? entryId = null;
-            string? constraintId = null;
-
-            // Try shared entry error IDs first
-            foreach (var kvp in errorIdMap)
-            {
-                var entry = GetEntryById(kvp.Key);
-                if (entry is not null && message.Contains(entry.getName()))
-                {
-                    entryId = kvp.Key;
-                    constraintId = ResolveConstraintFromEntry(entry, kvp.Value, message);
-                    break;
-                }
-            }
-
-            // Fall back to engine entry data when entryId or constraintId unresolved
-            if (entryId is null || constraintId is null)
-            {
-                var (resolvedEntryId, resolvedConstraintId) = ResolveEntryFromMessage(message);
-                entryId ??= resolvedEntryId;
-                constraintId ??= resolvedConstraintId;
-            }
-
-            // Detect hidden entry errors: "cannot have any selections of {name} (hidden)"
-            if (entryId is null && message.Contains("(hidden)"))
-            {
-                foreach (var (id, entry) in _entryLookup)
-                {
-                    var entryName = entry.getName();
-                    if (entryName is not null && message.Contains(entryName))
-                    {
-                        entryId = id;
-                        constraintId = "hidden";
-                        break;
-                    }
-                }
-            }
-
-            result.Add(new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId));
+            result.Add(BuildErrorState(rawId, message, ownerType, ownerId, ownerEntryId));
         }
     }
 
     /// <summary>
-    /// Given a shared entry and a list of candidate constraint IDs from errorIdMap,
-    /// pick the correct constraint ID by matching constraint value against the error message.
-    /// Returns null when no value match is found (caller should fall through to other resolution).
+    /// Turns the engine's captured <c>ownerId::entryId::constraintId</c> (now carried on the error
+    /// via the bs-engine-patch field) into a structured error state: entry and constraint split by
+    /// the shared rule, the collective/hidden pseudo-constraint disambiguated, and the constraint's
+    /// kind/field attached for placement. No message text is parsed for attribution.
     /// </summary>
-    private static string? ResolveConstraintFromEntry(
-        SelectionEntry entry, IReadOnlyList<string> candidateConstraintIds, string message)
+    private ValidationErrorState BuildErrorState(
+        string rawId, string message, string ownerType, string? ownerId, string? ownerEntryId)
     {
-        // Match by constraint value in message.
-        // BS error messages include "(maximum N)" or "(minimum N)" with the constraint value.
-        var constraints = JavaListToList<Constraint>(entry.getConstraints());
-        foreach (var candidateId in candidateConstraintIds)
-        {
-            foreach (var c in constraints)
-            {
-                if (c.getId() != candidateId)
-                {
-                    continue;
-                }
+        var (entryId, constraintId) = BattleScribeErrorIds.ParseOne(rawId);
 
-                var value = (int)c.getValue();
-                if (message.Contains($"maximum {value}") || message.Contains($"minimum {value}"))
-                {
-                    return candidateId;
-                }
-            }
+        // The `from` entry a spec asserts is the one that DECLARES the constraint -- the link for a
+        // link's own constraint, the target for a constraint on the target -- which is not always
+        // the last segment of the composite path (DeclaringEntryOf). The owner id is passed RAW:
+        // reducing a link-composite owner to its target entry is BattleScribeErrorPlacement's one
+        // shared rule (#400), applied identically to both BattleScribe lanes in ApplyTo.
+        entryId = DeclaringEntryOf(entryId, constraintId);
+
+        // The engine writes the SAME third id-segment "collective" for both a hidden-entry error and
+        // a collective (same-number) bookkeeping error; the id cannot tell them apart. The one
+        // surviving prose read: "(hidden)" in the message means the hidden case, which specs assert
+        // as the reserved pseudo-constraint "hidden".
+        if (constraintId == "collective" && message.Contains("(hidden)"))
+        {
+            constraintId = "hidden";
         }
 
-        // No value match — return null so caller can try other resolution methods
-        return null;
+        var (type, field) = ConstraintMetaFor(constraintId);
+        return new ValidationErrorState(message, ownerType, ownerId, ownerEntryId, entryId, constraintId, type, field);
     }
 
-    /// <summary>
-    /// Resolve entryId and constraintId by matching the error message against
-    /// the engine's own entry data (names and constraint types).
-    /// </summary>
-    private (string? entryId, string? constraintId) ResolveEntryFromMessage(string message)
+    /// <summary>The roster cost-limit overrun's (entryId, constraintId), matched by cost name.</summary>
+    private static (string? entryId, string? constraintId) ResolveRosterCostLimit(string message, List<Cost> costLimits)
     {
-        foreach (var (id, entry) in _entryLookup)
+        foreach (var limit in costLimits)
         {
-            var entryName = entry.getName();
-            if (entryName is null || !message.Contains(entryName))
+            var costName = limit.getName();
+            if (costName is not null && message.Contains(costName))
             {
-                continue;
-            }
-
-            var constraints = JavaListToList<Constraint>(entry.getConstraints());
-            string? firstMatch = null;
-            foreach (var c in constraints)
-            {
-                var type = c.getType();
-                if (MessageMatchesConstraintKind(message, type))
-                {
-                    // Prefer constraint whose value matches the message
-                    var value = (int)c.getValue();
-                    if (message.Contains($"maximum {value}") || message.Contains($"minimum {value}"))
-                    {
-                        return (id, c.getId());
-                    }
-                    firstMatch ??= c.getId();
-                }
-            }
-
-            // A link onto this entry carries constraints of its own, and expansion merges them into
-            // the same expanded copy — so both are candidates for one message. The VALUE is what
-            // says which fired, and it is asked here rather than after `firstMatch` because a
-            // kind-match whose value the message contradicts is not evidence: with `(maximum 2)` on
-            // an entry whose own maximum is 4, the entry's constraint is the one constraint the
-            // message rules OUT. Returning it named a limit that 3 selections do not exceed.
-            (string linkId, string constraintId)? linkFirstMatch = null;
-            if (_linkConstraintLookup.TryGetValue(id, out var linkConstraints))
-            {
-                foreach (var (linkId, constraintId, constraintType, constraintValue) in linkConstraints)
-                {
-                    if (!MessageMatchesConstraintKind(message, constraintType))
-                    {
-                        continue;
-                    }
-                    if (message.Contains($"maximum {constraintValue}") ||
-                        message.Contains($"minimum {constraintValue}"))
-                    {
-                        return (linkId, constraintId);
-                    }
-                    linkFirstMatch ??= (linkId, constraintId);
-                }
-            }
-
-            if (firstMatch is not null)
-            {
-                return (id, firstMatch);
-            }
-            // Entry has no matching constraint — fall back to a link's kind-match.
-            if (linkFirstMatch is not null)
-            {
-                return linkFirstMatch.Value;
-            }
-        }
-        // Also search SelectionEntryGroups for constraint matches
-        foreach (var (id, group) in _groupLookup)
-        {
-            var groupName = group.getName();
-            if (groupName is null || !message.Contains(groupName))
-            {
-                continue;
-            }
-
-            var constraints = JavaListToList<Constraint>(group.getConstraints());
-            foreach (var c in constraints)
-            {
-                if (MessageMatchesConstraintKind(message, c.getType()))
-                {
-                    return (id, c.getId());
-                }
+                return ("costLimits", limit.getTypeId());
             }
         }
         return (null, null);
     }
 
+    /// <summary>A constraint's kind and field by id, or (null, null) for a pseudo/unknown id.</summary>
+    private (string? type, string? field) ConstraintMetaFor(string? constraintId)
+        => constraintId is not null && _constraintMeta.TryGetValue(constraintId, out var meta)
+            ? (meta.type, meta.field)
+            : (null, null);
+
+    private static InvalidOperationException NoErrorId(string ownerType, string message)
+        => new($"BattleScribe validation error on {ownerType} carried no bsspecErrorId: \"{message}\". " +
+            "Only the roster cost-limit overrun (a.f#v(), the documented id-less bypass) may lack one. " +
+            "The engine-jar patch (src/bs-engine-patch) may not have run, or the engine changed -- " +
+            "refusing to guess attribution from the message text.");
+
     /// <summary>
-    /// Whether the message's phrasing is the one BattleScribe renders for this constraint type.
+    /// Reads the constraint id the patched engine hangs on each validation error. Resolves the
+    /// field once and fails loudly if it is absent -- an unpatched engine assembly must not silently
+    /// degrade to message-text guessing.
     /// </summary>
-    private static bool MessageMatchesConstraintKind(string message, string? type) => type switch
+    private string? ReadErrorId(object errorObject)
     {
-        "min" => message.Contains("must have") || message.Contains("must spend"),
-        "max" => message.Contains("too many") || message.Contains("too much"),
-        _ => false,
-    };
+        if (!_bsspecErrorIdFieldResolved)
+        {
+            _bsspecErrorIdField = errorObject.GetType().GetField("bsspecErrorId");
+            _bsspecErrorIdFieldResolved = true;
+            if (_bsspecErrorIdField is null)
+            {
+                throw new InvalidOperationException(
+                    "The IKVM-compiled BattleScribe engine error type net.battlescribe.engine.b.a has no " +
+                    "bsspecErrorId field: the engine-jar patch (src/bs-engine-patch, the " +
+                    "PatchBattleScribeEngineJar MSBuild target) did not run. Run ./setup.ps1 and rebuild. " +
+                    "Refusing to fall back to message-text attribution.");
+            }
+        }
+        return _bsspecErrorIdField!.GetValue(errorObject) as string;
+    }
 
     /// <summary>
     /// Check if the roster has any validation errors.
@@ -708,11 +556,15 @@ public sealed class BattleScribeEngine : IDisposable
     private readonly List<CostType> _setupCostTypes = [];
     private readonly Dictionary<string, SelectionEntry> _entryLookup = [];
     private readonly Dictionary<string, SelectionEntryGroup> _groupLookup = [];
-    // Entry link constraints indexed by target entry ID:
-    // targetId → [(linkId, constraintId, constraintType, constraintValue)]. The VALUE is carried
-    // because it is what tells a link's constraint apart from its target's when one message could
-    // name either — see ResolveEntryFromMessage.
-    private readonly Dictionary<string, List<(string linkId, string constraintId, string constraintType, int constraintValue)>> _linkConstraintLookup = [];
+    // Every constraint's kind and field by id, so a captured error is placed from structural facts
+    // (max vs min; forces vs selections/cost) rather than message prose. Built at setup from all
+    // constraint-bearing containers; a shared constraint id repeats with identical kind/field.
+    private readonly Dictionary<string, (string type, string field)> _constraintMeta = [];
+    // constraintId -> the container ids that declare it, for DeclaringEntryOf.
+    private readonly Dictionary<string, HashSet<string>> _constraintDeclarers = [];
+    // Cached reflection handle for the patched engine's bsspecErrorId field (see ReadErrorId).
+    private System.Reflection.FieldInfo? _bsspecErrorIdField;
+    private bool _bsspecErrorIdFieldResolved;
     // Entry link target resolution: linkId → targetId
     private readonly Dictionary<string, string> _linkTargetMap = [];
     // Per-catalogue entry lists for multi-catalogue support
@@ -1662,7 +1514,8 @@ public sealed class BattleScribeEngine : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
         _groupLookup.Clear();
-        _linkConstraintLookup.Clear();
+        _constraintMeta.Clear();
+        _constraintDeclarers.Clear();
         _linkTargetMap.Clear();
 
         foreach (var catSpec in catalogues)
@@ -1791,7 +1644,8 @@ public sealed class BattleScribeEngine : IDisposable
                 }
             }
 
-            // Index entry link constraints and targets for error resolution.
+            // Index entry link targets for owner/link-target resolution. Constraint kinds/fields and
+            // declarers come from IndexConstraintMetaTree below, which walks these same links.
             if (catSpec.EntryLinks != null)
             {
                 foreach (var elSpec in catSpec.EntryLinks)
@@ -1800,26 +1654,14 @@ public sealed class BattleScribeEngine : IDisposable
                     {
                         _linkTargetMap[elSpec.Id] = elSpec.TargetId;
                     }
-
-                    if (elSpec.Constraints is { Count: > 0 } && elSpec.TargetId is not null)
-                    {
-                        if (!_linkConstraintLookup.TryGetValue(elSpec.TargetId, out var list))
-                        {
-                            list = [];
-                            _linkConstraintLookup[elSpec.TargetId] = list;
-                        }
-                        foreach (var cSpec in elSpec.Constraints)
-                        {
-                            // Truncated to int to match what the entry-side path does with
-                            // `getValue()`, because both are compared against the same rendered
-                            // "maximum N" — the two must round the same way or they disagree about
-                            // which constraint a message names.
-                            list.Add((elSpec.Id, cSpec.Id, cSpec.Type ?? "max", (int)cSpec.Value));
-                        }
-                    }
                 }
             }
         }
+
+        // Constraint kind/field by id, from every constraint-bearing container in the setup data.
+        // Placement (BattleScribeErrorPlacement) reads these off the captured error instead of the
+        // message text.
+        IndexConstraintMetaTree(gameSystem, catalogues);
 
         // Default active catalogue is the first loaded catalogue.
         _setupCatalogue = _setupCatalogues.Count > 0 ? _setupCatalogues[0] : null;
@@ -1845,6 +1687,161 @@ public sealed class BattleScribeEngine : IDisposable
 
         var initErrors = Initialize(gs, catalogueDict);
         return initErrors;
+    }
+
+    // ===== Constraint-meta indexing =====
+    // Two indexes, both keyed by constraint id and built once from the setup data:
+    //   _constraintMeta      : constraintId -> (kind, field), for structural placement.
+    //   _constraintDeclarers : constraintId -> the container ids that DECLARE it, for choosing which
+    //                          segment of a composite entry id is the `from` entry (a link's own
+    //                          constraint declares on the LINK, not its target -- see DeclaringEntryOf).
+
+    private void IndexConstraintMeta(string declarerId, IEnumerable<ProtocolConstraint>? constraints)
+    {
+        if (constraints is null)
+        {
+            return;
+        }
+        foreach (var c in constraints)
+        {
+            if (string.IsNullOrEmpty(c.Id))
+            {
+                continue;
+            }
+            // A shared constraint id repeats across the entries that share it with identical
+            // kind/field, so first-wins is fine and last-wins would be identical.
+            _constraintMeta.TryAdd(c.Id, (c.Type, c.Field));
+            if (!string.IsNullOrEmpty(declarerId))
+            {
+                if (!_constraintDeclarers.TryGetValue(c.Id, out var declarers))
+                {
+                    declarers = [];
+                    _constraintDeclarers[c.Id] = declarers;
+                }
+                declarers.Add(declarerId);
+            }
+        }
+    }
+
+    private void IndexConstraintMetaTree(ProtocolGameSystem gs, IEnumerable<ProtocolCatalogue> catalogues)
+    {
+        WalkForceEntries(gs.ForceEntries);
+        WalkCategoryEntries(gs.CategoryEntries);
+        WalkSelectionEntries(gs.SelectionEntries);
+        WalkSelectionEntries(gs.SharedSelectionEntries);
+        WalkGroups(gs.SharedSelectionEntryGroups);
+        WalkEntryLinks(gs.EntryLinks);
+
+        foreach (var cat in catalogues)
+        {
+            WalkForceEntries(cat.ForceEntries);
+            WalkForceEntries(cat.SharedForceEntries);
+            WalkCategoryEntries(cat.CategoryEntries);
+            WalkSelectionEntries(cat.SelectionEntries);
+            WalkSelectionEntries(cat.SharedSelectionEntries);
+            WalkGroups(cat.SharedSelectionEntryGroups);
+            WalkEntryLinks(cat.EntryLinks);
+        }
+    }
+
+    private void WalkForceEntries(IEnumerable<ProtocolForceEntry>? forceEntries)
+    {
+        if (forceEntries is null)
+        {
+            return;
+        }
+        foreach (var fe in forceEntries)
+        {
+            IndexConstraintMeta(fe.Id, fe.Constraints);
+            WalkForceEntries(fe.ForceEntries);
+        }
+    }
+
+    private void WalkCategoryEntries(IEnumerable<ProtocolCategoryEntry>? categoryEntries)
+    {
+        if (categoryEntries is null)
+        {
+            return;
+        }
+        foreach (var ce in categoryEntries)
+        {
+            IndexConstraintMeta(ce.Id, ce.Constraints);
+        }
+    }
+
+    private void WalkSelectionEntries(IEnumerable<ProtocolSelectionEntry>? entries)
+    {
+        if (entries is null)
+        {
+            return;
+        }
+        foreach (var se in entries)
+        {
+            IndexConstraintMeta(se.Id, se.Constraints);
+            WalkSelectionEntries(se.SelectionEntries);
+            WalkGroups(se.SelectionEntryGroups);
+            WalkEntryLinks(se.EntryLinks);
+        }
+    }
+
+    private void WalkGroups(IEnumerable<ProtocolSelectionEntryGroup>? groups)
+    {
+        if (groups is null)
+        {
+            return;
+        }
+        foreach (var g in groups)
+        {
+            IndexConstraintMeta(g.Id, g.Constraints);
+            WalkSelectionEntries(g.SelectionEntries);
+            WalkGroups(g.SelectionEntryGroups);
+            WalkEntryLinks(g.EntryLinks);
+        }
+    }
+
+    private void WalkEntryLinks(IEnumerable<ProtocolEntryLink>? links)
+    {
+        if (links is null)
+        {
+            return;
+        }
+        foreach (var el in links)
+        {
+            IndexConstraintMeta(el.Id, el.Constraints);
+            WalkSelectionEntries(el.SelectionEntries);
+            WalkGroups(el.SelectionEntryGroups);
+        }
+    }
+
+    /// <summary>
+    /// Which segment of a composite entry id actually DECLARES <paramref name="constraintId"/>. A
+    /// constraint on an entry link and one on the link's target are different constraints with
+    /// different meanings (per-link vs shared), and a spec names the error's <c>from</c> by the
+    /// declaring one -- so the last segment is not always right. Falls back to the last segment (the
+    /// innermost entry) when nothing in the id is a known declarer.
+    /// </summary>
+    private string? DeclaringEntryOf(string? compositeEntryId, string? constraintId)
+    {
+        if (compositeEntryId is null)
+        {
+            return null;
+        }
+        if (!compositeEntryId.Contains("::", StringComparison.Ordinal))
+        {
+            return compositeEntryId;
+        }
+        var segments = compositeEntryId.Split("::");
+        if (constraintId is not null && _constraintDeclarers.TryGetValue(constraintId, out var declarers))
+        {
+            foreach (var seg in segments)
+            {
+                if (declarers.Contains(seg))
+                {
+                    return seg;
+                }
+            }
+        }
+        return segments[^1];
     }
 
     private static ForceEntry BuildForceEntry(ProtocolForceEntry feSpec)
@@ -2416,7 +2413,8 @@ public sealed class BattleScribeEngine : IDisposable
         _setupSelectionEntries.Clear();
         _entryLookup.Clear();
         _groupLookup.Clear();
-        _linkConstraintLookup.Clear();
+        _constraintMeta.Clear();
+        _constraintDeclarers.Clear();
         _linkTargetMap.Clear();
         GC.SuppressFinalize(this);
     }
@@ -2509,25 +2507,6 @@ public sealed class BattleScribeEngine : IDisposable
         if (!_initialized || _gameSystem is null)
         {
             throw new InvalidOperationException("Engine not initialized. Call Initialize() first.");
-        }
-    }
-
-    /// <summary>
-    /// A Java collection read as strings, tolerating nulls. Unlike <see cref="JavaListToList{T}"/>
-    /// this does not insist on an element type: <c>getValidationErrorIds()</c> is a raw collection
-    /// and its elements are only ever consumed as text.
-    /// </summary>
-    private static IEnumerable<string?> JavaListToStrings(JavaCollection? javaList)
-    {
-        if (javaList is null)
-        {
-            yield break;
-        }
-
-        var iter = javaList.iterator();
-        while (iter.hasNext())
-        {
-            yield return iter.next()?.ToString();
         }
     }
 

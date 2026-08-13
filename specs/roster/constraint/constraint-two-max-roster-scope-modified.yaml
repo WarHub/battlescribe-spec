@@ -12,22 +12,6 @@ tags:
   - validation-errors
   - structured-errors
 
-engines:
-  # Same defect as constraint-two-max-one-modified, at the least-covered owner. The error is
-  # raised on the ROSTER element (the constraints' scope), the message quotes the POST-modifier
-  # limit — "…has 1 too many selections of Unit A (maximum 2)" — and placement re-homes it to
-  # the selection. Both BattleScribe resolvers then compare AUTHORED values (9 and 5) against
-  # "maximum 2", match neither, and fall through to the first kind-match by declaration order:
-  # con-max-plain, whose limit of 9 three selections do not reach.
-  # Measured 2026-08-13: `se-unit-a/con-max-plain`. NewRecruit passes on the same data
-  # (`se-unit-a/con-max-boosted`), reading e.constraint.id structurally.
-  # Shared roster-scope constraints are also the one place getValidationErrorIds() genuinely
-  # lists candidate ids — and it lists only the VIOLATED constraint, whose authored value still
-  # contradicts the rendered text, so the id list does not save the tiebreak either.
-  # `fail` rather than `skip` so the spec still RUNS and a fixed resolver reports an unexpected
-  # pass. See issues #403 and #401.
-  battlescribe: fail
-
 setup:
   gameSystem:
     categoryEntries:

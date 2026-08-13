@@ -6,13 +6,22 @@ namespace BattleScribeSpec.Roster;
 /// They serialize to JSON via ProtocolJsonContext (camelCase naming, null-omission by default).
 /// </summary>
 
+/// <remarks>
+/// <see cref="ConstraintType"/> ("min"/"max") and <see cref="ConstraintField"/>
+/// ("selections"/"forces"/a cost-type id) are read from the live constraint at capture and let
+/// <c>BattleScribeErrorPlacement</c> decide where an error belongs from structural facts instead of
+/// the message prose. Both are null for the id-less paths (roster cost-limit bypass) and the
+/// reserved pseudo-constraints ("hidden"/"collective").
+/// </remarks>
 public record ValidationErrorState(
     string Message,
     string? OwnerType = null,
     string? OwnerId = null,
     string? OwnerEntryId = null,
     string? EntryId = null,
-    string? ConstraintId = null);
+    string? ConstraintId = null,
+    string? ConstraintType = null,
+    string? ConstraintField = null);
 
 public record RosterState(
     string Name,

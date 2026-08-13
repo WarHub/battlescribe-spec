@@ -48,6 +48,9 @@ public class EngineAccessor {
     private Class<?> engineClass;
     private Class<?> rosterClass;
     private Method getRosterMethod;
+    // Cached handle for the patched engine's bsspecErrorId field (see readErrorId).
+    private java.lang.reflect.Field errorIdField;
+    private boolean errorIdFieldResolved;
 
     /**
      * Classes {@link #findClass} has already resolved.
@@ -90,8 +93,8 @@ public class EngineAccessor {
         /** Instances of a class reachable from the engine and roster — see {@link #collectInstances}. */
         final Map<Class<?>, List<Object>> instances = new IdentityHashMap<Class<?>, List<Object>>();
 
-        /** An entry's declared constraints as id -> value — see {@link #constraintValuesOf}. */
-        final Map<String, Map<String, Integer>> constraintValues = new HashMap<String, Map<String, Integer>>();
+        /** constraintId -> source container ids that declare it — see {@link #constraintDeclarers}. */
+        Map<String, Set<String>> constraintDeclarers;
     }
 
     /**
@@ -1236,508 +1239,107 @@ public class EngineAccessor {
         return resolveMethod.invoke(engineInstance, forceContext, selection, originalEntry, true);
     }
 
-    private static final class ValidationRef {
-        private final String entryId;
-        private final String constraintId;
-
-        private ValidationRef(String entryId, String constraintId) {
-            this.entryId = entryId;
-            this.constraintId = constraintId;
-        }
-    }
-
     /**
-     * Reads {@code ownerId::entryId::constraintId} into entry id → its candidate constraint ids.
+     * Which segment of a composite id actually DECLARES {@code constraintId}, matching the in-process
+     * adapter's rule exactly.
      *
-     * <p><b>This is a HAND-KEPT MIRROR, not a shared implementation.</b> The normative rule and the
-     * reasoning behind it live in {@code src/BattleScribeSpec.TestKit/Roster/BattleScribeErrorIds.cs};
-     * this agent runs inside the BattleScribe JVM and cannot call it, so the only thing keeping the
-     * two together is that someone changes both. Be honest about what that buys: nothing enforces
-     * it at build time. What does exist is {@code tests/Features/BattleScribeErrorIdsTests.cs},
-     * which pins the cases the two are meant to answer identically —
-     *
-     * <ul>
-     *   <li>{@code owner::entry::con} → {@code {entry: [con]}}, the only shape observed in the corpus
-     *   <li>{@code owner::link::entry::con} → {@code {link::entry: [con]}} — the middle segments are
-     *       part of the composite ENTRY id (docs/entry-id-construction.md), so only the LAST segment
-     *       is ever the constraint. Inferred, not observed.
-     *   <li>repeats of one id collapse, and the surviving order is the order first seen
-     *   <li>two constraints on one entry both survive, in listed order
-     *   <li>fewer than three segments, and nulls, are dropped
-     * </ul>
-     *
-     * <p>Two things changed here and both had been silent. The split is now unlimited where it was
-     * {@code split("::", 3)}, which left {@code parts[2]} holding the whole remaining tail — a
-     * four-segment id answered {@code entry::con} as a constraint id. And the dedupe is new; it
-     * matters because the surviving ORDER is what {@link #pickConstraintId} walks when the message
-     * quotes no value to decide on.
-     */
-    private Map<String, List<String>> parseValidationErrorIds(List<String> errorIds) {
-        Map<String, List<String>> errorIdMap = new HashMap<String, List<String>>();
-        for (String errorId : errorIds) {
-            if (errorId == null) {
-                continue;
-            }
-            // -1, not 0: an unlimited split still has to KEEP trailing empty segments, because
-            // C#'s String.Split does and this has to answer the same for `owner::entry::`.
-            String[] parts = errorId.split("::", -1);
-            if (parts.length >= 3) {
-                // parts[0] is the owner and is dropped; parts[1..n-2] rejoined is the entry id;
-                // the last segment alone is the constraint id.
-                StringBuilder entryId = new StringBuilder(parts[1]);
-                for (int i = 2; i < parts.length - 1; i++) {
-                    entryId.append("::").append(parts[i]);
-                }
-                String entryKey = entryId.toString();
-                String constraintId = parts[parts.length - 1];
-                List<String> constraintIds = errorIdMap.get(entryKey);
-                if (constraintIds == null) {
-                    constraintIds = new ArrayList<String>();
-                    errorIdMap.put(entryKey, constraintIds);
-                }
-                if (!constraintIds.contains(constraintId)) {
-                    constraintIds.add(constraintId);
-                }
-            }
-        }
-        return errorIdMap;
-    }
-
-    /**
-     * Resolves the {@code entryId/constraintId} a spec asserts as {@code from}.
-     *
-     * <p><b>The error object cannot answer this.</b> {@code net.battlescribe.engine.b.a} is
-     * constructed as {@code (Object, String)} and exposes the object as {@code a()}, which reads
-     * like the source constraint and is not: it is the ROSTER ELEMENT the error hangs on — a
-     * {@code model.roster.Category} whose parent is the {@code Force} — carrying runtime ids
-     * regenerated on every recalculation. Reading ids off it produces a well-formed and entirely
-     * wrong {@code from}, which is worse than none. Measured with {@code BS_UI_VALIDATION_TRACE=1}.
-     *
-     * <p>So the only carriers are {@code getValidationErrorIds()}, which is where the spec-side ids
-     * genuinely live, and failing that the message text. Both are used below.
-     */
-    /**
-     * Resolves {@code entryId/constraintId} by reading the message against the LOADED DATA, when
-     * {@code getValidationErrorIds()} offered nothing.
-     *
-     * <p>This is a port of {@code BattleScribeEngine.ResolveEntryFromMessage}, and deliberately so:
-     * it is the same question about the same Java model, and the in-process adapter is the
-     * reference every spec's `from` was written against. Reimplementing the rule differently here
-     * would make the two BattleScribe engines disagree by accident rather than agree by
-     * construction.
-     *
-     * <p>Message matching is a poor way to recover provenance and it is the only one available.
-     * BattleScribe attaches no constraint to a validation error — the object it does attach is the
-     * roster element the error hangs on — and `getValidationErrorIds()` comes back empty on every
-     * element for these errors, measured with {@code BS_UI_VALIDATION_TRACE=1}. So the rendered
-     * text is the sole carrier, and the entry NAME plus the constraint's own type and value are
-     * what it carries.
-     */
-    /**
-     * What a selection made through an entry link IS, as specs name it.
-     *
-     * <p>Such a selection reports its entryId as the composite {@code linkId::targetId}. That is
-     * the right answer to "how did this get here" and the wrong one to "what is it": specs address
-     * the error's owner by the ENTRY, {@code shared-unit}, not by the route taken to it. The route
-     * still matters for {@code from}, which is why only the owner is reduced — see
-     * {@link #declaringEntryOf}.
-     */
-    private String linkTargetOf(String entryId) {
-        if (entryId == null || !entryId.contains("::")) {
-            return entryId;
-        }
-        String[] parts = entryId.split("::");
-        return parts[parts.length - 1];
-    }
-
-    /**
-     * Which segment of a composite id actually DECLARES {@code constraintId}.
-     *
-     * <p>A constraint on the link and a constraint on its target are different constraints with
-     * different meanings — per-link versus shared — and a spec asserts which one fired by naming
-     * its owner. Reporting the composite for both loses exactly that distinction, so each segment
-     * is asked whether the constraint is its own.
+     * <p>A constraint on an entry link and one on the link's target are different constraints (per-link
+     * vs shared) and a spec names {@code from} by the declaring one. This must read the SOURCE
+     * declaration, not the live merged entry: a constraint declared on a shared target is MERGED into
+     * every link's expansion, so asking the runtime "does this segment carry the constraint" answers
+     * yes for the outer link too and would pick the route rather than the declarer. So it consults a
+     * map built once from the loaded game data's source containers, and returns the first segment that
+     * genuinely declares the id (falling back to the whole composite when none does).
      */
     private String declaringEntryOf(String entryId, String constraintId) {
         if (entryId == null || constraintId == null || !entryId.contains("::")) {
             return entryId;
         }
-        for (String segment : entryId.split("::")) {
-            if (constraintValuesOf(segment).containsKey(constraintId)) {
-                return segment;
+        String[] segments = entryId.split("::");
+        Set<String> declarers = constraintDeclarers().get(constraintId);
+        if (declarers != null) {
+            for (String segment : segments) {
+                if (declarers.contains(segment)) {
+                    return segment;
+                }
             }
         }
-        return entryId;
-    }
-
-    private ValidationRef resolveRefFromMessage(String message) {
-        if (message == null) {
-            return null;
-        }
-
-        // Order matters: the most specific owner first. A message names its container as well as
-        // its subject — "Troops cannot have any selections of Hidden Unit" holds both a category
-        // name and an entry name — and the entry is the one the spec asserts.
-        for (String className : CONSTRAINT_OWNER_CLASSES) {
-            ValidationRef ref = message.contains("(hidden)")
-                    ? matchHiddenOwner(findClass(className), message)
-                    : matchConstraintOwner(findClass(className), message);
-            if (ref != null) {
-                return ref;
-            }
-        }
-        return null;
+        // The map indexes constraints on entries, groups, force-entries and categories from source;
+        // a constraint it does NOT know is one declared on the entry LINK itself (a live EntryLink
+        // does not surface its own constraints the way a source entry does). Its declaring container
+        // is the outermost link -- the first segment -- not the target the link resolves to.
+        return segments[0];
     }
 
     /**
-     * Owners a constraint can hang on, most specific first.
-     *
-     * <p>{@code ForceEntry} is here because a force-count constraint ("must have 1 more forces
-     * from Patrol") belongs to the force entry, not to any selection — leaving it out left that
-     * whole family of errors with no {@code from} at all.
+     * constraintId -> the SOURCE container ids that declare it, read once from the loaded game
+     * system and catalogues. The mirror of {@code BattleScribeEngine}'s constraint-declarer index,
+     * built from the same source shape so both BattleScribe lanes choose the same {@code from} entry.
      */
-    private static final String[] CONSTRAINT_OWNER_CLASSES = {
-        "net.battlescribe.model.data.SelectionEntry",
-        "net.battlescribe.model.data.SelectionEntryGroup",
-        "net.battlescribe.model.data.EntryLink",
-        "net.battlescribe.model.data.ForceEntry",
-    };
-
-    /**
-     * The entry a hidden-entry error is ABOUT, which is not the one it is reported on.
-     *
-     * <p>BattleScribe renders "Troops cannot have any selections of Hidden Unit (hidden)" on the
-     * category. Taking the reported owner names the container; the spec asserts the entry that is
-     * hidden, so it is read out of the message like any other.
-     */
-    private ValidationRef matchHiddenOwner(Class<?> ownerClass, String message) {
-        if (ownerClass == null) {
-            return null;
-        }
-        for (Object owner : collectInstances(ownerClass)) {
-            String name = callGetter(owner, "getName");
-            String ownerId = callGetter(owner, "getId");
-            if (name != null && !name.isEmpty() && ownerId != null && message.contains(name)) {
-                return new ValidationRef(ownerId, "hidden");
-            }
-        }
-        return null;
-    }
-
-    /** The best (entry, constraint) pair among instances of {@code ownerClass}, or null. */
-    private ValidationRef matchConstraintOwner(Class<?> ownerClass, String message) {
-        if (ownerClass == null) {
-            return null;
-        }
-
-        ValidationRef fallback = null;
-        for (Object owner : collectInstances(ownerClass)) {
-            String name = callGetter(owner, "getName");
-            if (name == null || name.isEmpty() || !message.contains(name)) {
-                continue;
-            }
-            String ownerId = callGetter(owner, "getId");
-            if (ownerId == null) {
-                continue;
-            }
-
-            for (Object constraint : toJavaList(callListGetter(owner, "getConstraints"))) {
-                String type = callGetter(constraint, "getType");
-                if (!messageMatchesConstraintKind(message, type)) {
-                    continue;
-                }
-                String constraintId = callGetter(constraint, "getId");
-                if (constraintId == null) {
-                    continue;
-                }
-                // The value disambiguates two constraints of the same kind on one entry, so a
-                // value match wins outright; otherwise keep the first kind match and keep looking.
-                int value = (int) parseDouble(callGetter(constraint, "getValue"));
-                if (message.contains("maximum " + value) || message.contains("minimum " + value)) {
-                    return new ValidationRef(ownerId, constraintId);
-                }
-                if (fallback == null) {
-                    fallback = new ValidationRef(ownerId, constraintId);
-                }
-            }
-        }
-        return fallback;
-    }
-
-    /** Whether the message's phrasing is the one BattleScribe renders for this constraint type. */
-    private boolean messageMatchesConstraintKind(String message, String type) {
-        if ("min".equals(type)) {
-            return message.contains("must have") || message.contains("must spend");
-        }
-        if ("max".equals(type)) {
-            return message.contains("too many") || message.contains("too much");
-        }
-        return false;
-    }
-
-    private double parseDouble(String value) {
-        try {
-            return value == null ? 0 : Double.parseDouble(value);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private ValidationRef resolveValidationRef(
-            Map<String, List<String>> errorIdMap, String ownerType, String message, String ownerEntryId) {
-        String lowerMessage = message != null ? message.toLowerCase(Locale.ROOT) : null;
-
-        if ("roster".equals(ownerType)) {
-            ValidationRef rosterCostLimitRef = resolveRosterCostLimitRef(errorIdMap, lowerMessage);
-            if (rosterCostLimitRef != null) {
-                return rosterCostLimitRef;
-            }
-        }
-
-        for (Map.Entry<String, List<String>> entry : errorIdMap.entrySet()) {
-            String candidateEntryId = entry.getKey();
-            if ("costLimits".equals(candidateEntryId)) {
-                continue;
-            }
-            String entryName = getEntryName(candidateEntryId);
-            if (containsIgnoreCase(message, entryName)) {
-                // The id list cannot say which constraint fired, and a SHORT list is not evidence
-                // that it can. It is not per-error: BattleScribe lists ids the ELEMENT knows
-                // about, and one element carries every error raised under it.
-                //
-                // Measured on `constraint-shared-flag`: the force reports exactly one id,
-                // `…::shared-unit::con-max-shared`, while carrying three errors — two of them
-                // raised by `con-max-per-link`, which appears in no list anywhere. Trusting a
-                // one-element list therefore answered `con-max-shared` for a message reading
-                // `(maximum 2)`, naming a constraint whose limit is 3 and which that message
-                // rules out.
-                //
-                // So the rendered VALUE decides whenever it disagrees with the list, at any list
-                // size: a candidate the message contradicts is not a weaker witness than the
-                // message, it is a refuted one.
-                String picked = pickConstraintId(candidateEntryId, entry.getValue(), lowerMessage);
-                if (!constraintValueMatchesMessage(candidateEntryId, picked, lowerMessage)) {
-                    ValidationRef byMessage = resolveRefFromMessage(message);
-                    if (byMessage != null
-                            && constraintValueMatchesMessage(
-                                    byMessage.entryId, byMessage.constraintId, lowerMessage)) {
-                        return byMessage;
-                    }
-                }
-
-                return new ValidationRef(candidateEntryId, picked);
-            }
-        }
-
-        // Hidden error: "(hidden)" in message → the entry the message NAMES, then errorIdMap.
-        if (lowerMessage != null && lowerMessage.contains("(hidden)")) {
-            // Read the message first. errorIdMap's keys here are the error's OWNER — the category
-            // that refused the selection — and the spec asserts the entry that is hidden.
-            ValidationRef named = resolveRefFromMessage(message);
-            if (named != null) {
-                return named;
-            }
-            for (Map.Entry<String, List<String>> entry : errorIdMap.entrySet()) {
-                if (!"costLimits".equals(entry.getKey())) {
-                    return new ValidationRef(entry.getKey(), "hidden");
-                }
-            }
-            // Fallback: use ownerEntryId as the entry reference
-            if (ownerEntryId != null) {
-                return new ValidationRef(ownerEntryId, "hidden");
-            }
-        }
-
-        // Cost limit fallback for roster errors
-        if ("roster".equals(ownerType)) {
-            List<String> constraintIds = errorIdMap.get("costLimits");
-            if (constraintIds != null && !constraintIds.isEmpty()) {
-                return new ValidationRef("costLimits", constraintIds.get(0));
-            }
-            // Fallback: if message contains "over" or "limit" and we can find cost type
-            if (lowerMessage != null && (lowerMessage.contains("over") || lowerMessage.contains("limit"))) {
-                String costTypeId = extractCostTypeIdFromMessage(lowerMessage);
-                if (costTypeId != null) {
-                    return new ValidationRef("costLimits", costTypeId);
-                }
-            }
-        }
-
-        // Last resort, and for most constraint errors the ONLY one: read the message against the
-        // loaded data. Everything above needs an id from `getValidationErrorIds()`, which comes
-        // back empty on every element for those errors.
-        ValidationRef fromMessage = resolveRefFromMessage(message);
-        if (fromMessage != null) {
-            return fromMessage;
-        }
-
-        return new ValidationRef(null, null);
-    }
-
-    private ValidationRef resolveRosterCostLimitRef(Map<String, List<String>> errorIdMap, String lowerMessage) {
-        List<String> constraintIds = errorIdMap.get("costLimits");
-        if (constraintIds == null || constraintIds.isEmpty()) {
-            return null;
-        }
-
-        boolean looksLikeCostLimit = lowerMessage == null
-                || lowerMessage.contains("over")
-                || lowerMessage.contains("too much");
-        if (!looksLikeCostLimit) {
-            return null;
-        }
-
-        for (String constraintId : constraintIds) {
-            String costTypeName = getCostTypeName(constraintId);
-            if (costTypeName != null && containsIgnoreCase(lowerMessage, costTypeName.toLowerCase(Locale.ROOT))) {
-                return new ValidationRef("costLimits", constraintId);
-            }
-        }
-
-        if (constraintIds.size() == 1) {
-            return new ValidationRef("costLimits", constraintIds.get(0));
-        }
-        return null;
-    }
-
-    /**
-     * Which of an entry's constraints raised this error.
-     *
-     * <p>An entry can carry several of the same kind — a per-link maximum and a shared maximum,
-     * say — and taking the first is a coin toss between them. The rendered VALUE is what tells them
-     * apart, so a constraint whose value the message quotes wins; the first is only a fallback for
-     * when nothing distinguishes them.
-     */
-    private String pickConstraintId(String entryId, List<String> constraintIds, String lowerMessage) {
-        if (constraintIds == null || constraintIds.isEmpty()) {
-            return null;
-        }
-        if (lowerMessage != null && lowerMessage.contains("(hidden)")) {
-            return "hidden";
-        }
-        if (lowerMessage != null && constraintIds.size() > 1) {
-            for (Map.Entry<String, Integer> candidate : constraintValuesOf(entryId).entrySet()) {
-                if (!constraintIds.contains(candidate.getKey())) {
-                    continue;
-                }
-                int value = candidate.getValue();
-                if (lowerMessage.contains("maximum " + value) || lowerMessage.contains("minimum " + value)) {
-                    return candidate.getKey();
-                }
-            }
-        }
-        return constraintIds.get(0);
-    }
-
-    /**
-     * Whether the message quotes the limit this constraint actually declares.
-     *
-     * <p>The test a candidate has to survive before it is believed. A message rendering
-     * {@code (maximum 2)} is positive evidence for a constraint whose value is 2 and evidence
-     * AGAINST one whose value is 3 — so this separates "the only candidate offered" from "the
-     * candidate the app's own text supports". Absent a value on either side the answer is false,
-     * which leaves the caller on its existing path rather than inventing a preference.
-     */
-    private boolean constraintValueMatchesMessage(String entryId, String constraintId, String lowerMessage) {
-        if (entryId == null || constraintId == null || lowerMessage == null) {
-            return false;
-        }
-        // A composite entryId names the route; the constraint is declared by one segment of it.
-        Integer value = constraintValuesOf(declaringEntryOf(entryId, constraintId)).get(constraintId);
-        if (value == null) {
-            return false;
-        }
-        return lowerMessage.contains("maximum " + value) || lowerMessage.contains("minimum " + value);
-    }
-
-    /**
-     * An entry's own constraints as id -> declared value.
-     *
-     * <p>Asked repeatedly for the same few ids while resolving one roster's errors — once per
-     * candidate in {@link #pickConstraintId}, once per segment in {@link #declaringEntryOf}, and
-     * again by {@link #constraintValueMatchesMessage} — and every ask is a roster search. Hence the
-     * per-pass memory; see {@link ValidationPass} for why it is per pass and not per session.
-     */
-    private Map<String, Integer> constraintValuesOf(String entryId) {
+    private Map<String, Set<String>> constraintDeclarers() {
         ValidationPass pass = validationPass;
+        if (pass != null && pass.constraintDeclarers != null) {
+            return pass.constraintDeclarers;
+        }
+        Map<String, Set<String>> map = new HashMap<String, Set<String>>();
+        try {
+            indexSourceConstraints(getCurrentGameSystem(), map);
+            for (Object catalogue : sourceCatalogues()) {
+                indexSourceConstraints(catalogue, map);
+            }
+        } catch (Exception e) {
+            System.err.println("[bs-ui-agent] could not index source constraint declarers: " + e);
+        }
         if (pass != null) {
-            Map<String, Integer> remembered = pass.constraintValues.get(entryId);
-            if (remembered != null) {
-                return remembered;
-            }
+            pass.constraintDeclarers = map;
         }
-
-        Map<String, Integer> values = readConstraintValues(entryId);
-        if (pass != null) {
-            pass.constraintValues.put(entryId, values);
-        }
-        return values;
+        return map;
     }
 
-    /** {@link #constraintValuesOf} without the per-pass memory — the lookup itself. */
-    private Map<String, Integer> readConstraintValues(String entryId) {
-        Map<String, Integer> values = new HashMap<String, Integer>();
-        try {
-            Object entry = findEntryById(entryId);
-            if (entry == null) {
-                return values;
-            }
-            for (Object constraint : toJavaList(callListGetter(entry, "getConstraints"))) {
-                String id = callGetter(constraint, "getId");
-                if (id != null) {
-                    values.put(id, (int) parseDouble(callGetter(constraint, "getValue")));
+    /**
+     * The loaded source catalogues. Found by the object-graph scan rather than a named getter: the
+     * engine's {@code q()} is overridden on the engine class to return validation errors, so a
+     * reflective {@code q()} is ambiguous; {@link #collectInstances} reaches every {@code Catalogue}
+     * referenced from the engine/roster and is cached per pass.
+     */
+    private List<Object> sourceCatalogues() {
+        Class<?> catalogueClass = findClass("net.battlescribe.model.data.Catalogue");
+        return catalogueClass == null ? Collections.<Object>emptyList() : collectInstances(catalogueClass);
+    }
+
+    /**
+     * Walks a game system / catalogue / entry / group / link / force-entry, recording every
+     * constraint id against the SOURCE container that declares it. Recurses the same containers the
+     * in-process walker does (docs/entry-id-construction.md shapes).
+     */
+    private void indexSourceConstraints(Object container, Map<String, Set<String>> map) {
+        if (container == null) {
+            return;
+        }
+        String declarerId = callGetter(container, "getId");
+        for (Object constraint : toJavaList(callListGetter(container, "getConstraints"))) {
+            String id = callGetter(constraint, "getId");
+            if (id != null && declarerId != null) {
+                Set<String> declarers = map.get(id);
+                if (declarers == null) {
+                    declarers = new java.util.HashSet<String>();
+                    map.put(id, declarers);
                 }
+                declarers.add(declarerId);
             }
-        } catch (Exception e) {
-            // A lookup failure just means no tiebreak is available.
         }
-        return values;
-    }
-
-    private boolean containsIgnoreCase(String message, String candidate) {
-        if (message == null || candidate == null || candidate.isEmpty()) {
-            return false;
-        }
-        return message.toLowerCase(Locale.ROOT).contains(candidate.toLowerCase(Locale.ROOT));
-    }
-
-    private String getEntryName(String entryId) {
-        try {
-            Object entry = findEntryById(entryId);
-            return entry != null ? callGetter(entry, "getName") : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String getCostTypeName(String costTypeId) {
-        try {
-            Object costType = findCostTypeById(costTypeId);
-            return costType != null ? callGetter(costType, "getName") : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractCostTypeIdFromMessage(String lowerMessage) {
-        // Search gameSystem costTypes for one whose name appears in the message
-        try {
-            Object gs = getCurrentGameSystem();
-            if (gs == null) return null;
-            Object costTypes = callListGetter(gs, "getCostTypes");
-            if (costTypes == null) return null;
-            for (Object ct : toJavaList(costTypes)) {
-                String id = callGetter(ct, "getId");
-                String name = callGetter(ct, "getName");
-                if (name != null && lowerMessage.contains(name.toLowerCase(Locale.ROOT))) {
-                    return id;
-                }
+        for (String getter : SOURCE_CHILD_GETTERS) {
+            for (Object child : toJavaList(callListGetter(container, getter))) {
+                indexSourceConstraints(child, map);
             }
-        } catch (Exception e) {
-            // ignore
         }
-        return null;
     }
+
+    private static final String[] SOURCE_CHILD_GETTERS = {
+        "getSelectionEntries", "getSharedSelectionEntries",
+        "getSelectionEntryGroups", "getSharedSelectionEntryGroups",
+        "getEntryLinks", "getForceEntries", "getCategoryEntries",
+    };
 
     private void collectForceValidationErrors(Object force, JsonArray errors) throws Exception {
         collectValidationErrors(force, "force", errors);
@@ -1765,65 +1367,154 @@ public class EngineAccessor {
     private void collectValidationErrors(Object element, String ownerType, JsonArray errors)
             throws Exception {
         Object elementErrors = callListGetter(element, "getValidationErrors");
-        Object errorIds = callListGetter(element, "getValidationErrorIds");
-        List<String> errorIdList = extractStrings(errorIds);
-        Map<String, List<String>> errorIdMap = parseValidationErrorIds(errorIdList);
+        String ownerId = callGetter(element, "getId");
+        // Shipped RAW, link route and all. Reducing a link-composite owner to the target entry a
+        // spec names is BattleScribeErrorPlacement.ReduceToTargetEntry's job on the .NET side --
+        // the ONE rule both BattleScribe lanes share (#400) -- not a second implementation here.
         String ownerEntryId = callGetter(element, "getEntryId");
-        if (VALIDATION_TRACE) {
-            System.err.println("[agent] validation trace: element ownerType=" + ownerType
-                    + " ownerEntryId=" + ownerEntryId
-                    + " errorIds=" + errorIdList
-                    + " errorCount=" + toJavaList(elementErrors).size());
-        }
+        List<Object> costLimits = "roster".equals(ownerType)
+                ? toJavaList(callListGetter(element, "getCostLimits"))
+                : null;
+
         for (Object error : toJavaList(elementErrors)) {
             String message = extractValidationMessage(error);
-            ValidationRef validationRef = resolveValidationRef(errorIdMap, ownerType, message, ownerEntryId);
+            String rawId = readErrorId(error);
+
             JsonObject item = new JsonObject();
             item.addProperty("message", message);
             item.addProperty("ownerType", ownerType);
-            item.addProperty("ownerId", callGetter(element, "getId"));
+            if (ownerId != null) {
+                item.addProperty("ownerId", ownerId);
+            }
             if (ownerEntryId != null) {
-                item.addProperty("ownerEntryId", linkTargetOf(ownerEntryId));
+                item.addProperty("ownerEntryId", ownerEntryId);
             }
-            if (validationRef.entryId != null && validationRef.constraintId != null) {
-                // A composite entryId names the ROUTE to the entry; the constraint belongs to one
-                // element on that route, and which one is what distinguishes a per-link limit from
-                // a shared one.
-                item.addProperty(
-                        "entryId",
-                        declaringEntryOf(validationRef.entryId, validationRef.constraintId));
-            } else if (validationRef.entryId != null) {
-                item.addProperty("entryId", validationRef.entryId);
+
+            if (rawId == null) {
+                // The one funneled error the engine builds with no id is the roster cost-limit
+                // overrun (a.f#v(), added directly). Resolve it by cost name -- the one documented
+                // prose path. Anything else without an id is a bug (a missed transform, an engine
+                // change) and is reported loudly rather than guessed at.
+                String[] cl = "roster".equals(ownerType) ? resolveCostLimitByName(message, costLimits) : null;
+                if (cl != null) {
+                    item.addProperty("entryId", cl[0]);
+                    item.addProperty("constraintId", cl[1]);
+                } else {
+                    System.err.println("[bs-ui-agent] validation error on " + ownerType
+                            + " carried no bsspecErrorId and is not the roster cost-limit bypass: \""
+                            + message + "\" -- refusing to guess attribution.");
+                }
+                errors.add(item);
+                continue;
             }
-            if (validationRef.constraintId != null) {
-                item.addProperty("constraintId", validationRef.constraintId);
+
+            String[] parsed = parseOneErrorId(rawId);
+            String entryId = declaringEntryOf(parsed[0], parsed[1]);
+            String constraintId = parsed[1];
+            // The engine writes the same third segment "collective" for a hidden-entry error and a
+            // collective (same-number) error; the id cannot tell them apart. "(hidden)" in the
+            // message means the hidden case, asserted as the reserved pseudo-constraint "hidden".
+            if ("collective".equals(constraintId) && message != null
+                    && message.toLowerCase(Locale.ROOT).contains("(hidden)")) {
+                constraintId = "hidden";
             }
-            if (VALIDATION_TRACE) {
-                Object attached = callGetterObject(error, "a");
-                System.err.println("[agent] validation trace: ownerType=" + ownerType
-                        + " ownerEntryId=" + ownerEntryId
-                        + " ownErrorIds=" + errorIdList
-                        + " attached=" + (attached == null ? null : attached.getClass().getName())
-                        + " resolved=" + validationRef.entryId + "/" + validationRef.constraintId
-                        + " message=" + message);
-            }
-            if (validationRef.entryId == null || validationRef.constraintId == null) {
-                // An unresolved ref is not an absent error: the error IS reported, with its owner
-                // and message intact, and only `from` is missing — so the spec fails saying the
-                // error was "not found in" a list that visibly contains it. Say what could not be
-                // resolved, and from what, or the next reader diagnoses it as a missing error.
-                System.err.println("[agent] validation ref unresolved: ownerType=" + ownerType
-                        + " ownerEntryId=" + ownerEntryId
-                        + " entryId=" + validationRef.entryId
-                        + " constraintId=" + validationRef.constraintId
-                        + " errorIds=" + errorIdList
-                        + " message=" + message);
-            }
-            if (!errorIdList.isEmpty()) {
-                item.add("errorIds", toJsonArray(errorIdList));
+            item.addProperty("entryId", entryId);
+            item.addProperty("constraintId", constraintId);
+
+            String[] meta = constraintMetaOf(entryId, constraintId);
+            if (meta != null) {
+                item.addProperty("constraintType", meta[0]);
+                item.addProperty("constraintField", meta[1]);
             }
             errors.add(item);
         }
+    }
+
+    /**
+     * The constraint id the patched engine hangs on each validation error (bsspecErrorId). Resolves
+     * the field once and fails loudly if it is absent -- an unpatched engine must not silently
+     * degrade to message-text guessing (mirrors the in-process guard).
+     */
+    private String readErrorId(Object error) {
+        if (error == null) {
+            return null;
+        }
+        if (!errorIdFieldResolved) {
+            try {
+                errorIdField = error.getClass().getField("bsspecErrorId");
+            } catch (NoSuchFieldException e) {
+                errorIdField = null;
+            }
+            errorIdFieldResolved = true;
+            if (errorIdField == null) {
+                throw new IllegalStateException(
+                        "BattleScribe engine error type " + error.getClass().getName()
+                        + " has no bsspecErrorId field: the ErrorIdTransformer did not run (see"
+                        + " BsUiAgent.premain / src/bs-engine-patch). Refusing message-text attribution.");
+            }
+        }
+        try {
+            Object v = errorIdField.get(error);
+            return v == null ? null : v.toString();
+        } catch (IllegalAccessException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Splits one {@code ownerId::entryId::constraintId} id into {entryId, constraintId} by the same
+     * rule as {@code BattleScribeErrorIds.ParseOne}: owner dropped, middle segments rejoined as the
+     * (possibly link-composite) entry, last segment the constraint.
+     */
+    private String[] parseOneErrorId(String rawId) {
+        String[] parts = rawId.split("::", -1);
+        if (parts.length < 3) {
+            return new String[] {null, null};
+        }
+        StringBuilder entryId = new StringBuilder(parts[1]);
+        for (int i = 2; i < parts.length - 1; i++) {
+            entryId.append("::").append(parts[i]);
+        }
+        return new String[] {entryId.toString(), parts[parts.length - 1]};
+    }
+
+    /** A constraint's {kind, field} on its declaring entry, or null for a pseudo/unknown id. */
+    private String[] constraintMetaOf(String entryId, String constraintId) {
+        if (entryId == null || constraintId == null) {
+            return null;
+        }
+        try {
+            Object entry = findEntryById(entryId);
+            if (entry == null) {
+                return null;
+            }
+            for (Object constraint : toJavaList(callListGetter(entry, "getConstraints"))) {
+                if (constraintId.equals(callGetter(constraint, "getId"))) {
+                    return new String[] {callGetter(constraint, "getType"), callGetter(constraint, "getField")};
+                }
+            }
+        } catch (Exception e) {
+            // A lookup failure just means placement falls back to leaving the error where it is.
+        }
+        return null;
+    }
+
+    /** The roster cost-limit overrun's {entryId, constraintId}, matched by cost name. */
+    private String[] resolveCostLimitByName(String message, List<Object> costLimits) {
+        if (message == null || costLimits == null) {
+            return null;
+        }
+        for (Object limit : costLimits) {
+            try {
+                String costName = callGetter(limit, "getName");
+                if (costName != null && message.contains(costName)) {
+                    return new String[] {"costLimits", callGetter(limit, "getTypeId")};
+                }
+            } catch (Exception e) {
+                // skip
+            }
+        }
+        return null;
     }
 
     private String extractValidationMessage(Object error) {
@@ -1978,7 +1669,7 @@ public class EngineAccessor {
      * <p><b>Fields are taken in name order</b> because {@link Class#getDeclaredFields()} is
      * explicitly documented as returning them in no particular order. Both walks then answer
      * order-sensitive questions off that enumeration — {@link #findObjectById} returns the first
-     * match it reaches, {@link #matchConstraintOwner} keeps the first kind-match as its fallback —
+     * match it reaches, and {@link #collectInstances} hands callers its finds in discovery order —
      * so leaving the order to the JVM leaves those answers to the JVM too, and a run that picked the
      * right one is no evidence about the next.
      */
@@ -2117,16 +1808,6 @@ public class EngineAccessor {
             }
         }
         return false;
-    }
-
-    private List<String> extractStrings(Object values) {
-        List<String> result = new ArrayList<String>();
-        for (Object value : toJavaList(values)) {
-            if (value != null) {
-                result.add(value.toString());
-            }
-        }
-        return result;
     }
 
     @SuppressWarnings("unchecked")

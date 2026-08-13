@@ -6,9 +6,18 @@ namespace BattleScribeSpec.Roster;
 /// <remarks>
 /// <para>
 /// BattleScribe's Java engine hangs an over-limit violation on the CATEGORY, FORCE or ROSTER node
-/// that noticed it. NewRecruit — and the canonical spec form — attribute it to the selection that
+/// that noticed it, and can hang a violation raised inside a link-reached selection on the PARENT
+/// selection. NewRecruit — and the canonical spec form — attribute it to the selection that
 /// violated the constraint. Min violations are the exception: both engines place those on the
 /// category, so they are left alone.
+/// </para>
+/// <para>
+/// <b>Structural, not textual.</b> This used to read the message ("too many"/"too much" for
+/// over-limit, " forces from " for a force-count) — which mis-scoped the force-count case the engine
+/// renders as " forces of " for a SelectionEntry, and coupled placement to the exact prose. It now
+/// decides from the constraint's captured <see cref="ValidationErrorState.ConstraintType"/> and
+/// <see cref="ValidationErrorState.ConstraintField"/>: a <c>max</c> violation is over-limit, and a
+/// <c>forces</c>-field violation is a count whose subject is the roster/force, not a selection.
 /// </para>
 /// <para>
 /// <b>Why this is shared rather than reimplemented.</b> Both BattleScribe engines read the same
@@ -17,18 +26,13 @@ namespace BattleScribeSpec.Roster;
 /// right <c>from</c> on the wrong <c>on</c> — the two engines disagreeing by accident. One rule in
 /// one place is what makes them agree by construction.
 /// </para>
-/// <para>
-/// <b>This reads English error text</b>, because the placement BattleScribe intends is not exposed
-/// any other way — the model attaches no constraint to a validation error. That is accepted here on
-/// the same grounds the in-process adapter accepted it: the BS engine is EOL at v2.3.21, so its
-/// message strings are fixed.
-/// </para>
 /// </remarks>
 public static class BattleScribeErrorPlacement
 {
     /// <summary>
     /// Rewrites <paramref name="errors"/> in place, moving over-limit and hidden violations off
-    /// their container node and onto the selection responsible.
+    /// their container node and onto the selection responsible, and reducing a link-reached owner to
+    /// the target entry a spec names it by (issue #400).
     /// </summary>
     /// <param name="errors">The collected errors, rewritten in place.</param>
     /// <param name="resolveLinkTarget">
@@ -42,30 +46,48 @@ public static class BattleScribeErrorPlacement
         for (var i = 0; i < errors.Count; i++)
         {
             var e = errors[i];
+
+            // THE owner reduction, for both BattleScribe lanes (#400): an element reached through an
+            // entry link reports its entryId as the composite route (linkId::…::targetId), and specs
+            // address the owner by the target entry. Both engines feed their captured errors through
+            // this method with the RAW owner id — the in-process adapter from the live element, the
+            // UI driver from the agent's payload — so the two lanes agree by construction, not by
+            // keeping two implementations in step. Plain ids pass through unchanged.
+            if (e.OwnerEntryId is not null)
+            {
+                e = e with { OwnerEntryId = BattleScribeErrorIds.ReduceToTargetEntry(e.OwnerEntryId) };
+                errors[i] = e;
+            }
+
             if (e.EntryId is null)
             {
                 continue;
             }
 
+            // The selection a spec attributes the error to is the constraint's own entry, addressed
+            // by target — not the link route taken to reach it (#400). Both lanes apply this one
+            // reduction so they agree on ownerEntryId for link-reached selections.
+            var ownerEntry = BattleScribeErrorIds.ReduceToTargetEntry(e.EntryId);
+
             var moved = e.OwnerType switch
             {
                 // Hidden-entry errors move too: the category is where BattleScribe noticed the
                 // hidden selection, not what was hidden.
-                "category" when e.ConstraintId == "hidden" || IsOverLimit(e.Message)
-                    => e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId },
+                "category" when e.ConstraintId == "hidden" || IsOverLimit(e)
+                    => e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = ownerEntry },
 
-                // A cost-limit violation genuinely belongs to the roster, so `costLimits` stays.
-                // " forces from " is a force-COUNT constraint: its subject is the roster, not a
-                // selection, and moving it would invent an owner that does not exist.
-                "roster" when e.EntryId != "costLimits" && IsOverLimit(e.Message) && !IsForceCount(e.Message)
-                    => e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = e.EntryId },
+                // A cost-limit violation genuinely belongs to the roster, so `costLimits` stays. A
+                // force-COUNT constraint's subject is the roster, not a selection, and moving it
+                // would invent an owner that does not exist.
+                "roster" when e.EntryId != "costLimits" && IsOverLimit(e) && !IsForceCount(e)
+                    => e with { OwnerType = "selection", OwnerId = null, OwnerEntryId = ownerEntry },
 
-                "force" when IsOverLimit(e.Message) && !IsForceCount(e.Message)
+                "force" when IsOverLimit(e) && !IsForceCount(e)
                     => e with
                     {
                         OwnerType = "selection",
                         OwnerId = null,
-                        OwnerEntryId = resolveLinkTarget?.Invoke(e.EntryId) ?? e.EntryId,
+                        OwnerEntryId = resolveLinkTarget?.Invoke(e.EntryId) ?? ownerEntry,
                     },
 
                 _ => e,
@@ -75,9 +97,9 @@ public static class BattleScribeErrorPlacement
         }
     }
 
-    private static bool IsOverLimit(string message)
-        => message.Contains("too many") || message.Contains("too much");
+    // A max violation is the over-limit ("too many"/"too much") case; min stays on its container.
+    private static bool IsOverLimit(ValidationErrorState e) => e.ConstraintType == "max";
 
-    private static bool IsForceCount(string message)
-        => message.Contains(" forces from ");
+    // A forces-field count's subject is the roster/force itself, not a selection.
+    private static bool IsForceCount(ValidationErrorState e) => e.ConstraintField == "forces";
 }

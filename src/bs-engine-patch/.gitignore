@@ -1,0 +1,3 @@
+# Build artifacts (compiled by setup.ps1 via build.ps1; consumed by the PatchBattleScribeEngineJar
+# MSBuild target). Not committed, same as the bs-ui-java-agent jar.
+out/
