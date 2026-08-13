@@ -101,9 +101,17 @@ one kind on one entry are told apart only by the rendered value; and **placement
 
 Placement was three private remap methods on the in-process adapter, moving an over-limit violation
 off the category/force/roster that noticed it and onto the selection responsible. This driver had
-none, so it produced the right `from` on the wrong `on`. They are now `BattleScribeErrorPlacement`
-in TestKit and both engines call it — verdict-neutral for the reference engine, and the two can no
-longer drift.
+none, so it produced the right `from` on the wrong `on`. They were lifted into a shared
+`BattleScribeErrorPlacement` in TestKit that both engines called — verdict-neutral for the reference
+engine, and the two could no longer drift.
+
+**That whole layer is gone as of #426**, and the reason is worth carrying here because this page is
+where the port was argued for. Once `on:` matched the raising node instead of the moved attribution
+(#423/#424), the pass could be measured against what it was standing in for, and it turned out not to
+be a normalization at all: the errors it moved are, item for item, the 24 of 38 assertions where
+BattleScribe and NewRecruit genuinely disagree about which node raised the error. Both lanes now
+report the node BattleScribe named, they agree because both read the same `element.getId()` walk, and
+the disagreement with NewRecruit is recorded by the specs instead of erased before they see it.
 
 > **A correction worth recording.** The error object `net.battlescribe.engine.b.a` is constructed as
 > `(Object, String)` and exposes the object as `a()`. That reads exactly like the source constraint,

@@ -227,14 +227,13 @@ public sealed class ProtocolSchemaTests
             [
                 new ValidationErrorState(
                     "Too few selections",
-                    OwnerType: "selection",
-                    OwnerEntryId: "e1",
                     EntryId: "e1",
                     ConstraintId: "c1",
                     ConstraintType: "min",
                     ConstraintField: "selections",
                     RaisedOnType: "category",
-                    RaisedOnId: "cat-node-1")
+                    RaisedOnId: "cat-node-1",
+                    RaisedOnEntryId: "cat1")
             ],
         }));
 
@@ -243,7 +242,7 @@ public sealed class ProtocolSchemaTests
             Errors =
             [
                 new ValidationErrorState(
-                    "Minimum not met", OwnerType: "force", RaisedOnType: "force", RaisedOnId: "f1")
+                    "Minimum not met", RaisedOnType: "force", RaisedOnId: "f1", RaisedOnEntryId: "fe1")
             ],
         }));
 

@@ -8,44 +8,43 @@ namespace BattleScribeSpec.Roster;
 
 /// <remarks>
 /// <para>
-/// <b>Two attributions, named apart.</b> <see cref="RaisedOnType"/> and <see cref="RaisedOnId"/> are
-/// the RUNTIME NODE the engine raised the error on — the element the error was read off, written
-/// once at capture and never rewritten afterwards. <see cref="OwnerType"/> and
-/// <see cref="OwnerEntryId"/> are the NORMALIZED attribution: where the spec corpus reports the
-/// error, which <c>BattleScribeErrorPlacement</c> may move off the raising node onto the selection
-/// responsible. A collective over-limit violation is raised by a category and attributed to a
-/// selection, so the two disagree by design and neither is a substitute for the other.
+/// <b>One attribution, the engine's own.</b> <see cref="RaisedOnType"/> and <see cref="RaisedOnId"/>
+/// are the RUNTIME NODE the engine raised the error on — the element the error was read off, written
+/// once at capture and never rewritten. <see cref="RaisedOnEntryId"/> is that same node's CATALOGUE
+/// entry id, which is a different fact: three selections of one entry share it, so it names a set
+/// and <see cref="RaisedOnId"/> names a member. It is kept because no other field carries it and it
+/// is what makes a failure line readable — a bare runtime GUID says nothing about what was selected.
 /// </para>
 /// <para>
-/// The distinction used to live in one field: <c>OwnerId</c> held the raising node's id while
-/// <c>OwnerType</c> held the post-placement type, and placement nulled the id whenever it moved an
-/// error rather than let the record name one node by type and a different one by id. Nulling threw
-/// away the only thing that identifies a node — <see cref="OwnerEntryId"/> is a CATALOGUE entry id,
-/// and three selections of one entry share it (issue #421).
+/// The record used to carry a second, NORMALIZED attribution (<c>OwnerType</c>/<c>OwnerEntryId</c>)
+/// that a shared placement pass moved off the raising node onto "the selection responsible". Measured
+/// across the corpus, that pass rewrote BattleScribe's answer into NewRecruit's on 24 of the 38
+/// assertions both lanes evaluate; the divergence it hid is now recorded per engine by the specs
+/// themselves (#426). <c>OwnerType</c> was, on every honest path, the same value as
+/// <see cref="RaisedOnType"/>.
 /// </para>
 /// <para>
-/// <see cref="RaisedOnId"/> is a runtime node id and is never link-reduced: the
-/// <c>ReduceToTargetEntry</c> rule (#400) applies to entry ids, and applying it here would corrupt
-/// an id that has no link-composite form.
+/// <see cref="RaisedOnEntryId"/> is shipped as the engine reports it, link route and all: a node
+/// reached through an entry link reports <c>linkId::…::targetId</c>, and reducing that to the target
+/// was a normalization for a matcher that no longer reads the field.
 /// </para>
 /// <para>
 /// <see cref="ConstraintType"/> ("min"/"max") and <see cref="ConstraintField"/>
-/// ("selections"/"forces"/a cost-type id) are read from the live constraint at capture and let
-/// <c>BattleScribeErrorPlacement</c> decide where an error belongs from structural facts instead of
-/// the message prose. Both are null for the id-less paths (roster cost-limit bypass) and the
-/// reserved pseudo-constraints ("hidden"/"collective").
+/// ("selections"/"forces"/a cost-type id) are read from the live constraint at capture, so a
+/// consumer can tell an over-limit violation from an unmet minimum without parsing message prose.
+/// Both are null for the id-less paths (roster cost-limit bypass) and the reserved pseudo-constraints
+/// ("hidden"/"collective").
 /// </para>
 /// </remarks>
 public record ValidationErrorState(
     string Message,
-    string? OwnerType = null,
-    string? OwnerEntryId = null,
     string? EntryId = null,
     string? ConstraintId = null,
     string? ConstraintType = null,
     string? ConstraintField = null,
     string? RaisedOnType = null,
-    string? RaisedOnId = null);
+    string? RaisedOnId = null,
+    string? RaisedOnEntryId = null);
 
 public record RosterState(
     string Name,

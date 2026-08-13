@@ -68,9 +68,11 @@ NewRecruit materialises with its own errors — appears in no engine's state mod
 matched on kind alone, which measurement says is never ambiguous: across the whole corpus, on both
 lanes, no step has more than one roster-raised or more than one group-raised error.
 
-`ownerType` / `ownerEntryId` are **no longer what `on:` matches**. They remain on the error record as
-the normalized post-placement attribution (a *catalogue entry* id, which several roster nodes share),
-they are printed in failure output, and nothing asserts them.
+The record carries one more field about the same node: `raisedOnEntryId`, the raising node's
+*catalogue entry* id. It is not a weaker `raisedOnId` — it names the entry, which every node built
+from that entry shares, so it can never address one node and `on:` never matches it. It exists
+because a per-run node id is unreadable on its own: it is what makes a failure line say `category
+cat-node-9f3 [cat-troops]` instead of just the id.
 
 ### Where the engines disagree, the spec says so
 
@@ -99,19 +101,19 @@ An `engines:` key replaces the base list wholesale for that engine; other `expec
 inherited. A UI lane inherits its base engine's block unless it declares its own
 (`newrecruit-ui` falls back to `newrecruit`).
 
-### Transitional: the entry-addressed form
+### The entry-addressed form is gone
 
-While the corpus migrates (issue #424), a second token that is **not** a `${{ … }}` expression is
-still read the old way — as a catalogue entry id matched against `ownerType` + `ownerEntryId`:
+A second token that is **not** a `${{ … }}` expression names a catalogue entry, which is the form
+#419 removed. It matches nothing, and the linter rejects the spec before it runs so the failure names
+the mistake rather than reading as a missing error:
 
 ```yaml
-- on: selection se-unit-a       # legacy: the catalogue entry, post-placement attribution
-- on: selection ${{ steps.select-first.selectionId }}   # the node
+- on: selection se-unit-a                              # rejected: an entry names a SET of nodes
+- on: selection ${{ steps.select-first.selectionId }}  # the node
 ```
 
 The discriminator is the presence of `${{`, and it is exact rather than a guess: a node id can only
-ever be written as a step reference, and a catalogue entry id never is. This form is removed when the
-migration finishes; do not write new assertions with it.
+ever be written as a step reference, and a catalogue entry id never is.
 
 ## `from:` (required)
 

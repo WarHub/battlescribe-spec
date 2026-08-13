@@ -38,8 +38,8 @@ The node kind is one of: `roster`, `force`, `category`, `selection`, `group`.
 NewRecruit on the violating selection — so a spec carries a base assertion plus an `engines:` block
 rather than one answer bent to fit both.
 
-**Transitional:** a literal second token (`selection se-unit`) is still read the old way, matching
-`ownerType` + `ownerEntryId`, until #424 finishes migrating the corpus.
+**A literal second token (`selection se-unit`) matches nothing** — it names a catalogue entry, which
+is a SET of nodes. The linter rejects the spec before it runs.
 
 ### `from` field — error source
 
@@ -65,7 +65,7 @@ matching is ambiguous.
 ### Exact match (`errors`)
 
 1. For each expected error, find an actual error where:
-   - `on` matches: raisedOnType and raisedOnId (or ownerType/ownerEntryId on the transitional form)
+   - `on` matches: raisedOnType and raisedOnId
    - `from` matches: entryId and constraintId
    - `messageContains` (if specified) is a substring of actual message
 2. Each actual error can only match one expected error — **consume-once**, and some steps really do

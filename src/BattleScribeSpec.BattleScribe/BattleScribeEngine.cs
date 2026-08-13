@@ -327,11 +327,6 @@ public sealed class BattleScribeEngine : IDisposable
                 CollectSelectionErrors(selection, result);
             }
         }
-        // One placement rule, shared with the UI driver so the two BattleScribe engines cannot
-        // drift apart on where an error belongs -- see BattleScribeErrorPlacement.
-        BattleScribeErrorPlacement.ApplyTo(
-            result,
-            linkId => _linkTargetMap.TryGetValue(linkId, out var targetId) ? targetId : null);
         return result;
     }
 
@@ -377,8 +372,6 @@ public sealed class BattleScribeEngine : IDisposable
                 {
                     result.Add(new ValidationErrorState(
                         message,
-                        OwnerType: "roster",
-                        OwnerEntryId: null,
                         EntryId: clEntry,
                         ConstraintId: clConstraint,
                         RaisedOnType: "roster",
@@ -389,12 +382,12 @@ public sealed class BattleScribeEngine : IDisposable
             }
 
             result.Add(BuildErrorState(
-                rawId, message, ownerType: "roster", raisedOnId: roster.getId(), ownerEntryId: null));
+                rawId, message, raisedOnType: "roster", raisedOnId: roster.getId(), raisedOnEntryId: null));
         }
     }
 
     private void CollectElementErrors(
-        BaseRosterElement element, string ownerType, string? raisedOnId, string? ownerEntryId,
+        BaseRosterElement element, string raisedOnType, string? raisedOnId, string? raisedOnEntryId,
         List<ValidationErrorState> result)
     {
         var errors = element.getValidationErrors();
@@ -417,9 +410,9 @@ public sealed class BattleScribeEngine : IDisposable
             var message = (string?)error.b() ?? "(null error)";
             // Only the roster cost-limit overrun is allowed to be id-less, and that error hangs on
             // the Roster, not on a force/category/selection -- so here a missing id is a bug.
-            var rawId = ReadErrorId(item) ?? throw NoErrorId(ownerType, message);
+            var rawId = ReadErrorId(item) ?? throw NoErrorId(raisedOnType, message);
 
-            result.Add(BuildErrorState(rawId, message, ownerType, raisedOnId, ownerEntryId));
+            result.Add(BuildErrorState(rawId, message, raisedOnType, raisedOnId, raisedOnEntryId));
         }
     }
 
@@ -427,24 +420,21 @@ public sealed class BattleScribeEngine : IDisposable
     /// Turns the engine's captured <c>ownerId::entryId::constraintId</c> (now carried on the error
     /// via the bs-engine-patch field) into a structured error state: entry and constraint split by
     /// the shared rule, the collective/hidden pseudo-constraint disambiguated, and the constraint's
-    /// kind/field attached for placement. No message text is parsed for attribution.
+    /// kind/field attached. No message text is parsed for attribution.
     /// </summary>
     /// <remarks>
-    /// <paramref name="ownerType"/> and <paramref name="raisedOnId"/> both describe the element the
-    /// errors were READ OFF, and are written to both attributions here — but only the raisedOn pair
-    /// stays that way. <c>BattleScribeErrorPlacement</c> may rewrite <c>OwnerType</c> to "selection"
-    /// afterwards; it never touches the raising node.
+    /// All three raisedOn values describe the ONE element the errors were read off: its kind, its
+    /// runtime node id, and its catalogue entry id. Nothing downstream rewrites them.
     /// </remarks>
     private ValidationErrorState BuildErrorState(
-        string rawId, string message, string ownerType, string? raisedOnId, string? ownerEntryId)
+        string rawId, string message, string raisedOnType, string? raisedOnId, string? raisedOnEntryId)
     {
         var (entryId, constraintId) = BattleScribeErrorIds.ParseOne(rawId);
 
         // The `from` entry a spec asserts is the one that DECLARES the constraint -- the link for a
         // link's own constraint, the target for a constraint on the target -- which is not always
-        // the last segment of the composite path (DeclaringEntryOf). The owner id is passed RAW:
-        // reducing a link-composite owner to its target entry is BattleScribeErrorPlacement's one
-        // shared rule (#400), applied identically to both BattleScribe lanes in ApplyTo.
+        // the last segment of the composite path (DeclaringEntryOf). The raising node's own entry id
+        // is a different question and is passed through untouched, link route and all.
         entryId = DeclaringEntryOf(entryId, constraintId);
 
         // The engine writes the SAME third id-segment "collective" for both a hidden-entry error and
@@ -459,14 +449,13 @@ public sealed class BattleScribeEngine : IDisposable
         var (type, field) = ConstraintMetaFor(constraintId);
         return new ValidationErrorState(
             message,
-            OwnerType: ownerType,
-            OwnerEntryId: ownerEntryId,
             EntryId: entryId,
             ConstraintId: constraintId,
             ConstraintType: type,
             ConstraintField: field,
-            RaisedOnType: ownerType,
-            RaisedOnId: raisedOnId);
+            RaisedOnType: raisedOnType,
+            RaisedOnId: raisedOnId,
+            RaisedOnEntryId: raisedOnEntryId);
     }
 
     /// <summary>The roster cost-limit overrun's (entryId, constraintId), matched by cost name.</summary>
@@ -489,8 +478,8 @@ public sealed class BattleScribeEngine : IDisposable
             ? (meta.type, meta.field)
             : (null, null);
 
-    private static InvalidOperationException NoErrorId(string ownerType, string message)
-        => new($"BattleScribe validation error on {ownerType} carried no bsspecErrorId: \"{message}\". " +
+    private static InvalidOperationException NoErrorId(string raisedOnType, string message)
+        => new($"BattleScribe validation error on {raisedOnType} carried no bsspecErrorId: \"{message}\". " +
             "Only the roster cost-limit overrun (a.f#v(), the documented id-less bypass) may lack one. " +
             "The engine-jar patch (src/bs-engine-patch) may not have run, or the engine changed -- " +
             "refusing to guess attribution from the message text.");
@@ -588,8 +577,6 @@ public sealed class BattleScribeEngine : IDisposable
     // Cached reflection handle for the patched engine's bsspecErrorId field (see ReadErrorId).
     private System.Reflection.FieldInfo? _bsspecErrorIdField;
     private bool _bsspecErrorIdFieldResolved;
-    // Entry link target resolution: linkId → targetId
-    private readonly Dictionary<string, string> _linkTargetMap = [];
     // Per-catalogue entry lists for multi-catalogue support
     private readonly List<List<SelectionEntry>> _perCatalogueEntries = [];
     // Maps force object identity to catalogue (avoids positional corruption on removal)
@@ -1539,7 +1526,6 @@ public sealed class BattleScribeEngine : IDisposable
         _groupLookup.Clear();
         _constraintMeta.Clear();
         _constraintDeclarers.Clear();
-        _linkTargetMap.Clear();
 
         foreach (var catSpec in catalogues)
         {
@@ -1666,24 +1652,10 @@ public sealed class BattleScribeEngine : IDisposable
                     IndexEntries(se);
                 }
             }
-
-            // Index entry link targets for owner/link-target resolution. Constraint kinds/fields and
-            // declarers come from IndexConstraintMetaTree below, which walks these same links.
-            if (catSpec.EntryLinks != null)
-            {
-                foreach (var elSpec in catSpec.EntryLinks)
-                {
-                    if (elSpec.TargetId is not null)
-                    {
-                        _linkTargetMap[elSpec.Id] = elSpec.TargetId;
-                    }
-                }
-            }
         }
 
-        // Constraint kind/field by id, from every constraint-bearing container in the setup data.
-        // Placement (BattleScribeErrorPlacement) reads these off the captured error instead of the
-        // message text.
+        // Constraint kind/field by id, from every constraint-bearing container in the setup data, so
+        // a captured error carries the constraint's kind without anyone parsing its message text.
         IndexConstraintMetaTree(gameSystem, catalogues);
 
         // Default active catalogue is the first loaded catalogue.
@@ -2438,7 +2410,6 @@ public sealed class BattleScribeEngine : IDisposable
         _groupLookup.Clear();
         _constraintMeta.Clear();
         _constraintDeclarers.Clear();
-        _linkTargetMap.Clear();
         GC.SuppressFinalize(this);
     }
 

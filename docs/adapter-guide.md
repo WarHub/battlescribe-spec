@@ -149,7 +149,7 @@ Return current validation errors.
 {"type":"getErrors"}
 
 // Output
-{"type":"errors","errors":[{"message":"Min 1 HQ required","ownerType":"category","ownerEntryId":"cat-hq","entryId":"se-unit","constraintId":"con-min-1","raisedOnType":"category","raisedOnId":"cat-hq-node-1"}]}
+{"type":"errors","errors":[{"message":"Min 1 HQ required","entryId":"se-unit","constraintId":"con-min-1","raisedOnType":"category","raisedOnId":"cat-hq-node-1","raisedOnEntryId":"cat-hq"}]}
 ```
 
 ### 6. Handle `teardown` Command

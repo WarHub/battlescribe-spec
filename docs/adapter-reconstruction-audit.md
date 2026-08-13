@@ -93,7 +93,7 @@ the next section). What died, defect by defect:
 | `_linkConstraintLookup` (was `BattleScribeEngine.cs:715`) | constraint values for link-reached entries | stored `cSpec.Value` raw off the spec YAML, which never sees a modifier at all — the same defect in a third shape |
 | `ResolveForceEntryFromMessage` (was `BattleScribeEngine.cs:430`) | force-entry constraint identity | matched on constraint KIND alone — any same-kind sibling answered |
 | `EngineAccessor.matchConstraintOwner` (was `EngineAccessor.java:1428`) | the same tiebreak, desktop lane | deliberate port of `ResolveEntryFromMessage`, defects included — byte-identical failure text was the measured evidence for treating the lanes as one |
-| `BattleScribeErrorPlacement`'s `" forces from "` probe (was `:82`) | which errors are force-count errors | the engine also renders `" forces of "`, which the probe missed; placement now reads `ConstraintType`/`ConstraintField`, captured from the live constraint into `ValidationErrorState` (`src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs`) |
+| `BattleScribeErrorPlacement`'s `" forces from "` probe (was `:82`) | which errors are force-count errors | the engine also renders `" forces of "`, which the probe missed; placement was moved onto `ConstraintType`/`ConstraintField`, captured from the live constraint into `ValidationErrorState` (`src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs`) — and then retired outright by #426, below |
 | `linkTargetOf` + four orphaned helpers (`containsIgnoreCase`, `getEntryName`, `getCostTypeName`, `extractCostTypeIdFromMessage`), agent | the agent's own copy of owner reduction and its message-probing support | two implementations of one reduction is how the lanes drifted (#400); the survivor is below |
 
 The declarations the defects forced are gone with them: `constraint-two-max-one-modified` lost
@@ -106,14 +106,14 @@ pair, kept as a per-engine override.
 This is the list #270 tracks. Each row is a decision, not an oversight; a row with no reason
 would be a bug in this document.
 
-### BattleScribe — identity and placement
+### BattleScribe — identity
+
+(Placement used to be the other half of this heading. It is retired; see the checklist below.)
 
 | site | what it still reconstructs | why it stays |
 |---|---|---|
 | roster cost-limit errors, resolved by cost-type name (`BattleScribeEngine.cs:450` `ResolveRosterCostLimit`; agent mirror `EngineAccessor.java:1510`) | which cost type a roster-level error is about | the engine's `a.f#v()` adds these errors directly to `Roster.getValidationErrors()` — they never pass the funnel, and #416 deliberately patches nothing else, so **no id exists anywhere** for them |
 | `(hidden)` message probe (`BattleScribeEngine.cs:440`; agent mirror `EngineAccessor.java:1418`) | hidden vs collective | the funnel id's third segment is the literal `collective` for BOTH kinds — the pseudo-id distinguishes neither, the prose `(hidden)` suffix still does. Specs assert the two as reserved pseudo-constraints `hidden` / `collective`. See [hidden-validation-analysis.md](hidden-validation-analysis.md), [collective-flag.md](collective-flag.md) |
-| `BattleScribeErrorPlacement.ApplyTo` (`BattleScribeErrorPlacement.cs:42`) | where an error BELONGS (roster/force/category → selection re-homing) | placement is semantics, not identity — the spec model wants errors on the selection the user acts on; the engine hangs them per element. Two callers (`BattleScribeEngine.cs:332`, `BsUiRosterEngine.cs:646`), which is what keeps the lanes from drifting on placement |
-| owner reduction for link-composite ids — `BattleScribeErrorIds.ReduceToTargetEntry` (`BattleScribeErrorIds.cs:179`), `ApplyTo`'s first step (`BattleScribeErrorPlacement.cs:58`) | the owner ENTRY of an error whose owner id is a link-composite | this is #400's fix, and the point is that it exists ONCE: both lanes ship the raw composite `ownerEntryId` and the shared step reduces it, so the lanes agree by construction rather than by keeping two implementations in step |
 | the agent's `declaringEntryOf` first-segment fallback (`EngineAccessor.java:1254`) | which segment of a composite id DECLARES the constraint, when the source-declarer map does not know the constraint | a live `EntryLink` does not surface its own constraints in the source walk, so a link-declared constraint is exactly the one the map cannot know — and its declaring container is the outermost link, the first segment. Correct for every corpus shape today (CI-green on both roster shards). **Caveat, recorded deliberately:** a constraint declared on a MIDDLE link of a multi-link chain would want a middle segment; no such spec exists today, and this row is where that spec's author starts |
 
 The engine-side text-reading that remains is safe for the reason #283 recorded: the pinned
@@ -141,7 +141,6 @@ validation-errors notes.
 | `entryId` back-search (`JsHelpers.cs`, `extractErrors`, `:531`–`:577`) | NR errors carry no `entryId`; the extractor scans four tiers of candidate `source.constraints[]` for the matching constraint id | structural, correct today, and the sole remaining *derivation* of an identity field on the NR side — #283 finding 1, landed here |
 | roster-level non-`max` drop (`JsHelpers.cs:579`–`:590`) | roster-scope errors that are not a `max` cost limit end in an unconditional `return` — an `exactly` cost limit would vanish rather than fail | known hole; wants its own issue the day a spec needs one |
 | cost-limit constraint id (`JsHelpers.cs:587`) | `costLimits`/`e.constraint.field` pseudo-entry convention, mirroring the BattleScribe shape | convention, kept deliberately so both engines report cost-limit errors in one shape |
-| owner walk on the flat merge (`JsHelpers.cs:657`–`:675`) | errors reached only through `army.getErrors()` have no owner in hand, so `ownerType`/`ownerEntryId` are rebuilt by walking `e.parent.parent` upward for the first node with a source id | still a reconstruction, and #422 measured what it stands in for: those errors are raised on a `selectionEntryGroup` node, which the walk replaces with the enclosing selection. The raising node beside it is now read, not rebuilt |
 
 ### Cost value conversions — the `double ↔ decimal` boundary
 
@@ -184,8 +183,17 @@ work. #270 closed against this list.
   #416; read from the funnel-patched `bsspecErrorId`.
 - [x] Placement's force-count prose probe — **deleted** in #416; structural
   `ConstraintType`/`ConstraintField`.
-- [x] Owner reduction duplicated per lane (#400) — **deleted** in #416; one implementation,
-  `ReduceToTargetEntry`, applied in shared placement.
+- [x] Owner reduction duplicated per lane (#400) — **deleted** in #416; collapsed to one
+  implementation, `ReduceToTargetEntry`, applied in shared placement — and then deleted with it.
+- [x] **The placement pass itself** (`BattleScribeErrorPlacement`, both callers, the link-target
+  map the in-process engine built to feed it, and `ReduceToTargetEntry`) — **deleted** in #426.
+  Measurement is what closed it: the errors it re-homed are, item for item, the 24 of 38 assertions
+  where BattleScribe and NewRecruit genuinely name different raising nodes, so it was not a
+  normalization but one engine reconstructed into the other's answer. The corpus records both engines
+  now; see [nr-behavioral-differences.md](nr-behavioral-differences.md).
+- [x] NR's owner walk on the flat `army.getErrors()` merge — **deleted** in #426. It rebuilt an
+  owner by walking `e.parent.parent` up to the enclosing selection, because a `selectionEntryGroup`
+  is not in any state model; the group is now reported as itself.
 
 ### Stays — permanent, because there is nothing to read
 
@@ -195,7 +203,6 @@ not a thing that can happen, and the reason is recorded in the table above.
 - Roster cost-limit errors resolved by cost-type name — no id exists (`a.f#v()` bypass); stays
   until someone patches a second funnel, which the audit does not recommend.
 - `(hidden)` vs collective prose probe — pseudo-id ambiguity is the engine's; stays.
-- `ApplyTo` re-homing — semantics by design; stays, single implementation, two callers.
 
 ### Waiting on a trigger — no work owed until it fires
 

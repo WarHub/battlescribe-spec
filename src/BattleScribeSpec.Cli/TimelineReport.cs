@@ -546,18 +546,18 @@ public sealed class TimelineReport
         builder.AppendLine($"{indent}  <ul class=\"error-list\">");
         foreach (var error in errors)
         {
-            // Two different answers, both worth a reader's time: the owner is where the error is
-            // reported after placement, the raising node is what the engine actually hung it on.
+            // The node the engine raised the error on, plus its catalogue entry — the runtime id
+            // alone is a per-run GUID and tells a reader nothing about what it is.
             var annotations = new List<string>();
-            if (error.OwnerType is { } ownerType)
-            {
-                annotations.Add(ownerType);
-            }
-
             if (error.RaisedOnType is not null || error.RaisedOnId is not null)
             {
                 var node = string.Join(' ', new[] { error.RaisedOnType, error.RaisedOnId }.OfType<string>());
                 annotations.Add($"raised on {node}");
+            }
+
+            if (error.RaisedOnEntryId is { } raisedOnEntryId)
+            {
+                annotations.Add(raisedOnEntryId);
             }
 
             var detail = annotations.Count == 0

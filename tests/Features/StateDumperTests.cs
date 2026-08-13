@@ -157,43 +157,43 @@ public class StateDumperTests
         var state = MinimalRoster();
         var errors = new List<ValidationErrorState>
         {
-            new("Over pts limit", OwnerType: "roster", EntryId: "costLimits")
+            new("Over pts limit", EntryId: "costLimits", RaisedOnType: "roster")
         };
 
         var output = DumpToString(state, errors);
 
         Assert.Contains("Errors: 1", output);
         Assert.Contains("Over pts limit", output);
-        Assert.Contains("owner=roster", output);
+        Assert.Contains("raisedOnType=roster", output);
         Assert.Contains("entryId=costLimits", output);
     }
 
     /// <summary>
-    /// A moved error is dumped with BOTH attributions, because they are different answers: the
-    /// owner is where the corpus reports the error, the raising node is what the engine hung it on.
-    /// The owner names a catalogue entry that several nodes share; only the raising node is a node.
+    /// The raising node is dumped by BOTH its identities, because they answer different questions:
+    /// the runtime id is which node, and the catalogue entry is what that node is. The id is minted
+    /// per run, so a dump carrying only the id is unreadable; the entry is shared by every node of
+    /// that entry, so a dump carrying only the entry cannot tell three selections apart.
     /// </summary>
     [Fact]
-    public void DumpTree_MovedValidationError_WritesTheRaisingNodeAndTheOwner()
+    public void DumpTree_ValidationError_WritesBothIdentitiesOfTheRaisingNode()
     {
         var state = MinimalRoster();
         var errors = new List<ValidationErrorState>
         {
             new(
                 "Troops has too many selections of Unit A (maximum 1)",
-                OwnerType: "selection",
-                OwnerEntryId: "se-unit-a",
                 EntryId: "se-unit-a",
                 ConstraintId: "con-max-1",
                 RaisedOnType: "category",
-                RaisedOnId: "cat-node-7ff1")
+                RaisedOnId: "cat-node-7ff1",
+                RaisedOnEntryId: "cat-troops")
         };
 
         var output = DumpToString(state, errors);
 
-        Assert.Contains("owner=selection", output);
         Assert.Contains("raisedOnType=category", output);
         Assert.Contains("raisedOnId=cat-node-7ff1", output);
+        Assert.Contains("raisedOnEntryId=cat-troops", output);
     }
 
     [Fact]

@@ -721,14 +721,13 @@
       "additionalProperties": false,
       "properties": {
         "message": { "type": "string" },
-        "ownerType": { "type": "string" },
-        "ownerEntryId": { "type": "string" },
         "entryId": { "type": "string" },
         "constraintId": { "type": "string" },
         "constraintType": { "type": "string" },
         "constraintField": { "type": "string" },
         "raisedOnType": { "type": "string" },
-        "raisedOnId": { "type": "string" }
+        "raisedOnId": { "type": "string" },
+        "raisedOnEntryId": { "type": "string" }
       }
     },
 

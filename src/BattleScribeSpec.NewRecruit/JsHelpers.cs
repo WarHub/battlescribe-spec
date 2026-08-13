@@ -188,8 +188,8 @@ internal static class JsHelpers
                 // Every key the error shape carries, so a diagnostic error and a real one deserialize
                 // through the same DTO — an omitted key is dropped silently on the C# side.
                 const emptyErr = msg => ({
-                    message: msg, ownerType: null, ownerEntryId: null, entryId: null,
-                    constraintId: null, raisedOnType: null, raisedOnId: null
+                    message: msg, entryId: null, constraintId: null,
+                    raisedOnType: null, raisedOnId: null, raisedOnEntryId: null
                 });
                 const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
 
@@ -526,7 +526,7 @@ internal static class JsHelpers
                     const seen = new Set();
                     const result = [];
 
-                    function addError(e, ownerType, ownerNode) {
+                    function addError(e, raisedOnType, ownerNode) {
                         const hash = e.hash || '';
                         if (seen.has(hash) && hash) return;
                         if (hash) seen.add(hash);
@@ -535,12 +535,14 @@ internal static class JsHelpers
                             : (e.msg || e.message || e.text || '');
                         const cleanMsg = msg.replace(/<[^>]*>/g, '');
 
-                        let ownerEntryId = null;
+                        // The CATALOGUE entry of that same node — a different fact from its uid,
+                        // because three selections of one entry share it.
+                        let raisedOnEntryId = null;
                         const raw = ownerNode;
                         if (raw) {
                             const srcId = raw.source?.id;
                             const targetId = raw.source?.targetId;
-                            ownerEntryId = targetId || srcId || raw.getId?.() || null;
+                            raisedOnEntryId = targetId || srcId || raw.getId?.() || null;
                         }
 
                         // The node the error was READ OFF, straight from the node in hand. `uid` is
@@ -606,37 +608,32 @@ internal static class JsHelpers
                         }
 
                         // Roster-level errors: only emit cost limit violations
-                        if (ownerType === 'roster') {
+                        if (raisedOnType === 'roster') {
                             if (e.constraint?.type === 'max' && e.constraint?.field) {
                                 result.push({
                                     message: cleanMsg,
-                                    ownerType: 'roster',
-                                    ownerEntryId: null,
                                     entryId: 'costLimits',
                                     constraintId: e.constraint.field,
                                     raisedOnType: 'roster',
-                                    raisedOnId
+                                    raisedOnId,
+                                    raisedOnEntryId: null
                                 });
                             }
                             return;
                         }
 
-                        if (ownerType === 'selection' && !constraintId) {
+                        if (raisedOnType === 'selection' && !constraintId) {
                             const raw = ownerNode;
                             if (raw?.isHidden?.()) {
-                                entryId = ownerEntryId || null;
+                                entryId = raisedOnEntryId || null;
                                 constraintId = 'hidden';
                             }
                         }
 
                         result.push({
                             message: cleanMsg,
-                            ownerType, ownerEntryId,
                             entryId, constraintId,
-                            // `ownerType` here is still the kind of node the walk read the error
-                            // off; nothing has rewritten it yet. BattleScribeErrorPlacement may move
-                            // the owner pair later and must not touch this one.
-                            raisedOnType: ownerType, raisedOnId
+                            raisedOnType, raisedOnId, raisedOnEntryId
                         });
                     }
 
@@ -670,44 +667,32 @@ internal static class JsHelpers
                             const msg = (e.msg || e.message || '').replace(/<[^>]*>/g, '');
                             const constraintId = e.constraint?.id || null;
 
-                            let ownerType = e.scope || null;
-                            let ownerEntryId = null;
-                            let entryId = null;
-
                             // The raising node, NOT reconstructed: NR hangs its own reference to it
                             // on the error as `parent`. That reference is a bare handle — a uid with
-                            // no methods and no source — so it can say WHICH node but not what kind,
-                            // and the kind is resolved by looking the uid up in the tree. Errors
-                            // that reach this path and nothing else are entry-group constraints, and
-                            // the group is what they are raised on.
+                            // no methods — so it can say WHICH node but not what kind, and the kind
+                            // is resolved by looking the uid up in the tree. Errors that reach this
+                            // path and nothing else are entry-group constraints, and the group is
+                            // what they are raised on.
                             const raisedOnId = e.parent?.uid || null;
                             const raisedOnType = kindOfUid(raisedOnId);
 
-                            // Extract entryId from the error's parent node (the entry owning the constraint)
-                            // and walk up to find the owning selection
-                            if (e.parent) {
-                                const parentSrc = e.parent.source;
-                                entryId = parentSrc?.targetId || parentSrc?.id || null;
-
-                                // Walk up from the constraint's parent to find the owning selection
-                                let walker = e.parent.parent;
-                                while (walker) {
-                                    const wSrc = walker.source;
-                                    const wId = wSrc?.targetId || wSrc?.id;
-                                    if (wId) {
-                                        ownerType = 'selection';
-                                        ownerEntryId = wId;
-                                        break;
-                                    }
-                                    walker = walker.parent;
-                                }
-                            }
+                            // The group's own catalogue entry, and the entry that declares the
+                            // constraint — the same node here, because the group both raises the
+                            // error and owns the constraint.
+                            //
+                            // This used to walk UP from `e.parent` to the enclosing selection and
+                            // report that as the owner, which was the last reconstruction on the
+                            // error record: NewRecruit raises these on a selectionEntryGroup, and no
+                            // engine's state model has such a node, so the walk answered a question
+                            // NR never asked by substituting the nearest node that does exist. The
+                            // group is reported as itself now (#426).
+                            const parentSrc = e.parent?.source;
+                            const entryId = parentSrc?.targetId || parentSrc?.id || null;
 
                             result.push({
                                 message: msg,
-                                ownerType, ownerEntryId,
                                 entryId, constraintId,
-                                raisedOnType, raisedOnId
+                                raisedOnType, raisedOnId, raisedOnEntryId: entryId
                             });
                         }
                     } catch(ex) {}

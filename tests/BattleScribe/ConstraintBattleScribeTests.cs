@@ -188,10 +188,13 @@ public class ConstraintBattleScribeTests
         Assert.Single(errorsAt2);
         Assert.Single(errorsAt3);
 
-        // Verify placement: errors are remapped from category to selection
+        // And the one error is raised on the CATEGORY that counted them, not on any of the three
+        // selections. That is BattleScribe's own answer: a collective over-limit violation is about
+        // a set, and the container is what noticed. A shared pass used to move it onto "the
+        // selection responsible" to match NewRecruit; the corpus records the divergence now (#426).
         foreach (var e in errorsAt3)
         {
-            Assert.Equal("selection", e.OwnerType);
+            Assert.Equal("category", e.RaisedOnType);
         }
     }
 
@@ -222,7 +225,7 @@ public class ConstraintBattleScribeTests
         Assert.NotEmpty(errors);
         foreach (var e in errors)
         {
-            Assert.Equal("roster", e.OwnerType);
+            Assert.Equal("roster", e.RaisedOnType);
             Assert.Equal("fe-patrol", e.EntryId);
             Assert.Equal("con-max-forces", e.ConstraintId);
         }
@@ -313,7 +316,7 @@ public class ConstraintBattleScribeTests
         Assert.NotEmpty(errors);
         foreach (var e in errors)
         {
-            Assert.Equal("roster", e.OwnerType);
+            Assert.Equal("roster", e.RaisedOnType);
             Assert.Equal("se-unit", e.EntryId);
             Assert.Equal("con-force-field", e.ConstraintId);
         }
@@ -359,9 +362,18 @@ public class ConstraintBattleScribeTests
         var errors = engine.GetValidationErrors();
         Assert.Single(errors);
         var e = errors[0];
-        Assert.Equal("selection", e.OwnerType);
-        Assert.Equal("shared-unit", e.OwnerEntryId);
+
+        // `from` is the LINK, because the link is what declares the constraint — that is the claim
+        // this test was written for and it is unchanged.
         Assert.Equal("link-1", e.EntryId);
         Assert.Equal("con-link-max", e.ConstraintId);
+
+        // The raising node is the FORCE the constraint is scoped to, named by the id `addForce`
+        // handed back. It used to be reported as `selection shared-unit`: a shared pass re-homed the
+        // error onto the link's target entry, which is neither the node BattleScribe raised it on
+        // nor a node at all.
+        Assert.Equal("force", e.RaisedOnType);
+        Assert.Equal(fId, e.RaisedOnId);
+        Assert.Equal("fe-1", e.RaisedOnEntryId);
     }
 }

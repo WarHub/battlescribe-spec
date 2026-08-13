@@ -385,12 +385,11 @@ flattens each `outputs` property onto the step's expression namespace — e.g.,
   "validationErrors": [
     {
       "message": "Patrol must have 1 more selections of Unit A (minimum 1)",
-      "ownerType": "category",
-      "ownerEntryId": "cat-troops",
       "entryId": "se-unit-a",
       "constraintId": "con-min-1",
       "raisedOnType": "category",
-      "raisedOnId": "abc-123"
+      "raisedOnId": "abc-123",
+      "raisedOnEntryId": "cat-troops"
     }
   ]
 }
@@ -419,46 +418,53 @@ Each validation error is a structured object with the following fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `message` | string | Human-readable error message (always present) |
-| `ownerType` | string? | Type of roster element the error is ATTRIBUTED to: `"roster"`, `"force"`, `"category"`, `"selection"` |
-| `ownerEntryId` | string? | Catalogue entry ID of the owner (for force/category/selection) |
 | `entryId` | string? | ID of the entry whose constraint was violated, or `"costLimits"` for cost limit errors |
 | `constraintId` | string? | ID of the constraint that failed, the cost type ID for cost limit errors, or `"hidden"` for hidden entry errors |
 | `constraintType` | string? | The constraint's kind: `"min"` or `"max"` |
 | `constraintField` | string? | What the constraint counts: `"selections"`, `"forces"`, or a cost-type ID |
-| `raisedOnType` | string? | Type of the roster element the engine RAISED the error on. NOT limited to `ownerType`'s four values — an engine may raise on a node its state has no place for, and NewRecruit reports `"group"` for a `selectionEntryGroup` constraint |
+| `raisedOnType` | string? | Type of the roster element the engine RAISED the error on: `"roster"`, `"force"`, `"category"`, `"selection"` — and not limited to those, since an engine may raise on a node its state has no place for. NewRecruit reports `"group"` for a `selectionEntryGroup` constraint |
 | `raisedOnId` | string? | Runtime node ID of that element |
+| `raisedOnEntryId` | string? | Catalogue entry ID of that same element (omitted for the roster, which has none) |
 
 Null fields are omitted from the JSON.
 
-#### Two attributions, and why they differ
+#### One attribution: the node the engine raised it on
 
-`ownerType`/`ownerEntryId` say where the error is **reported**; `raisedOnType`/`raisedOnId` say
-which node the engine **raised** it on. They are frequently not the same element. A collective
-over-limit violation is raised by the category, force or roster that noticed the overrun — the
-engine never names one selection as the culprit — while the spec corpus attributes it to the
-selection responsible.
+The three `raisedOn*` fields are three facts about ONE element — the node your engine hung the error
+on. Report what it says, and do not move the error anywhere else.
 
-Only the raisedOn pair identifies a **node**. `ownerEntryId` is a catalogue entry id, and three
-selections of one entry share it. An adapter that can report the runtime node should: it is what a
-failing assertion prints, and what tooling joins errors to parsed roster nodes by. An adapter that
-cannot may omit both — nothing in the assertion contract requires them today.
+That is worth stating because moving it is the obvious temptation. A collective over-limit violation
+is raised by the category, force or roster that noticed the overrun; BattleScribe never names one
+selection as the culprit, while NewRecruit raises the same violation on the violating selection.
+This repo used to normalize BattleScribe into NewRecruit's answer with a shared re-homing pass, and
+then measured what that cost: across the 38 error assertions both engines evaluate, they disagree
+about the raising node on **24**. Those 24 are a real structural difference between two
+applications, and a spec now records it per engine instead of an adapter erasing it. An adapter that
+re-homes an error reports a judgement its engine did not make.
 
-Report the node the engine actually raised on, even when the roster state has no node for it —
+`raisedOnId` and `raisedOnEntryId` are different identities, not a strong and a weak version of one.
+The id names ONE node and is minted per run; the entry id names the catalogue entry, which every
+node built from that entry shares — three selections of `se-unit-a` have one entry id between them.
+Only `raisedOnId` can satisfy an `on:` assertion. `raisedOnEntryId` is what makes a failure readable
+and what tooling groups by, so report it when you have it — and report it as your engine spells it:
+BattleScribe gives a link-reached node its whole route (`link-unit::sse-unit`), and flattening that
+to the target entry is a normalization, not a reading.
+
+Report the node the engine actually raised on even when the roster state has no node for it —
 NewRecruit raises `selectionEntryGroup` constraints on the group, which `getSelections()` flattens
-away. Substituting the nearest node that IS in the state would make the pair a reconstruction of the
-owner attribution rather than an independent answer, which is the whole reason it exists.
+away. Substituting the nearest node that IS in the state is the same reconstruction one level down.
 
 #### Cost limit errors
 
 When a roster exceeds a cost limit, the error uses a special convention:
-- `ownerType` is `"roster"`
+- `raisedOnType` is `"roster"`
 - `entryId` is `"costLimits"` (pseudo-entry)
 - `constraintId` is the cost type ID (e.g., `"ct-pts"`)
 
 ```json
 {
   "message": "Roster is over the pts limit by 50pts",
-  "ownerType": "roster",
+  "raisedOnType": "roster",
   "entryId": "costLimits",
   "constraintId": "ct-pts"
 }
@@ -473,12 +479,11 @@ When a hidden entry is selected, the error uses:
 ```json
 {
   "message": "Patrol cannot have any selections of Unit A (hidden)",
-  "ownerType": "category",
-  "ownerEntryId": "cat-troops",
   "entryId": "se-unit-a",
   "constraintId": "hidden",
   "raisedOnType": "category",
-  "raisedOnId": "abc-123"
+  "raisedOnId": "abc-123",
+  "raisedOnEntryId": "cat-troops"
 }
 ```
 
@@ -490,12 +495,11 @@ When a hidden entry is selected, the error uses:
   "errors": [
     {
       "message": "Patrol must have 1 more selections of Unit A (minimum 1)",
-      "ownerType": "category",
-      "ownerEntryId": "cat-troops",
       "entryId": "se-unit-a",
       "constraintId": "con-min-1",
       "raisedOnType": "category",
-      "raisedOnId": "abc-123"
+      "raisedOnId": "abc-123",
+      "raisedOnEntryId": "cat-troops"
     }
   ]
 }

@@ -1369,19 +1369,20 @@ public class EngineAccessor {
         }
     }
 
-    private void collectValidationErrors(Object element, String ownerType, JsonArray errors)
+    private void collectValidationErrors(Object element, String raisedOnType, JsonArray errors)
             throws Exception {
         Object elementErrors = callListGetter(element, "getValidationErrors");
-        // The RUNTIME NODE the engine raised these errors on. It is reported as raisedOn* rather
-        // than as part of the owner triple because BattleScribeErrorPlacement re-homes an
-        // over-limit violation onto the selection responsible, and the node that noticed it is a
-        // fact about the engine that survives that move (#421).
+        // The RUNTIME NODE the engine raised these errors on, and that node's catalogue entry --
+        // three facts about ONE element, which is why they share a prefix. Nothing downstream
+        // re-homes them: `on:` matches the raising node directly (#423), so this lane and the
+        // in-process adapter agree because both read the same walk, not because a shared pass
+        // rewrote them into agreement afterwards (#426).
         String raisedOnId = callGetter(element, "getId");
-        // Shipped RAW, link route and all. Reducing a link-composite owner to the target entry a
-        // spec names is BattleScribeErrorPlacement.ReduceToTargetEntry's job on the .NET side --
-        // the ONE rule both BattleScribe lanes share (#400) -- not a second implementation here.
-        String ownerEntryId = callGetter(element, "getEntryId");
-        List<Object> costLimits = "roster".equals(ownerType)
+        // Shipped RAW, link route and all: a node reached through an entry link reports its route as
+        // `linkId::...::targetId`, and that IS what the engine says. Reducing it to the target was a
+        // normalization for a matcher that no longer reads this field.
+        String raisedOnEntryId = callGetter(element, "getEntryId");
+        List<Object> costLimits = "roster".equals(raisedOnType)
                 ? toJavaList(callListGetter(element, "getCostLimits"))
                 : null;
 
@@ -1391,13 +1392,12 @@ public class EngineAccessor {
 
             JsonObject item = new JsonObject();
             item.addProperty("message", message);
-            item.addProperty("ownerType", ownerType);
-            item.addProperty("raisedOnType", ownerType);
+            item.addProperty("raisedOnType", raisedOnType);
             if (raisedOnId != null) {
                 item.addProperty("raisedOnId", raisedOnId);
             }
-            if (ownerEntryId != null) {
-                item.addProperty("ownerEntryId", ownerEntryId);
+            if (raisedOnEntryId != null) {
+                item.addProperty("raisedOnEntryId", raisedOnEntryId);
             }
 
             if (rawId == null) {
@@ -1405,12 +1405,12 @@ public class EngineAccessor {
                 // overrun (a.f#v(), added directly). Resolve it by cost name -- the one documented
                 // prose path. Anything else without an id is a bug (a missed transform, an engine
                 // change) and is reported loudly rather than guessed at.
-                String[] cl = "roster".equals(ownerType) ? resolveCostLimitByName(message, costLimits) : null;
+                String[] cl = "roster".equals(raisedOnType) ? resolveCostLimitByName(message, costLimits) : null;
                 if (cl != null) {
                     item.addProperty("entryId", cl[0]);
                     item.addProperty("constraintId", cl[1]);
                 } else {
-                    System.err.println("[bs-ui-agent] validation error on " + ownerType
+                    System.err.println("[bs-ui-agent] validation error on " + raisedOnType
                             + " carried no bsspecErrorId and is not the roster cost-limit bypass: \""
                             + message + "\" -- refusing to guess attribution.");
                 }

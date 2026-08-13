@@ -160,16 +160,4 @@ public sealed class BattleScribeErrorIdsTests
     {
         Assert.Equal((null, null), BattleScribeErrorIds.ParseOne(errorId));
     }
-
-    // ReduceToTargetEntry: the one link-target reduction both lanes apply for owner entries (#400).
-
-    [Theory]
-    [InlineData("link-1::sse-unit", "sse-unit")]
-    [InlineData("a::b::c", "c")]
-    [InlineData("shared-unit", "shared-unit")]
-    [InlineData(null, null)]
-    public void ReduceToTargetEntry_KeepsLastSegment(string? entryId, string? expected)
-    {
-        Assert.Equal(expected, BattleScribeErrorIds.ReduceToTargetEntry(entryId));
-    }
 }

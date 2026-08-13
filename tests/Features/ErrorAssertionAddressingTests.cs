@@ -49,14 +49,18 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         Assert.Contains("sel-node-2", failure, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A collective over-limit violation on BattleScribe is raised by the CATEGORY that counted the
+    /// selections, and NewRecruit raises the same violation on the violating selection. An
+    /// <c>on: selection …</c> therefore does not match BattleScribe's error — it is a per-engine
+    /// divergence the corpus records, which it could only do once nothing normalized it away.
+    /// </summary>
     [Fact]
-    public void On_NamesANodeTheErrorWasNotRaisedOn_FailsEvenWhenTheOwnerAttributionAgrees()
+    public void On_NamesASelection_WhenTheContainerRaisedIt_Fails()
     {
-        // Raised on the category, attributed to the selection — the shape placement produces for
-        // every collective over-limit violation on BattleScribe.
-        var error = Error("category", "cat-node-1") with { OwnerType = "selection", OwnerEntryId = "se-unit-a" };
-
-        var result = Run(errors: [error], on: "selection ${{ steps.select-first.selectionId }}");
+        var result = Run(
+            errors: [Error("category", "cat-node-1")],
+            on: "selection ${{ steps.select-first.selectionId }}");
 
         var failure = Assert.Single(result.Failures);
         output.WriteLine(failure);
@@ -76,11 +80,10 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
     public void OnGroup_IsBare_AndMatchesTheEntryGroupRaisingNode()
     {
         // NewRecruit raises entry-group constraints on a real group node that no engine's state
-        // model carries. `group` is not an owner type on any lane — only a raising-node kind — so
-        // this form can only work against the raising node.
-        var error = Error("group", "nr-group-uid") with { OwnerType = "selection", OwnerEntryId = "se-parent" };
-
-        AssertPassed(Run(errors: [error], on: "group"));
+        // model carries — so this form can only work against the raising node. The adapter used to
+        // report the enclosing SELECTION beside it as the error's owner; that reconstruction is gone
+        // and the group is reported as itself (#426).
+        AssertPassed(Run(errors: [Error("group", "nr-group-uid")], on: "group"));
     }
 
     [Fact]
@@ -155,13 +158,13 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
     /// names the dialect instead of reading as a missing error.
     /// </summary>
     [Fact]
-    public void LiteralSecondToken_MatchesNothing_EvenWhenTheOwnerAttributionAgrees()
+    public void LiteralSecondToken_MatchesNothing_EvenWhenItNamesTheRightEntry()
     {
-        // Placement moved this off its raising node, so the two attributions disagree — the shape
-        // that used to make `on: selection se-unit-a` pass by reading the owner pair.
-        var error = Error("category", "cat-node-1") with { OwnerType = "selection", OwnerEntryId = "se-unit-a" };
-
-        var failure = Assert.Single(Run(errors: [error], on: "selection se-unit-a").Failures);
+        // `se-unit-a` IS this error's entry — and the address still matches nothing, because an
+        // entry names a set of nodes and an address names one.
+        var failure = Assert.Single(Run(
+            errors: [Error("selection", "sel-node-1")],
+            on: "selection se-unit-a").Failures);
         output.WriteLine(failure);
     }
 
@@ -219,12 +222,11 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
 
     private static ValidationErrorState Error(string raisedOnType, string raisedOnId) => new(
         Message: "over the limit",
-        OwnerType: raisedOnType,
-        OwnerEntryId: "se-unit-a",
         EntryId: "se-unit-a",
         ConstraintId: "con-max",
         RaisedOnType: raisedOnType,
-        RaisedOnId: raisedOnId);
+        RaisedOnId: raisedOnId,
+        RaisedOnEntryId: "se-unit-a");
 
     /// <summary>
     /// Runs a two-action, one-assertion spec whose <c>on:</c> is <paramref name="on"/> against an

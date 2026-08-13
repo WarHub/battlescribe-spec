@@ -632,21 +632,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
 
         var json = ExtractJson(result);
-        var errors = JsonSerializer.Deserialize<List<ValidationErrorState>>(json, JsonOptions) ?? [];
 
-        // The agent reports each error on the node BattleScribe hung it on. The spec corpus reports
-        // an over-limit violation on the SELECTION responsible, and the in-process adapter has
-        // always moved it there — so without this the two BattleScribe engines answer the same
-        // question differently, and this one produces the right `from` on the wrong `on`.
-        //
-        // The link-target map matters here for the same reason it does in-process: placement moves
-        // an error onto the selection named by `from`, and `from` is deliberately the DECLARING
-        // element — which for a per-link constraint is the link, not the entry. Without this the
-        // error lands on `selection link-1`, naming the route rather than the thing.
-        BattleScribeErrorPlacement.ApplyTo(
-            errors,
-            linkId => _linkTargetsById.GetValueOrDefault(linkId));
-        return errors;
+        // The agent reports each error on the node BattleScribe hung it on, and that is what arrives
+        // here — no re-homing step in between. The two BattleScribe lanes agree on the raising node
+        // by construction: both read it off the same `element.getId()` walk over the same Java model.
+        return JsonSerializer.Deserialize<List<ValidationErrorState>>(json, JsonOptions) ?? [];
     }
 
     private RosterState EmptyRosterState()

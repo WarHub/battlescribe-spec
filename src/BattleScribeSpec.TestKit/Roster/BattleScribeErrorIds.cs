@@ -167,22 +167,4 @@ public static class BattleScribeErrorIds
         }
         return (string.Join("::", parts, 1, parts.Length - 2), parts[^1]);
     }
-
-    /// <summary>
-    /// Reduces a composite entry id to the entry a spec names it by: its LAST <c>::</c> segment, the
-    /// link's target. A selection reached through an entry link carries its route as
-    /// <c>linkId::…::targetId</c> (docs/entry-id-construction.md), but specs address the error's
-    /// owner by the target entry, not the route taken to it. This is the one rule both BattleScribe
-    /// lanes apply so they agree on <c>ownerEntryId</c> for link-reached selections (issue #400).
-    /// A non-composite id is returned unchanged.
-    /// </summary>
-    public static string? ReduceToTargetEntry(string? entryId)
-    {
-        if (entryId is null || !entryId.Contains("::", StringComparison.Ordinal))
-        {
-            return entryId;
-        }
-        var parts = entryId.Split("::");
-        return parts[^1];
-    }
 }

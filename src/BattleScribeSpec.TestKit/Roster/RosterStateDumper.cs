@@ -103,13 +103,9 @@ public static class StateDumper
             foreach (var err in errors)
             {
                 var parts = new List<string> { err.Message };
-                if (err.OwnerType is { } ot)
-                {
-                    parts.Add($"owner={ot}");
-                }
 
-                // The node the engine raised the error on, which placement may have moved the
-                // attribution off. `owner` above is where the error is reported, not where it arose.
+                // The node the engine raised the error on: its kind, its runtime id — what an `on:`
+                // assertion matches — and its catalogue entry, which says what that node is.
                 if (err.RaisedOnType is { } rt)
                 {
                     parts.Add($"raisedOnType={rt}");
@@ -118,6 +114,11 @@ public static class StateDumper
                 if (err.RaisedOnId is { } rid)
                 {
                     parts.Add($"raisedOnId={rid}");
+                }
+
+                if (err.RaisedOnEntryId is { } reid)
+                {
+                    parts.Add($"raisedOnEntryId={reid}");
                 }
 
                 if (err.EntryId is { } eid)
