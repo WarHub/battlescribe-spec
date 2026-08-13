@@ -24,23 +24,41 @@ public sealed class ActionOutputs
     public string? SelectionId { get; set; }
 
     /// <summary>
-    /// Map of entryId → selectionId for auto-selected child selections.
-    /// Populated when selectEntry/selectChildEntry creates children via defaults.
+    /// Every selection node the step minted, grouped by the catalogue entry each came from and
+    /// listed in roster order. Populated when addForce/selectEntry/selectChildEntry create
+    /// children via defaults.
+    /// <para>
+    /// A list per key, not a node per key (#428). One step routinely mints two selections of one
+    /// entry — a <c>min: 2</c> auto-add is the everyday case — and a
+    /// <c>Dictionary&lt;string, string&gt;</c> silently kept whichever the collector visited last,
+    /// so the other node existed in the roster and could not be named by anything. That is the
+    /// entry-addressed proxy #419 removed from <c>on:</c>, one level down.
+    /// </para>
+    /// <para>
+    /// Order is roster order — the order the engine reports the nodes in — so index 0 is the first
+    /// node of that entry and <c>${{ steps.X.selections.se-a }}</c> means it. See
+    /// <see cref="ExpressionResolver"/> for the <c>[n]</c> sibling syntax.
+    /// </para>
     /// </summary>
     [JsonPropertyName("selections")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Dictionary<string, string>? Selections { get; set; }
+    public Dictionary<string, List<string>>? Selections { get; set; }
 
     /// <summary>
-    /// Map of categoryEntryId → category node id for the categories a force owns
-    /// (returned by addForce, addChildForce, duplicateForce).
+    /// Every category node the created force owns, grouped by the category entry each came from
+    /// and listed in force order (returned by addForce, addChildForce, duplicateForce).
     /// <para>
     /// A map rather than a scalar because nothing creates a category: a force mints all of its own
     /// at once, from its force entry's category links, so there is no action to hang a
     /// <c>categoryId</c> output on. Keyed by catalogue entry id, which is what a spec can write
     /// down — <c>${{ steps.add-patrol.categories.cat-troops }}</c> — where the node id it resolves
-    /// to is minted per run. When one force links the same category entry twice, the first node
-    /// wins the key; the second is unaddressable, and would need a shape this map does not have.
+    /// to is minted per run.
+    /// </para>
+    /// <para>
+    /// A list per key for the same reason <see cref="Selections"/> carries one: a force entry that
+    /// links one category entry twice owns two category nodes, and the old shape kept one of them
+    /// and dropped the other without saying so. Both maps now answer the same question the same
+    /// way, so a spec learns one rule.
     /// </para>
     /// <para>
     /// <c>duplicateForce</c> returns its OWN categories, not the source force's: duplicating a
@@ -50,7 +68,7 @@ public sealed class ActionOutputs
     /// </summary>
     [JsonPropertyName("categories")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Dictionary<string, string>? Categories { get; set; }
+    public Dictionary<string, List<string>>? Categories { get; set; }
 }
 
 /// <summary>

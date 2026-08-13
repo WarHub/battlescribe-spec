@@ -202,15 +202,22 @@ later steps reference that value as `${{ steps.add-patrol.forceId }}` (not
 |-------------|------|-------------|
 | `forceId` | string | `addForce`, `addChildForce`, `duplicateForce` |
 | `selectionId` | string | `selectEntry`, `selectChildEntry`, `duplicateSelection` |
-| `selections` | map(entryId → selectionId) | `addForce`, `addChildForce`, `selectEntry`, `selectChildEntry` — auto-selected child entries |
-| `categories` | map(categoryEntryId → category node id) | `addForce`, `addChildForce`, `duplicateForce` — the categories the created force owns |
+| `selections` | map(entryId → [selection node id, …]) | `addForce`, `addChildForce`, `selectEntry`, `selectChildEntry` — auto-selected child entries |
+| `categories` | map(categoryEntryId → [category node id, …]) | `addForce`, `addChildForce`, `duplicateForce` — the categories the created force owns |
 
 `categories` is a map for the reason `selections` is: nothing creates a category. A force mints
 all of its own at once from its force entry's category links, so there is no action to hang a
 `categoryId` on and nothing to name one by except the catalogue entry it came from. The VALUES are
 runtime node ids — the same ids `categoryState.id` reports — so
 `${{ steps.add-patrol.categories.cat-troops }}` names one specific category node in one specific
-force. When a force links the same category entry twice, the first node wins the key.
+force.
+
+**Each key holds a LIST, in roster order.** One action routinely mints more than one node from one
+entry: `min: 2` auto-adds two selections, and a force entry can link one category entry twice. An
+adapter that reported a single id per key silently dropped the rest, leaving real roster nodes that
+nothing could name — the same entry-addressed-proxy defect `on:` was flipped to remove (#428). A spec
+reads index 0 as `${{ steps.X.selections.se-a }}` and the rest as `${{ steps.X.selections.se-a[1] }}`,
+so an adapter must emit every node it created and must not reorder them.
 
 `duplicateForce` returns the COPY's categories. Duplicating a force mints fresh category nodes, so
 returning the source force's would hand the spec ids for a force the step did not create.
@@ -332,7 +339,7 @@ For `screenshot` and `record` that costs you an artifact and the client moves on
 ### `actionResult`
 
 ```json
-{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","selections":{"se-required":"sel-789"},"categories":{"cat-troops":"cat-node-1"}}}
+{"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","selections":{"se-required":["sel-789","sel-790"]},"categories":{"cat-troops":["cat-node-1"]}}}
 {"type":"actionResult","ok":true,"outputs":{"selectionId":"sel-456"}}
 {"type":"actionResult","ok":true}
 {"type":"actionResult","ok":false,"error":"Force not found with id 'xyz'"}

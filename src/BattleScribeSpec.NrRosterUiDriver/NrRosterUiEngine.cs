@@ -333,7 +333,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // the lane — and not one of those specs declares a `min` constraint, so the early break
         // could never fire. The engine now asks NR which of the three states it is in and stops as
         // soon as the answer is settled. The 8s stays as a CEILING, not a cost.
-        Dictionary<string, string> selections = [];
+        Dictionary<string, List<string>> selections = [];
         if (uid is not null)
         {
             var deadline = DateTime.UtcNow.AddSeconds(8);
@@ -385,7 +385,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// same rule <see cref="GetRosterState"/> follows, and the reason a step output and the state
     /// read after it name the same nodes.
     /// </summary>
-    private async Task<Dictionary<string, string>?> ReadCategoryIdsAsync(string? forceUid)
+    private async Task<Dictionary<string, List<string>>?> ReadCategoryIdsAsync(string? forceUid)
         => forceUid is null
             ? null
             : await NewRecruitStateReader.ReadForceCategoryIdsAsync(Browser.Page, forceUid);
@@ -400,7 +400,11 @@ public sealed class NrRosterUiEngine : IRosterEngine
     {
         var name = ResolveEntryName(entryId);
         var uid = await NrUiActions.SelectEntryByNameAsync(Browser.Page, forceId, entryId, name);
-        return new ActionOutputs { SelectionId = uid };
+        return new ActionOutputs
+        {
+            SelectionId = uid,
+            Selections = await ReadSelectionDescendantIdsAsync(forceId, uid),
+        };
     }
 
     public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
@@ -408,7 +412,6 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> SelectChildEntryAsync(string forceId, string parentSelectionId, string entryId)
     {
-        _ = forceId;
         var name = ResolveEntryName(entryId);
         var uid = await NrUiActions.SelectChildEntryByNameAsync(Browser.Page, parentSelectionId, name, entryId);
         if (uid is not null)
@@ -416,8 +419,23 @@ public sealed class NrRosterUiEngine : IRosterEngine
             _childSelectionParent[uid] = (parentSelectionId, name);
         }
 
-        return new ActionOutputs { SelectionId = uid };
+        return new ActionOutputs
+        {
+            SelectionId = uid,
+            Selections = await ReadSelectionDescendantIdsAsync(forceId, uid),
+        };
     }
+
+    /// <summary>
+    /// The nodes NR auto-added underneath a selection this step just made. A state read, so it goes
+    /// through the shared reader for the same reason <see cref="ReadCategoryIdsAsync"/> does — the
+    /// step output and the state read after it must name nodes from one object graph.
+    /// </summary>
+    private async Task<Dictionary<string, List<string>>?> ReadSelectionDescendantIdsAsync(
+        string forceId, string? selectionUid)
+        => selectionUid is null
+            ? null
+            : await NewRecruitStateReader.ReadSelectionDescendantIdsAsync(Browser.Page, forceId, selectionUid);
 
     /// <summary>
     /// Resolves a spec entry ID (possibly composite e.g. "groupLink::linkId::targetId")

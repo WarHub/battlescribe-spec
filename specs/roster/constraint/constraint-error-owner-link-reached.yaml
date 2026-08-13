@@ -83,14 +83,14 @@ steps:
   # BattleScribe's, and moving BattleScribe's answer onto the child to match
   # NewRecruit would contradict every other group/child spec.
   #
-  # The NewRecruit assertion is the ONE literal in constraint/ still written the
-  # entry-addressed way, and not by choice: the Gear node is auto-added, and
-  # NewRecruitRosterEngine.SelectEntry returns only SelectionId — it never fills
-  # the `selections` map its BattleScribe counterpart does, so
-  # `${{ steps.select-unit.selections.se-gear }}` resolves against an empty map
-  # on that lane ("Available: []"). No step id can name a node the adapter does
-  # not report. Migrating it needs that parity gap closed first (#422's remit),
-  # not a spec change.
+  # Both sides of that divergence are now node ids, so the spec states it as one
+  # fact rather than two spellings: `selectionId` is the Elite Guard this step
+  # created, `selections.se-gear` is the Gear node the engine auto-added inside
+  # it. They are different nodes of the same subtree, and each engine names its
+  # own. Until #428 the NewRecruit side could not be written at all —
+  # NewRecruitRosterEngine.SelectEntry returned only SelectionId and never filled
+  # the `selections` map its BattleScribe counterpart does, so the reference
+  # resolved against an empty map on that lane ("Available: []").
   - expectedState:
       errors:
         - on: selection ${{ steps.select-unit.selectionId }}
@@ -100,5 +100,5 @@ steps:
       engines:
         newrecruit:
           errors:
-            - on: selection se-gear
+            - on: selection ${{ steps.select-unit.selections.se-gear }}
               from: se-gear/con-gear-max

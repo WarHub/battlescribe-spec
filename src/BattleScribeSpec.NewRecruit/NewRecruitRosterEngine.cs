@@ -415,10 +415,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     }
 
     /// <summary>The new force's own category nodes, or null when the action minted no force.</summary>
-    private Dictionary<string, string>? ReadCategoryIds(string? forceId)
+    private Dictionary<string, List<string>>? ReadCategoryIds(string? forceId)
         => forceId is null
             ? null
             : NewRecruitStateReader.ReadForceCategoryIdsAsync(Browser.Page, forceId)
+                .GetAwaiter().GetResult();
+
+    /// <summary>
+    /// The nodes NR auto-added underneath a selection this step just made, so a spec can name them.
+    /// BattleScribe has always reported these (<c>CollectChildSelectionIds</c>); NewRecruit reported
+    /// nothing, so <c>${{ steps.X.selections.se-child }}</c> failed with <c>Available: []</c> on
+    /// this lane alone (#428).
+    /// </summary>
+    private Dictionary<string, List<string>>? ReadSelectionDescendantIds(string forceId, string? selectionId)
+        => selectionId is null
+            ? null
+            : NewRecruitStateReader.ReadSelectionDescendantIdsAsync(Browser.Page, forceId, selectionId)
                 .GetAwaiter().GetResult();
 
     public void RemoveForce(string forceId)
@@ -431,14 +443,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         var selectionId = NewRecruitActions.SelectEntryByIdAsync(Browser.Page, forceId, entryId)
             .GetAwaiter().GetResult();
-        return new ActionOutputs { SelectionId = selectionId };
+        return new ActionOutputs
+        {
+            SelectionId = selectionId,
+            Selections = ReadSelectionDescendantIds(forceId, selectionId),
+        };
     }
 
     public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
     {
         var selectionId = NewRecruitActions.SelectChildEntryByIdAsync(Browser.Page, forceId, parentSelectionId, entryId)
             .GetAwaiter().GetResult();
-        return new ActionOutputs { SelectionId = selectionId };
+        return new ActionOutputs
+        {
+            SelectionId = selectionId,
+            Selections = ReadSelectionDescendantIds(forceId, selectionId),
+        };
     }
 
     public void DeselectSelection(string forceId, string selectionId)

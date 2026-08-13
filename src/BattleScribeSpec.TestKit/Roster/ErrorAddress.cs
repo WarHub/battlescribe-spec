@@ -31,14 +31,19 @@ public readonly record struct ErrorAddress
     public static readonly IReadOnlySet<string> IdLessTypes =
         new HashSet<string>(StringComparer.Ordinal) { "roster", "group" };
 
-    /// <summary>The token that marks an <c>on:</c> value as node-addressed rather than legacy.</summary>
+    /// <summary>
+    /// The token an id-carrying <c>on:</c> must contain. A node id is minted per run, so the only
+    /// way to write one is a step reference; a literal second token names a catalogue entry, which
+    /// is the pre-#423 form and no longer an address at all. <see cref="IsLiteralId"/> is what
+    /// rejects it, in the linter and here, from one definition.
+    /// </summary>
     public const string ExpressionMarker = "${{";
 
-    private ErrorAddress(string type, string? nodeId, string? legacyEntryId, string raw)
+    private ErrorAddress(string type, string? nodeId, bool literalId, string raw)
     {
         Type = type;
         NodeId = nodeId;
-        LegacyEntryId = legacyEntryId;
+        IsLiteralId = literalId;
         Raw = raw;
     }
 
@@ -48,27 +53,17 @@ public readonly record struct ErrorAddress
     /// <summary>The resolved runtime node id, or null for a bare kind-only address.</summary>
     public string? NodeId { get; }
 
-    /// <summary>
-    /// The CATALOGUE entry id of a not-yet-migrated assertion. Non-null only on the transient legacy
-    /// branch — see <see cref="IsLegacyEntryAddressed"/>.
-    /// </summary>
-    public string? LegacyEntryId { get; }
-
     /// <summary>The <c>on:</c> value as the spec wrote it, before resolution.</summary>
     public string Raw { get; }
 
     /// <summary>
-    /// TRANSIENT — true when this <c>on:</c> still names a catalogue entry instead of a node.
-    /// <para>
-    /// The corpus migrates per category in #424, and until it is finished both forms have to be
-    /// accepted at once or no batch is bisectable. The discriminator is the presence of a
-    /// <c>${{</c> in the id token, which is exact rather than heuristic: a node id can only ever be
-    /// written as a step reference, and a catalogue entry id never is. <b>Delete this property, the
-    /// branch in <see cref="Matches"/>, and the branch in <see cref="Parse"/> together when #424
-    /// closes.</b>
-    /// </para>
+    /// True when the second token is a literal rather than a <c>${{ … }}</c> reference — the
+    /// entry-addressed form #419 removed. It is not a node address and cannot become one: a
+    /// catalogue entry id names a SET of nodes, and two selections of one entry are indistinguishable
+    /// by it. <see cref="Matches"/> never matches such an address, and the linter rejects the spec
+    /// before it runs so the failure names the mistake instead of reporting a missing error.
     /// </summary>
-    public bool IsLegacyEntryAddressed => LegacyEntryId is not null;
+    public bool IsLiteralId { get; }
 
     /// <summary>
     /// Parse an <c>on:</c> value. <paramref name="resolve"/> expands a <c>${{ steps.… }}</c>
@@ -82,33 +77,23 @@ public readonly record struct ErrorAddress
         if (spaceIdx < 0)
         {
             // Bare: the kinds with nothing to name. Matches on the raising node's kind.
-            return new ErrorAddress(raw, nodeId: null, legacyEntryId: null, raw);
+            return new ErrorAddress(raw, nodeId: null, literalId: false, raw);
         }
 
         var type = raw[..spaceIdx];
         var id = raw[(spaceIdx + 1)..].Trim();
 
-        // TRANSIENT (#424): no expression means the id is a catalogue entry id, not a node id.
         if (!id.Contains(ExpressionMarker, StringComparison.Ordinal))
         {
-            return new ErrorAddress(type, nodeId: null, legacyEntryId: id, raw);
+            return new ErrorAddress(type, nodeId: null, literalId: true, raw);
         }
 
-        return new ErrorAddress(type, resolve?.Invoke(id) ?? id, legacyEntryId: null, raw);
+        return new ErrorAddress(type, resolve?.Invoke(id) ?? id, literalId: false, raw);
     }
 
     /// <summary>Does <paramref name="error"/> sit on the node this address names?</summary>
     public bool Matches(ValidationErrorState error)
-    {
-        // TRANSIENT (#424): the pre-#423 comparison, unchanged — the normalized post-placement
-        // attribution, by catalogue entry id.
-        if (LegacyEntryId is { } entryId)
-        {
-            return error.OwnerType == Type && error.OwnerEntryId == entryId;
-        }
-
-        return error.RaisedOnType == Type && (NodeId is null || error.RaisedOnId == NodeId);
-    }
+        => !IsLiteralId && error.RaisedOnType == Type && (NodeId is null || error.RaisedOnId == NodeId);
 
     /// <summary>
     /// The address as a failure message shows it: what the spec wrote, plus what it resolved to when

@@ -35,21 +35,42 @@ public static class NewRecruitStateReader
     }
 
     /// <summary>
-    /// Read categoryEntryId → category node id for one force, for the <c>categories</c> step
+    /// Read categoryEntryId → category node ids for one force, for the <c>categories</c> step
     /// output. Shared by both NR lanes: a category id is a state read, and reading it any other way
     /// in the UI driver would risk answering from a different object graph than
     /// <see cref="ReadRosterStateAsync"/> reports.
     /// </summary>
-    public static async Task<Dictionary<string, string>?> ReadForceCategoryIdsAsync(IPage page, string forceUid)
+    public static async Task<Dictionary<string, List<string>>?> ReadForceCategoryIdsAsync(IPage page, string forceUid)
     {
         var json = await page.EvaluateAsync<string?>(
             "(uid) => window.__bsspec_forceCategoryIds(uid)", forceUid);
+        return DeserializeNodeMap(json);
+    }
+
+    /// <summary>
+    /// Read entryId → selection node ids for every auto-selected descendant of one selection, for
+    /// the <c>selections</c> step output of <c>selectEntry</c>/<c>selectChildEntry</c>. The
+    /// BattleScribe adapter has always reported these; NewRecruit reported nothing, so a spec could
+    /// not name a node NR auto-added under the selection it just made (#428).
+    /// </summary>
+    public static async Task<Dictionary<string, List<string>>?> ReadSelectionDescendantIdsAsync(
+        IPage page, string forceUid, string selectionUid)
+    {
+        var json = await page.EvaluateAsync<string?>(
+            "([forceUid, selectionUid]) => window.__bsspec_selectionDescendantIds(forceUid, selectionUid)",
+            new object[] { forceUid, selectionUid });
+        return DeserializeNodeMap(json);
+    }
+
+    /// <summary>A <c>{ entryId: [nodeId, …] }</c> blob from the page, or null when it named nothing.</summary>
+    private static Dictionary<string, List<string>>? DeserializeNodeMap(string? json)
+    {
         if (string.IsNullOrEmpty(json))
         {
             return null;
         }
 
-        var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions);
+        var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json, JsonOptions);
         return map is { Count: > 0 } ? map : null;
     }
 

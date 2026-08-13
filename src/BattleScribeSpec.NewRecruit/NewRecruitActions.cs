@@ -70,9 +70,9 @@ public static class NewRecruitActions
 
     /// <summary>
     /// Collect auto-selected root selections for a force after addForce.
-    /// Returns a map of entryId → selection uid, or null if no selections.
+    /// Returns a map of entryId → selection uids in roster order, or null if no selections.
     /// </summary>
-    public static async Task<Dictionary<string, string>?> GetForceAutoSelectionsAsync(IPage page, string forceUid)
+    public static async Task<Dictionary<string, List<string>>?> GetForceAutoSelectionsAsync(IPage page, string forceUid)
     {
         var json = await page.EvaluateAsync<string?>("""
             (forceUid) => {
@@ -87,7 +87,9 @@ public static class NewRecruitActions
                     for (const s of sels) {
                         const entryId = s.getId();
                         const uid = s.uid;
-                        if (entryId && uid) map[entryId] = uid;
+                        // A list per entry: a min=2 auto-add mints two nodes of one entry, and
+                        // keeping one of them is the defect #428 removes.
+                        if (entryId && uid) (map[entryId] ??= []).push(uid);
                     }
                     return Object.keys(map).length > 0 ? JSON.stringify(map) : null;
                 } catch(e) {
@@ -101,7 +103,7 @@ public static class NewRecruitActions
         }
 
         HandleCreateResult(json);
-        return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+        return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json);
     }
 
     /// <summary>

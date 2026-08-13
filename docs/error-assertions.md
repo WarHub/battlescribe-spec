@@ -43,6 +43,25 @@ A literal id can never be correct and is not read as one.
 | `roster` | `roster` — **bare** | `roster` |
 | `group` | `group` — **bare** | `group` |
 
+### Naming one of several nodes of the same entry
+
+`selections` and `categories` are keyed by **catalogue entry id**, because that is the only name a
+spec can write down. One step routinely mints more than one node from one entry — `min: 2` auto-adds
+two selections, a force entry can link one category entry twice — so each key holds an ordered
+**list**, and a trailing `[n]` picks one:
+
+```yaml
+selectionId: ${{ steps.add-patrol.selections.se-unit-a }}      # the first  Unit A
+selectionId: ${{ steps.add-patrol.selections.se-unit-a[1] }}   # the second
+```
+
+The bare form is index `0` — the first node — so `[0]` and no index are the same address. An index
+past the end fails loudly, naming how many nodes there actually are; it never resolves to nothing.
+
+This is the same defect as the entry-addressed `on:`, one level down: until it was fixed the map held
+one node per entry id, so a step that created two selections of one entry left one of them in the
+roster with nothing able to name it (#428).
+
 `roster` and `group` are written bare because **neither node has an id a spec can name**:
 `RosterState` exposes none on any of the four lanes, and a `selectionEntryGroup` node — which
 NewRecruit materialises with its own errors — appears in no engine's state model at all. Both are
