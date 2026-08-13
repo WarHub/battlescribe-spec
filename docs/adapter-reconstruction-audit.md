@@ -172,23 +172,48 @@ Cross-links #138, #227. Where an adapter sorts, the engine's own order is not wh
 
 ## The #270 checklist
 
+Read the groups, not the boxes. An earlier version of this list was one flat run of checkboxes,
+and it read as half-finished work — an unchecked box for "the engine provides nothing to read
+here" looks identical to an unchecked box for "nobody has done this yet". Only the last group is
+work. #270 closed against this list.
+
+### Retired — the reconstruction this stack deleted
+
 - [x] Constraint/hidden/collective error identity, both BattleScribe lanes — **deleted** in
   #416; read from the funnel-patched `bsspecErrorId`.
 - [x] Placement's force-count prose probe — **deleted** in #416; structural
   `ConstraintType`/`ConstraintField`.
 - [x] Owner reduction duplicated per lane (#400) — **deleted** in #416; one implementation,
   `ReduceToTargetEntry`, applied in shared placement.
-- [ ] Roster cost-limit errors resolved by cost-type name — no id exists (`a.f#v()` bypass);
-  stays until someone patches a second funnel, which the audit does not recommend.
-- [ ] `(hidden)` vs collective prose probe — pseudo-id ambiguity is the engine's; stays.
-- [ ] `ApplyTo` re-homing — semantics by design; stays, single implementation, two callers.
-- [ ] Agent `declaringEntryOf` first-segment fallback — write the middle-link spec if a
-  multi-link chain ever declares a constraint mid-chain; until then, stays with its caveat.
-- [ ] NR `entryId` four-tier back-search — structural; candidate for an upstream field the day
-  NR ships one.
-- [ ] NR roster-level non-`max` drop — file an issue when a spec first needs `exactly` at
-  roster scope.
-- [ ] `double ↔ decimal` casts (15 sites above) — candidate for one conversion helper with a
-  written rounding rule.
-- [ ] Ordering normalization (6 sites above) — candidate for per-engine ordering declared in one
-  place; cross-link #138, #227.
+
+### Stays — permanent, because there is nothing to read
+
+Not debt. Each of these reconstructs something the engine never exposes; "completing" them is
+not a thing that can happen, and the reason is recorded in the table above.
+
+- Roster cost-limit errors resolved by cost-type name — no id exists (`a.f#v()` bypass); stays
+  until someone patches a second funnel, which the audit does not recommend.
+- `(hidden)` vs collective prose probe — pseudo-id ambiguity is the engine's; stays.
+- `ApplyTo` re-homing — semantics by design; stays, single implementation, two callers.
+
+### Waiting on a trigger — no work owed until it fires
+
+Correct as they stand. Each names the event that would make it work.
+
+- Agent `declaringEntryOf` first-segment fallback — write the middle-link spec if a multi-link
+  chain ever declares a constraint mid-chain; until then, stays with its caveat.
+- NR roster-level non-`max` drop — file an issue when a spec first needs `exactly` at roster
+  scope.
+- NR `entryId` four-tier back-search — structural, and derives a field NR does not emit; the fix
+  is upstream, the day NR ships one.
+
+### Enumerated here, owned elsewhere
+
+Listed because #282 asked for *every* reconstruction site, not because #270 owned fixing them.
+Both areas are closed.
+
+- `double ↔ decimal` casts (15 sites above) — out of #270's scope by its own terms; cost
+  conformance is #277 / #286. Still a candidate for one conversion helper with a written
+  rounding rule, if anyone wants it.
+- Ordering normalization (6 sites above) — #138 and #227, both closed as completed. Still a
+  candidate for per-engine ordering declared in one place.
