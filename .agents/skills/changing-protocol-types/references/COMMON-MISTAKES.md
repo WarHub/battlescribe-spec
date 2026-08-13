@@ -78,7 +78,7 @@ YAML spec files use `camelCase` field names.
 `[YamlMember(Alias = "fieldName")]` must match exactly.
 `[JsonPropertyName("fieldName")]` must match the protocol JSON format.
 
-## 8. Record parameter ordering in EngineTypes.cs
+## 8. Record parameter ordering in Roster/RosterTypes.cs
 
 State records use **positional constructor parameters**. New fields must be added
 at the **end** with default values to avoid breaking existing code:

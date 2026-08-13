@@ -150,7 +150,7 @@ id, name, targetId, importRootEntries (bool)
 
 ---
 
-## State Records (EngineTypes.cs)
+## State Records (Roster/RosterTypes.cs)
 
 These are the assertion targets — what you check in `expectedState`.
 

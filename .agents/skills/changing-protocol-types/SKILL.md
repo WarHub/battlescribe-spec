@@ -21,14 +21,18 @@ Every protocol type change must update **all applicable** files:
 | # | File | What it defines | When to update |
 |---|------|----------------|----------------|
 | 1 | `Protocol/ProtocolMessages.cs` | Wire format (JSON) — Protocol* classes | Always |
-| 2 | `EngineTypes.cs` | Runtime state records — *State types | If field appears in roster state |
-| 3 | `SpecFileModels.cs` | YAML assertion models — Expected* types | If specs need to assert on it |
-| 4 | `SpecRunner.cs` | Assertion logic — Assert* methods | If specs need to assert on it |
+| 2 | `Roster/RosterTypes.cs` | Runtime state records — *State types | If field appears in roster state |
+| 3 | `Roster/RosterSpecModels.cs` | YAML assertion models — Expected* types | If specs need to assert on it |
+| 4 | `Roster/RosterRunner.cs` | Assertion logic — Assert* methods | If specs need to assert on it |
 | 5 | `JavaModelFactory.cs` (BattleScribe project) | Java object creation from protocol | If BattleScribe needs to produce it |
 | 6 | `JsonProtocolEngine.cs` | Protocol JSON engine adapter | If adding new commands/responses |
 
 All paths are relative to `src/BattleScribeSpec.TestKit/` except `JavaModelFactory.cs`
 which is in `src/BattleScribeSpec.BattleScribe/`.
+
+Rows 2-4 name the **roster** domain. GameData has the same three files under `GameData/`:
+`GameDataTypes.cs`, `GameDataSpecModels.cs`, `GameDataRunner.cs`. A type used by both domains
+changes in both sets.
 
 ## Step-by-step: Adding a new field
 
@@ -47,7 +51,7 @@ public class ProtocolGameSystem
 }
 ```
 
-**Step 2: EngineTypes.cs — Add to State record (if runtime state)**
+**Step 2: Roster/RosterTypes.cs — Add to State record (if runtime state)**
 
 ```csharp
 public record ForceState(
@@ -57,7 +61,7 @@ public record ForceState(
     string? Author = null);
 ```
 
-**Step 3: SpecFileModels.cs — Add to Expected type (if assertable)**
+**Step 3: Roster/RosterSpecModels.cs — Add to Expected type (if assertable)**
 
 ```csharp
 public sealed class ExpectedForceDef
@@ -69,7 +73,7 @@ public sealed class ExpectedForceDef
 }
 ```
 
-**Step 4: SpecRunner.cs — Add assertion logic**
+**Step 4: Roster/RosterRunner.cs — Add assertion logic**
 
 Add in the relevant Assert* method (e.g., inside the force assertion loop):
 
@@ -106,10 +110,10 @@ Use this checklist for every protocol type change:
 
 - [ ] **ProtocolMessages.cs**: Added/changed field with `[JsonPropertyName]`
 - [ ] **ProtocolMessages.cs**: Used `[JsonIgnore(WhenWritingNull)]` for optional fields
-- [ ] **EngineTypes.cs**: Updated state record (if field is in runtime state)
-- [ ] **SpecFileModels.cs**: Updated Expected* class (if field is assertable)
-- [ ] **SpecFileModels.cs**: Used `[YamlMember(Alias = "...")]` for YAML mapping
-- [ ] **SpecRunner.cs**: Added assertion logic in relevant Assert* method
+- [ ] **Roster/RosterTypes.cs**: Updated state record (if field is in runtime state)
+- [ ] **Roster/RosterSpecModels.cs**: Updated Expected* class (if field is assertable)
+- [ ] **Roster/RosterSpecModels.cs**: Used `[YamlMember(Alias = "...")]` for YAML mapping
+- [ ] **Roster/RosterRunner.cs**: Added assertion logic in relevant Assert* method
 - [ ] **JavaModelFactory.cs**: Updated factory method (if BattleScribe needs it)
 - [ ] **Build passes**: `dotnet build --no-restore`
 - [ ] **Tests pass**: `dotnet test --no-restore`
