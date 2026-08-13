@@ -156,7 +156,12 @@ internal static class JsHelpers
             // --- State reader (used by NewRecruitStateReader.cs) ---
 
             window.__bsspec_readState = function() {
-                const emptyErr = msg => ({ message: msg, ownerType: null, ownerEntryId: null, entryId: null, constraintId: null });
+                // Every key the error shape carries, so a diagnostic error and a real one deserialize
+                // through the same DTO — an omitted key is dropped silently on the C# side.
+                const emptyErr = msg => ({
+                    message: msg, ownerType: null, ownerEntryId: null, entryId: null,
+                    constraintId: null, raisedOnType: null, raisedOnId: null
+                });
                 const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
 
                 const spec = window.__bsspec;
@@ -421,21 +426,72 @@ internal static class JsHelpers
                 }
 
                 function extractErrors(army) {
+                    // uid -> the kind of node the state reader reports it as, filled by the same
+                    // walk that primes the constraint state. It exists so the merge path below can
+                    // say what KIND of node it names: the error's parent handle carries a uid and
+                    // nothing else, and `e.scope` describes what the constraint counts over, not
+                    // what raised it.
+                    const nodeKinds = new Map();
+                    const noteNode = (kind, node) => { if (node?.uid) nodeKinds.set(node.uid, kind); };
+
                     try { army.checkConstraints(); } catch(e) {}
+                    noteNode('roster', army);
                     const forces = army.getForces?.() || [];
                     for (const f of forces) {
                         try { f.checkConstraints?.(); } catch(e) {}
-                        for (const cat of (f.getCategories?.() || []))
+                        noteNode('force', f);
+                        for (const cat of (f.getCategories?.() || [])) {
                             try { cat.checkConstraints?.(); } catch(e) {}
+                            noteNode('category', cat);
+                        }
                         for (const sel of (f.getSelections?.() || [])) {
                             try { sel.checkConstraints?.(); } catch(e) {}
+                            noteNode('selection', sel);
                             (function checkChildSels(parent) {
                                 for (const child of (parent.getSelections?.() || [])) {
                                     try { child.checkConstraints?.(); } catch(e) {}
+                                    noteNode('selection', child);
                                     checkChildSels(child);
                                 }
                             })(sel);
                         }
+                    }
+
+                    // A node the four state-model kinds do not cover. NR raises an entry-group
+                    // constraint on the GROUP node — a real roster node with its own uid and its own
+                    // errors array, which `getSelections()` flattens away and the state model has no
+                    // node for. Naming it is the honest answer; calling it a selection would not be.
+                    // Scanned lazily over the dual tree (instances own `selectors`, selectors own
+                    // `instances`) because only an entry-group error ever reaches it.
+                    let straysScanned = false;
+                    function kindOfNode(n) {
+                        // Asked of the node, in the order that makes each answer exclusive.
+                        try { if (n.isRoster?.() === true) return 'roster'; } catch(e) {}
+                        try { if (n.isForce?.() === true) return 'force'; } catch(e) {}
+                        try { if (n.isCategory?.() === true) return 'category'; } catch(e) {}
+                        try { if (n.isGroup?.() === true) return 'group'; } catch(e) {}
+                        return null;
+                    }
+                    function kindOfUid(uid) {
+                        if (!uid) return null;
+                        if (nodeKinds.has(uid)) return nodeKinds.get(uid);
+                        if (!straysScanned) {
+                            straysScanned = true;
+                            const seenNodes = new Set();
+                            try {
+                                (function deep(n, depth) {
+                                    if (!n || depth > 32 || seenNodes.has(n)) return;
+                                    seenNodes.add(n);
+                                    if (n.uid && !nodeKinds.has(n.uid)) {
+                                        const kind = kindOfNode(n);
+                                        if (kind) nodeKinds.set(n.uid, kind);
+                                    }
+                                    for (const s of (n.selectors || [])) deep(s, depth + 1);
+                                    for (const i of (n.instances || [])) deep(i, depth + 1);
+                                })(army, 0);
+                            } catch(e) {}
+                        }
+                        return nodeKinds.has(uid) ? nodeKinds.get(uid) : null;
                     }
 
                     const seen = new Set();
@@ -457,6 +513,17 @@ internal static class JsHelpers
                             const targetId = raw.source?.targetId;
                             ownerEntryId = targetId || srcId || raw.getId?.() || null;
                         }
+
+                        // The node the error was READ OFF, straight from the node in hand. `uid` is
+                        // NR's node identity and the same value `extractForce`/`extractSelection`/
+                        // `extractCategories` report as the state model's ids; `getId()` is the
+                        // CATALOGUE entry (and on the roster, the literal string "(roster)").
+                        // NR keeps a second route to the same answer — the error's own `parent`
+                        // handle — and the two are measured equal on every walked error that has
+                        // one. The error's `hash` is NOT a third route: its first segment names the
+                        // node the constraint counts over, which is the raising node only when the
+                        // constraint's scope is `self`.
+                        const raisedOnId = ownerNode?.uid || null;
 
                         let constraintId = null;
                         if (e.constraint?.id) constraintId = e.constraint.id;
@@ -517,7 +584,9 @@ internal static class JsHelpers
                                     ownerType: 'roster',
                                     ownerEntryId: null,
                                     entryId: 'costLimits',
-                                    constraintId: e.constraint.field
+                                    constraintId: e.constraint.field,
+                                    raisedOnType: 'roster',
+                                    raisedOnId
                                 });
                             }
                             return;
@@ -534,7 +603,11 @@ internal static class JsHelpers
                         result.push({
                             message: cleanMsg,
                             ownerType, ownerEntryId,
-                            entryId, constraintId
+                            entryId, constraintId,
+                            // `ownerType` here is still the kind of node the walk read the error
+                            // off; nothing has rewritten it yet. BattleScribeErrorPlacement may move
+                            // the owner pair later and must not touch this one.
+                            raisedOnType: ownerType, raisedOnId
                         });
                     }
 
@@ -572,6 +645,15 @@ internal static class JsHelpers
                             let ownerEntryId = null;
                             let entryId = null;
 
+                            // The raising node, NOT reconstructed: NR hangs its own reference to it
+                            // on the error as `parent`. That reference is a bare handle — a uid with
+                            // no methods and no source — so it can say WHICH node but not what kind,
+                            // and the kind is resolved by looking the uid up in the tree. Errors
+                            // that reach this path and nothing else are entry-group constraints, and
+                            // the group is what they are raised on.
+                            const raisedOnId = e.parent?.uid || null;
+                            const raisedOnType = kindOfUid(raisedOnId);
+
                             // Extract entryId from the error's parent node (the entry owning the constraint)
                             // and walk up to find the owning selection
                             if (e.parent) {
@@ -595,7 +677,8 @@ internal static class JsHelpers
                             result.push({
                                 message: msg,
                                 ownerType, ownerEntryId,
-                                entryId, constraintId
+                                entryId, constraintId,
+                                raisedOnType, raisedOnId
                             });
                         }
                     } catch(ex) {}

@@ -127,14 +127,41 @@ Each detected violation is mapped to `ValidationErrorState` with:
 - `OwnerEntryId` — catalogue entry id of the owning roster element
 - `EntryId` — entry that defines the constraint
 - `ConstraintId` — specific constraint ID
+- `RaisedOnType`/`RaisedOnId` — the runtime NODE the error was raised on
 
-**NR does not report the raising node.** `RaisedOnType`/`RaisedOnId` — the runtime
-node the engine raised the error on — are left null by this adapter, so a
-NewRecruit failure shows no `[raised on …]` and cannot distinguish two selections
-of one entry. Both BattleScribe lanes populate them. Issue #422 is the parity
-work. (An earlier version of this file listed an `OwnerId` field here; the
-adapter never populated it, and the field no longer exists — issue #421 replaced
-it with the raisedOn pair.)
+**The raising node is `uid`, and it comes from the node in hand.** The walk
+already holds the node it read the errors off, so `RaisedOnId` is that node's
+`uid` — the same value `extractForce`/`extractSelection`/`extractCategories`
+report as `ForceState.Id`/`SelectionState.Id`/`CategoryState.Id`, and
+`RaisedOnType` is the kind of node the walk was visiting. The roster is a node
+like any other here: `army.uid` is real, while `army.getId()` returns the literal
+string `"(roster)"`.
+
+Two traps, both of which produce a plausible-looking wrong answer:
+
+- **`getId()` is the catalogue entry, not the node** — on a category it returns
+  `cat-troops`, which several nodes share. Only `uid` is node identity.
+- **`error.hash` is not a second name for the raising node.** Its shape is
+  `<uid>::<constraintId>`, but that uid is the node the constraint COUNTS OVER —
+  the one the message names — which is the raising node only when the
+  constraint's scope is `self`. Measured across the roster corpus 2026-08-13: the
+  prefix named a different node on 72 of 142 errors. NR's own second reference,
+  `error.parent`, IS the raising node: a bare handle carrying a `uid` and nothing
+  else, agreeing with the walked node on all 142 and disagreeing on none.
+
+The flat `army.getErrors()` merge has no node in hand and must use that handle.
+Because the handle carries no methods, the KIND is resolved by looking its `uid`
+up in the tree the same walk indexed. Errors that arrive only through the merge
+are entry-group constraints, raised on the group node — which is real in NR
+(`isGroup() === true`, its own `errors` array) but has no counterpart in the state
+model, so those report `RaisedOnType: "group"` and an id no `ForceState`/
+`SelectionState`/`CategoryState` carries. The 17 hidden-entry pseudo-errors are
+the only ones NR gives no `error.parent` at all; they are always found by the walk
+first, which knows the node directly.
+
+(An earlier version of this file listed an `OwnerId` field here; the adapter never
+populated it, and the field no longer exists — issue #421 replaced it with the
+raisedOn pair, and #422 populated it on both NewRecruit lanes.)
 
 ## Publication ID resolution
 

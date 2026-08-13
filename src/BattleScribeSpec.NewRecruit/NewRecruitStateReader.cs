@@ -82,7 +82,9 @@ public static class NewRecruitStateReader
                 OwnerType: e.OwnerType,
                 OwnerEntryId: e.OwnerEntryId,
                 EntryId: e.EntryId,
-                ConstraintId: e.ConstraintId))],
+                ConstraintId: e.ConstraintId,
+                RaisedOnType: e.RaisedOnType,
+                RaisedOnId: e.RaisedOnId))],
             CostLimits: costLimits,
             GameSystemName: snapshot.GameSystemName);
     }
@@ -180,6 +182,18 @@ public static class NewRecruitStateReader
         public string? OwnerEntryId { get; init; }
         public string? EntryId { get; init; }
         public string? ConstraintId { get; init; }
+
+        /// <summary>
+        /// The roster node NR raised the error on — its kind, and its <c>uid</c>. Distinct from
+        /// <see cref="OwnerType"/>/<see cref="OwnerEntryId"/>, which name a CATALOGUE entry and, on
+        /// the entry-group path, a node other than the one that raised it. Like every other field
+        /// here, a name that does not match the JS payload's key is dropped silently with no error;
+        /// <c>NrRaisedOnNodeTests</c> is what notices.
+        /// </summary>
+        public string? RaisedOnType { get; init; }
+
+        /// <inheritdoc cref="RaisedOnType"/>
+        public string? RaisedOnId { get; init; }
     }
 
     internal record NrForceSnapshot

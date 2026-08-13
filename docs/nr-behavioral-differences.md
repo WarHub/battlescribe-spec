@@ -217,6 +217,32 @@ BattleScribe's auto-select only triggers for `field=selections` constraints.
 An entry with `min=1, field=forces` is NOT auto-selected. NR auto-selects
 based on any `min>=1` regardless of field type.
 
+### Which node an error is raised on
+
+Both engines now report a raising node (`raisedOnType`/`raisedOnId`), and they do not always
+choose the same one. This is engine behaviour, not adapter normalization: each answer is read off
+the element the engine itself attached the error to.
+
+| Case | BattleScribe | NewRecruit |
+|------|--------------|------------|
+| A child's over-limit inside a link-reached parent (`constraint/constraint-error-owner-link-reached`) | the counting PARENT selection (`sse-unit`) | the violating CHILD selection (`se-gear`) |
+| A constraint on a `selectionEntryGroup` (`selection/selection-entry-group-constraint`, `selection/collective-group-constraint-per-model`, `selection/selection-entry-group-default-with-max`, both `real-world/wh40k-10e-*`) | the owning selection — BattleScribe materialises no group node | the GROUP node, which no engine's state model represents |
+
+The first is the same divergence the spec's own `engines: newrecruit:` block already pins for
+`on:`, seen one layer down: BattleScribe owns group/child constraints on the element that counts
+the children, NewRecruit on the element that broke the limit. Curiously NewRecruit *does* carry
+BattleScribe's answer, in the error's `hash` prefix — the node it counts over — so the two engines
+disagree about which of two nodes they both know to name.
+
+The second has no BattleScribe counterpart at all. NR's group node is a real roster node
+(`isGroup() === true`, its own `uid`, its own `errors` array), it is what NR raises the group's
+constraint on, and it is the one raising node the state model cannot resolve — `getSelections()`
+flattens groups away, and `SelectionState` records only the group's catalogue `entryGroupId`. Such
+errors report `raisedOnType: "group"` with a uid no `ForceState`/`SelectionState`/`CategoryState`
+carries. They are also the only errors that reach the adapter through the flat `army.getErrors()`
+merge rather than the node walk. The owner attribution is unaffected: it still reconstructs the
+parent selection, which is what the corpus asserts.
+
 ### Selection Number with Min
 | Spec | Issue |
 |------|-------|
@@ -400,12 +426,19 @@ roster node, then reading the node's error arrays. Key findings:
 - `checkConstraints()` must be called explicitly per node
 - Can crash with undefined reference errors — wrapped in try-catch
 - Errors on army node are cost limit violations
-- Error structure: `{message, ownerType, ownerEntryId, entryId, constraintId}` — five of the
-  record's fields; `entryId` is reconstructed by a candidate-constraint back-search (see
+- Error structure: `{message, ownerType, ownerEntryId, entryId, constraintId, raisedOnType,
+  raisedOnId}`; `entryId` is reconstructed by a candidate-constraint back-search (see
   [adapter-reconstruction-audit.md](adapter-reconstruction-audit.md))
-- **Not reported: the raising node.** `raisedOnType`/`raisedOnId` name the runtime node the
-  engine raised the error on. Both BattleScribe lanes populate them; NR leaves them null, so a
-  NewRecruit failure names only a catalogue entry, which several roster nodes can share (#422)
+- **The raising node is reported, and it is `uid`.** `raisedOnType`/`raisedOnId` name the runtime
+  node the error was raised on, read off the node the walk was visiting — the same value the state
+  model reports as `ForceState.Id`/`SelectionState.Id`/`CategoryState.Id`. The roster included:
+  `army.uid` is real, while `army.getId()` returns the literal `"(roster)"` (#422)
+- **`error.hash` is not a second name for the raising node.** It is `<uid>::<constraintId>`, but
+  that uid is the node the constraint COUNTS OVER — the one the message names — equal to the raising
+  node only when the constraint's scope is `self`. Measured over the roster corpus 2026-08-13: the
+  prefix named a different node on 72 of 142 errors. The reference that IS the raising node is
+  `error.parent`, a handle carrying a uid and nothing else; it agreed with the walked node on all
+  142 and disagreed on none
 - ConstraintId format: NR now maps cost limit errors to the `costLimits/`
   pseudo-entry convention (matching BattleScribe's format)
 - Max constraint errors go on the selection (both BS BattleScribe adapter and NR now agree)
