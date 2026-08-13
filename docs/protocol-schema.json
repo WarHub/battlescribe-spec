@@ -680,6 +680,10 @@
       "required": ["name", "primary"],
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Runtime node id of the category. Present for a FORCE's categories, which are roster nodes; a SELECTION's categories are the tags it counts against and may have no node identity (they do not on NewRecruit). Distinct from entryId, which several nodes can share."
+        },
         "name": { "type": "string" },
         "entryId": { "type": "string" },
         "primary": { "type": "boolean" },

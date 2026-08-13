@@ -625,6 +625,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catCustomName = c.getCustomName();
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
+                    Id: string.IsNullOrEmpty(c.getId()) ? null : c.getId(),
                     Name: c.getName() ?? "",
                     EntryId: c.getEntryId(),
                     Primary: c.isPrimary(),
@@ -678,6 +679,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 var catCustomName = c.getCustomName();
                 var catCustomNotes = c.getCustomNotes();
                 return new CategoryState(
+                    Id: string.IsNullOrEmpty(c.getId()) ? null : c.getId(),
                     Name: c.getName() ?? "",
                     EntryId: c.getEntryId(),
                     Primary: c.isPrimary(),

@@ -688,6 +688,11 @@ public class EngineAccessor {
         List<Object> categories = toJavaList(list);
         for (Object category : categories) {
             JsonObject item = new JsonObject();
+            // The category NODE's runtime id. `entryId` below is the CATALOGUE entry id, which two
+            // links to the same category entry share, so it cannot name which node an error was
+            // raised on. Both force categories and selection categories are roster Category
+            // objects here and both answer getId().
+            item.addProperty("id", callGetter(category, "getId"));
             item.addProperty("name", callGetter(category, "getName"));
             item.addProperty("entryId", callGetter(category, "getEntryId"));
             try {

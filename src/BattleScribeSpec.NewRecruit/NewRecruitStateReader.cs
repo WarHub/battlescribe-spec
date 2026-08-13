@@ -86,6 +86,7 @@ public static class NewRecruitStateReader
             Page: f.Page,
             EntryId: f.EntryId,
             Categories: [.. f.Categories.Select(c => new CategoryState(
+                Id: c.Id,
                 Name: c.Name,
                 EntryId: c.EntryId,
                 Primary: c.Primary,
@@ -120,6 +121,9 @@ public static class NewRecruitStateReader
             ))],
             Rules: [.. sel.Rules.Select(r => new RuleState(r.Name, r.Description, r.Hidden, r.Page, r.PublicationId))],
             Categories: [.. sel.Categories.Select(c => new CategoryState(
+                // Null on NR, and correctly so — see NrCategorySnapshot.Id. Read through rather
+                // than hardcoded so the day NR gives these an identity, it arrives.
+                Id: c.Id,
                 Name: c.Name,
                 EntryId: c.EntryId,
                 Primary: c.Primary,
@@ -237,6 +241,14 @@ public static class NewRecruitStateReader
 
     internal record NrCategorySnapshot
     {
+        /// <summary>
+        /// The category NODE's uid — present for a force's categories, absent for a selection's,
+        /// which NR represents as plain tag objects with no node identity. A field missing from
+        /// this DTO is dropped from the payload silently, so this is the only thing standing
+        /// between <c>id</c> being read and <c>id</c> quietly never arriving.
+        /// </summary>
+        public string? Id { get; init; }
+
         public string Name { get; init; } = "";
         public string? EntryId { get; init; }
         public bool Primary { get; init; }

@@ -261,6 +261,12 @@ internal static class JsHelpers
                             publicationId: r.publication?.id || null
                         })),
                         categories: cats.map(cat => ({
+                            // No node id, deliberately. getSelectionCategories() returns plain
+                            // object literals — no prototype, no methods, no uid — because a
+                            // selection's categories are the TAGS it counts against, not nodes in
+                            // the tree. Their `id` key is a catalogue id and is NOT a node
+                            // identity; reading it here would invent one. See CategoryState.
+                            id: cat.uid || null,
                             name: cat.name || cat.getName?.() || '',
                             entryId: cat.entryId || cat.getId?.() || null,
                             primary: cat.primary || false,
@@ -363,6 +369,11 @@ internal static class JsHelpers
                 function extractForceCategories(f) {
                     const cats = f.getCategories?.() || [];
                     return cats.map(c => ({
+                        // `uid` is the NODE identity, and the only one: `id`/`getId()` on a force
+                        // category return the CATALOGUE entry id (cat-troops), `source.id` the
+                        // categoryLink's. NR keys its own validation-error hashes on this uid and
+                        // writes it as the `id` attribute of exported roster XML.
+                        id: c.uid || null,
                         name: c.getName?.() || c.name || '',
                         entryId: c.source?.targetId || c.source?.id || c.getId?.() || null,
                         primary: c.isPrimary?.() === true,

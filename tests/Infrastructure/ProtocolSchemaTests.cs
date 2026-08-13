@@ -213,11 +213,11 @@ public sealed class ProtocolSchemaTests
                                     Characteristics: [new CharacteristicState("WS", "char1", "3+")])
                             ],
                             Rules: [new RuleState("Rule1", "A rule", Hidden: false)],
-                            Categories: [new CategoryState(Name: "HQ", EntryId: "cat1", Primary: true)])
+                            Categories: [new CategoryState(Id: null, Name: "HQ", EntryId: "cat1", Primary: true)])
                     ],
                     Profiles: [new ProfileState("Force Profile", "fpt1", "ForceType", false, [])],
                     Rules: [new RuleState("ForceRule", "desc", false)],
-                    Categories: [new CategoryState(Name: "HQ", EntryId: "cat1", Primary: true)],
+                    Categories: [new CategoryState(Id: "cat-node-1", Name: "HQ", EntryId: "cat1", Primary: true)],
                     Publications: [new PublicationState("pub1", "Core Book")])
             ],
             Costs = [new CostState("Points", "pts", 100m)],
