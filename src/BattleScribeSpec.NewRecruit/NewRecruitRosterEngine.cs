@@ -399,15 +399,27 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             ? NewRecruitActions.GetForceAutoSelectionsAsync(Browser.Page, forceId)
                 .GetAwaiter().GetResult()
             : null;
-        return new ActionOutputs { ForceId = forceId, Selections = selections };
+        return new ActionOutputs
+        {
+            ForceId = forceId,
+            Selections = selections,
+            Categories = ReadCategoryIds(forceId),
+        };
     }
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
     {
         var forceId = NewRecruitActions.AddChildForceByIdAsync(Browser.Page, parentForceId, forceEntryId, catalogueId)
             .GetAwaiter().GetResult();
-        return new ActionOutputs { ForceId = forceId };
+        return new ActionOutputs { ForceId = forceId, Categories = ReadCategoryIds(forceId) };
     }
+
+    /// <summary>The new force's own category nodes, or null when the action minted no force.</summary>
+    private Dictionary<string, string>? ReadCategoryIds(string? forceId)
+        => forceId is null
+            ? null
+            : NewRecruitStateReader.ReadForceCategoryIdsAsync(Browser.Page, forceId)
+                .GetAwaiter().GetResult();
 
     public void RemoveForce(string forceId)
     {
@@ -452,7 +464,9 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     {
         var newForceId = NewRecruitActions.DuplicateForceAsync(Browser.Page, forceId)
             .GetAwaiter().GetResult();
-        return new ActionOutputs { ForceId = newForceId };
+        // The COPY's categories: duplicating a force mints fresh category nodes, so the source
+        // force's ids name nodes the spec did not just create. Measured on NR.
+        return new ActionOutputs { ForceId = newForceId, Categories = ReadCategoryIds(newForceId) };
     }
 
     public void SetCostLimit(string costTypeId, decimal value)

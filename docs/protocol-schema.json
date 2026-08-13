@@ -440,6 +440,11 @@
           "type": "object",
           "additionalProperties": { "type": "string" },
           "description": "Map of entryId → selectionId for auto-selected child selections."
+        },
+        "categories": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of categoryEntryId → category node id for the categories the created force owns. Returned by addForce, addChildForce and duplicateForce; duplicateForce returns the copy's own nodes, which are freshly minted."
         }
       }
     },

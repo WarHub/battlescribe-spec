@@ -102,28 +102,27 @@ internal static class JsHelpers
                 return null;
             };
 
-            // --- State reader (used by NewRecruitStateReader.cs) ---
+            // --- The list under test (used by every read below) ---
 
-            window.__bsspec_readState = function() {
-                const emptyErr = msg => ({ message: msg, ownerType: null, ownerEntryId: null, entryId: null, constraintId: null });
-                const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
-
+            // Prefer NR's LIVE list over the reference captured at creation, when they are the
+            // same list.
+            //
+            // `spec.army` is a snapshot taken once, and NR re-hydrates `currentList.army` —
+            // replacing the object, not mutating it — after a roster is created. Every read then
+            // reported the stale object, which has no selections, so specs failed with
+            // "force[0].selection[0] expected but only 0 selections" while the roster on screen
+            // was perfectly correct. In the NR-UI lane that re-hydration was being outrun by a
+            // 1500ms sleep during roster creation; the staleness itself was always there.
+            //
+            // Gated on the list key matching so this cannot silently retarget: the store-direct
+            // engine can hold lists that are not NR's current one, and "whatever is current" is
+            // not the same claim as "the list under test".
+            //
+            // Every read shares this, so a step output and the state read back after it are two
+            // reads of ONE object graph rather than two answers that usually agree.
+            window.__bsspec_list = function() {
                 const spec = window.__bsspec;
-                if (!spec) return JSON.stringify({...empty, validationErrors: [emptyErr('window.__bsspec not set — was Setup called?')]});
-
-                // Prefer NR's LIVE list over the reference captured at creation, when they are the
-                // same list.
-                //
-                // `spec.army` is a snapshot taken once, and NR re-hydrates `currentList.army` —
-                // replacing the object, not mutating it — after a roster is created. Every read then
-                // reported the stale object, which has no selections, so specs failed with
-                // "force[0].selection[0] expected but only 0 selections" while the roster on screen
-                // was perfectly correct. In the NR-UI lane that re-hydration was being outrun by a
-                // 1500ms sleep during roster creation; the staleness itself was always there.
-                //
-                // Gated on the list key matching so this cannot silently retarget: the store-direct
-                // engine can hold lists that are not NR's current one, and "whatever is current" is
-                // not the same claim as "the list under test".
+                if (!spec) return null;
                 let live = null;
                 try {
                     const pinia = document.querySelector('#__nuxt')
@@ -133,11 +132,41 @@ internal static class JsHelpers
                         && cl.row.list_key === spec.row.list_key;
                     if (sameList) { live = cl; }
                 } catch(e) { /* fall back to the captured reference */ }
+                return { army: live?.army ?? spec.army, book: live?.book ?? spec.book, row: spec.row };
+            };
 
-                const army = live?.army ?? spec.army;
+            // entryId → category NODE id for one force's categories. Backs the `categories` step
+            // output; reads the same nodes the state reader reports, through the same list.
+            window.__bsspec_forceCategoryIds = function(forceUid) {
+                const army = window.__bsspec_list()?.army;
+                if (!army) return '{}';
+                const force = getForceByUid(army, forceUid);
+                if (!force) return '{}';
+                const map = {};
+                for (const c of (force.getCategories?.() || [])) {
+                    // Same accessors the state reader uses: `uid` is the node, `source` the entry.
+                    const entryId = c.source?.targetId || c.source?.id || c.getId?.() || null;
+                    const uid = c.uid || null;
+                    // First node wins — see ActionOutputs.Categories.
+                    if (entryId && uid && !(entryId in map)) map[entryId] = uid;
+                }
+                return JSON.stringify(map);
+            };
+
+            // --- State reader (used by NewRecruitStateReader.cs) ---
+
+            window.__bsspec_readState = function() {
+                const emptyErr = msg => ({ message: msg, ownerType: null, ownerEntryId: null, entryId: null, constraintId: null });
+                const empty = { name: '', gameSystemId: '', forces: [], costs: [], validationErrors: [] };
+
+                const spec = window.__bsspec;
+                if (!spec) return JSON.stringify({...empty, validationErrors: [emptyErr('window.__bsspec not set — was Setup called?')]});
+
+                const list = window.__bsspec_list();
+                const army = list?.army;
                 if (army === null || army === undefined) return JSON.stringify({...empty, validationErrors: [emptyErr('army is null')]});
 
-                const gs = (live?.book ?? spec.book)?.catalogue?.gameSystem;
+                const gs = list.book?.catalogue?.gameSystem;
                 const costTypeHiddenMap = {};
                 if (gs?.costTypes) {
                     for (const ct of gs.costTypes) {

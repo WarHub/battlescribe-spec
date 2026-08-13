@@ -30,6 +30,27 @@ public sealed class ActionOutputs
     [JsonPropertyName("selections")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string>? Selections { get; set; }
+
+    /// <summary>
+    /// Map of categoryEntryId → category node id for the categories a force owns
+    /// (returned by addForce, addChildForce, duplicateForce).
+    /// <para>
+    /// A map rather than a scalar because nothing creates a category: a force mints all of its own
+    /// at once, from its force entry's category links, so there is no action to hang a
+    /// <c>categoryId</c> output on. Keyed by catalogue entry id, which is what a spec can write
+    /// down — <c>${{ steps.add-patrol.categories.cat-troops }}</c> — where the node id it resolves
+    /// to is minted per run. When one force links the same category entry twice, the first node
+    /// wins the key; the second is unaddressable, and would need a shape this map does not have.
+    /// </para>
+    /// <para>
+    /// <c>duplicateForce</c> returns its OWN categories, not the source force's: duplicating a
+    /// force mints fresh category nodes (measured on NewRecruit), so returning the source's would
+    /// hand a spec ids belonging to a force it did not just create.
+    /// </para>
+    /// </summary>
+    [JsonPropertyName("categories")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Categories { get; set; }
 }
 
 /// <summary>

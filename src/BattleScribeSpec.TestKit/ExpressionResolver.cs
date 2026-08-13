@@ -26,7 +26,9 @@ public sealed class ExpressionResolver
     /// Reverse map: minted instance id (a value produced by some step) → the <c>${{ steps.… }}</c>
     /// token that resolves to it. Used to templatize a roster export on snapshot-write, turning the
     /// run's volatile ids back into stable, meaningful step references. Covers <c>forceId</c>,
-    /// <c>selectionId</c>, and each auto-/multi-selection in the step's <c>selections</c> map.
+    /// <c>selectionId</c>, each auto-/multi-selection in the step's <c>selections</c> map, and each
+    /// category node in its <c>categories</c> map — an exported roster writes category node ids as
+    /// <c>&lt;category id="…"&gt;</c>, and without this a snapshot would bake in one run's.
     /// </summary>
     public IReadOnlyDictionary<string, string> BuildIdReverseIndex()
     {
@@ -48,6 +50,16 @@ public sealed class ExpressionResolver
                     if (selId is { Length: > 0 })
                     {
                         map[selId] = $"{ExprStart} steps.{stepId}.selections.{entryId} {ExprEnd}";
+                    }
+                }
+            }
+            if (outputs.Categories is { } cats)
+            {
+                foreach (var (categoryEntryId, catId) in cats)
+                {
+                    if (catId is { Length: > 0 })
+                    {
+                        map[catId] = $"{ExprStart} steps.{stepId}.categories.{categoryEntryId} {ExprEnd}";
                     }
                 }
             }
@@ -225,8 +237,24 @@ public sealed class ExpressionResolver
             return selId;
         }
 
+        // Dotted path into categories map: categories.cat-troops. Keyed by CATEGORY ENTRY id
+        // because a force mints all its categories at once and no action creates one, so there is
+        // nothing to name them by except the entry they came from.
+        if (field.StartsWith("categories.", StringComparison.Ordinal))
+        {
+            var categoryEntryId = field["categories.".Length..];
+            if (outputs.Categories is null || !outputs.Categories.TryGetValue(categoryEntryId, out var catId))
+            {
+                throw new InvalidOperationException(
+                    $"Expression '{rawExpr}': category '{categoryEntryId}' not found in step's categories map. " +
+                    $"Available: [{string.Join(", ", outputs.Categories?.Keys ?? (IEnumerable<string>)[])}].");
+            }
+
+            return catId;
+        }
+
         throw new InvalidOperationException(
             $"Expression '{rawExpr}': unknown field '{field}'. " +
-            $"Supported: forceId, selectionId, selections.<entryId>.");
+            $"Supported: forceId, selectionId, selections.<entryId>, categories.<categoryEntryId>.");
     }
 }

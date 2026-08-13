@@ -49,7 +49,12 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         // Re-read force from roster to capture auto-selected entries (from constraints)
         var rosterForce = FindForceById(force.getId());
         var selections = CollectForceSelectionIds(rosterForce);
-        return new ActionOutputs { ForceId = force.getId(), Selections = selections };
+        return new ActionOutputs
+        {
+            ForceId = force.getId(),
+            Selections = selections,
+            Categories = CollectForceCategoryIds(rosterForce),
+        };
     }
 
     public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
@@ -61,7 +66,11 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var catalogue = Engine.ResolveCatalogue(catalogueId);
 
         var childForce = Engine.CreateChildForce(parentForce, forceEntry, catalogue);
-        return new ActionOutputs { ForceId = childForce.getId() };
+        return new ActionOutputs
+        {
+            ForceId = childForce.getId(),
+            Categories = CollectForceCategoryIds(FindForceById(childForce.getId())),
+        };
     }
 
     public void RemoveForce(string forceId)
@@ -538,6 +547,29 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         foreach (var sel in selections)
         {
             CollectSelectionIdsRecursive(sel, map);
+        }
+
+        return map.Count > 0 ? map : null;
+    }
+
+    /// <summary>
+    /// Collect categoryEntryId → category node id for a force's own categories.
+    /// A force mints these when it is created, so this is what <c>addForce</c> reports.
+    /// </summary>
+    private static Dictionary<string, string>? CollectForceCategoryIds(
+        net.battlescribe.model.roster.Force force)
+    {
+        var map = new Dictionary<string, string>();
+        foreach (var c in JavaListToList<net.battlescribe.model.roster.Category>(force.getCategories()))
+        {
+            var entryId = c.getEntryId();
+            var id = c.getId();
+            if (!string.IsNullOrEmpty(entryId) && !string.IsNullOrEmpty(id))
+            {
+                // First node wins: a force that links one category entry twice has two nodes for
+                // one key, and this map has no way to say which. See ActionOutputs.Categories.
+                map.TryAdd(entryId, id);
+            }
         }
 
         return map.Count > 0 ? map : null;

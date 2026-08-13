@@ -35,6 +35,25 @@ public static class NewRecruitStateReader
     }
 
     /// <summary>
+    /// Read categoryEntryId → category node id for one force, for the <c>categories</c> step
+    /// output. Shared by both NR lanes: a category id is a state read, and reading it any other way
+    /// in the UI driver would risk answering from a different object graph than
+    /// <see cref="ReadRosterStateAsync"/> reports.
+    /// </summary>
+    public static async Task<Dictionary<string, string>?> ReadForceCategoryIdsAsync(IPage page, string forceUid)
+    {
+        var json = await page.EvaluateAsync<string?>(
+            "(uid) => window.__bsspec_forceCategoryIds(uid)", forceUid);
+        if (string.IsNullOrEmpty(json))
+        {
+            return null;
+        }
+
+        var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json, JsonOptions);
+        return map is { Count: > 0 } ? map : null;
+    }
+
+    /// <summary>
     /// Read validation errors from NR's store.
     /// </summary>
     public static async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync(IPage page)
