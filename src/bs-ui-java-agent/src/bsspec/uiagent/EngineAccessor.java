@@ -1669,7 +1669,7 @@ public class EngineAccessor {
      * <p><b>Fields are taken in name order</b> because {@link Class#getDeclaredFields()} is
      * explicitly documented as returning them in no particular order. Both walks then answer
      * order-sensitive questions off that enumeration — {@link #findObjectById} returns the first
-     * match it reaches, {@link #matchConstraintOwner} keeps the first kind-match as its fallback —
+     * match it reaches, and {@link #collectInstances} hands callers its finds in discovery order —
      * so leaving the order to the JVM leaves those answers to the JVM too, and a run that picked the
      * right one is no evidence about the next.
      */
