@@ -36,8 +36,10 @@ steps:
       forces:
         - selectionCount: 0
 
-  # 1 selection — at max=1 limit
+  # 1 selection — at max=1 limit. Named because NewRecruit raises the over-limit
+  # violation on the FIRST of the two Unit A selections; see the last step.
   - action: selectEntry
+    id: select-first
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: se-unit-a
 
@@ -56,7 +58,7 @@ steps:
 
   - expectedState:
       errors:
-        - on: selection se-unit-a
+        - on: selection ${{ steps.select-first.selectionId }}
           from: se-unit-a/con-max-1
       forces:
         - selectionCount: 2

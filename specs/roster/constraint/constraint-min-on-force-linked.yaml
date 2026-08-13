@@ -53,16 +53,27 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     selectionId: ${{ steps.add-patrol.selections.se-unit-a }}
 
+  # BattleScribe raises the force-scoped min on the force that counted, and so
+  # does NewRecruit — but NewRecruit also raises it a second time on the Unit A
+  # that is left, which BattleScribe does not. The override exists for that extra
+  # error, not for a disagreement about the first one.
+  #
+  # That second assertion is entry-addressed, and cannot yet be anything else:
+  # the surviving Unit A is one of two the force auto-added, and
+  # ActionOutputs.Selections holds one node per entry id (last one wins) — the
+  # very id this spec then deselects. So the node that remains is the one no step
+  # output names. Same shape as the caveat on ActionOutputs.Categories: a map
+  # keyed by catalogue entry id cannot address two nodes that share one.
   - expectedState:
       errors:
-        - on: force
+        - on: force ${{ steps.add-patrol.forceId }}
           from: se-unit-a/con-min-force
       forces:
         - selectionCount: 1
       engines:
         newrecruit:
           errors:
-            - on: force fe-patrol
+            - on: force ${{ steps.add-patrol.forceId }}
               from: se-unit-a/con-min-force
             - on: selection se-unit-a
               from: se-unit-a/con-min-force

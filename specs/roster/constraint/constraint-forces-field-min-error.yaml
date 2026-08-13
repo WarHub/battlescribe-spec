@@ -25,7 +25,12 @@ setup:
           type: unit
 
 steps:
+  # Both forces are named. NewRecruit raises the min-forces violation once per
+  # force NODE, so the last step needs to name two of them — and they are the
+  # same force entry, which is exactly what an entry-addressed assertion could
+  # not distinguish.
   - action: addForce
+    id: add-first
     forceEntryId: fe-patrol
 
   # 1 Patrol force added, min 2 required → validation error.
@@ -36,25 +41,33 @@ steps:
           from: fe-patrol/con-min-forces
       forceCount: 1
       engines:
-        # NR places the error on force (not roster) and never resolves it
+        # NR raises it on the force, not the roster, and never resolves it
         newrecruit:
           forceCount: 1
           errors:
-            - on: force fe-patrol
+            - on: force ${{ steps.add-first.forceId }}
               from: fe-patrol/con-min-forces
 
   - action: addForce
+    id: add-second
     forceEntryId: fe-patrol
 
   # 2 Patrol forces, min 2 → constraint satisfied
   - expectedState:
       forceCount: 2
       engines:
-        # NR still reports errors — each force independently reports min-forces violation
+        # NR still reports errors — each force independently reports the
+        # min-forces violation on ITSELF. Both assertions used to read
+        # `on: force fe-patrol`, one catalogue entry id written twice: the pair
+        # asserted "two errors somewhere on some Patrol force", and would have
+        # passed just as happily if NewRecruit had raised both on the first
+        # force. Naming the two nodes is what makes them separate claims, and
+        # measurement backs each: the first error sits on the force add-first
+        # created, the second on add-second's.
         newrecruit:
           forceCount: 2
           errors:
-            - on: force fe-patrol
+            - on: force ${{ steps.add-first.forceId }}
               from: fe-patrol/con-min-forces
-            - on: force fe-patrol
+            - on: force ${{ steps.add-second.forceId }}
               from: fe-patrol/con-min-forces

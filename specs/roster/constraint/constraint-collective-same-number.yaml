@@ -48,16 +48,19 @@ steps:
     selectionId: ${{ steps.select-squad-1.selectionId }}
     entryId: se-weapon
 
-  # The error belongs to the Squad whose Weapon count is uneven; `se-weapon` is
-  # the entry the count is OF, and `collective` is a reserved pseudo-constraint
-  # like `hidden` — the engine raises this bookkeeping error with no authored
-  # constraint behind it, and its identity is read from the captured error id
-  # (third segment "collective"), not the text. NewRecruit has no equivalent
-  # bookkeeping: it raises nothing here, measured 2026-08-13 — declared as an
-  # empty error set rather than left to look like a missed assertion.
+  # The error belongs to the Squad whose Weapon count is uneven — the FIRST one,
+  # the Squad the Weapon was added to, not the second. Both are selections of
+  # se-squad, so the entry-addressed form this used to carry could not say which
+  # and passed on either. `se-weapon` is the entry the count is OF, and
+  # `collective` is a reserved pseudo-constraint like `hidden` — the engine
+  # raises this bookkeeping error with no authored constraint behind it, and its
+  # identity is read from the captured error id (third segment "collective"), not
+  # the text. NewRecruit has no equivalent bookkeeping: it raises nothing here,
+  # measured 2026-08-13 — declared as an empty error set rather than left to look
+  # like a missed assertion.
   - expectedState:
       errors:
-        - on: selection se-squad
+        - on: selection ${{ steps.select-squad-1.selectionId }}
           from: se-weapon/collective
       forces:
         - selectionCount: 2
