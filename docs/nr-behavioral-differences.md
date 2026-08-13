@@ -283,11 +283,46 @@ group's constraint on, and it is the one raising node the state model cannot res
 `ForceState`/`SelectionState`/`CategoryState` carries. They are also the only errors that reach the
 adapter through the flat `army.getErrors()` merge rather than the node walk.
 
-The owner attribution still reconstructs the parent selection, and that reconstruction is exactly
-why the divergence went unrecorded for so long: while `on:` matched `ownerType`/`ownerEntryId`,
-`on: selection se-parent` passed on both lanes and the group node was invisible. Node-addressed
-`on:` splits them, so all three group specs now carry a bare `on: group` under
-`engines: newrecruit:`.
+The adapter used to report the enclosing selection beside the group as the error's *owner*, and that
+reconstruction is exactly why the divergence went unrecorded for so long: while `on:` matched
+`ownerType`/`ownerEntryId`, `on: selection se-parent` passed on both lanes and the group node was
+invisible. Node-addressed `on:` splits them, so all three group specs now carry a bare `on: group`
+under `engines: newrecruit:`, and the walk that manufactured the parent is gone (#426).
+
+#### How the table above used to be hidden — and what removing the normalization measured
+
+Until #426 a shared pass, `BattleScribeErrorPlacement`, ran over both BattleScribe lanes' captured
+errors and moved the first three rows of that table off the node the engine named. Its own
+description of what it did is worth keeping, because it is the clearest statement of the divergence
+anyone wrote:
+
+> BattleScribe's Java engine hangs an over-limit violation on the CATEGORY, FORCE or ROSTER node
+> that noticed it, and can hang a violation raised inside a link-reached selection on the PARENT
+> selection. NewRecruit — and the canonical spec form — attribute it to the selection that violated
+> the constraint. **Min violations are the exception: both engines place those on the category, so
+> they are left alone.**
+
+It decided structurally, not from message prose: a `max` violation was over-limit and got moved; a
+`forces`-field violation was a count whose subject is the roster, so it stayed. Its output was a
+second attribution on the error record (`ownerType`/`ownerEntryId`), and `on:` matched that —
+which is what made the two engines look like they agreed.
+
+The census that retired it (#426, measured 2026-08-13 across 73 assertion literals) is the reason
+the table above exists at all. Of the **38 assertions both lanes evaluate, the engines disagree
+about the raising node on 24 — 63%**:
+
+| BattleScribe raises on | NewRecruit raises on | count | what these are |
+|---|---|---|---|
+| `category` | `selection` | 11 | `max` over-limit and `hidden` violations |
+| `force` | `selection` | 7 | link / shared-scope `max` violations |
+| `roster` | `selection` | 3 | roster-scope `max` violations |
+| `selection` | `group` | 3 | entry-group constraints |
+| agree | | 14 | `min` violations (9, both on the category) and cost limits (5, both on the roster) |
+
+That disagreement set is, item for item, what the pass was written to move — including the
+min-violation exception, which shows up here as agreement. So it was never a normalization of a
+spelling difference: it was one engine's answer reconstructed into the other's, and 24 assertions is
+the size of what that hid. The corpus records both engines now, and the pass is gone.
 
 ### Selection Number with Min
 | Spec | Issue |
@@ -472,8 +507,8 @@ roster node, then reading the node's error arrays. Key findings:
 - `checkConstraints()` must be called explicitly per node
 - Can crash with undefined reference errors — wrapped in try-catch
 - Errors on army node are cost limit violations
-- Error structure: `{message, ownerType, ownerEntryId, entryId, constraintId, raisedOnType,
-  raisedOnId}`; `entryId` is reconstructed by a candidate-constraint back-search (see
+- Error structure: `{message, entryId, constraintId, raisedOnType, raisedOnId, raisedOnEntryId}`;
+  `entryId` is reconstructed by a candidate-constraint back-search (see
   [adapter-reconstruction-audit.md](adapter-reconstruction-audit.md))
 - **The raising node is reported, and it is `uid`.** `raisedOnType`/`raisedOnId` name the runtime
   node the error was raised on, read off the node the walk was visiting — the same value the state
@@ -673,7 +708,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 
 | Issue | Fix | Specs Fixed |
 |-------|-----|-------------|
-| Error placement mismatch | BS BattleScribe adapter remaps category-level max/cost/hidden errors to selection-level (matching NR) | 4 |
+| Error placement mismatch | ~~BS adapter remaps category-level max/cost/hidden errors to selection-level (matching NR)~~ — **reverted by #426**: that remap was BattleScribe reconstructed into NewRecruit's answer, and the divergence is recorded per engine instead (see "Which node an error is raised on" above) | 4 |
 | Selection ordering | Insertion-order tracking via `__bsspec_seq` tags | ~15 |
 | Action/state index mismatch | `getSortedSelections()` helper for all action methods | 3 |
 | Child cost aggregation | `incrementAmount()` instead of `addInstance()` | 8 |

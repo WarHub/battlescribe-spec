@@ -123,11 +123,10 @@ the roster hierarchy:
 
 Each detected violation is mapped to `ValidationErrorState` with:
 - `Message` — error text
-- `OwnerType` — roster/force/category/selection
-- `OwnerEntryId` — catalogue entry id of the owning roster element
 - `EntryId` — entry that defines the constraint
 - `ConstraintId` — specific constraint ID
 - `RaisedOnType`/`RaisedOnId` — the runtime NODE the error was raised on
+- `RaisedOnEntryId` — that same node's catalogue entry id
 
 **The raising node is `uid`, and it comes from the node in hand.** The walk
 already holds the node it read the errors off, so `RaisedOnId` is that node's
@@ -159,9 +158,16 @@ model, so those report `RaisedOnType: "group"` and an id no `ForceState`/
 the only ones NR gives no `error.parent` at all; they are always found by the walk
 first, which knows the node directly.
 
-(An earlier version of this file listed an `OwnerId` field here; the adapter never
-populated it, and the field no longer exists — issue #421 replaced it with the
-raisedOn pair, and #422 populated it on both NewRecruit lanes.)
+**Do not walk up from the group to the enclosing selection.** That is what the
+merge path used to do, to fill an `ownerType`/`ownerEntryId` pair that no longer
+exists: it answered "which node in the state model is nearest to the one NR
+named", which is a reconstruction wearing an identity field's name. The group is
+reported as itself (#426), and `RaisedOnEntryId` there is the group's own
+catalogue id.
+
+(Earlier versions of this file listed `OwnerId`, then `OwnerType`/`OwnerEntryId`.
+None survive: #421 replaced `OwnerId` with the raisedOn pair, #422 populated it on
+both NewRecruit lanes, and #426 removed the owner attribution entirely.)
 
 ## Publication ID resolution
 

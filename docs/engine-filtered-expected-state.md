@@ -156,20 +156,23 @@ Error assertions use the compact `on`/`from` format:
 
 ```yaml
 errors:
-  - on: force fe-1              # roster element owning the error
-    from: se-unit-a/con-max-2   # entryId/constraintId that caused it
+  - on: force ${{ steps.add-army.forceId }}   # the node the engine raised it on
+    from: se-unit-a/con-max-2                 # entryId/constraintId that caused it
 ```
 
 ### `on` field (required)
 
-Identifies the roster element that owns the error:
+Identifies the roster NODE the engine raised the error on — `raisedOnType` + `raisedOnId`. A node id
+is minted per run, so it is always written as a `${{ steps.… }}` reference; a literal second token is
+a catalogue entry id, which names a set of nodes rather than one, and is rejected by the linter. See
+[error-assertions.md](error-assertions.md) for the full form.
 
 | Format | Example | Matches |
 |--------|---------|---------|
-| `{ownerType}` | `roster` | Any error on a roster node |
-| `{ownerType} {entryId}` | `force fe-1` | Error on force with entryId `fe-1` |
-| `{ownerType} {entryId}` | `selection se-unit-a` | Error on selection `se-unit-a` |
-| `{ownerType} {entryId}` | `category cat-troops` | Error on category `cat-troops` |
+| `{type} ${{ steps.… }}` | `force ${{ steps.add-army.forceId }}` | The error raised on that force node |
+| `{type} ${{ steps.… }}` | `selection ${{ steps.select-first.selectionId }}` | The error raised on that selection node |
+| `{type} ${{ steps.… }}` | `category ${{ steps.add-patrol.categories.cat-troops }}` | The error raised on that category node |
+| `roster` / `group` | `roster` | Any error raised on a node of that kind — neither has an id a spec can name |
 
 ### `from` field (optional)
 
