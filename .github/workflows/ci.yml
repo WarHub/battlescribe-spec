@@ -89,6 +89,14 @@ jobs:
         with:
           path: lib/battlescribe
           key: bsapp-${{ hashFiles('testdata.json') }}
+      # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, issue
+      # #401), and the patch step runs `java PatchJarMain`. This lane skips the JavaFX agent build,
+      # so it has no in-repo JDK — provide a plain one for the patch tool.
+      - name: Setup Java (engine-jar patch tool)
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'liberica'
+          java-version: '11'
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipPlaywright -SkipJavaAgent -SkipWh40k
         env:
@@ -365,6 +373,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
+      # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, #401);
+      # its patch step runs `java PatchJarMain`. This lane skips the agent build, so provide a JDK.
+      - name: Setup Java (engine-jar patch tool)
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'liberica'
+          java-version: '11'
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
         env:
@@ -526,6 +541,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
+      # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, #401);
+      # its patch step runs `java PatchJarMain`. This lane skips the agent build, so provide a JDK.
+      - name: Setup Java (engine-jar patch tool)
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'liberica'
+          java-version: '11'
       - name: Setup dependencies
         run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
         env:

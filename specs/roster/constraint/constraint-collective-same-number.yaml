@@ -9,19 +9,6 @@ description: >
 tags:
   - validation-errors
   - structured-errors
-  - engine-limitation
-
-engines:
-  # BattleScribe raises exactly this error — measured 2026-08-13: one error,
-  # "All Squads must have the same number of selections from Weapon", hanging on a Squad
-  # selection — but neither lane can currently say WHAT raised it: the message names no
-  # constraint (there is none) and quotes no value, so the value tiebreak and the kind-match
-  # both come up empty and the error is reported with no `from` at all. The identity exists in
-  # the engine: net.battlescribe.engine.a.f builds `<ownerId>::se-weapon::collective` for this
-  # error and discards it before construction, the same discard measured for constraint errors
-  # (see issue #401). `fail` rather than `skip` so the spec still RUNS: the day error identity
-  # is read from the engine instead of the text, this is reported as an unexpected pass.
-  battlescribe: fail
 
 setup:
   gameSystem:
@@ -61,15 +48,16 @@ steps:
     selectionId: ${{ steps.select-squad-1.selectionId }}
     entryId: se-weapon
 
-  # The uneven Weapon selection is the violation's source and, canonically, the
-  # error's owner; `collective` is a reserved pseudo-constraint like `hidden` —
-  # the engine raises this bookkeeping error with no authored constraint behind
-  # it. NewRecruit has no equivalent bookkeeping: it raises nothing here,
-  # measured 2026-08-13 — declared as an empty error set rather than left to
-  # look like a missed assertion.
+  # The error belongs to the Squad whose Weapon count is uneven; `se-weapon` is
+  # the entry the count is OF, and `collective` is a reserved pseudo-constraint
+  # like `hidden` — the engine raises this bookkeeping error with no authored
+  # constraint behind it, and its identity is read from the captured error id
+  # (third segment "collective"), not the text. NewRecruit has no equivalent
+  # bookkeeping: it raises nothing here, measured 2026-08-13 — declared as an
+  # empty error set rather than left to look like a missed assertion.
   - expectedState:
       errors:
-        - on: selection se-weapon
+        - on: selection se-squad
           from: se-weapon/collective
       forces:
         - selectionCount: 2

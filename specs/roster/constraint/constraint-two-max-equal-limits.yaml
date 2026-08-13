@@ -9,26 +9,6 @@ description: >
 tags:
   - validation-errors
   - structured-errors
-  - engine-limitation
-
-engines:
-  # BattleScribe raises BOTH errors and renders them identically: two copies of "Troops has 1
-  # too many selections of Unit A (maximum 2)". Nothing else is exposed — net.battlescribe.engine.b.a
-  # is constructed as (Object, String) where the Object is the roster element the error hangs on,
-  # and the (element, entry, constraint) id the engine builds while raising each error is
-  # registered only for shared entries and discarded before the error is constructed
-  # (net.battlescribe.engine.a.f, see the getValidationErrorIds notes in BattleScribeEngine).
-  # So the message is the only carrier and here it carries nothing that separates the pair: both
-  # resolvers value-match "maximum 2" and both return the FIRST constraint whose value is 2.
-  # Measured 2026-08-12: 2 errors, both `se-unit-a/con-max-alpha`. Measured alongside it, as the
-  # control: the same entry with limits 2 and 1 instead of 2 and 2 resolves both correctly, so
-  # what defeats resolution is the equality, not the pairing.
-  # Unlike constraint-two-max-one-modified this is not a comparison bug — no rewrite of the
-  # message-matching rule can recover the second id, because the two messages are the same string.
-  # Lifting it needs identity from somewhere other than the text.
-  # `fail` rather than `skip` so the spec still RUNS: a future route to constraint identity would
-  # be reported as an unexpected pass instead of going unnoticed. See issue #403.
-  battlescribe: fail
 
 setup:
   gameSystem:

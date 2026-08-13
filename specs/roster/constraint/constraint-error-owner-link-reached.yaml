@@ -67,33 +67,30 @@ steps:
     forceId: ${{ steps.add-patrol.forceId }}
     entryId: link-unit
 
-  # Canonical: the violating selection owns the error — NewRecruit reports it
-  # structurally. Measured 2026-08-13, in-process CLI: `selection se-gear <-
-  # se-gear/con-gear-max`.
-  # BattleScribe hangs the error on the PARENT Elite Guard selection instead
-  # (the constraint's scope element), and its two lanes spell that element
-  # differently:
-  #  - in-process reports the element's raw composite entryId
-  #    `link-unit::sse-unit` (the route through the link, per
-  #    docs/entry-id-construction.md);
-  #  - battlescribe-ui reduces the composite to its target `sse-unit`
-  #    (EngineAccessor.linkTargetOf keeps the last `::` segment).
-  # Three engines, three owners for one error — that disagreement is the
-  # finding, and it is declared per engine rather than papered over. The
-  # violating entry and constraint are not in dispute: every lane answers
-  # `from: se-gear/con-gear-max`.
+  # Where a link-reached child's over-limit hangs. The two engines genuinely
+  # disagree (issue #400), and that disagreement is the finding this spec pins:
+  #  - BattleScribe owns it on the PARENT selection, consistent with how it owns
+  #    every group/child constraint — the element counting the children. That
+  #    parent is the link-reached Elite Guard, addressed by its target entry
+  #    sse-unit (the link route is reduced away, the one shared reduction both
+  #    lanes apply). Measured 2026-08-13: `selection sse-unit <-
+  #    se-gear/con-gear-max`.
+  #  - NewRecruit owns it on the violating child selection se-gear. Measured
+  #    2026-08-13: `selection se-gear <- se-gear/con-gear-max`.
+  # The `from` — the constraint and its declaring entry — is not in dispute:
+  # both answer se-gear/con-gear-max. Only the owner differs, and it is declared
+  # per engine rather than normalised, because the corpus convention (owner =
+  # the counting parent, see collective-constraint-per-model) is BattleScribe's,
+  # and moving BattleScribe's owner onto the child to match NewRecruit would
+  # contradict every other group/child spec.
   - expectedState:
       errors:
-        - on: selection se-gear
+        - on: selection sse-unit
           from: se-gear/con-gear-max
       forces:
         - selectionCount: 1
       engines:
-        battlescribe:
+        newrecruit:
           errors:
-            - on: selection link-unit::sse-unit
-              from: se-gear/con-gear-max
-        battlescribe-ui:
-          errors:
-            - on: selection sse-unit
+            - on: selection se-gear
               from: se-gear/con-gear-max

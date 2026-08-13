@@ -135,4 +135,41 @@ public sealed class BattleScribeErrorIdsTests
         Assert.Equal([""], map.Keys);
         Assert.Equal(["con-max"], map[""]);
     }
+
+    // ParseOne: the single-id form the patched engine now hangs on each error (bsspecErrorId). The
+    // Java agent's parseOneErrorId is the hand-kept mirror of these cases.
+
+    [Fact]
+    public void ParseOne_ThreeSegments_SplitsEntryAndConstraint()
+    {
+        Assert.Equal(("shared-unit", "con-max"), BattleScribeErrorIds.ParseOne("force-1::shared-unit::con-max"));
+    }
+
+    [Fact]
+    public void ParseOne_FourSegments_MiddleRejoinsIntoEntry()
+    {
+        Assert.Equal(("link-1::sse-weapon", "con-max"), BattleScribeErrorIds.ParseOne("force-1::link-1::sse-weapon::con-max"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("shared-unit")]
+    [InlineData("force-1::shared-unit")]
+    public void ParseOne_FewerThanThreeSegments_IsNull(string? errorId)
+    {
+        Assert.Equal((null, null), BattleScribeErrorIds.ParseOne(errorId));
+    }
+
+    // ReduceToTargetEntry: the one link-target reduction both lanes apply for owner entries (#400).
+
+    [Theory]
+    [InlineData("link-1::sse-unit", "sse-unit")]
+    [InlineData("a::b::c", "c")]
+    [InlineData("shared-unit", "shared-unit")]
+    [InlineData(null, null)]
+    public void ReduceToTargetEntry_KeepsLastSegment(string? entryId, string? expected)
+    {
+        Assert.Equal(expected, BattleScribeErrorIds.ReduceToTargetEntry(entryId));
+    }
 }

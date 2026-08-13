@@ -145,4 +145,44 @@ public static class BattleScribeErrorIds
 
         return map.ToDictionary(kvp => kvp.Key, kvp => (IReadOnlyList<string>)kvp.Value);
     }
+
+    /// <summary>
+    /// Splits ONE <c>ownerId::entryId::constraintId</c> id — the value the patched engine now hangs
+    /// on each validation error (<c>bsspecErrorId</c>, issue #401) — into its entry and constraint
+    /// halves, by the same segment rule as <see cref="Parse"/>: the owner is dropped, the middle
+    /// segments rejoin into the (possibly link-composite) entry id, and the last segment alone is the
+    /// constraint. Returns <c>(null, null)</c> for a null id or fewer than three segments, so a
+    /// caller can take its documented id-less path rather than invent a wrong <c>from</c>.
+    /// </summary>
+    public static (string? entryId, string? constraintId) ParseOne(string? errorId)
+    {
+        if (errorId is null)
+        {
+            return (null, null);
+        }
+        var parts = errorId.Split("::");
+        if (parts.Length < 3)
+        {
+            return (null, null);
+        }
+        return (string.Join("::", parts, 1, parts.Length - 2), parts[^1]);
+    }
+
+    /// <summary>
+    /// Reduces a composite entry id to the entry a spec names it by: its LAST <c>::</c> segment, the
+    /// link's target. A selection reached through an entry link carries its route as
+    /// <c>linkId::…::targetId</c> (docs/entry-id-construction.md), but specs address the error's
+    /// owner by the target entry, not the route taken to it. This is the one rule both BattleScribe
+    /// lanes apply so they agree on <c>ownerEntryId</c> for link-reached selections (issue #400).
+    /// A non-composite id is returned unchanged.
+    /// </summary>
+    public static string? ReduceToTargetEntry(string? entryId)
+    {
+        if (entryId is null || !entryId.Contains("::", StringComparison.Ordinal))
+        {
+            return entryId;
+        }
+        var parts = entryId.Split("::");
+        return parts[^1];
+    }
 }

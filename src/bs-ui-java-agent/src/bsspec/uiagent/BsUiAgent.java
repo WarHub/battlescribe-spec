@@ -1,5 +1,6 @@
 package bsspec.uiagent;
 
+import bsspec.enginepatch.ErrorIdTransformer;
 import java.lang.instrument.Instrumentation;
 import java.io.IOException;
 
@@ -13,6 +14,13 @@ import java.io.IOException;
 public class BsUiAgent {
 
     public static void premain(String agentArgs, Instrumentation inst) {
+        // Before the engine classes load: register the transform that makes every validation error
+        // carry its constraint id (the SAME transform the in-process build bakes into the jar --
+        // src/bs-engine-patch), so the UI lane reads attribution structurally instead of parsing it
+        // out of the message. Registered here rather than via a second -javaagent so the two lanes
+        // share one application point. The engine classes load lazily, well after premain.
+        inst.addTransformer(new ErrorIdTransformer(), true);
+
         // Before anything else, and in particular before the FX toolkit exists: an exception the FX
         // thread never catches is how an action silently half-happens (see FxExceptionMonitor).
         FxExceptionMonitor.install();

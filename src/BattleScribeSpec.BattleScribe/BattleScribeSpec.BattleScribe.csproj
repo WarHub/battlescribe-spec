@@ -20,8 +20,23 @@
     <PackageReference Include="IKVM" />
   </ItemGroup>
 
+  <!--
+    The BattleScribe engine is IKVM-compiled from a PATCHED COPY of BattleScribeEngine.jar, not the
+    pristine download. The patch (src/bs-engine-patch) makes every validation error carry the
+    constraint id the stock engine computes and discards, so the harness reads an error's
+    owner/entry/constraint structurally instead of parsing it back out of the rendered message
+    (issue #401). The disk jar stays pristine; the copy is a gitignored sibling under lib/, produced
+    by the PatchBattleScribeEngineJar target below before this reference is compiled.
+  -->
+  <PropertyGroup>
+    <BattleScribeEngineJarOriginal>$(MSBuildThisFileDirectory)..\..\lib\battlescribe\lib\BattleScribeEngine.jar</BattleScribeEngineJarOriginal>
+    <BattleScribeEngineJarPatched>$(MSBuildThisFileDirectory)..\..\lib\battlescribe\lib\BattleScribeEngine.bsspec-errorids.jar</BattleScribeEngineJarPatched>
+    <BsEnginePatchClasses>$(MSBuildThisFileDirectory)..\bs-engine-patch\out\classes</BsEnginePatchClasses>
+    <BsEnginePatchAsm>$(MSBuildThisFileDirectory)..\..\lib\asm\asm-9.7.jar</BsEnginePatchAsm>
+  </PropertyGroup>
+
   <ItemGroup>
-    <IkvmReference Include="..\..\lib\battlescribe\lib\BattleScribeEngine.jar">
+    <IkvmReference Include="..\..\lib\battlescribe\lib\BattleScribeEngine.bsspec-errorids.jar">
       <AssemblyName>BattleScribeEngine</AssemblyName>
       <AssemblyVersion>2.3.21.0</AssemblyVersion>
       <References>..\..\lib\battlescribe\lib\simple-xml-2.7.1.jar;..\..\lib\battlescribe\lib\kotlin-stdlib-1.3.71.jar;..\..\lib\battlescribe\lib\kotlin-stdlib-common-1.3.71.jar;..\..\lib\battlescribe\lib\annotations-13.0.jar</References>
@@ -29,7 +44,9 @@
     <IkvmReference Include="..\..\lib\battlescribe\lib\DataUtils.jar">
       <AssemblyName>DataUtils</AssemblyName>
       <AssemblyVersion>2.3.21.0</AssemblyVersion>
-      <References>..\..\lib\battlescribe\lib\BattleScribeEngine.jar;..\..\lib\battlescribe\lib\simple-xml-2.7.1.jar;..\..\lib\battlescribe\lib\commons-io-2.4.jar;..\..\lib\battlescribe\lib\kotlin-stdlib-1.3.71.jar;..\..\lib\battlescribe\lib\kotlin-stdlib-common-1.3.71.jar;..\..\lib\battlescribe\lib\annotations-13.0.jar</References>
+      <!-- References the PATCHED engine jar, matching the IkvmReference Include above: IKVM requires
+           every <References> entry to be itself an IkvmReference, and the pristine jar no longer is. -->
+      <References>..\..\lib\battlescribe\lib\BattleScribeEngine.bsspec-errorids.jar;..\..\lib\battlescribe\lib\simple-xml-2.7.1.jar;..\..\lib\battlescribe\lib\commons-io-2.4.jar;..\..\lib\battlescribe\lib\kotlin-stdlib-1.3.71.jar;..\..\lib\battlescribe\lib\kotlin-stdlib-common-1.3.71.jar;..\..\lib\battlescribe\lib\annotations-13.0.jar</References>
     </IkvmReference>
     <IkvmReference Include="..\..\lib\battlescribe\lib\commons-io-2.4.jar">
       <AssemblyName>CommonsIo</AssemblyName>
@@ -67,5 +84,42 @@
       <AssemblyVersion>1.1.3.3</AssemblyVersion>
     </IkvmReference>
   </ItemGroup>
+
+  <!--
+    Produce the patched engine jar before IKVM resolves references. `BeforeResolveReferences` runs
+    ahead of `ResolveAssemblyReferences`, which is where IKVM's `ResolveIkvmReferences` hooks and
+    hashes the jar for its compile cache — so the copy exists and is current by the time IKVM reads
+    it. Inputs/Outputs give real incrementality: the target is skipped unless the pristine jar, the
+    patch tool, or ASM changed, and PatchJarMain writes byte-stable output so IKVM's content hash
+    stays put and its (slow) compile stays cached.
+
+    FAILURE MODE when setup.ps1 has not run: the pristine jar and/or the patch tool are absent,
+    exactly as a missing BattleScribeEngine.jar fails an unpatched build today. The errors below say
+    which input is missing and to run setup.ps1, rather than surfacing as an opaque IKVM error.
+  -->
+  <Target Name="PatchBattleScribeEngineJar"
+          BeforeTargets="BeforeResolveReferences"
+          Inputs="$(BattleScribeEngineJarOriginal);$(BsEnginePatchClasses)\bsspec\enginepatch\PatchJarMain.class;$(BsEnginePatchClasses)\bsspec\enginepatch\ErrorIdPatcher.class;$(BsEnginePatchAsm)"
+          Outputs="$(BattleScribeEngineJarPatched)">
+    <Error Condition="!Exists('$(BattleScribeEngineJarOriginal)')"
+           Text="BattleScribeEngine.jar not found at $(BattleScribeEngineJarOriginal). Run ./setup.ps1 to download the BattleScribe app." />
+    <Error Condition="!Exists('$(BsEnginePatchClasses)\bsspec\enginepatch\PatchJarMain.class')"
+           Text="bs-engine-patch tool not built at $(BsEnginePatchClasses). Run ./setup.ps1 (it vendors ASM and compiles src/bs-engine-patch)." />
+    <Error Condition="!Exists('$(BsEnginePatchAsm)')"
+           Text="Vendored ASM not found at $(BsEnginePatchAsm). Run ./setup.ps1 to vendor it." />
+
+    <!-- Resolve a JDK: JAVA_HOME (CI's actions/setup-java) first, else the in-repo Liberica JDK. -->
+    <PropertyGroup>
+      <_BsPatchJavaHome Condition="'$(JAVA_HOME)' != '' and Exists('$(JAVA_HOME)')">$(JAVA_HOME)</_BsPatchJavaHome>
+      <_BsPatchJavaHome Condition="'$(_BsPatchJavaHome)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\lib\liberica-jdk\bin')">$(MSBuildThisFileDirectory)..\..\lib\liberica-jdk</_BsPatchJavaHome>
+      <_BsPatchJavaExe Condition="'$(OS)' == 'Windows_NT'">$(_BsPatchJavaHome)\bin\java.exe</_BsPatchJavaExe>
+      <_BsPatchJavaExe Condition="'$(OS)' != 'Windows_NT'">$(_BsPatchJavaHome)/bin/java</_BsPatchJavaExe>
+    </PropertyGroup>
+    <Error Condition="'$(_BsPatchJavaHome)' == ''"
+           Text="No JDK found to run the engine-jar patch. Set JAVA_HOME or run ./setup.ps1 (which installs lib/liberica-jdk)." />
+
+    <Message Importance="high" Text="Patching BattleScribe engine jar for validation-error ids -> $(BattleScribeEngineJarPatched)" />
+    <Exec Command="&quot;$(_BsPatchJavaExe)&quot; -cp &quot;$(BsEnginePatchClasses)$([System.IO.Path]::PathSeparator)$(BsEnginePatchAsm)&quot; bsspec.enginepatch.PatchJarMain &quot;$(BattleScribeEngineJarOriginal)&quot; &quot;$(BattleScribeEngineJarPatched)&quot;" />
+  </Target>
 
 </Project>
