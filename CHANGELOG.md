@@ -147,6 +147,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A directory the spec merely lived under could decide which engine ran it (#311)** —
+  `SpecLoading.InferEngineType` classified a spec by substring-scanning
+  `Path.GetFullPath(input).ToLowerInvariant()`, i.e. the absolute path, which carries every directory
+  above the checkout: a home directory, a CI workspace, an agent worktree. A repo cloned into
+  `gamedata-tools/` routed every roster spec in it to the gamedata engine — on every platform, not
+  just Linux. A spec inside `specs/` is now classified by **containment** in `specs/gamedata` or
+  `specs/roster` (via `Path.GetRelativePath`, which applies the running platform's own casing rule
+  instead of a hard-coded one), and only a spec outside that tree falls back to a hint — now an exact
+  path **segment** rather than a substring, so `gamedata-tools/` is no longer `gamedata/`. The tail
+  `return normalized.Contains("roster") ? "roster" : "roster"` went with it: both arms were identical,
+  so the probe was evaluated and discarded, and roster has always been a fallback rather than a
+  detection. Same treatment for the **directory-escape guard** in `NrEditorStore`'s static-file route
+  (`fullPath.StartsWith(dir, OrdinalIgnoreCase)`), which on a case-sensitive filesystem let
+  `/tmp/STATIC/x` — a genuinely different directory — past a guard rooted at `/tmp/static/`; and for
+  the two `OrdinalIgnoreCase` full-path compares in `SpecLoader`'s spec discovery, where the fix is a
+  no-op today (both operands derive from the same root) but removes the last hand-rolled path-casing
+  decision from the code that decides which specs exist. The route guard is now
+  `NrEditorStore.IsInsideRoot`, extracted so it can be tested rather than argued about — and its test
+  derives the case-variant expectation *from the filesystem*, so it is falsifiable in opposite
+  directions on the two platforms instead of being skipped on one. **Not changed, deliberately:**
+  `DataSourceResolver.FindGameSystem`/`FindCatalogue` match a spec-authored game-system name against
+  real-world data-repo filenames, `TagFilter` matches `--tag` tokens, and the `.gst`/`.cat`/`.yaml`
+  extension checks tolerate mixed case in third-party data. Those compare *user input*, not paths, and
+  their case-insensitivity is the feature — `DataSourceResolverTests` pins it.
 - **An NR UI action timeout was anonymous, and its diagnostics never left the runner** — the two
   facts compound, and the NR snapshot bump to `v35.27` is what showed it. `thorough-conformance`
   failed one spec of 363 (`constraint/constraint-forces-field-on-forceentry`, run 31568343878) and
