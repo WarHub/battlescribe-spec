@@ -138,8 +138,25 @@ The `update-nr-snapshot.yml` workflow runs daily and on manual dispatch:
 4. If changed:
    - Determines the tag: `v{version}` for new versions, `v{version}-{YYYYMMDD}` if the
      version is unchanged but content differs
+   - Diffs the new HAR against **the release `testdata.json` currently pins** and writes the
+     summary that becomes both the release notes and the PR body
    - Publishes a new release to [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har)
    - Opens a PR updating `testdata.json` with the new tag, labelled `thorough-ci`
+
+The workflow compares against two different things on purpose. Change detection and tag naming
+use the **newest release** — they ask "is this snapshot new to the world?", and anchoring them to
+the pin instead would republish an identical HAR under a fresh date-suffixed tag every night that
+a snapshot PR sat unmerged. The **diff** uses the pin, because that is the snapshot the frozen
+suites replay today and the one the reviewer is being asked to stop replaying. The two agree on
+the common path and diverge the moment a PR waits a day.
+
+The diff baseline is downloaded fresh into `.har-old/` on every run, and a download that fails
+means *no baseline* — a summary with no comparison — rather than a fallback to whatever is on
+disk. #443 is why that is spelled out: `.har-old/` was committed to the repo by the bot's own #80,
+`gh release download` will not overwrite an existing file without `--clobber`, and the step that
+consumed it only checked that the file existed. Every PR body and release note from `v34.21` to
+`v35.28` claimed a diff against `v34.18`, describing five months of accumulated change as if it
+were one night's.
 
 A snapshot bump changes what every frozen suite replays, and the every-push CI lanes trim those
 suites to kitchen-sink — so the bump PR must run the full ones or it proves nothing. `ci.yml`

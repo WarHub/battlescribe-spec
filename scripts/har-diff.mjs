@@ -8,6 +8,8 @@
 //   --new <path>          Path to new HAR file
 //   --old-version <ver>   Old client version (for news filtering)
 //   --new-version <ver>   New client version
+//   --old-tag <tag>       Old release tag (the pin being replaced)
+//   --new-tag <tag>       New release tag (the pin being adopted)
 //   --news-url <url>      URL to scrape for news (default: https://www.newrecruit.eu/news)
 //   --no-news             Skip news scraping
 //   -h, --help            Show help
@@ -19,7 +21,7 @@ import { get as httpGet } from "node:http";
 
 // --- CLI state (populated only when run as main) ---
 
-let oldPath, newPath, oldVersion, newVersion;
+let oldPath, newPath, oldVersion, newVersion, oldTag, newTag;
 let newsUrl = "https://www.newrecruit.eu/news";
 let skipNews = false;
 
@@ -531,6 +533,41 @@ function renderOtherCategories(oldMap, newMap) {
   return ["### Other", "", ...summaryLines, ""];
 }
 
+/**
+ * Title and version lines.
+ *
+ * Tags lead when we have them, because the tag is what the reader is being asked to change:
+ * `testdata.json` pins a tag, not a client version. The two are not interchangeable. A same-day
+ * re-snapshot gets a `-YYYYMMDD` suffix on an unchanged client version, so a version-only title
+ * collapses `v35.27` -> `v35.27-20260813` into a bare "v35.27" and hides the point of the PR.
+ * The client version keeps its own line: it is what NR calls itself, and what the news feed is
+ * filtered against.
+ */
+function renderHeader({ hasOld, oldTag, newTag, oldVersion, newVersion }) {
+  const lines = [];
+  const versionsDiffer =
+    hasOld && oldVersion && newVersion && oldVersion !== newVersion;
+
+  if (hasOld && oldTag && newTag) {
+    lines.push(`## NR Snapshot: ${oldTag} \u2192 ${newTag}`, "");
+  } else if (versionsDiffer) {
+    lines.push(`## NR Snapshot: v${oldVersion} \u2192 v${newVersion}`, "");
+  } else if (newTag) {
+    lines.push(`## NR Snapshot: ${newTag}`, "");
+  } else if (newVersion) {
+    lines.push(`## NR Snapshot: v${newVersion}`, "");
+  } else {
+    lines.push(`## NR Snapshot Update`, "");
+  }
+
+  if (versionsDiffer) {
+    lines.push(`**Client version:** ${oldVersion} \u2192 ${newVersion}`);
+  } else if (newVersion) {
+    lines.push(`**Client version:** ${newVersion}`);
+  }
+  return lines;
+}
+
 // --- Main ---
 
 async function main() {
@@ -540,16 +577,9 @@ async function main() {
 
   const lines = [];
 
-  // Header
-  if (hasOld && oldVersion && newVersion && oldVersion !== newVersion) {
-    lines.push(`## NR Snapshot: v${oldVersion} \u2192 v${newVersion}`, "");
-    lines.push(`**Client version:** ${oldVersion} \u2192 ${newVersion}`);
-  } else if (newVersion) {
-    lines.push(`## NR Snapshot: v${newVersion}`, "");
-    lines.push(`**Client version:** ${newVersion}`);
-  } else {
-    lines.push(`## NR Snapshot Update`, "");
-  }
+  lines.push(
+    ...renderHeader({ hasOld, oldTag, newTag, oldVersion, newVersion })
+  );
 
   // Totals
   const newTotal = [...newMap.values()].reduce(
@@ -682,6 +712,7 @@ export {
   computeCssDiff,
   renderChangesTable,
   renderOtherCategories,
+  renderHeader,
 };
 
 // Run main() only when executed directly (not imported).
@@ -705,6 +736,12 @@ if (isMain) {
       case "--new-version":
         newVersion = args[++i];
         break;
+      case "--old-tag":
+        oldTag = args[++i];
+        break;
+      case "--new-tag":
+        newTag = args[++i];
+        break;
       case "--news-url":
         newsUrl = args[++i];
         break;
@@ -714,7 +751,7 @@ if (isMain) {
       case "-h":
       case "--help":
         console.log(
-          `Usage: node scripts/har-diff.mjs --old <old.har> --new <new.har> [--old-version X] [--new-version Y] [--news-url URL] [--no-news]`
+          `Usage: node scripts/har-diff.mjs --old <old.har> --new <new.har> [--old-version X] [--new-version Y] [--old-tag A] [--new-tag B] [--news-url URL] [--no-news]`
         );
         process.exit(0);
     }

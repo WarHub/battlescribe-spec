@@ -63,6 +63,22 @@ jobs:
           CURRENT_TAG=$(gh api repos/WarHub/newrecruit-har/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
           echo "current_tag=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
 
+      # Two different baselines, deliberately.
+      #
+      # The newest release answers "is this snapshot new to the world?" — it gates publishing and
+      # names the tag. It has to stay the newest release, or an unmerged PR would republish an
+      # identical HAR under a fresh date-suffixed tag every night.
+      #
+      # The pin in testdata.json answers "what is this PR changing?" — it is the snapshot the
+      # frozen suites replay today, and the one a reviewer is being asked to stop replaying. That
+      # is the diff baseline. The two diverge as soon as a snapshot PR sits unmerged for a day.
+      - name: Read the pinned snapshot tag
+        id: pin
+        run: |
+          PIN_TAG=$(jq -r '."newrecruit-har".tag // ""' testdata.json)
+          echo "tag=$PIN_TAG" >> "$GITHUB_OUTPUT"
+          echo "testdata.json pins: ${PIN_TAG:-<none>}"
+
       - name: Check for changes
         id: check
         run: |
@@ -100,31 +116,62 @@ jobs:
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           echo "Release tag: $NEW_TAG"
 
-      - name: Download current HAR for diff
+      # Start from an empty .har-old every time, and let a failed download mean "no baseline"
+      # rather than "reuse whatever is lying around".
+      #
+      # This step used to do neither. #80 committed its own .har-old/ scratch dir (nothing ignored
+      # it, and create-pull-request commits the whole workspace), so every later run found the file
+      # already present, `gh release download` refused to overwrite without --clobber, and the next
+      # step's `[ -f ... ]` check happily diffed against a HAR frozen at v34.18. Five months of PR
+      # bodies and release notes claimed "v34.18 → ..." while the pin moved 34.21 → 35.28.
+      - name: Download the pinned HAR as the diff baseline
         if: steps.check.outputs.changed == 'true'
+        id: baseline
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PIN_TAG: ${{ steps.pin.outputs.tag }}
         run: |
-          TAG="${{ steps.current.outputs.current_tag }}"
-          if [ -n "$TAG" ]; then
-            mkdir -p .har-old
-            gh release download "$TAG" \
-              -R WarHub/newrecruit-har \
-              -p 'newrecruit.har' -p 'metadata.json' \
-              -D .har-old || echo "Could not download previous HAR — skipping diff"
+          rm -rf .har-old
+          if [ -z "$PIN_TAG" ]; then
+            echo "::warning::testdata.json pins no newrecruit-har tag — publishing without a diff."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p .har-old
+          if gh release download "$PIN_TAG" \
+               -R WarHub/newrecruit-har \
+               -p 'newrecruit.har' -p 'metadata.json' \
+               --clobber -D .har-old \
+             && [ -f .har-old/newrecruit.har ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Diff baseline: $PIN_TAG"
+          else
+            echo "::warning::could not download pinned baseline $PIN_TAG — publishing without a diff."
+            echo "available=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate change summary
         if: steps.check.outputs.changed == 'true'
         id: summary
+        env:
+          NEW_VERSION: ${{ steps.record.outputs.client_version }}
+          NEW_TAG: ${{ steps.tag.outputs.new_tag }}
+          PIN_TAG: ${{ steps.pin.outputs.tag }}
+          HAVE_BASELINE: ${{ steps.baseline.outputs.available }}
         run: |
-          OLD_VERSION=""
-          DIFF_ARGS="--new .har-staging/newrecruit.har --new-version ${{ steps.record.outputs.client_version }}"
-          if [ -f .har-old/newrecruit.har ]; then
-            OLD_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('.har-old/metadata.json','utf8')).ClientVersion||'')}catch{console.log('')}")
-            DIFF_ARGS="--old .har-old/newrecruit.har --old-version $OLD_VERSION $DIFF_ARGS"
+          # An array, not a word-split string. As a string, an empty --old-version silently shifted
+          # every later flag along by one and handed har-diff a nonsense baseline instead of failing.
+          DIFF_ARGS=(--new .har-staging/newrecruit.har --new-version "$NEW_VERSION" --new-tag "$NEW_TAG")
+          if [ "$HAVE_BASELINE" = "true" ]; then
+            OLD_VERSION=$(jq -r '.ClientVersion // ""' .har-old/metadata.json)
+            DIFF_ARGS=(--old .har-old/newrecruit.har --old-version "$OLD_VERSION" --old-tag "$PIN_TAG" "${DIFF_ARGS[@]}")
           fi
-          node scripts/har-diff.mjs $DIFF_ARGS > .har-staging/summary.md 2>/dev/null || echo "_(change summary unavailable)_" > .har-staging/summary.md
+          # stderr stays on the console: a broken diff has to be readable in the run log, not
+          # swallowed into a one-line "unavailable" that looks like a quiet day at NR.
+          if ! node scripts/har-diff.mjs "${DIFF_ARGS[@]}" > .har-staging/summary.md; then
+            echo "::warning::har-diff failed — falling back to a bare summary."
+            echo "_(change summary unavailable)_" > .har-staging/summary.md
+          fi
           echo "--- Change Summary ---"
           cat .har-staging/summary.md
 
@@ -166,6 +213,11 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           branch: update-nr-snapshot
+          # The pin is the ONLY thing this bot may commit. Left to itself it commits the entire
+          # workspace, which is how an 11 MB .har-old/ scratch dir landed on main in #80 and then
+          # quietly became the diff baseline for every run after it. Ignoring the scratch dirs is
+          # the other half of that fix; this is the half that does not depend on remembering to.
+          add-paths: testdata.json
           commit-message: |
             chore: update NR snapshot to ${{ steps.tag.outputs.new_tag }}
 
@@ -204,6 +256,7 @@ jobs:
           TAG: ${{ steps.tag.outputs.new_tag }}
           VERSION: ${{ steps.record.outputs.client_version }}
           OLD_TAG: ${{ steps.current.outputs.current_tag }}
+          PIN_TAG: ${{ steps.pin.outputs.tag }}
           PR_URL: ${{ steps.pr.outputs.pull-request-url }}
         run: |
           {
@@ -211,6 +264,7 @@ jobs:
             echo ""
             echo "**Client version:** $VERSION"
             echo "**Previous release:** [\`$OLD_TAG\`](https://github.com/WarHub/newrecruit-har/releases/tag/$OLD_TAG)"
+            echo "**Diff baseline (testdata.json pin):** [\`$PIN_TAG\`](https://github.com/WarHub/newrecruit-har/releases/tag/$PIN_TAG)"
             echo "**New release:** [\`$TAG\`](https://github.com/WarHub/newrecruit-har/releases/tag/$TAG)"
             if [ -n "$PR_URL" ]; then
               echo "**Pull request:** $PR_URL"

@@ -10,6 +10,12 @@ node_modules/
 lib/
 .har-staging/
 
+# The other half of the snapshot workflow's scratch space. .har-staging/ was ignored from the
+# start and .har-old/ was not, so #80 committed an 11 MB HAR here — and because the workflow only
+# checked that the file existed, five months of snapshot PRs diffed against that frozen v34.18
+# copy instead of the release they were replacing.
+.har-old/
+
 # Playwright MCP artifacts
 .playwright-mcp/
 # Squad: ignore runtime state (logs, inbox, sessions)
