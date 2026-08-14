@@ -98,6 +98,16 @@ dotnet test -p:TestProfile=pre-push                                             
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
 ```
 
+**The SDK band is pinned, and CI installs from `global.json`.** `rollForward: latestPatch` holds the
+feature band; every `setup-dotnet` step uses `global-json-file: global.json`, so your machine and CI
+run the same analyzers. This matters because `AnalysisLevel=latest-recommended` +
+`TreatWarningsAsErrors=true` make the set of rules that can fail the build a property of the
+installed SDK — unpinned, a runner-image bump turns untouched code red. Bumping the band is
+Dependabot's job (`dotnet-sdk` ecosystem), and reviewing that PR is where a widened rule set gets
+dealt with. `ToolchainPinDriftTests` fails if a workflow step starts picking its own SDK again. Two
+SDK-derived pins do **not** move with it and stay manual: `Directory.Build.targets`' `KnownILLinkPack`
+(see the comment there) and the `mcr.microsoft.com/dotnet/sdk` tags in `docker/`.
+
 **Lock files are real.** Every project has a `packages.lock.json` and CI verifies it
 (`dotnet restore --locked-mode`, `checks` job). If a restore rewrites one, that is a **finding, not
 noise** — do not revert it. Regenerate with `dotnet restore --force-evaluate` and commit the result;

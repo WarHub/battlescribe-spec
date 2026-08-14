@@ -8,6 +8,18 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!--
+      `latest` here means "whatever the installed SDK considers current", and combined with
+      TreatWarningsAsErrors above that makes the set of rules able to fail this build a property of
+      the toolchain. It stays `latest` on purpose: global.json pins the SDK to one feature band
+      (rollForward=latestPatch) and CI installs from that file, so `latest` now resolves to a version
+      this repo chose. Pinning a second number here (10.0-recommended) would be a duplicate of that
+      decision, free to drift from it, and the drift would be silent.
+
+      The consequence to keep in mind when reviewing the Dependabot SDK bump: THAT PR is where the
+      recommended rule set can widen, so it is the one that can go red on files it does not touch.
+      That is the intended place for it to happen. See .github/dependabot.yml.
+    -->
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- Deterministic restores + enables NuGet caching in CI (packages.lock.json per project). -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>

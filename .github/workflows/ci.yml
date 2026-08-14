@@ -72,10 +72,28 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+      # THE BUILD'S STRICTNESS USED TO BE WHATEVER MICROSOFT SHIPPED THAT WEEK. `AnalysisLevel` is
+      # `latest-recommended` and `TreatWarningsAsErrors` is true (Directory.Build.props), so the set
+      # of CA rules that can fail this job is resolved from the installed SDK — and every step here
+      # used to ask setup-dotnet for a floating `dotnet-version: '10.0.x'`, which installs the newest
+      # 10.0 SDK in existence at that moment. global.json's `rollForward: latestFeature` then
+      # accepted it, whatever band it was.
+      #
+      # That is not theoretical. SDK 10.0.400 was released 2026-08-11; run 31746128450 (main,
+      # 2026-08-13) installed it and built on a feature band no commit in this repo had ever seen.
+      # It was green. That was luck, not a property of the repo: a feature band is where analyzers
+      # get stricter, the previous band change surfaced ~22 CA errors in TestKit and TraceSummary on
+      # untouched files (#312), and the commit that would have gone red was a docs-only one.
+      #
+      # `global-json-file` makes global.json the single declaration of the toolchain, for CI and for
+      # contributors alike — setup-dotnet honours `latestPatch` and installs the newest SDK inside
+      # the pinned band. The band still moves; it moves through a Dependabot PR that CI actually
+      # builds (see .github/dependabot.yml), so a stricter analyzer set arrives as a reviewable diff
+      # instead of as a red build on a commit that changed nothing.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -237,7 +255,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -348,7 +366,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -481,7 +499,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -545,7 +563,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3

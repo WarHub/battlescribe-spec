@@ -221,7 +221,10 @@ battlescribe-spec/
 
 ### Prerequisites
 
-- .NET 10.0 SDK
+- .NET SDK — the exact band is pinned in [`global.json`](global.json) (`rollForward: latestPatch`),
+  and CI installs from that file, so a local build and a CI build see the same analyzers. If
+  `dotnet build` reports that no compatible SDK was found, install the version it names; the band is
+  bumped by Dependabot, not by hand.
 - Git
 
 ### Setup
