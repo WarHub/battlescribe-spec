@@ -38,9 +38,17 @@ updates:
   # read on its own — a red build here is the analyzer band tightening, which is a decision, not
   # noise to be batched with a JSON serializer bump.
   #
-  # Two SDK-derived pins do NOT move with this and stay manual: `Directory.Build.targets`'
-  # KnownILLinkPack (see the comment there — dependabot cannot see an implicit reference) and the
-  # `mcr.microsoft.com/dotnet/sdk` tags in docker/.
+  # Two SDK-derived pins are invisible to this updater and must move by hand in the same PR:
+  # `Directory.Build.targets`' KnownILLinkPack (see the comment there — dependabot cannot see an
+  # implicit reference), and the `mcr.microsoft.com/dotnet/sdk` tag in docker/. The Dockerfile is not
+  # left to drift, though: it COPYs global.json, so a tag outside the pinned band fails the image
+  # build outright, and `ToolchainPinDriftTests.DockerImagesUseTheSdkBandPinnedInGlobalJson` says so
+  # in seconds rather than minutes. Expect the SDK bump PR to go red there until the tag follows —
+  # that is the reminder working, not a problem with the PR.
+  #
+  # There is deliberately no `package-ecosystem: docker` entry. A second bot bumping the image tag
+  # would race this one over two numbers that must agree, and every such PR would be red until the
+  # other landed.
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:

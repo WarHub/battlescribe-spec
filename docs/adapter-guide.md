@@ -251,11 +251,21 @@ through the memory cap for unmeasured engines. Declare what you know; inherit no
 
 ### With Docker
 
+Build the image first (it is not published yet — `docker build -f docker/bs-spec.Dockerfile -t
+bs-spec:local .` from a checkout cloned with `--recurse-submodules`). It ships the specs and the
+runner and **no engine**, so yours is the only one:
+
 ```bash
-docker run --rm -v /path/to/your-adapter:/adapter \
+docker run --rm -v /path/to/your-adapter:/adapter:ro \
   bs-spec:local \
-  run --all --engine "exec:/adapter/your-adapter" --specs /specs --output summary
+  run --all --engine "myengine=exec:/adapter/your-adapter" --engine-endpoint local \
+  --specs /specs --output summary
 ```
+
+`--engine-endpoint local` belongs here for the same reason it belongs anywhere: an undeclared endpoint
+fails safe to "a third party's live service" and is held to 2 concurrent sessions. Naming your adapter
+(`myengine=`) rather than leaving it anonymous is what makes per-engine spec applicability and
+`--expected-failures` work.
 
 ### .NET Adapter Shortcut
 

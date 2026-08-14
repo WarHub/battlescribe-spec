@@ -104,9 +104,17 @@ run the same analyzers. This matters because `AnalysisLevel=latest-recommended` 
 `TreatWarningsAsErrors=true` make the set of rules that can fail the build a property of the
 installed SDK — unpinned, a runner-image bump turns untouched code red. Bumping the band is
 Dependabot's job (`dotnet-sdk` ecosystem), and reviewing that PR is where a widened rule set gets
-dealt with. `ToolchainPinDriftTests` fails if a workflow step starts picking its own SDK again. Two
-SDK-derived pins do **not** move with it and stay manual: `Directory.Build.targets`' `KnownILLinkPack`
-(see the comment there) and the `mcr.microsoft.com/dotnet/sdk` tags in `docker/`.
+dealt with. `ToolchainPinDriftTests` fails if a workflow step starts picking its own SDK again, or if
+`docker/`'s SDK image tag leaves the pinned band. Two SDK-derived pins are invisible to Dependabot and
+must move by hand **in the same PR** as an SDK bump: `Directory.Build.targets`' `KnownILLinkPack` (see
+the comment there) and the `mcr.microsoft.com/dotnet/sdk` tag in `docker/`.
+
+**The `docker` CI job builds `docker/bs-spec.Dockerfile` on every push, and runs the image.** It
+exists because nothing built these files and both rotted unnoticed — one referenced a project renamed
+away four months earlier, the other missed two `ProjectReference`s and shipped on a base image lacking
+a shared framework it needs. A stale `COPY` list is only wrong relative to a project graph that
+moves, so no lint rule finds it; building the image does. The image ships **no engine** (the built-in
+one needs third-party jars from a token-gated archive) — bring your own adapter as a connectable.
 
 **Lock files are real.** Every project has a `packages.lock.json` and CI verifies it
 (`dotnet restore --locked-mode`, `checks` job). If a restore rewrites one, that is a **finding, not

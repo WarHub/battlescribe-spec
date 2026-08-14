@@ -1,37 +1,42 @@
-# Docker Compose for running BattleScribe spec conformance tests.
+# Builds the bs-spec CLI image (engine-free orchestrator + embedded specs).
 #
-# Usage:
-#   docker compose -f docker/docker-compose.yaml up --build
+#   docker compose -f docker/docker-compose.yaml build
+#   docker compose -f docker/docker-compose.yaml run --rm bs-spec run --all --roster --specs /specs
 #
-# bs-spec starts the reference adapter as a subprocess via stdin/stdout,
-# so both images are built but only bs-spec is launched directly.
-# For external adapters, override the --engine connectable (exec:/dotnet:).
+# THIS FILE USED TO ORCHESTRATE TWO SERVICES AND COULD NOT BUILD EITHER. The second was
+# `reference-adapter-build`, publishing the in-process BattleScribe engine into a shared volume for
+# bs-spec to launch. It was deleted in 2026-08 along with its Dockerfile: that engine is IKVM-compiled
+# from BattleScribe's own jars, which setup.ps1 fetches with an authenticated `gh release download`
+# from a token-gated archive repo. Building it inside `docker build` would mean carrying a GitHub App
+# token into the build and redistributing a third party's binaries in an image. It had also referenced
+# a project renamed away in April 2026 and gone unnoticed for four months, because nothing built it.
+#
+# So there is no bundled engine here, and that is not a gap to fill later — it is what "engine-free
+# orchestrator" means. Bring your own adapter, which is the shape docs/ci-guide.md documents for
+# consumers anyway.
 
 services:
-  # Builds the bs-spec CLI image (engine-free orchestrator + embedded specs)
   bs-spec:
     build:
       context: ..
       dockerfile: docker/bs-spec.Dockerfile
     image: bs-spec:local
-    # Default: run all specs against the reference adapter (anonymous dotnet: connectable)
-    command: ["run", "--all", "--roster", "--engine", "dotnet:/adapter/bs-reference-adapter.dll", "--specs", "/specs", "--output", "summary"]
-    volumes:
-      - adapter-bin:/adapter:ro
-    depends_on:
-      reference-adapter-build:
-        condition: service_completed_successfully
-
-  # Build-only service that publishes the reference adapter binary
-  reference-adapter-build:
-    build:
-      context: ..
-      dockerfile: docker/reference-adapter.Dockerfile
-    image: bs-reference-adapter:local
-    # Copy the published adapter to the shared volume, then exit
-    entrypoint: ["sh", "-c", "cp -r /app/* /output/"]
-    volumes:
-      - adapter-bin:/output
-
-volumes:
-  adapter-bin:
+    # Default is `--help` (the image's CMD). Running specs needs an engine, so mount your published
+    # adapter and name it as a connectable:
+    #
+    #   volumes:
+    #     - ../path/to/your/adapter/bin/Release/net10.0:/adapter:ro
+    #   command:
+    #     - run
+    #     - --all
+    #     - --roster
+    #     - --specs
+    #     - /specs
+    #     - --output
+    #     - summary
+    #     - --engine
+    #     - myengine=dotnet:/adapter/my-adapter.dll
+    #     # A DECLARATION, NOT A TUNING KNOB: an undeclared endpoint fails safe to "a third party's
+    #     # live service" and is throttled to 2 concurrent sessions. Say where the traffic lands.
+    #     - --engine-endpoint
+    #     - local
