@@ -133,13 +133,39 @@ the fixture gracefully skips when the HAR is not found.
 The `update-nr-snapshot.yml` workflow runs daily and on manual dispatch:
 
 1. Records a fresh HAR from newrecruit.eu
-2. Computes SHA256 and compares with the current latest release's asset digest
-3. If unchanged, exits early (no action needed)
-4. If changed:
-   - Determines the tag: `v{version}` for new versions, `v{version}-{YYYYMMDD}` if the
-     version is unchanged but content differs
+2. Asks two independent questions:
+   - **`content_new`** — does the recording's SHA256 differ from the newest release's asset digest?
+   - **`pin_stale`** — is `testdata.json` pinned to something other than the newest release?
+3. If neither, exits early (no action needed)
+4. Otherwise:
+   - Picks the target tag. A changed recording earns a new one — `v{version}`, or
+     `v{version}-{YYYYMMDD}` if the version is unchanged but the content differs. An unchanged
+     recording with a lagging pin adopts the release that already exists.
+   - Diffs the new HAR against **the release `testdata.json` currently pins** and writes the
+     summary that becomes both the release notes and the PR body
    - Publishes a new release to [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har)
-   - Opens a PR updating `testdata.json` with the new tag, labelled `thorough-ci`
+     — only when `content_new`; there is nothing to publish when just the pin lagged
+   - Opens a PR updating `testdata.json` with the target tag, labelled `thorough-ci`
+
+`pin_stale` is what lets the pin catch up on its own. Without it the workflow could only react to
+NR: close a snapshot PR unmerged and the pin stays behind indefinitely, because every later run
+compares the recording against a release that already exists, finds them identical, and exits. Any
+closed snapshot PR is re-proposed by the next run.
+
+The workflow compares against two different things on purpose. Change detection and tag naming
+use the **newest release** — they ask "is this snapshot new to the world?", and anchoring them to
+the pin instead would republish an identical HAR under a fresh date-suffixed tag every night that
+a snapshot PR sat unmerged. The **diff** uses the pin, because that is the snapshot the frozen
+suites replay today and the one the reviewer is being asked to stop replaying. The two agree on
+the common path and diverge the moment a PR waits a day.
+
+The diff baseline is downloaded fresh into `.har-old/` on every run, and a download that fails
+means *no baseline* — a summary with no comparison — rather than a fallback to whatever is on
+disk. #443 is why that is spelled out: `.har-old/` was committed to the repo by the bot's own #80,
+`gh release download` will not overwrite an existing file without `--clobber`, and the step that
+consumed it only checked that the file existed. Every PR body and release note from `v34.21` to
+`v35.28` claimed a diff against `v34.18`, describing five months of accumulated change as if it
+were one night's.
 
 A snapshot bump changes what every frozen suite replays, and the every-push CI lanes trim those
 suites to kitchen-sink — so the bump PR must run the full ones or it proves nothing. `ci.yml`

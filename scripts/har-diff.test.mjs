@@ -12,6 +12,7 @@ import {
   matchJsBundles,
   computeCssDiff,
   renderChangesTable,
+  renderHeader,
 } from "./har-diff.mjs";
 
 // --- helpers to build synthetic HAR-like Maps ---
@@ -416,5 +417,62 @@ describe("renderChangesTable", () => {
     const text = renderChangesTable(items, "CSS").join("\n");
     assert.ok(text.includes("CSS (~2 changed)"));
     assert.ok(text.includes("<summary>~2 changed</summary>"));
+  });
+});
+
+// ─── renderHeader ───────────────────────────────────────────
+
+describe("renderHeader", () => {
+  it("titles on the tag transition, and keeps the client version separate", () => {
+    const text = renderHeader({
+      hasOld: true,
+      oldTag: "v35.27",
+      newTag: "v35.28",
+      oldVersion: "35.27",
+      newVersion: "35.28",
+    }).join("\n");
+    assert.ok(text.includes("## NR Snapshot: v35.27 → v35.28"));
+    assert.ok(text.includes("**Client version:** 35.27 → 35.28"));
+  });
+
+  it("still shows the tag transition when the client version is unchanged", () => {
+    // A same-day re-snapshot. The version-only title used to collapse to a bare "v35.27",
+    // which reads as "nothing changed" on a PR that swaps the pinned tag.
+    const text = renderHeader({
+      hasOld: true,
+      oldTag: "v35.27",
+      newTag: "v35.27-20260813",
+      oldVersion: "35.27",
+      newVersion: "35.27",
+    }).join("\n");
+    assert.ok(text.includes("## NR Snapshot: v35.27 → v35.27-20260813"));
+    assert.ok(text.includes("**Client version:** 35.27"));
+    assert.ok(!text.includes("**Client version:** 35.27 →"));
+  });
+
+  it("falls back to versions when no tags are supplied", () => {
+    const text = renderHeader({
+      hasOld: true,
+      oldVersion: "35.27",
+      newVersion: "35.28",
+    }).join("\n");
+    assert.ok(text.includes("## NR Snapshot: v35.27 → v35.28"));
+  });
+
+  it("does not invent a transition when there is no baseline", () => {
+    const text = renderHeader({
+      hasOld: false,
+      newTag: "v35.28",
+      newVersion: "35.28",
+    }).join("\n");
+    assert.ok(text.includes("## NR Snapshot: v35.28"));
+    assert.ok(!text.includes("→"));
+  });
+
+  it("degrades to a bare title with nothing to go on", () => {
+    assert.deepEqual(renderHeader({ hasOld: false }), [
+      "## NR Snapshot Update",
+      "",
+    ]);
   });
 });
