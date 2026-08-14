@@ -128,6 +128,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Both Dockerfiles had been unbuildable for months, and the stale `10.0-preview` tag was the least
+  of it** — nothing in CI, scripts, or tooling ever built them, so nobody found out.
+  `reference-adapter.Dockerfile` copied `src/BattleScribeSpec.Oracle/`, a project renamed away on
+  2026-04-23, and had been broken for four months; it also copied `lib/*.jar`, which is gitignored and
+  where no jars have lived since they moved to `lib/battlescribe/lib/`. `bs-spec.Dockerfile` never
+  copied the two Telemetry `.csproj` files the CLI has ProjectReferenced since 2026-07-13 (restore
+  failed), and its `dotnet/runtime` base lacks the **ASP.NET Core** shared framework that
+  `Telemetry.Collector`'s `FrameworkReference` pulls into `bs-spec.runtimeconfig.json` — so even a
+  fixed restore would have produced an image that could not start. Its `CMD` defaulted to the built-in
+  `battlescribe` engine, which this image cannot carry.
+  **`reference-adapter.Dockerfile` is deleted** rather than repaired: its engine is IKVM-compiled from
+  BattleScribe jars that `setup.ps1` fetches with an authenticated `gh release download` from a
+  token-gated archive, so building it means carrying a GitHub App token into `docker build` and
+  redistributing a third party's binaries. `docker-compose.yaml` loses that service and now builds the
+  one image that can exist. **`bs-spec.Dockerfile` is repaired**: SDK `10.0.302` (inside the band
+  `global.json` pins, which it now COPYs along with `Directory.Build.targets`), an `aspnet` runtime
+  base, the two missing csproj copies, and `CMD ["--help"]` instead of a default engine it does not
+  ship. A new **`docker` CI job** builds the image and runs it on every push — a stale `COPY` list is
+  only wrong relative to a project graph that moves, so no lint rule can find it and only a build
+  will. `ToolchainPinDriftTests.DockerImagesUseTheSdkBandPinnedInGlobalJson` catches the cheaper half
+  in seconds: the image tag must stay inside `global.json`'s feature band, since the Dockerfile COPYs
+  that file and a mismatch is a hard "no compatible SDK" failure.
 - **`run --policy reuse=on` is refused on an engine that has not earned reuse-safety, instead of
   warned about (#313)** — `EngineProfile.ReuseSafeRoster`/`ReuseSafeGameData` are claims `bs-spec
   compare` has demonstrated against a cold arm, and `newrecruit-ui` declares its roster domain unsafe

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace BattleScribeSpec.Tests;
 
@@ -91,6 +92,85 @@ public sealed class ToolchainPinDriftTests
         // are the only movement `latestPatch` permits.
         var version = sdk.GetProperty("version").GetString();
         Assert.Matches(@"^\d+\.\d+\.\d{3}$", version);
+    }
+
+    /// <summary>
+    /// <b>A Dockerfile's SDK tag is the same decision, spelled somewhere Dependabot's dotnet-sdk
+    /// updater cannot reach.</b> The images COPY <c>global.json</c>, so a tag outside the pinned band
+    /// does not build differently — it fails outright ("A compatible .NET SDK was not found"). Two
+    /// numbers that must agree, in two files, is exactly the shape that drifts, so it is asserted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bands only: the patch within the band is free to move, because <c>latestPatch</c> accepts any
+    /// patch at or above the pinned one. So <c>sdk:10.0.302</c> satisfies a <c>10.0.300</c> pin and
+    /// this test says nothing about it; <c>sdk:10.0.400</c> does not, and this test says so by name.
+    /// </para>
+    /// <para>
+    /// Falsifiable: change the tag in <c>docker/bs-spec.Dockerfile</c> to a different feature band
+    /// (<c>10.0.400</c>) and this fails with both values — which is the same failure the
+    /// <c>docker</c> CI job would produce, several minutes later.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void DockerImagesUseTheSdkBandPinnedInGlobalJson()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "global.json")));
+        var pinned = doc.RootElement.GetProperty("sdk").GetProperty("version").GetString()!;
+        var pinnedBand = FeatureBandOf(pinned);
+
+        var dockerfiles = Directory
+            .EnumerateFiles(Path.Combine(RepoRoot, "docker"), "*.Dockerfile", SearchOption.AllDirectories)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotEmpty(dockerfiles);
+
+        var mismatched = new List<string>();
+        var checkedAny = false;
+
+        foreach (var file in dockerfiles)
+        {
+            foreach (var match in Regex.Matches(
+                File.ReadAllText(file),
+                @"mcr\.microsoft\.com/dotnet/sdk:(?<tag>[^\s]+)").Cast<Match>())
+            {
+                checkedAny = true;
+                var tag = match.Groups["tag"].Value;
+                if (FeatureBandOf(tag) != pinnedBand)
+                {
+                    mismatched.Add($"  {Path.GetFileName(file)}: sdk:{tag}");
+                }
+            }
+        }
+
+        Assert.True(
+            checkedAny,
+            "No `mcr.microsoft.com/dotnet/sdk` tag found under docker/. Either the images stopped using "
+            + "the .NET SDK image or the tag was written in a form this gate cannot read — check before "
+            + "assuming the pin still holds.");
+
+        Assert.True(
+            mismatched.Count == 0,
+            $"global.json pins the SDK to the {pinnedBand} feature band (version {pinned}, "
+            + $"rollForward latestPatch), but these images ask for a different band:\n"
+            + string.Join("\n", mismatched)
+            + "\n\nThe Dockerfiles COPY global.json, so this is a build failure, not a nuance: the "
+            + "SDK in the image cannot satisfy the pin. Move both together — Dependabot's dotnet-sdk "
+            + "updater rewrites global.json and does not know these files exist.");
+    }
+
+    /// <summary>
+    /// The <c>major.minor.Fxx</c> band of an SDK version or image tag, or the input unchanged when it
+    /// names no band (<c>10.0</c>, <c>latest</c>) — those float by definition and are reported as a
+    /// mismatch rather than silently treated as compatible.
+    /// </summary>
+    private static string FeatureBandOf(string version)
+    {
+        var match = Regex.Match(version, @"^(?<major>\d+)\.(?<minor>\d+)\.(?<band>\d)\d\d$");
+        return match.Success
+            ? $"{match.Groups["major"].Value}.{match.Groups["minor"].Value}.{match.Groups["band"].Value}xx"
+            : version;
     }
 
     /// <summary>

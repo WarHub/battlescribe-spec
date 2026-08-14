@@ -51,13 +51,21 @@ jobs:
       # Build your adapter image
       - run: docker build -t my-adapter .
 
-      # Run conformance (future — image not yet published)
+      # Run conformance (future — image not yet published to GHCR; build it from a checkout with
+      # `docker build -f docker/bs-spec.Dockerfile -t bs-spec:local .` in the meantime)
       # - run: |
       #     docker run --rm \
-      #       -v $(pwd)/my-adapter:/adapter \
+      #       -v $(pwd)/my-adapter:/adapter:ro \
       #       ghcr.io/warhub/bs-spec:latest \
-      #       run --all --engine "dotnet:/adapter/my-adapter.dll" --output github-actions
+      #       run --all --engine "myengine=dotnet:/adapter/my-adapter.dll" \
+      #       --engine-endpoint local --output github-actions
 ```
+
+The image carries the specs and the runner and **no engine** — the built-in `battlescribe` one is
+IKVM-compiled from third-party jars that cannot be redistributed in it — so `--engine` is required,
+not optional. Name your adapter (`myengine=`) so per-engine spec applicability and
+`--expected-failures` apply to it, and declare `--engine-endpoint local`: an undeclared endpoint fails
+safe to "a third party's live service" and is throttled to 2 concurrent sessions.
 
 ### Using the TestKit NuGet Package (Recommended for .NET engines)
 

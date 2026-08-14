@@ -242,6 +242,36 @@ jobs:
           path: artifacts/telemetry/
           if-no-files-found: ignore
 
+  # ── DOCKER — every push. Builds the published-image Dockerfile. Build only, no push. ──
+  #
+  # THIS JOB EXISTS BECAUSE NOTHING BUILT THESE FILES AND THEY ROTTED IN SILENCE. As of 2026-08 both
+  # Dockerfiles were unbuildable and had been for months: reference-adapter.Dockerfile copied
+  # `src/BattleScribeSpec.Oracle/`, a project renamed away on 2026-04-23, and it went unnoticed for
+  # four months; bs-spec.Dockerfile never copied the two Telemetry csprojs the CLI has
+  # ProjectReferenced since 2026-07-13, and its runtime base lacked the ASP.NET Core shared framework
+  # the Collector pulls in — so it failed at restore, and would then have failed at startup.
+  #
+  # None of that is catchable by a lint rule or a drift test, because a stale COPY list is only wrong
+  # relative to a project graph that changes. The only thing that finds it is building the image.
+  # It is a plain `docker build` with no push, no registry auth and no secrets: nothing here needs the
+  # BattleScribe archive, because this image ships no engine.
+  docker:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      # submodules: recursive is load-bearing — the Dockerfile COPYs .deps/ for the vendored wham
+      # projects XmlGen references, and an uninitialised submodule is an empty directory that fails
+      # restore rather than the checkout.
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Build bs-spec image
+        run: docker build -f docker/bs-spec.Dockerfile -t bs-spec:ci .
+      # A built image that cannot start is the failure mode that motivated the aspnet base, and the
+      # build stage cannot see it. `--help` exercises the real entrypoint and framework resolution.
+      - name: The image starts and resolves its frameworks
+        run: docker run --rm bs-spec:ci --help
+
   # ── SMOKE — every push. Kitchen-sink through every real engine, proving each
   #    engine/adapter/submodule/dependency wires up end-to-end. ──
   smoke:
@@ -636,7 +666,7 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [gate, checks, smoke, thorough-conformance, thorough-ui-bs, nr-conformance]
+    needs: [gate, checks, docker, smoke, thorough-conformance, thorough-ui-bs, nr-conformance]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -653,6 +683,7 @@ jobs:
             # failure that silently disables the deepest suites was the one nobody was told about.
             'gate'                 = '${{ needs.gate.result }}'
             'checks'               = '${{ needs.checks.result }}'
+            'docker'               = '${{ needs.docker.result }}'
             'smoke'                = '${{ needs.smoke.result }}'
             'thorough-conformance' = '${{ needs.thorough-conformance.result }}'
             'thorough-ui-bs'       = '${{ needs.thorough-ui-bs.result }}'

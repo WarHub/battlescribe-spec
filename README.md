@@ -199,7 +199,7 @@ battlescribe-spec/
 │   ├── Features/                   # Domain feature tests
 │   ├── Integration/                # End-to-end and real-world data tests
 │   └── Regression/                 # Regression and protocol tests
-├── docker/                         # Dockerfiles + compose
+├── docker/                         # bs-spec Dockerfile + compose (engine-free image)
 ├── docs/                           # Protocol spec, guides, ADRs
 └── BattleScribeSpec.slnx           # Solution file
 ```
