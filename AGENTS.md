@@ -215,7 +215,12 @@ lands. `--policy reuse=on|off,reuse-roster=…,reuse-gamedata=…` overrides the
 diagnosis; `--policy workers=N` applies to `run --all` (a batch has workers) and is **rejected** on a
 single-spec `run`, which has exactly one — a flag is honoured or refused, never silently dropped.
 `--policy` cannot raise the load on a third party's live site, and it cannot be delivered to an
-`exec:`/`dotnet:` adapter at all. (`--workers` and `--keep-alive` are deleted.)
+`exec:`/`dotnet:` adapter at all. **Nor can `run` force reuse ON for a domain the engine has not
+earned** — `ReuseSafe*` is a claim `bs-spec compare` has demonstrated, and forcing it in a one-arm
+`run` cannot test that claim, only produce a faster answer that may be wrong (it changed six verdicts
+on `newrecruit-ui` once, which is why `compare` exists). That ablation belongs in `compare`, where it
+stays allowed and the other arm catches the divergence; `reuse=off` is legal everywhere.
+(`--workers` and `--keep-alive` are deleted.)
 Specs can include `action: dump` steps for explicit dump points.
 
 ## After editing specs

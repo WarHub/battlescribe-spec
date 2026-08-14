@@ -257,6 +257,16 @@ The ablation lever is `bs-spec compare --policy-a/--policy-b`: each arm gets its
 `reuse=on|off`, `reuse-roster=on|off`, `reuse-gamedata=on|off`). `compare` runs both arms, asserts
 per-spec verdict-equality, and only then reports timing.
 
+**`compare` is the only verb that will force a reuse the engine has not earned, and that is not a
+convenience — it is the entire reason the ablation is trustworthy.** `run --policy reuse=on` on an
+engine whose profile declares that domain unsafe is **rejected** (#313). It used to warn and proceed,
+which reproduced the exact configuration that silently changed six `newrecruit-ui` verdicts while a
+stopwatch reported success — the incident this document exists to record. A single-arm `run` has
+nothing to compare against, so forcing reuse there cannot test the hypothesis; it can only return a
+faster answer that may be wrong. Here the forced arm is the experiment and the other arm is the
+control, so a divergence surfaces as `A=failed B=passed` instead of as a corrupted result nobody
+sees. `reuse=off` remains legal in every verb: turning reuse off cannot invent a verdict.
+
 ```bash
 dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll compare \
   --engine battlescribe-ui --gamedata --filter "entry/,export/" \

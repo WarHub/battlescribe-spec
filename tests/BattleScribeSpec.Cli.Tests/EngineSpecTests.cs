@@ -606,11 +606,11 @@ public sealed class EngineSpecTests
         var live = Live(Resolve("plain-spec-id", "--engine", "newrecruit"));
 
         var ex = Assert.Throws<CliInputException>(
-            () => RunCommand.ApplyPolicyOverride(live, "workers=32", _ => { }));
+            () => RunCommand.ApplyPolicyOverride(live, "workers=32", _ => { }, UnsafeReuse.Refuse));
         Assert.Contains("load question", ex.Message, StringComparison.Ordinal);
 
         // Lowering it is always allowed.
-        var quieter = RunCommand.ApplyPolicyOverride(live, "workers=1", _ => { });
+        var quieter = RunCommand.ApplyPolicyOverride(live, "workers=1", _ => { }, UnsafeReuse.Refuse);
         Assert.Equal(1, quieter.EffectivePlan.Workers);
 
         // An override that says nothing about workers must not resurrect the machine-width count through
@@ -620,7 +620,13 @@ public sealed class EngineSpecTests
         // `Assert.Equal(ThirdPartyLiveLoadLimit, …Workers)` and the runner said "expected 2, actual 1" —
         // because the runner has 2 logical processors, `ceil(2 × 0.375) = 1`, and this engine is already
         // under the limit on its own. The CODE was right. The test had turned a ceiling into a floor.
-        var reuseOnly = RunCommand.ApplyPolicyOverride(live, "reuse-roster=on", _ => { });
+        //
+        // AllowForAblation, because this line forces reuse on `newrecruit`, which declares neither
+        // domain reuse-safe — `run` refuses that outright (#313) and would throw before reaching the
+        // assertion below. The question here is a plan-arithmetic one, and `compare` is the verb that
+        // can legitimately ask it.
+        var reuseOnly = RunCommand.ApplyPolicyOverride(
+            live, "reuse-roster=on", _ => { }, UnsafeReuse.AllowForAblation);
 
         Assert.True(reuseOnly.EffectivePlan.ReuseRoster, "the flag the user actually passed was dropped");
         Assert.Equal(LiveWorkersEntitlement(live.Entry.Profile), reuseOnly.EffectivePlan.Workers);
@@ -647,7 +653,7 @@ public sealed class EngineSpecTests
     {
         var frozen = Frozen(Resolve("plain-spec-id", "--engine", "newrecruit"));
 
-        var overridden = RunCommand.ApplyPolicyOverride(frozen, "workers=32", _ => { });
+        var overridden = RunCommand.ApplyPolicyOverride(frozen, "workers=32", _ => { }, UnsafeReuse.Refuse);
 
         Assert.Equal(32, overridden.EffectivePlan.Workers);
     }

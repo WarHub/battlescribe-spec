@@ -100,7 +100,10 @@ internal static class RunCommand
             Description = "Override the concurrency/reuse policy, comma-separated KEY=VALUE: workers=N, " +
                 "reuse=on|off, reuse-roster=on|off, reuse-gamedata=on|off. Without this, the policy " +
                 "(ConcurrencyPolicy.For — machine + engine) picks the worker count and reuse decision " +
-                "by itself; this exists to diagnose or ablate, not to operate.",
+                "by itself; this exists to diagnose or ablate, not to operate. workers=N needs --all. " +
+                "Turning reuse ON for a domain the engine does not declare reuse-safe is rejected here " +
+                "— that ablation belongs in `bs-spec compare`, which runs both arms and catches a " +
+                "changed verdict; reuse=off is always allowed.",
         };
         var allSteps = new Option<bool>("--all-steps")
         {
@@ -182,7 +185,10 @@ internal static class RunCommand
 
                     // Resolve validates --gamedata/--roster exclusivity, --ui, and the engine identity.
                     var selection = ApplyPolicyOverride(
-                        engineOptions.Resolve(parseResult, specInput: null), parseResult.GetValue(policy), Ui.Warn);
+                        engineOptions.Resolve(parseResult, specInput: null),
+                        parseResult.GetValue(policy),
+                        Ui.Warn,
+                        UnsafeReuse.Refuse);
 
                     // Batch runs both domains by default; --gamedata/--roster narrow. Resolve already
                     // rejected the both-set case, so the remaining cases are single-domain or neither→both.
@@ -237,7 +243,10 @@ internal static class RunCommand
                 var options = new RunOptions(
                     Spec: specInput!,
                     Engine: ApplyPolicyOverride(
-                        engineOptions.Resolve(parseResult, specInput), parseResult.GetValue(policy), Ui.Warn),
+                        engineOptions.Resolve(parseResult, specInput),
+                        parseResult.GetValue(policy),
+                        Ui.Warn,
+                        UnsafeReuse.Refuse),
                     Format: format,
                     Headed: parseResult.GetValue(engineOptions.Headed),
                     AllSteps: parseResult.GetValue(allSteps),
@@ -312,13 +321,26 @@ internal static class RunCommand
     /// <param name="selection">The resolved engine selection to override.</param>
     /// <param name="policyRaw">The raw <c>--policy k=v,...</c> string, or null when omitted.</param>
     /// <param name="warn">
-    /// Sink for the "policy override, not capability mismatch" warning: forcing reuse on for a domain
-    /// the engine's <see cref="EngineProfile"/> does not declare reuse-safe is ALLOWED (it is exactly
-    /// the ablation <c>bs-spec compare</c> needs to prove reuse-safety) but is never silent.
+    /// Sink for the "policy override, not capability mismatch" warning, used when
+    /// <paramref name="unsafeReuse"/> permits forcing reuse: allowed is not the same as silent.
+    /// </param>
+    /// <param name="unsafeReuse">
+    /// Whether THIS verb may force reuse on for a domain the engine's <see cref="EngineProfile"/> does
+    /// not declare reuse-safe. Required rather than defaulted: a new call site has to state which it
+    /// is, because the wrong answer here is a silently wrong conformance result. See
+    /// <see cref="UnsafeReuse"/>.
     /// </param>
     /// <returns><paramref name="selection"/>, with <see cref="EngineSelection.PlanOverride"/> set when an override was given.</returns>
-    /// <exception cref="CliInputException"><paramref name="policyRaw"/> fails to parse (see <see cref="PolicyOverride.Apply"/>).</exception>
-    internal static EngineSelection ApplyPolicyOverride(EngineSelection selection, string? policyRaw, Action<string> warn)
+    /// <exception cref="CliInputException">
+    /// <paramref name="policyRaw"/> fails to parse (see <see cref="PolicyOverride.Apply"/>), raises the
+    /// load on a third party's live service, or forces reuse the engine has not earned when
+    /// <paramref name="unsafeReuse"/> is <see cref="UnsafeReuse.Refuse"/>.
+    /// </exception>
+    internal static EngineSelection ApplyPolicyOverride(
+        EngineSelection selection,
+        string? policyRaw,
+        Action<string> warn,
+        UnsafeReuse unsafeReuse)
     {
         if (policyRaw is null)
         {
@@ -360,16 +382,57 @@ internal static class RunCommand
                 $"worker count was fitted against).");
         }
 
+        // FORCING AN UNEARNED REUSE HAS EXACTLY ONE LEGITIMATE PURPOSE, AND `run` IS NOT IT.
+        // `ReuseSafeRoster`/`ReuseSafeGameData` are earned: an engine may claim reuse-safety for a
+        // domain only where `bs-spec compare` has demonstrated verdict-equality against a cold arm
+        // (EngineProfile's own remarks). The one time reuse was enabled without that evidence —
+        // newrecruit-ui, roster — it silently changed SIX spec verdicts while a stopwatch reported
+        // success. `compare` exists because of that incident.
+        //
+        // So the question to ask of `--policy reuse=on` is what the user is trying to find out.
+        // Testing whether reuse is safe means running both arms and comparing them, which is
+        // `compare`, and there the divergence gets CAUGHT — that is the ablation channel and it stays
+        // open. In a plain `run` there is no second arm and nothing to catch anything: the hypothesis
+        // is not under test, the results are just quietly wrong, and the only thing gained is a faster
+        // wrong answer. That is not a use case, so `run` refuses instead of warning. This repo's rule
+        // is that a flag is honoured or refused, never silently honoured into a wrong result (#305) —
+        // and a warning in a CI log is close enough to silence to count.
+        var unearned = new List<string>(2);
         if (overridden.ReuseRoster && !selection.Entry.Profile.ReuseSafeRoster)
         {
-            warn("forcing reuse on for the roster domain on an engine not declared reuse-safe; " +
-                "verdicts may change — use `bs-spec compare` to check.");
+            unearned.Add("roster");
         }
 
         if (overridden.ReuseGameData && !selection.Entry.Profile.ReuseSafeGameData)
         {
-            warn("forcing reuse on for the gamedata domain on an engine not declared reuse-safe; " +
-                "verdicts may change — use `bs-spec compare` to check.");
+            unearned.Add("gamedata");
+        }
+
+        if (unearned.Count > 0)
+        {
+            var engine = selection.EngineName ?? selection.Display;
+            if (unsafeReuse == UnsafeReuse.Refuse)
+            {
+                throw new CliInputException(
+                    $"--policy: engine '{engine}' has not earned reuse-safety for its " +
+                    $"{string.Join(" or ", unearned)} domain{(unearned.Count > 1 ? "s" : "")}, " +
+                    $"so `run` will not force it. " +
+                    $"Reuse-safety is earned by evidence, and forcing it here produces no evidence — " +
+                    $"only a faster answer that may be wrong, the way enabling it on newrecruit-ui once " +
+                    $"changed six spec verdicts with a stopwatch reporting success. Run the ablation " +
+                    $"where both arms exist and a divergence is caught:\n" +
+                    $"  bs-spec compare --engine {engine} --{unearned[0]} " +
+                    $"--policy-a \"reuse=off\" --policy-b \"reuse=on\"\n" +
+                    $"Or drop the override and let the policy decide (`--policy reuse=off` stays legal " +
+                    $"everywhere — turning reuse OFF cannot invent a verdict).");
+            }
+
+            foreach (var domain in unearned)
+            {
+                warn($"forcing reuse on for the {domain} domain on an engine not declared reuse-safe; " +
+                    "verdicts may change — this arm is only trustworthy because `compare` checks it " +
+                    "against the other one.");
+            }
         }
 
         return selection with { PlanOverride = overridden };

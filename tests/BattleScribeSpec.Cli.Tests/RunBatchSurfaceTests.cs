@@ -168,23 +168,86 @@ public sealed class RunBatchSurfaceTests
         var selection = ResolveSelection("battlescribe");
         var warnings = new List<string>();
 
-        var result = RunCommand.ApplyPolicyOverride(selection, policyRaw: null, warnings.Add);
+        var result = RunCommand.ApplyPolicyOverride(
+            selection, policyRaw: null, warnings.Add, UnsafeReuse.Refuse);
 
         Assert.Same(selection, result);
         Assert.Empty(warnings);
     }
 
+    /// <summary>
+    /// <b><c>run</c> refuses to force a reuse the engine has not earned.</b> A <c>ReuseSafe*</c> flag
+    /// is a claim about verdicts, established only by running both arms and comparing them. <c>run</c>
+    /// has one arm, so a verdict changed by forcing reuse is indistinguishable from a real one — which
+    /// is not a hypothetical: enabling it on <c>newrecruit-ui</c>'s roster domain once changed six spec
+    /// verdicts while a stopwatch reported success, and `bs-spec compare` exists because of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to warn and proceed. A warning is the right shape for "unusual but intended" and the
+    /// wrong shape for "the number you are about to read may be a lie" — nobody reads warnings in a CI
+    /// log, and the repo's own rule is that a flag is honoured or refused, never silently honoured into
+    /// a wrong result (#305, #313).
+    /// </para>
+    /// <para>
+    /// Falsifiable: pass <see cref="UnsafeReuse.AllowForAblation"/> here and this stops throwing.
+    /// </para>
+    /// </remarks>
     [Fact]
     [Trait("Category", "Unit")]
-    public void ApplyPolicyOverride_ForcingReuseOn_AnEngineNotDeclaredReuseSafe_WarnsButAllows()
+    public void ApplyPolicyOverride_ForcingReuseOn_UnderRun_IsRejected()
     {
-        // battlescribe (non-ui) declares ReuseSafeRoster/ReuseSafeGameData = false. Forcing reuse=on
-        // anyway must NOT be rejected — it is exactly the ablation `bs-spec compare` needs to prove
-        // reuse-(un)safety — but it must never be silent either.
+        // battlescribe (non-ui) declares ReuseSafeRoster/ReuseSafeGameData = false.
+        var selection = ResolveSelection("battlescribe");
+
+        var ex = Assert.Throws<CliInputException>(() => RunCommand.ApplyPolicyOverride(
+            selection, "reuse=on", _ => { }, UnsafeReuse.Refuse));
+
+        Assert.Contains("reuse-safe", ex.Message, StringComparison.Ordinal);
+        // The refusal has to name the way to get the answer, or it just blocks the user.
+        Assert.Contains("bs-spec compare", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The refusal is about the DIRECTION, not about the key. Turning reuse off cannot invent a
+    /// verdict, so <c>reuse=off</c> stays legal on an engine that declares neither domain safe —
+    /// guarding against over-correcting into "no reuse keys in `run`", which would delete the
+    /// cold-run recipe the BS GameData UI lane documents.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyPolicyOverride_ForcingReuseOff_UnderRun_IsAllowed()
+    {
         var selection = ResolveSelection("battlescribe");
         var warnings = new List<string>();
 
-        var result = RunCommand.ApplyPolicyOverride(selection, "reuse=on", warnings.Add);
+        var result = RunCommand.ApplyPolicyOverride(
+            selection, "reuse=off", warnings.Add, UnsafeReuse.Refuse);
+
+        Assert.False(result.EffectivePlan.ReuseRoster);
+        Assert.False(result.EffectivePlan.ReuseGameData);
+        Assert.Empty(warnings);
+    }
+
+    /// <summary>
+    /// <b>...and <c>compare</c> must keep allowing exactly what <c>run</c> now refuses.</b> That is the
+    /// ablation channel: the forced arm is the experiment, the other arm is the control, and
+    /// <c>compare</c> asserts per-spec verdict-equality before reporting any timing. Closing it would
+    /// leave no way for an engine to ever earn a <c>ReuseSafe*</c> flag.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: pass <see cref="UnsafeReuse.Refuse"/> here (or make it the only stance) and this
+    /// throws — as do <c>CompareCommandTests</c>' two end-to-end <c>--policy-a "reuse=on"</c> runs.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ApplyPolicyOverride_ForcingReuseOn_UnderCompare_IsAllowedButNeverSilent()
+    {
+        var selection = ResolveSelection("battlescribe");
+        var warnings = new List<string>();
+
+        var result = RunCommand.ApplyPolicyOverride(
+            selection, "reuse=on", warnings.Add, UnsafeReuse.AllowForAblation);
 
         Assert.True(result.EffectivePlan.ReuseRoster);
         Assert.True(result.EffectivePlan.ReuseGameData);
@@ -194,16 +257,35 @@ public sealed class RunBatchSurfaceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ApplyPolicyOverride_ForcingReuseOn_AnEngineDeclaredReuseSafe_DoesNotWarn()
+    public void ApplyPolicyOverride_ForcingReuseOn_AnEngineDeclaredReuseSafe_IsUnremarkableInBothVerbs()
     {
-        // battlescribe-ui declares both domains reuse-safe, so the same override is unremarkable.
+        // battlescribe-ui EARNED both flags, so there is nothing to refuse and nothing to warn about
+        // — including under `run`, which is what keeps this a safety gate rather than a ban on reuse.
         var selection = ResolveSelection("battlescribe-ui");
         var warnings = new List<string>();
 
-        var result = RunCommand.ApplyPolicyOverride(selection, "reuse=on", warnings.Add);
+        var result = RunCommand.ApplyPolicyOverride(
+            selection, "reuse=on", warnings.Add, UnsafeReuse.Refuse);
 
         Assert.True(result.EffectivePlan.ReuseRoster);
         Assert.Empty(warnings);
+    }
+
+    /// <summary>
+    /// End-to-end: the refusal reaches the user as a clean <c>error:</c> line and exit 1, not a stack
+    /// trace. Exit code alone cannot tell those apart, which is why this class spawns the CLI.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Policy_ReuseOn_IsRejectedForARun_NotSilentlyHonoured()
+    {
+        var (exitCode, _, stdErr) = await RunCliAsync(
+            "run", "protocol-kitchen-sink", "--engine", "battlescribe", "--policy", "reuse=on");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("reuse-safe", stdErr, StringComparison.Ordinal);
+        Assert.Contains("bs-spec compare", stdErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,7 +293,8 @@ public sealed class RunBatchSurfaceTests
     public void ApplyPolicyOverride_InvalidPolicyString_ThrowsCliInputException()
     {
         var selection = ResolveSelection("battlescribe");
-        Assert.Throws<CliInputException>(() => RunCommand.ApplyPolicyOverride(selection, "workers=0", _ => { }));
+        Assert.Throws<CliInputException>(() => RunCommand.ApplyPolicyOverride(
+            selection, "workers=0", _ => { }, UnsafeReuse.Refuse));
     }
 
     private static EngineSelection ResolveSelection(string engineName)
