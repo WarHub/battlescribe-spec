@@ -985,9 +985,9 @@
       "additionalProperties": false,
       "properties": {
         "on": {
-          "description": "The roster NODE the engine raised the error on. '<kind> ${{ steps.<id>.<field> }}' for force/category/selection — node ids are minted per run, so a literal id is never valid. 'roster' and 'group' are written bare: neither has an id a spec can name. The legacy '<kind> <catalogueEntryId>' form is still accepted while the corpus migrates (#424).",
+          "description": "The roster NODE the engine raised the error on. '<kind> ${{ steps.<id>.<field> }}' for force/category/selection — node ids are minted per run, so a literal id is never valid: it names a catalogue ENTRY, which is a set of nodes, not one. Written bare, those kinds match on kind alone. 'roster' and 'group' are always bare: neither has an id a spec can name.",
           "type": "string",
-          "pattern": "^(roster|group)$|^(force|category|selection)( \\S.*)?$"
+          "pattern": "^(roster|group)$|^(force|category|selection)( \\$\\{\\{.*\\}\\})?$"
         },
         "from": { "type": "string" },
         "messageContains": { "type": "string" }
