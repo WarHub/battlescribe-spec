@@ -34,20 +34,20 @@ the base assertion.
     forces:
       - selectionCount: 3
     errors:
-      - on: force fe-1
+      - on: force ${{ steps.add-force.forceId }}
         from: shared-unit/con-shared-max
     engines:
       newrecruit:
         errors:
-          - on: selection shared-unit
+          - on: selection ${{ steps.select-shared.selectionId }}
             from: link-1/con-link-max
 ```
 
 When running on **BattleScribe**: asserts `selectionCount: 3` and expects one
-error on `force fe-1`.
+error on the force `add-force` created.
 
 When running on **New Recruit**: asserts `selectionCount: 3` (inherited from
-base) and expects one error on `selection shared-unit` (overridden).
+base) and expects one error on the selection `select-shared` created (overridden).
 
 ### Engine adds errors where base has none
 
@@ -58,7 +58,7 @@ base) and expects one error on `selection shared-unit` (overridden).
     engines:
       newrecruit:
         errors:
-          - on: selection se-unit-a
+          - on: selection ${{ steps.select-unit-a.selectionId }}
             from: se-unit-a/con-max-2
 ```
 
@@ -85,12 +85,12 @@ Any field in `expectedState` can be overridden per engine — not just `errors`:
 ```yaml
 - expectedState:
     errors:
-      - on: force fe-1
+      - on: force ${{ steps.add-force.forceId }}
         from: se-unit/con-max
     engines:
       newrecruit:
         errors:
-          - on: selection se-unit
+          - on: selection ${{ steps.select-unit.selectionId }}
             from: se-unit/con-max
       newrecruit-ui:
         errors: []
@@ -133,12 +133,12 @@ Unlisted engines default to `"pass"`.
 ```yaml
 - expectedState:
     errors:
-      - on: force fe-1
+      - on: force ${{ steps.add-force.forceId }}
         from: se-unit/con-max
     engines:
       newrecruit:
         errors:
-          - on: selection se-unit
+          - on: selection ${{ steps.select-unit.selectionId }}
             from: se-unit/con-max
 ```
 
@@ -253,6 +253,11 @@ The BS BattleScribe adapter includes remapping logic (`RemapRosterErrorsToSelect
 `RemapForceErrorsToSelection`, `RemapCategoryErrorsToSelection`) that moves
 higher-level errors down to selection level where possible, aligning with NR.
 After remapping, the following differences remain.
+
+> The tables below quote `on:` values as they were written when the divergence was recorded, in the
+> pre-#419 entry-addressed dialect. That form is now rejected by both the schema and the linter —
+> read them as history, not as syntax to copy. The current grammar is in the examples above and in
+> `docs/error-assertions.md`.
 
 ### Missing Errors (NR reports, BS does not)
 

@@ -140,8 +140,9 @@ are always written as `${{ steps.… }}` references: `force ${{ steps.<id>.force
 `selection ${{ steps.<id>.selectionId }}`. `roster` and `group` are written **bare** — neither node
 has an id a spec can name. Where the two engines raise on different nodes (they do, on 24 of the 38
 assertions both evaluate) the spec records both, base plus an `engines:` block.
-A literal second token is the pre-#423 entry-addressed form, still accepted while the corpus
-migrates (#424) — do not write new ones. Full contract: `docs/error-assertions.md`.
+A literal second token is the retired pre-#423 entry-addressed form: it names a catalogue ENTRY,
+which is a set of nodes rather than one. Both the schema pattern and the linter reject it. Full
+contract: `docs/error-assertions.md`.
 
 `from` format: `{entryId}/{constraintId}` — pseudo-values: `costLimits/{costTypeId}`,
 `{entryId}/hidden`.

@@ -115,6 +115,12 @@ the mistake rather than reading as a missing error:
 The discriminator is the presence of `${{`, and it is exact rather than a guess: a node id can only
 ever be written as a step reference, and a catalogue entry id never is.
 
+The whole second token must be the expression. `${{ … }}` with a stray brace, a prefix
+(`selection sel-${{ … }}`), or trailing text is not a partial reference — the resolver substitutes
+nothing and hands the value back, so the address resolves to a literal that matches no node and the
+spec fails as though the engine had stopped raising the error. The linter and the schema both reject
+it, so that silent shape cannot reach a run.
+
 ## `from:` (required)
 
 Identifies the source entry and constraint that caused the error.

@@ -184,6 +184,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`on:` schema pattern rejects the retired entry-addressed dialect (#419, #424)** — the
+  `errorAssertion.on` pattern was `^(roster|group)$|^(force|category|selection)( \S.*)?$`, which
+  accepted any second token, so `on: selection se-unit-a` stayed schema-valid long after #419 made it
+  meaningless. Its description still promised the form was "still accepted while the corpus migrates
+  (#424)" — #424 closed 2026-08-13. A spec in that dialect passed schema validation and was then
+  refused by the linter: two records of one rule, with the schema being the wrong one. The pattern now
+  permits only a `${{ … }}` expression as the second token, and tolerates surrounding whitespace
+  because `ErrorAddress.Parse` and `ExpressionResolver.Resolve` both trim before inspecting. It also
+  now rejects a value whose expression is not the whole token (`selection ${{ a }} junk`,
+  `selection sel-${{ x }}`) — `Resolve` returns those unchanged, so they resolved to a literal that
+  matched nothing, silently. Bare `force`/`category`/`selection` stays valid: the matcher treats a
+  null node id as match-on-kind. No corpus spec changes. `SpecSchemaTests` gains a theory that reads
+  the pattern out of the shipped schema, since the corpus cannot catch a loosening of it.
+
 - **A directory the spec merely lived under could decide which engine ran it (#311)** —
   `SpecLoading.InferEngineType` classified a spec by substring-scanning
   `Path.GetFullPath(input).ToLowerInvariant()`, i.e. the absolute path, which carries every directory
