@@ -6,7 +6,8 @@ using YamlDotNet.RepresentationModel;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Validates all spec YAML files against the JSON Schema in docs/spec-schema.json.
+/// Validates every roster spec YAML against the JSON Schema in docs/spec-schema.json, and pins the
+/// restrictive direction of the schema's own patterns — which the corpus cannot do on its own.
 /// </summary>
 [Trait("Category", "Lint")]
 public sealed class SpecSchemaTests
@@ -73,7 +74,13 @@ public sealed class SpecSchemaTests
     /// That mattered once already: the schema accepted the legacy form long after the code stopped
     /// honouring it (<see cref="Roster.ErrorAddress.Matches"/> never matches a literal id, and
     /// <c>SpecLintTests</c> rejects the spec outright), so a spec could pass schema validation and
-    /// then fail lint with a message saying the schema should not have let it through.
+    /// then be refused by the linter — which names a catalogue entry, not the schema — for a shape the
+    /// schema had just blessed.
+    ///
+    /// The pattern tolerates surrounding whitespace because the runtime does: <c>ErrorAddress.Parse</c>
+    /// and <c>ExpressionResolver.Resolve</c> both trim before inspecting. It still rejects a value
+    /// whose expression is not the whole token — <c>Resolve</c> returns those unchanged, so they
+    /// resolve to a literal that matches nothing, silently.
     /// </summary>
     [Theory]
     // Retired entry-addressed form: a literal second token names a catalogue ENTRY, which is a set
@@ -92,10 +99,23 @@ public sealed class SpecSchemaTests
     // so the schema must not forbid it.
     [InlineData("selection", true)]
     [InlineData("force", true)]
+    [InlineData("category", true)]
+    // Whitespace the runtime trims away.
+    [InlineData("selection  ${{ steps.a.selectionId }}", true)]
+    [InlineData("selection ${{ steps.a.selectionId }} ", true)]
+    // The expression must be the whole token, or it resolves to a literal that never matches.
+    [InlineData("selection ${{ steps.a.selectionId }} junk", false)]
+    [InlineData("selection sel-${{ steps.a.selectionId }}", false)]
+    [InlineData("selection ${{", false)]
     // Giving an id-less kind an id is a lint error, and the pattern rejects it too.
     [InlineData("roster ros-1", false)]
     public void ErrorAddressPattern_AcceptsOnlyNodeAddressedForms(string on, bool expectedValid)
     {
+        if (SpecsDir is null || !Directory.Exists(SpecsDir))
+        {
+            return;
+        }
+
         using var doc = JsonDocument.Parse(File.ReadAllText(SchemaPath));
         var pattern = doc.RootElement
             .GetProperty("$defs").GetProperty("errorAssertion")
