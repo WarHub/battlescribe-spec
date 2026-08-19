@@ -654,9 +654,9 @@ the epic reports itself more complete than it is.
 
 ## Decision: Accept the documented risk of live NewRecruit automated testing (#88)
 
-**Date:** 2026-08-16
-**Source:** User directive (Amadeusz Sadowski), during backlog grooming
-**Status:** Decided — #88 closed
+**Date:** 2026-08-16  
+**Source:** User directive (Amadeusz Sadowski), during backlog grooming  
+**Status:** Decided — #88 closed  
 **Scope:** Automated conformance testing against the live newrecruit.eu site
 
 ### Decision
@@ -669,13 +669,15 @@ assert that permission exists.
 
 ### What #88 documented
 
-#88 (authored 2026-04-01, zero comments) recorded, as findings:
+#88 (authored 2026-04-01, no discussion in the four months it stayed open) recorded, as findings:
 
 - `newrecruit.eu/terms` returns 404 — no published Terms of Service.
 - A privacy policy exists at `/privacy`, covers email collection only, silent on automation.
 - `robots.txt` contains `Disallow: /app/` for all user-agents, and the tooling navigates exactly
-  `/app` and `/app/Lists/{id}`. The issue called this the primary concern, while noting robots.txt is
-  not itself legally binding.
+  `/app` and `/app/Lists/{id}`. The issue called this the primary concern. It noted robots.txt is not
+  itself legally binding, but also that it is "potentially relevant evidence in unauthorized access
+  claims (US CFAA / EU computer misuse directives)" — the sharpest risk language in the issue, and
+  the thing this decision accepts.
 - Risk rated low for frozen HAR replay, moderate for live Playwright testing and for the daily HAR
   recording cron.
 - Mitigating factors: no ToS to violate, non-commercial open-source conformance testing, minimal load
@@ -683,16 +685,19 @@ assert that permission exists.
 
 It closed with four recommendations — obtain written permission; document any existing informal
 agreement; respect robots.txt or obtain an exception; keep favouring frozen mode — rather than a
-conclusion.
+conclusion. Of recommendation 1 it said obtaining written permission "eliminates virtually all
+risk"; this decision forgoes that.
 
 ### State at the time of this decision
 
-- **Recommendation 4 is satisfied.** Frozen (`nr-frozen`) is the every-push path; live
-  (`nr-conformance`) is gated on `thorough` — manual dispatch, the weekly schedule, `[nr-test]`, the
-  `thorough-ci` label, or a `testdata.json` PR.
+- **Recommendation 4 is satisfied.** The only NR contact on the every-push path is frozen HAR
+  replay, in the `smoke` job's frozen NR lanes. Both the `nr-frozen` profile suites (inside
+  `thorough-conformance`) and the live lane (`nr-conformance`) sit behind the
+  `thorough` gate — manual dispatch, the weekly schedule, `[nr-test]`, the `thorough-ci` label, or a
+  `testdata.json` PR. Live NR is never touched by a default push.
 - **Recommendations 1–3 are not actioned.** No permission was sought or recorded; no code path
   consults robots.txt; `.github/workflows/update-nr-snapshot.yml` still records a HAR snapshot daily
-  at 04:30 UTC. No commit has ever referenced #88.
+  at 04:30 UTC. Before this entry, no commit had ever referenced #88.
 
 ### Consequences
 
