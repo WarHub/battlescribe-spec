@@ -50,8 +50,9 @@ incremental workarounds. When in doubt, choose the cleaner design.
 The backlog lives on the [Conformance Spec board](https://github.com/orgs/WarHub/projects/2). All
 open issues are on it; the board adds no work of its own.
 
-**Four things are fields, not labels.** Read and write them through the API — a label that looks
-like one of these is legacy and does not feed the board.
+**Five things live in metadata, not labels.** Read and write them through the API — a label that
+looks like one of these is legacy and does not feed the board. The first three are fields; the last
+two are links.
 
 | | Where it lives | Values |
 |---|---|---|
@@ -59,6 +60,7 @@ like one of these is legacy and does not feed the board.
 | **Priority** | org issue field | `Urgent`, `High`, `Medium`, `Low` |
 | **Size** | org issue field | `XS`, `S`, `M`, `L`, `XL` |
 | **Parent** | sub-issue link | see below |
+| **Blocked by** | dependency link | see below |
 
 `Priority` and `Size` are **organization-level issue fields**, shared across every WarHub repo. They
 are not project fields — a project-field query returns them with an empty option list, which reads
@@ -68,8 +70,26 @@ as "unconfigured" and is not. Read them from the issue:
 gh api graphql -f query='query{repository(owner:"WarHub",name:"battlescribe-spec"){issue(number:419){ issueType{name} parent{number} issueFieldValues(first:10){nodes{... on IssueFieldSingleSelectValue{name field{... on IssueFieldCommon{name}}}}} }}}'
 ```
 
-Write with the `updateIssueIssueType` and `setIssueFieldValue` GraphQL mutations. `gh issue edit`
-cannot set any of them.
+Write with the `updateIssueIssueType` and `setIssueFieldValue` GraphQL mutations — `gh issue edit`
+cannot set any of them. `setIssueFieldValue` takes a **list** of field writes; passing `fieldId` and
+`singleSelectOptionId` as flat arguments on `input` is rejected:
+
+```bash
+gh api graphql -f query='mutation{ setIssueFieldValue(input:{issueId:"I_…", issueFields:[{fieldId:"IFSS_…", singleSelectOptionId:"IFSSO_…"},{fieldId:"IFSS_…", singleSelectOptionId:"IFSSO_…"}]}){issue{number}} }'
+```
+
+The read query above returns field *names* but neither of the ids you need to write. Field ids are
+reachable by widening that query with `... on Node{id}` — but **option** ids are not, because only
+the concrete `IssueFieldSingleSelect` type exposes `options`. (Widening with `... on
+IssueFieldCommon{id}` instead is a query error, not an empty result: that interface has no `id`.)
+Get both from the concrete type, against any issue that already carries the values you want:
+
+```bash
+gh api graphql -f query='query{repository(owner:"WarHub",name:"battlescribe-spec"){issue(number:279){ issueFieldValues(first:10){nodes{... on IssueFieldSingleSelectValue{ name optionId field{... on IssueFieldSingleSelect{ id name options{id name} }} }}} }}}'
+```
+
+Issue-type ids come from `repository{issueTypes(first:10){nodes{id name}}}`, and the type is set with
+`updateIssueIssueType(input:{issueId:"I_…", issueTypeId:"IT_…"})`.
 
 **Parentage is a real link.** Writing `Part of #N` in an issue body creates no link — the issue
 stays unparented in the API and on the board. Use the sub-issue API, and note that `sub_issue_id`
@@ -84,6 +104,29 @@ creation time**, and **delete the body-text equivalents** — the `Part of #N` l
 any `## Children` checklist on the parent. Prose and metadata drift apart, and only the metadata
 drives the hierarchy and the progress rollup. See `.squad/decisions/decisions.md` — "Sub-issue
 parentage is a real link, not body prose".
+
+**Dependencies are a real link too**, and a separate one. A `## Depends on` list in a body is prose
+GitHub does not parse, for exactly the reason `Part of #N` is not parentage. GitHub has native
+**blocked-by / blocking** relations; use them for "this cannot start until that lands", and keep
+sub-issues for "this is part of that". A blocker does not have to be a sibling, or in the same epic.
+Like `sub_issues`, the endpoint takes the other issue's **database id**, not its number:
+
+```bash
+gh api --method POST repos/WarHub/battlescribe-spec/issues/281/dependencies/blocked_by -F issue_id=$(gh api repos/WarHub/battlescribe-spec/issues/450 --jq .id)
+```
+
+```bash
+gh api repos/WarHub/battlescribe-spec/issues/281/dependencies/blocked_by --jq '.[] | "\(.number) \(.title)"'
+gh api repos/WarHub/battlescribe-spec/issues/281/dependencies/blocking   --jq '.[] | "\(.number) \(.title)"'
+```
+
+Unlink with `DELETE …/dependencies/blocked_by/{database id}`. The POST and DELETE responses are the
+whole issue object — pipe through `--jq .issue_dependencies_summary` unless you want a screenful.
+
+Link only **live** constraints. A closed blocker adds a satisfied row that reads as noise, and a
+blocker that merely *relates* overstates the constraint — if the work can proceed with an opt-out or
+against one engine, it is not blocked. As with parentage, **delete the body-text equivalent** once
+the link exists.
 
 **Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `go:*`,
 `release:*`, `thorough-ci`, `scheduled-ci-failure`. The `type:*` and `priority:*` label sets were
