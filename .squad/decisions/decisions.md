@@ -650,3 +650,61 @@ the epic reports itself more complete than it is.
 
 **Co-authored by:** Copilot <223556219+Copilot@users.noreply.github.com>
 
+---
+
+## Decision: Accept the documented risk of live NewRecruit automated testing (#88)
+
+**Date:** 2026-08-16  
+**Source:** User directive (Amadeusz Sadowski), during backlog grooming  
+**Status:** Decided — #88 closed  
+**Scope:** Automated conformance testing against the live newrecruit.eu site
+
+### Decision
+
+Continue automated conformance testing against live NewRecruit as currently configured, accepting the
+risks documented in #88, **without** first seeking written permission from the NR developer.
+
+This is the repository owner's risk acceptance. It is **not** a legal determination, and it does not
+assert that permission exists.
+
+### What #88 documented
+
+#88 (authored 2026-04-01, no discussion in the four months it stayed open) recorded, as findings:
+
+- `newrecruit.eu/terms` returns 404 — no published Terms of Service.
+- A privacy policy exists at `/privacy`, covers email collection only, silent on automation.
+- `robots.txt` contains `Disallow: /app/` for all user-agents, and the tooling navigates exactly
+  `/app` and `/app/Lists/{id}`. The issue called this the primary concern. It noted robots.txt is not
+  itself legally binding, but also that it is "potentially relevant evidence in unauthorized access
+  claims (US CFAA / EU computer misuse directives)" — the sharpest risk language in the issue, and
+  the thing this decision accepts.
+- Risk rated low for frozen HAR replay, moderate for live Playwright testing and for the daily HAR
+  recording cron.
+- Mitigating factors: no ToS to violate, non-commercial open-source conformance testing, minimal load
+  (single headless session), frozen mode already the default CI path.
+
+It closed with four recommendations — obtain written permission; document any existing informal
+agreement; respect robots.txt or obtain an exception; keep favouring frozen mode — rather than a
+conclusion. Of recommendation 1 it said obtaining written permission "eliminates virtually all
+risk"; this decision forgoes that.
+
+### State at the time of this decision
+
+- **Recommendation 4 is satisfied.** The only NR contact on the every-push path is frozen HAR
+  replay, in the `smoke` job's frozen NR lanes. Both the `nr-frozen` profile suites (inside
+  `thorough-conformance`) and the live lane (`nr-conformance`) sit behind the
+  `thorough` gate — manual dispatch, the weekly schedule, `[nr-test]`, the `thorough-ci` label, or a
+  `testdata.json` PR. Live NR is never touched by a default push.
+- **Recommendations 1–3 are not actioned.** No permission was sought or recorded; no code path
+  consults robots.txt; `.github/workflows/update-nr-snapshot.yml` still records a HAR snapshot daily
+  at 04:30 UTC. Before this entry, no commit had ever referenced #88.
+
+### Consequences
+
+- #88 is closed. It is not a tracker for an action anyone intends to take.
+- The daily cron and the gated live lane continue unchanged.
+- **#89 remains open and is unaffected** — setting an identifying User-Agent in
+  `NewRecruitBrowser.cs` and `HarRecorder.cs` is the good-faith transparency measure that pairs with
+  this, and it is mechanical work with no legal question attached.
+- Revisit if NewRecruit publishes Terms of Service, changes `robots.txt`, or objects.
+
