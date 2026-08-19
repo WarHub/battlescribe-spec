@@ -50,8 +50,9 @@ incremental workarounds. When in doubt, choose the cleaner design.
 The backlog lives on the [Conformance Spec board](https://github.com/orgs/WarHub/projects/2). All
 open issues are on it; the board adds no work of its own.
 
-**Four things are fields, not labels.** Read and write them through the API — a label that looks
-like one of these is legacy and does not feed the board.
+**Five things live in metadata, not labels.** Read and write them through the API — a label that
+looks like one of these is legacy and does not feed the board. The first three are fields; the last
+two are links.
 
 | | Where it lives | Values |
 |---|---|---|
@@ -59,6 +60,7 @@ like one of these is legacy and does not feed the board.
 | **Priority** | org issue field | `Urgent`, `High`, `Medium`, `Low` |
 | **Size** | org issue field | `XS`, `S`, `M`, `L`, `XL` |
 | **Parent** | sub-issue link | see below |
+| **Blocked by** | dependency link | see below |
 
 `Priority` and `Size` are **organization-level issue fields**, shared across every WarHub repo. They
 are not project fields — a project-field query returns them with an empty option list, which reads
@@ -76,9 +78,11 @@ cannot set any of them. `setIssueFieldValue` takes a **list** of field writes; p
 gh api graphql -f query='mutation{ setIssueFieldValue(input:{issueId:"I_…", issueFields:[{fieldId:"IFSS_…", singleSelectOptionId:"IFSSO_…"},{fieldId:"IFSS_…", singleSelectOptionId:"IFSSO_…"}]}){issue{number}} }'
 ```
 
-The read query above returns field *names* but not the ids you need to write, and `IssueFieldCommon`
-has **no `id` field** — asking for one is a query error, not an empty result. Get ids from the
-concrete type, against any issue that already carries the values you want:
+The read query above returns field *names* but neither of the ids you need to write. Field ids are
+reachable by widening that query with `... on Node{id}` — but **option** ids are not, because only
+the concrete `IssueFieldSingleSelect` type exposes `options`. (Widening with `... on
+IssueFieldCommon{id}` instead is a query error, not an empty result: that interface has no `id`.)
+Get both from the concrete type, against any issue that already carries the values you want:
 
 ```bash
 gh api graphql -f query='query{repository(owner:"WarHub",name:"battlescribe-spec"){issue(number:279){ issueFieldValues(first:10){nodes{... on IssueFieldSingleSelectValue{ name optionId field{... on IssueFieldSingleSelect{ id name options{id name} }} }}} }}}'
