@@ -765,6 +765,16 @@ public sealed class SpecLintTests
                     $"'{address.Type} ${{{{ steps.<id>.selectionId }}}}' or " +
                     $"'{address.Type} ${{{{ steps.<id>.selections.<entryId>[n] }}}}'";
             }
+
+            // Contains the marker, so IsLiteralId cleared it — but Resolve only substitutes when the
+            // whole token is the expression. A stray brace or a prefix comes back unchanged and
+            // addresses nothing, which reads as the engine having stopped raising the error.
+            if (address.IsMalformedExpression)
+            {
+                yield return $"{where}: error assertion on='{on}' contains '${{{{' but is not only an " +
+                    "expression, so it resolves to a literal that matches no node — the whole second " +
+                    $"token must be the reference, e.g. '{address.Type} ${{{{ steps.<id>.selectionId }}}}'";
+            }
         }
     }
 

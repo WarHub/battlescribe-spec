@@ -181,6 +181,32 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         Assert.False(ErrorAddress.Parse("group").IsLiteralId);
     }
 
+    [Fact]
+    public void AnExpressionThatIsNotTheWholeTokenIsMalformed_NotNodeAddressed()
+    {
+        // These clear IsLiteralId because they contain the marker, so before IsMalformedExpression
+        // nothing rejected them — and ExpressionResolver.Resolve substitutes only when the trimmed
+        // value both starts with the marker and ends with "}}", so it handed them straight back and
+        // the address matched nothing. Silent, and indistinguishable from the engine having stopped
+        // raising the error.
+        foreach (var on in new[]
+        {
+            "selection ${{ steps.a.selectionId }",      // one closing brace
+            "selection sel-${{ steps.a.selectionId }}", // prefixed
+            "selection ${{ steps.a.selectionId }} junk",// trailing text
+            "selection ${{",                            // unterminated
+        })
+        {
+            var address = ErrorAddress.Parse(on);
+            Assert.False(address.IsLiteralId);
+            Assert.True(address.IsMalformedExpression, on);
+            Assert.False(address.Matches(Error("selection", "sel-node-1")));
+        }
+
+        var wellFormed = ErrorAddress.Parse("selection ${{ steps.a.selectionId }}", _ => "sel-node-1");
+        Assert.False(wellFormed.IsMalformedExpression);
+    }
+
     // ── Siblings of one entry (#428) ─────────────────────────────────
 
     /// <summary>

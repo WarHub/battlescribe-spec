@@ -116,18 +116,34 @@ public sealed class SpecSchemaTests
             return;
         }
 
-        using var doc = JsonDocument.Parse(File.ReadAllText(SchemaPath));
-        var pattern = doc.RootElement
-            .GetProperty("$defs").GetProperty("errorAssertion")
-            .GetProperty("properties").GetProperty("on")
-            .GetProperty("pattern").GetString();
+        // Evaluate through the real validator, not a .NET Regex re-run of the pattern: the pattern
+        // is only meaningful as JSON Schema, and a proxy assertion can agree with the regex engine
+        // while the validator disagrees.
+        var specJson = $$"""
+            {
+              "id": "error-address-probe",
+              "category": "probe",
+              "description": "Minimal spec whose only variable is the error address under test.",
+              "setup": { "gameSystem": {} },
+              "steps": [
+                {
+                  "expectedState": {
+                    "errors": [ { "on": {{JsonSerializer.Serialize(on)}}, "from": "entry/constraint" } ]
+                  }
+                }
+              ]
+            }
+            """;
 
-        Assert.NotNull(pattern);
-        var actual = System.Text.RegularExpressions.Regex.IsMatch(on, pattern);
+        using var doc = JsonDocument.Parse(specJson);
+        var result = Schema.Value.Evaluate(doc.RootElement, new EvaluationOptions
+        {
+            OutputFormat = OutputFormat.List
+        });
 
         Assert.True(
-            actual == expectedValid,
-            $"on: '{on}' should be {(expectedValid ? "accepted" : "rejected")} by the schema pattern " +
-            $"'{pattern}', but was {(actual ? "accepted" : "rejected")}.");
+            result.IsValid == expectedValid,
+            $"on: '{on}' should be {(expectedValid ? "accepted" : "rejected")} by docs/spec-schema.json, " +
+            $"but the validator {(result.IsValid ? "accepted" : "rejected")} it.");
     }
 }

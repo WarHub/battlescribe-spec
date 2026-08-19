@@ -39,11 +39,12 @@ public readonly record struct ErrorAddress
     /// </summary>
     public const string ExpressionMarker = "${{";
 
-    private ErrorAddress(string type, string? nodeId, bool literalId, string raw)
+    private ErrorAddress(string type, string? nodeId, bool literalId, string raw, bool malformed = false)
     {
         Type = type;
         NodeId = nodeId;
         IsLiteralId = literalId;
+        IsMalformedExpression = malformed;
         Raw = raw;
     }
 
@@ -64,6 +65,18 @@ public readonly record struct ErrorAddress
     /// before it runs so the failure names the mistake instead of reporting a missing error.
     /// </summary>
     public bool IsLiteralId { get; }
+
+    /// <summary>
+    /// True when the second token contains <see cref="ExpressionMarker"/> but is not <em>only</em> an
+    /// expression — a stray brace (<c>selection ${{ steps.x.selectionId }</c>), a prefix
+    /// (<c>selection sel-${{ … }}</c>), or text after the close. Such a value reads as
+    /// node-addressed to <see cref="IsLiteralId"/>, so nothing rejected it, and yet
+    /// <c>ExpressionResolver.Resolve</c> hands it straight back: it requires the trimmed value to
+    /// both start with the marker and end with <c>}}</c>, otherwise it substitutes nothing. The
+    /// address then resolves to a literal that matches no node, and the spec fails as though the
+    /// engine had stopped raising the error — silent, and the worst of the three outcomes.
+    /// </summary>
+    public bool IsMalformedExpression { get; }
 
     /// <summary>
     /// Parse an <c>on:</c> value. <paramref name="resolve"/> expands a <c>${{ steps.… }}</c>
@@ -88,12 +101,19 @@ public readonly record struct ErrorAddress
             return new ErrorAddress(type, nodeId: null, literalId: true, raw);
         }
 
-        return new ErrorAddress(type, resolve?.Invoke(id) ?? id, literalId: false, raw);
+        // Resolve only substitutes when the whole token is the expression. Anything else comes back
+        // unchanged and silently addresses nothing, so name it here rather than let it look like a
+        // missing engine error.
+        var malformed = !id.StartsWith(ExpressionMarker, StringComparison.Ordinal)
+            || !id.EndsWith("}}", StringComparison.Ordinal);
+
+        return new ErrorAddress(type, resolve?.Invoke(id) ?? id, literalId: false, raw, malformed);
     }
 
     /// <summary>Does <paramref name="error"/> sit on the node this address names?</summary>
     public bool Matches(ValidationErrorState error)
-        => !IsLiteralId && error.RaisedOnType == Type && (NodeId is null || error.RaisedOnId == NodeId);
+        => !IsLiteralId && !IsMalformedExpression
+            && error.RaisedOnType == Type && (NodeId is null || error.RaisedOnId == NodeId);
 
     /// <summary>
     /// The address as a failure message shows it: what the spec wrote, plus what it resolved to when
