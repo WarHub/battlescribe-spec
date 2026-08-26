@@ -726,7 +726,16 @@ public static class NrUiActions
         if (found)
         {
             var selEl = page.Locator($"[data-nrui-uid='{selectionUid}']");
-            await selEl.Locator("[title='Delete Unit']").ClickAsync();
+            // `:visible` is load-bearing, not decoration. v35.72 wraps every top-level unit row's
+            // `div.name` in a SwipeActions component whose left/right panels carry icons with the
+            // same `title` (a fallthrough attribute — the icon components declare only geometry
+            // props and never mention `title`), so this now matches TWO elements and Playwright's
+            // strict mode throws. The panels are v-show'n, not v-if'd, so they are in the DOM at
+            // display:none, and they are emitted BEFORE `.swipeContent` — which means a bare
+            // `.First` picks the swipe panel, the wrong control, silently. `swipeEnabled` has no
+            // mobile gate (`playMode ? false : depth === 0 || associationChild`), so this is live at
+            // desktop viewport for every root selection.
+            await selEl.Locator("[title='Delete Unit']:visible").First.ClickAsync();
             await MaybeConfirmDeletionAsync(page);
             return;
         }
@@ -734,7 +743,7 @@ public static class NrUiActions
         // No `.unitRow` means this is a CHILD selection — not a hidden one. NR gives children no row
         // in the unit list; it renders them in the parent's options panel, where the control is the
         // count input, and deselecting one is decrementing it. That is exactly what the store-direct
-        // engine does with `decrementAmount()`.
+        // engine does with `setAmount({}, getAmount() - step)`.
         //
         // The old message said "hidden or nested" and then refused both, which was wrong twice over:
         // nothing was hidden, and the child was fully editable one panel across. Measured on
@@ -783,7 +792,9 @@ public static class NrUiActions
     {
         var before = await GetAllSelectionUidsAsync(page);
         var selEl = await GetSelectionLocatorAsync(page, selectionUid);
-        await selEl.Locator("[title='Duplicate Unit']").ClickAsync();
+        // Two matches in v35.72 — see the note on the Delete Unit click above. The swipe panel is
+        // emitted first, so `.First` alone would pick it; `:visible` is what excludes it.
+        await selEl.Locator("[title='Duplicate Unit']:visible").First.ClickAsync();
         return await WaitForNewSelectionUidAsync(page, before);
     }
 

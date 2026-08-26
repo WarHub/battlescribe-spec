@@ -231,12 +231,19 @@ a fresh child node each time. After creation, the new instance starts with
 **Used by NR UI for**: "Duplicate Unit", "Create Unit (+)", structural operations.
 **NOT used by NR UI for** changing child counts (that's `setAmount`).
 
-### incrementAmount()
+### setAmount() — incrementing an existing instance
 
-Called on an existing **instance** (child node) to increment its count.
-Used for child entries that already exist as pre-created nodes with
-`amount=0` under a parent selection. Unlike `addInstance`, this doesn't
-create a new node — it bumps the count on an existing one.
+Called on an existing **instance** (child node) to change its count. Used for
+child entries that already exist as pre-created nodes with `amount=0` under a
+parent selection. Unlike `addInstance`, this doesn't create a new node — it
+sets the count on an existing one.
+
+`setAmount(ctx, n)` takes an **absolute** amount, so read `getAmount()` first.
+NR's own stepper spells "+1" as `opt.setAmount({}, opt.getAmount() + (opt.getStep() ?? 1))`.
+
+`incrementAmount`/`decrementAmount` existed up to v35.29 and were **deleted in
+v35.72**; NR itself never called them. Code written against them fails with
+`has no incrementAmount (unexpected node type)`.
 
 ### autocheck — cascading auto-selection
 

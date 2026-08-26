@@ -396,7 +396,15 @@ public static class NrUiSetup
         await NrUiTiming.MeasureAsync("create-roster/click-new", () =>
             ClickWhenReadyAsync(page, newBtn, "New list button"));
 
-        var box = page.Locator(".box").First;
+        // Root on the AddList component, not on a bare `.box`. Six other components render
+        // `class="box"` (PopupDialog, Prompt, the supporter promo, the login form), all inside
+        // #mainContent, which PRECEDES #popups in document order — so `.box` silently picks the
+        // wrong dialog the first time one of them is on screen, and #popups can hold more than one
+        // box by design (PopupDialog sizes itself from `#popups.childElementCount + 1`). The
+        // strings `vueAddlist`, `force-card` and `newListSave` each occur in exactly two files in
+        // the whole v35.72 asset tree, so nothing else in the app can forge them. Inside it the
+        // faction <select> is still the first select and the name input the first text input.
+        var box = page.Locator("#vueAddlist");
 
         // Select the preferred catalogue from the Faction dropdown
         var factionSelect = box.Locator("select").First;
@@ -427,8 +435,8 @@ public static class NrUiSetup
                     await page.WaitForFunctionAsync(
                         """
                         () => {
-                            const box = document.querySelector('.box');
-                            const sel = box?.querySelector('select');
+                            const add = document.querySelector('#vueAddlist');
+                            const sel = add?.querySelector('select');
                             return !!sel && sel.options.length > 1;
                         }
                         """,
@@ -486,15 +494,42 @@ public static class NrUiSetup
             var handle = await page.WaitForFunctionAsync(
                 """
                 (wantName) => {
-                    const box = document.querySelector('.box');
-                    if (!box) { return null; }
-                    if (/could not be loaded/i.test(box.innerText || '')) { return 'error'; }
+                    const add = document.querySelector('#vueAddlist');
+                    if (!add) { return null; }
+                    if (/could not be loaded/i.test(add.textContent || '')) { return 'error'; }
 
-                    // The dialog must be rendered far enough to have its Create List button (and
-                    // therefore its name input — see below).
-                    const hasCreate = [...box.querySelectorAll('button')]
-                        .some(b => /create list/i.test(b.textContent || ''));
-                    if (!hasCreate) { return null; }
+                    // The dialog must be rendered far enough to carry its CREATE control.
+                    //
+                    // Until v35.72 that control was a button reading "Create List", and scanning
+                    // for it was the whole gate. v35.72 rewrote the dialog: the create action is
+                    // now one `<button class="force-card">` per force, and the surviving
+                    // "Create List" button renders only under `needsConfirmButton`, which is
+                    // `!!bookData && !forces.length`. That state is unreachable — loadBook() runs
+                    // `this.forces[0].id` with no optional chaining, so a book with no forces
+                    // throws before Vue can flush and lands in the catch as loadBookError. The
+                    // "no forces" shape therefore arrives as the ERROR outcome above, not as a
+                    // confirm button. The .newListSave branch is kept in the disjunction only so
+                    // this starts working again the day NR writes `forces[0]?.id`; nothing may
+                    // depend on it. "Create List" also survives as div.headTitle, which is why the
+                    // old scan had to become structural rather than merely re-pointed.
+                    //
+                    // Both shapes below live on the `downloading === false` side of the template's
+                    // v-if, so either one positively proves the load finished. No "spinner is gone"
+                    // check is needed, and an absence check would be worse: it is false-negative
+                    // prone across a flush boundary.
+                    const hasForceCards = add.querySelectorAll('.forces button.force-card').length > 0;
+                    const hasConfirm = !!add.querySelector('.newListSave button');
+                    if (!hasForceCards && !hasConfirm) { return null; }
+
+                    // ...AND the form is rendered, which the force cards do NOT imply: they sit
+                    // under `v-if="selectedBook && !loadBookError && forces.length"` while the name
+                    // input sits under `v-if="lib"`. The old comment inferred one from the other
+                    // and was already wrong in v35.27, where the confirm button was outside the
+                    // form too. It matters because the fill below was a snapshot, so a missing
+                    // input silently took NR's default name — what roster-name-and-metadata
+                    // asserts against. Safe to require: systemsStore initialises
+                    // `library: {index:{},array:[]}`, so `lib` is never falsy once mounted.
+                    if (!add.querySelector('input[pattern=".{3,}"]')) { return null; }
 
                     // ...AND the chosen catalogue must actually be PARSED, which is a separate event.
                     //
@@ -555,83 +590,26 @@ public static class NrUiSetup
                 "spec failing only here is an NR-UI limitation, not a data error.");
         }
 
-        // Tell NR which force to build, instead of waiting for it to default to the right one.
+        // The force choice used to happen HERE, and in v35.72 it cannot: it moved below the
+        // catalogue settle and the name fill, because it is now the same action as creating.
         //
-        // NR renders a FORCE dropdown next to the faction one whenever the roster could start from
-        // more than one force entry. This driver never set it, so the roster began life with NR's
-        // default — and a flat 1500ms here was what made that default correct, because draining
-        // `manager.loadedCatalogues` re-renders the dropdown and flips it. 1.5s x 363 specs = 9
-        // minutes spent nudging a control rather than setting it.
+        // NR used to render a FORCE dropdown next to the faction one, and each option carried the
+        // force ENTRY ID as its bound value — Vue stashes a non-string v-model value on the element
+        // as `_value`, so the control identified itself by what it CARRIED rather than by position
+        // or label. v35.72 deleted that select. Each force is now a `<button class="force-card">`,
+        // and `pickForce(force)` sets `selectedForceId` and then awaits `addNewList()`. There is
+        // nothing left to pre-select: choosing and committing are one click, which must land AFTER
+        // the settle below and after the name fill, or the list is built from a half-parsed
+        // catalogue and under NR's default name. See the pick at the end of this method.
         //
-        // The option carries the force ENTRY ID as its bound value, which is the whole fix:
-        //
-        //   select#0  opt _value = {id: 'cat-1', name: …}   <- faction, binds a catalogue OBJECT
-        //   select#1  opt _value = 'fe-gs' / 'fe-cat'        <- force,   binds the entry id STRING
-        //
-        // So the control identifies itself by what it carries: a string equal to the requested entry
-        // id can only be a force option, never the faction one. No position, no label, and no name —
-        // names are ambiguous by design here (force-multi-catalogue-two-forces has two "Patrol"
-        // forces), which is why the previous attempt at this failed.
-        //
-        // That attempt is worth recording because its two mistakes are easy to repeat. It matched
-        // option TEXT and required the select to be VISIBLE. But the force select always exists —
-        // NR just hides it when there is only one option — so the visibility filter skipped exactly
-        // the specs that had nothing to choose, while the text match wandered onto other controls.
-        // Measured at both t=0 and t+1500ms, the option list is identical; only the default differs.
-        if (!string.IsNullOrEmpty(preferredForceEntryId))
-        {
-            await NrUiTiming.MeasureAsync("create-roster/select-force", async () =>
-            {
-                var found = await page.EvaluateAsync<int[]>(
-                    """
-                    (wantEntryId) => {
-                        const box = document.querySelector('.box');
-                        if (!box) { return [-1, -1, 0]; }
-                        const sels = [...box.querySelectorAll('select')];
-                        for (let i = 0; i < sels.length; i++) {
-                            const opts = [...sels[i].options];
-                            // Vue 3 stashes a non-string v-model value on the element as `_value`;
-                            // for force options it is the entry id itself.
-                            const j = opts.findIndex(o => o._value === wantEntryId);
-                            if (j >= 0) { return [i, j, sels[i].selectedIndex]; }
-                        }
-                        return [-1, -1, 0];
-                    }
-                    """,
-                    preferredForceEntryId);
-
-                if (found is not [var selectIndex, var optionIndex, var selectedIndex]
-                    || selectIndex < 0)
-                {
-                    // No option carries this id. The ordinary case for a spec whose force lives only
-                    // in the game system and is the sole choice — NR then has nothing to get wrong.
-                    return;
-                }
-
-                if (optionIndex == selectedIndex)
-                {
-                    // Already what NR picked. Skip rather than re-select: a redundant change event
-                    // makes NR rebuild the dialog for no reason.
-                    return;
-                }
-
-                // Set it through the DOM and announce it, rather than through Playwright's
-                // SelectOptionAsync. That call needs the control to be visible and actionable, and
-                // this one legitimately is not when NR collapses a single-choice dropdown — the very
-                // case the previous attempt filtered out and then mis-handled. Vue's v-model listens
-                // for `change`, so dispatching it is what "the user picked this" means here.
-                await page.EvaluateAsync(
-                    """
-                    ([selectIndex, optionIndex]) => {
-                        const box = document.querySelector('.box');
-                        const sel = [...box.querySelectorAll('select')][selectIndex];
-                        sel.selectedIndex = optionIndex;
-                        sel.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                    """,
-                    new[] { selectIndex, optionIndex });
-            });
-        }
+        // One correction while this is being rewritten, so it stops being repeated: the old comment
+        // justified matching by id with "names are ambiguous by design here
+        // (force-multi-catalogue-two-forces has two Patrol forces)". That is not true. That spec
+        // declares ONE forceEntry and adds it twice from two catalogues — two forces in the ROSTER,
+        // one card in the dialog. A sweep of all 492 spec files found zero forceEntryLinks, zero
+        // sortIndex, and no dialog anywhere that renders two same-named sibling force entries.
+        // Matching by id is still right, but the reason is that this driver HOLDS an entry id and
+        // never a name — not that the corpus is ambiguous.
 
         // Let NR finish parsing the catalogue BEFORE the list is created.
         //
@@ -648,19 +626,158 @@ public static class NrUiSetup
         // which the constant did (measured max 3380ms, more than twice the old sleep).
         await WaitForCatalogueWorkSettledAsync(page);
 
-        // Set list name
-        await NrUiTiming.MeasureAsync("create-roster/fill-name", async () =>
-        {
-            var nameInput = box.Locator("input[type='text'], input:not([type])").First;
-            if (await nameInput.IsVisibleAsync())
-            {
-                await nameInput.FillAsync(rosterName);
-            }
-        });
+        // Set list name. Unconditional now, not a snapshot `IsVisibleAsync()`: the readiness wait
+        // above conjoins this input, so a missing one is a bug to surface rather than a branch to
+        // take. It also has to happen BEFORE the click below, which is no longer merely tidy — the
+        // click creates the list, and `addNewList()` reads `this.listName || "Unnamed list"`. The
+        // fill is enough to commit it: the binding is plain vModelText with no modifiers, so it
+        // listens on `input` and assigns synchronously inside the dispatch, with no flush needed.
+        await NrUiTiming.MeasureAsync("create-roster/fill-name", () =>
+            box.Locator("input[type='text'], input:not([type])").First.FillAsync(rosterName));
 
-        // Click "Create List" button
-        var createBtn = box.GetByRole(AriaRole.Button, new() { Name = "Create List" });
-        await NrUiTiming.MeasureAsync("create-roster/click-create", () => createBtn.ClickAsync());
+        // Pick the force card, which is also how the list gets created.
+        //
+        // v35.72 replaced the "Create List" button with one `<button class="force-card">` per force;
+        // `pickForce` sets `selectedForceId` and awaits `addNewList()`, so the click both chooses
+        // and commits. The question the old force <select> answered by reading `option._value` —
+        // given an entry id, WHICH control do I drive — has no DOM answer any more: the cards carry
+        // the id only as their vnode `key`, which is never written to the DOM, and this build ships
+        // no devtools hooks (`__vnode` and `__vueParentComponent` are absent from the bundle), so
+        // there is no route UP from the element. The route down still exists: the renderer sets
+        // `container._vnode`, and #__nuxt is the container.
+        //
+        // Resolution and click are ONE synchronous evaluate with no `await` between them. Vue's
+        // scheduler is a microtask, so any await — or any CDP round trip — is a flush opportunity,
+        // and a card resolved in one task can be detached by the next. A detached card still holds
+        // its listener and would call `pickForce` with the previous render's force: a silently wrong
+        // roster, which is the exact failure class the old comment here existed to prevent.
+        //
+        // The ladder is deliberately ordered cheapest-and-safest first:
+        //   1. one card, or no force asked for -> click it. Nothing to resolve, and this is exactly
+        //      what v35.27 produced (return without selecting, then click Create). Roughly 361 of
+        //      the 363 lane specs land here, so a defect in the walk below cannot take out the lane.
+        //   2. vnode `key` per card -> an exact element-to-entry-id map, free of order assumptions.
+        //   3. the AddList instance's own `forces` array, cross-checked against the rendered names.
+        //   4. otherwise throw. Clicking a guessed card builds a wrong roster at a distance.
+        await NrUiTiming.MeasureAsync("create-roster/click-create", async () =>
+        {
+            var pick = await page.EvaluateAsync<string[]>(
+                """
+                (wantEntryId) => {
+                    const add = document.querySelector('#vueAddlist');
+                    if (!add) { return ['no-dialog', '']; }
+
+                    const cards = [...add.querySelectorAll('.forces button.force-card')];
+                    const names = cards.map(
+                        c => (c.querySelector('.force-name')?.textContent || '').trim());
+
+                    // Guarded in the same task as the read: a disabled button receives no click
+                    // events at all, so without this a lost race is a mute 30s wait-army timeout.
+                    const fire = (el, mode, detail) => {
+                        if (!el || !el.isConnected) { return ['stale', detail]; }
+                        if (el.disabled) { return ['busy', detail]; }
+                        el.click();
+                        return [mode, detail];
+                    };
+
+                    if (cards.length === 0) {
+                        // The needsConfirmButton branch. Unreachable today (loadBook throws on an
+                        // empty force list before Vue renders), kept so it works if NR ever guards
+                        // that line. Reaching it means the force choice was made for us.
+                        const save = add.querySelector('.newListSave button');
+                        return save ? fire(save, 'confirm-button', '') : ['no-control', ''];
+                    }
+
+                    if (cards.length === 1 || !wantEntryId) {
+                        return fire(cards[0], 'sole-card', names[0]);
+                    }
+
+                    // Walk DOWN from the container's root vnode. Only element vnodes own their el;
+                    // a component vnode shares its subtree's el and would shadow it with the wrong
+                    // key. Teleport keeps its children in `vnode.children`, which is how this
+                    // reaches a dialog that lives under #popups.
+                    const nuxt = document.querySelector('#__nuxt');
+                    const want = new Set(cards);
+                    const keyOf = new Map();
+                    const seen = new Set();
+                    const stack = nuxt && nuxt._vnode ? [nuxt._vnode] : [];
+                    let addList = null;
+                    let budget = 200000;
+                    while (stack.length && budget-- > 0) {
+                        const v = stack.pop();
+                        if (!v || typeof v !== 'object' || seen.has(v)) { continue; }
+                        seen.add(v);
+                        if (!v.component && v.el && want.has(v.el)) { keyOf.set(v.el, v.key); }
+                        if (v.component) {
+                            if (v.component.type && v.component.type.name === 'AddList') {
+                                addList = v.component;
+                            }
+                            stack.push(v.component.subTree);
+                        }
+                        if (v.suspense) {
+                            stack.push(v.suspense.activeBranch, v.suspense.pendingBranch);
+                        }
+                        if (Array.isArray(v.children)) {
+                            for (const c of v.children) {
+                                if (c && typeof c === 'object') { stack.push(c); }
+                            }
+                        }
+                    }
+                    const proxy = addList && addList.proxy;
+
+                    // All-or-nothing: a partial map falls through rather than indexing on a guess.
+                    if (keyOf.size === cards.length) {
+                        const ids = cards.map(el => keyOf.get(el));
+                        if (ids.every(id => typeof id === 'string' && id.length)) {
+                            const at = ids.indexOf(wantEntryId);
+                            if (at >= 0) { return fire(cards[at], 'vnode-key', ids[at]); }
+                            // Not offered. getForces() drops forces whose categories are all empty,
+                            // so this is legitimate. Defer to NR's own current choice, which is what
+                            // v35.27's silent return produced — not to a position we computed.
+                            const nrAt = proxy ? ids.indexOf(proxy.selectedForceId) : -1;
+                            if (nrAt >= 0) { return fire(cards[nrAt], 'nr-default', ids[nrAt]); }
+                            return ['unresolved', ids.join(',')];
+                        }
+                    }
+
+                    // Fallback: the array the cards were rendered from, read straight off the
+                    // component rather than rebuilt from the store (no await, and no second guess at
+                    // NR's `engine === "bs"` hidden filter). Trust it only if it still describes
+                    // what is on screen.
+                    if (proxy && proxy.downloading === false) {
+                        let forces = [];
+                        try { forces = proxy.forces || []; } catch (e) { forces = []; }
+                        if (forces.length === cards.length
+                            && forces.every((f, i) => (f.name || '') === names[i])) {
+                            const at = forces.findIndex(f => f.id === wantEntryId);
+                            if (at >= 0) { return fire(cards[at], 'instance-forces', forces[at].id); }
+                            const nrAt = forces.findIndex(f => f.id === proxy.selectedForceId);
+                            if (nrAt >= 0) { return fire(cards[nrAt], 'nr-default', forces[nrAt].id); }
+                        }
+                    }
+
+                    return ['unresolved', names.join(' | ')];
+                }
+                """,
+                preferredForceEntryId ?? "");
+
+            var mode = pick.Length > 0 ? pick[0] : "no-result";
+            if (mode is "vnode-key" or "instance-forces" or "sole-card"
+                or "nr-default" or "confirm-button")
+            {
+                return;
+            }
+
+            // Name the mechanism that gave up. Every alternative here — clicking the first card, or
+            // letting the wait-army gate below time out — reports something other than what actually
+            // happened.
+            throw new InvalidOperationException(
+                $"NR Create List: could not commit force entry '{preferredForceEntryId}' " +
+                $"(catalogue '{preferredCatalogueName}'). Card picker reported '{mode}'" +
+                (pick.Length > 1 && pick[1].Length > 0 ? $": {pick[1]}" : "") + ". " +
+                "v35.72 makes the force card the create button, so this is a roster that was never " +
+                "created, not a force that was mis-picked.");
+        });
 
         // Wait for NR to actually build the list, rather than guessing how long that takes.
         //
@@ -687,6 +804,20 @@ public static class NrUiSetup
             new() { Timeout = NrUiTimeouts.Condition }));
 
         // After creation, set up __bsspec for state reading
+        // ...and wait for the dialog to go away, which is a separate event from the list existing.
+        //
+        // `addNewList` awaits `$listStore.addList(...)` and only then emits `added` and `close`, so
+        // the wait above can be satisfied while the dialog is still mounted. That was harmless until
+        // v35.72 gave the dialog a `div.forces` of its own: AddForceByNameAsync opens with a snapshot
+        // `page.Locator(".forces").First.IsVisibleAsync()`, and a create dialog still on screen
+        // answers yes — skipping the "Add Force" click and failing later as "Force 'X' not found in
+        // the forces panel", which names the wrong cause. Cheaper to close the window here than to
+        // teach every downstream selector about the popup layer.
+        await NrUiTiming.MeasureAsync("create-roster/wait-dialog-closed", () =>
+            page.WaitForSelectorAsync(
+                "#vueAddlist",
+                new() { State = WaitForSelectorState.Detached, Timeout = NrUiTimeouts.Interaction }));
+
         var listKey = await NrUiTiming.MeasureAsync("create-roster/eval-bsspec", () => page.EvaluateAsync<string?>("""
             () => {
                 try {

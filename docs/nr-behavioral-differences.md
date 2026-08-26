@@ -463,30 +463,44 @@ catalogue definition order.
 Child selections always sort by **catalogue definition order** (entryOrder) since
 they're part of the entry definition, not user-ordered.
 
-### NR Selection Model: `incrementAmount()` vs `addInstance()`
+### NR Selection Model: bumping the amount vs. `addInstance()`
 
 NR pre-creates **selector nodes** with `amount=0` for all child entries when a
 parent is selected. These are placeholder objects representing available entries.
 
 - **`addInstance()`** on a selector template creates a NEW node with `amount=0`
   (broken — produces duplicates, costs not aggregated)
-- **`incrementAmount()`** on an existing child node sets amount from 0 to 1
+- **bumping the amount** on an existing child node takes it from 0 to 1
   (correct — costs properly included in `calcTotalCosts()`)
 
 This discovery resolved the **child cost aggregation** issue (8 specs fixed).
 
-### NR `decrementAmount()` for Deselect
+> **v35.72:** the bump used to be `incrementAmount()`. NR deleted that method
+> (and `decrementAmount()`) in v35.72 and moved the "+1" into its Vue widgets,
+> which express it over the surviving primitive:
+> `node.setAmount({}, node.getAmount() + (node.getStep() ?? 1))`. The adapter
+> now does the same. One behavioural consequence: `incrementAmount` clamped
+> **up** to satisfy unmet `min` constraints and `setAmount` does not, so an
+> entry with `min >= 2` on the bump target lands on `amount + step` plus a
+> validation error rather than jumping to the minimum.
 
-NR selections have a `decrementAmount()` method that reduces the selection's
-internal amount by 1 — the correct inverse of `incrementAmount()`. This matches
-BattleScribe's deselect semantics (decrement number by 1, or remove the node
-entirely when it reaches 0).
+### Deselect reduces the amount rather than deleting
+
+Deselecting reduces the selection's amount by one step — the inverse of the
+bump above — which matches BattleScribe's deselect semantics (decrement number
+by 1, or remove the node entirely when it reaches 0).
 
 Previously the adapter used `sel.delete()` which always removes the selection
 completely, regardless of its current amount. For collective entries with
 scaled counts (e.g., Weapon×6 from `setSelectionCount(2)` on a parent with
 number=3), `delete()` would remove the entry entirely instead of reducing to
-Weapon×3. Using `decrementAmount()` fixes this to match BS behavior.
+Weapon×3.
+
+Since v35.72 this is `sel.setAmount({}, Math.max(0, sel.getAmount() - step))`,
+followed by `delete()` when the amount reaches 0 so NR clears the associated
+validation errors. Note the `typeof` guard around this call matters: when the
+method it probes for disappears, the fallback silently deletes the whole
+instance instead of decrementing — wrong results rather than an error.
 
 ### BattleScribe Auto-Select Mechanism
 
@@ -678,7 +692,7 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 - **Data loading**: `loadSystemFromFs(files)` — injects BattleScribe XML
   (either synthetic from specs or real from DataSource repos like wh40k-10e)
 - **Actions**: Direct Pinia store method calls (`insertForce`, `addInstance`,
-  `incrementAmount`, `delete`, `setAmount`)
+  `delete`, `setAmount`, `getAmount`, `getStep`)
 - **State reading**: `getCurrentList().army` tree traversal using NR's reactive
   object API (`getForces`, `getSelections`, `getName`, `getCosts`, etc.)
 - **Validation**: Error extraction via `checkConstraints()` per node

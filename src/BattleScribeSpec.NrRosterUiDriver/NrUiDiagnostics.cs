@@ -205,7 +205,14 @@ public sealed class NrUiDiagnostics
                         ?.__vue_app__?.config?.globalProperties?.$pinia;
                     const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
                     const forces = army ? (army.getForces?.() || []).length : 'no army';
-                    return `forces=${forces} forcesPanel=${count('.forces')} `
+                    // forcesPanel excludes #popups deliberately. v35.72's Create-List dialog owns a
+                    // `.forces` of its own, and counting it here is what produced the
+                    // "forcesPanel=1" that sent this investigation towards the add-force panel when
+                    // the truth was in forceRows=0 — the dialog had never closed. `createDialog`
+                    // reports that state outright instead of hiding inside another counter.
+                    const panels = count('.forces') - count('#popups .forces');
+                    return `forces=${forces} forcesPanel=${panels} `
+                        + `createDialog=${count('#vueAddlist')} `
                         + `forceRows=${count('.unit-wrap.force')} unitRows=${count('.unitRow')} `
                         + `popups=${count('#popups > *')}`;
                 }

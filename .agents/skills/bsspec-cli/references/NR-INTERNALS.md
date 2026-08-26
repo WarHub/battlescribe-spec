@@ -78,13 +78,13 @@ obj.page != null ? String(obj.page) : null  // page (number → string)
   JSON.stringify it directly
 - Vue proxy doesn't affect `.publication?.id` since `.id` is a primitive
 
-## Selection mechanics: addInstance, incrementAmount, autocheck
+## Selection mechanics: addInstance, setAmount, autocheck
 
 NR's roster tree uses **selectors** (templates) and **instances** (materialized
 selections). These have **completely disjoint** method sets:
 
 **Selector methods:** `addInstance`, `delete`, `getSelections`, `getName`, `getId`
-**Instance methods:** `incrementAmount`, `setAmount`, `getAmount`, `delete`,
+**Instance methods:** `setAmount`, `getAmount`, `getStep`, `delete`,
 `getSelections`, `getSelectedEntries`, `getName`, `getId`, `autocheck`, `dupe`
 
 > Full API reference: [docs/nr-dual-tree-api.md](../../../docs/nr-dual-tree-api.md)
@@ -102,12 +102,33 @@ selector `findSelectorById` found (which may be in the `(Illegal Units)` staging
 category). Always use before/after uid diff to find the new instance — never
 check `selector.instances` directly.
 
-### incrementAmount()
+### setAmount() — incrementing an existing instance
 
-Called on an existing **instance** (child node) to increment its count.
-Used for child entries that already exist as pre-created nodes with
-`amount=0` under a parent selection. Unlike `addInstance`, this doesn't
-create a new node — it bumps the count on an existing one.
+Called on an existing **instance** (child node) to change its count. Used for
+child entries that already exist as pre-created nodes with `amount=0` under a
+parent selection. Unlike `addInstance`, this doesn't create a new node — it
+sets the count on an existing one.
+
+`setAmount(settings, amount)` takes an **absolute** amount, not a delta, so the
+caller reads `getAmount()` first. NR's own stepper spells "+1" as:
+
+```javascript
+opt.setAmount({}, opt.getAmount() + (opt.getStep() ?? 1));
+```
+
+**There is no `incrementAmount`/`decrementAmount`.** Both existed up to v35.29
+and were deleted in v35.72 — NR itself never called them, and the "+1" moved out
+of the model layer into the Vue widgets. Code written against them fails with
+`has no incrementAmount (unexpected node type)`.
+
+Two consequences worth knowing before you rely on the old behaviour:
+
+- `incrementAmount` clamped **up** to satisfy unmet `min` constraints;
+  `setAmount` does not. An entry with `min >= 2` on the target now lands on
+  `amount + step` plus a validation error, where it used to jump to the minimum.
+- Pass `{}` as `settings`. It is observationally identical to the `undefined`
+  the old zero-arg calls forwarded. Do **not** pass NR's `algoSettings` — that
+  switches on the autofixer and cross-unit modification.
 
 ### autocheck()
 
@@ -143,9 +164,9 @@ newSel.autocheck();
 return newSel.uid;
 
 // Child entry increment (already materialized, amount=0→1)
-if (typeof child.incrementAmount !== 'function')
+if (typeof child.setAmount !== 'function' || typeof child.getAmount !== 'function')
     return 'ERROR: not an instance node';
-child.incrementAmount();
+child.setAmount({}, child.getAmount() + (child.getStep?.() ?? 1));
 child.autocheck();
 
 // Changing count on existing selection (e.g. 1→3)
@@ -198,48 +219,29 @@ f.source?.publication?.id  // → "pub-1" ✅
 **Rule**: Publications must be defined in the same file as entries that reference them.
 BattleScribe resolves cross-scope, but NR's behavior is arguably more correct.
 
-## `setAmount()` corruption bugs
+## `setAmount()` takes TWO arguments
 
-**Discovered April 2026.** Calling `setAmount()` on certain entry types permanently
-corrupts NR's internal state. Three distinct failure modes:
-
-### 1. Entries with min≥1 constraints
-
-Calling `setAmount(n)` on an entry that was auto-selected due to a `min: 1`
-constraint triggers an unrecoverable validation error. Even `setAmount(1)` on
-an entry already at count 1 causes corruption:
-
-```javascript
-// Entry has min:1, auto-selected to amount=1
-sel.setAmount(1);  // ❌ Permanently breaks validation
-// Error: "1 or more must be taken" appears and never resolves
-```
-
-### 2. Entries with child selections
-
-Calling `setAmount()` on root unit entries that have child selection entries
-corrupts conditional modifier evaluation. After the call, modifier conditions
-stop being recalculated — conditional name changes, profile modifications, etc.
-freeze in their current state:
+**The "corruption bugs" recorded here in April 2026 were a calling-convention
+error, and are retracted.** `setAmount(ctx, n)` takes a checker context first.
+Calling `setAmount(n)` with one argument sets `ctx = n, n = undefined`, which is
+what silently corrupted state — not `setAmount` itself. NR's own UI calls it on
+every entry type without trouble. See
+[docs/nr-behavioral-differences.md](../../../docs/nr-behavioral-differences.md)
+§ "NR `setAmount()` — Signature Gotcha" for the retraction in full.
 
 ```javascript
-// Root unit has children (model, upgrade selections)
-rootUnit.setAmount(2);  // ❌ Conditional modifiers stop updating
-// Subsequent selection changes don't trigger modifier re-evaluation
+sel.setAmount({}, 3);   // ✅ two args — ctx first
+sel.setAmount(3);       // ❌ one arg — ctx=3, n=undefined, silent corruption
 ```
 
-### 3. Safe entries (leaf, no constraints)
+Pass `{}` for `ctx`. Do **not** pass NR's `algoSettings`: that object carries
+`automaticMode`/`autofixOtherUnits`, which switch on NR's autofixer and let a
+count change modify *other* units. `{}` leaves both false, which is what the
+adapter has always done.
 
-`setAmount()` on leaf entries WITHOUT children or min constraints is silently
-ignored — no corruption, but also no effect:
-
-```javascript
-leafEntry.setAmount(5);  // No error, no effect, no corruption
-```
-
-**Impact**: Specs must avoid `setSelectionCount` on entries with children or
-min constraints. Use `selectEntry`/`selectChildEntry` (which use
-`addInstance`/`incrementAmount`) instead.
+So there is no entry type `setSelectionCount` must avoid — the reason to prefer
+`selectEntry`/`selectChildEntry` is that they express selection, not that
+`setAmount` is unsafe.
 
 ## Hidden cost types in `calcTotalCosts()`
 
