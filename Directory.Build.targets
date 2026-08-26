@@ -11,12 +11,17 @@
     there is no PackageVersion that can hold this down.
 
     The reference is Direct, so it lands in packages.lock.json, and its version moves with whatever
-    SDK the machine happens to have: global.json pins 10.0.100 with rollForward=latestFeature and CI
-    asks setup-dotnet for '10.0.x', so "whatever SDK" genuinely differs between contributors and
-    between CI runs. main was carrying 10.0.3 in src/BattleScribeSpec.Cli's lock and 10.0.10 in the
-    other two, written by different machines, and a plain `dotnet restore` rewrote whichever ones
-    disagreed with the local SDK. Four separate branches hit that churn and reverted it as unrelated
-    noise before anyone traced it here.
+    SDK the machine happens to have. That used to mean a different SDK entirely — global.json pinned
+    10.0.100 with rollForward=latestFeature while CI asked setup-dotnet for '10.0.x' — and main was
+    carrying 10.0.3 in src/BattleScribeSpec.Cli's lock and 10.0.10 in the other two, written by
+    different machines, with a plain `dotnet restore` rewriting whichever ones disagreed with the
+    local SDK. Four separate branches hit that churn and reverted it as unrelated noise before anyone
+    traced it here.
+
+    #312 narrowed the range but did not close it: global.json now pins one feature band with
+    rollForward=latestPatch and every CI job installs from that file, so "whatever SDK" is any PATCH
+    within the band — and the bundled ILLinkPackVersion still moves between them. The pin is what
+    keeps the lock files a property of the repo rather than of the box that last restored.
 
     Pinning ends that, and it is what makes locked-mode restore (enforced by the "Verify lock files"
     step in .github/workflows/ci.yml) mean anything at all: without it, CI's floating '10.0.x' would
@@ -33,7 +38,7 @@
     Update there silently does nothing (measured: the restore still picked the SDK's version).
   -->
   <ItemGroup>
-    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" ILLinkPackVersion="10.0.10" />
+    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" ILLinkPackVersion="10.0.11" />
   </ItemGroup>
 
 </Project>

@@ -6,7 +6,7 @@
 # so bumping one without the other is a red Lint test rather than a broken image nobody builds.
 #
 # It was `10.0-preview` until 2026-08-14 — for the whole of .NET 10's GA life.
-FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build
 WORKDIR /src
 
 # Copy solution + build props for restore

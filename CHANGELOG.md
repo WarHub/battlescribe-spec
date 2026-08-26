@@ -128,6 +128,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **SDK feature band moves to 10.0.400** — `global.json` goes from `10.0.300` to `10.0.400`, keeping
+  `rollForward: latestPatch`. This is the bump path #312 pinned the band *for*: a pin with no bump
+  path is a slower version of the same problem, so the band moves as a PR, tested, with a diff.
+
+  The three SDK-derived pins that must agree, and do:
+  - `global.json` — `sdk.version`.
+  - `docker/bs-spec.Dockerfile` — `mcr.microsoft.com/dotnet/sdk:10.0.302` → `:10.0.400`. Invisible to
+    the Dependabot updater (there is deliberately no `docker` ecosystem entry — two bots racing over
+    two numbers that must agree), and asserted by
+    `ToolchainPinDriftTests.DockerImagesUseTheSdkBandPinnedInGlobalJson`.
+  - `Directory.Build.targets` — `KnownILLinkPack` `10.0.10` → `10.0.11`, the net10.0
+    `ILLinkPackVersion` bundled with 10.0.400. Also invisible to Dependabot: the reference is implicit,
+    so central package management cannot hold it down. Re-restored with `--force-evaluate`, which
+    rewrites it in the three `IsAotCompatible` projects' lock files (Cli, TestKit, Telemetry) and
+    nothing else.
+
+  **The analyzer band did not widen anything.** That is the risk this pin exists to make visible —
+  `AnalysisLevel=latest-recommended` + `TreatWarningsAsErrors` mean the enabled CA rule set is a
+  function of the installed SDK — so it is worth recording that the build is clean rather than
+  leaving a green run to imply it: solution build 0 warnings / 0 errors, `--locked-mode` restore
+  clean, and the offline `pre-push` suite green on 10.0.400.
+
+  Also corrects the `Directory.Build.targets` comment, which still described the pre-#312 world
+  (`pins 10.0.100 with rollForward=latestFeature`, CI on a floating `10.0.x`) as the present tense.
+  The churn it warns about is narrower now — any *patch* within the pinned band, rather than any SDK
+  at all — and the pin still earns its place, because the bundled `ILLinkPackVersion` moves between
+  patches.
 - **Both Dockerfiles had been unbuildable for months, and the stale `10.0-preview` tag was the least
   of it** — nothing in CI, scripts, or tooling ever built them, so nobody found out.
   `reference-adapter.Dockerfile` copied `src/BattleScribeSpec.Oracle/`, a project renamed away on
