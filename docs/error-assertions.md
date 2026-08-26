@@ -4,6 +4,20 @@ Spec YAML files can assert validation errors produced by the engine after each s
 An error assertion names **the roster node the engine raised the error on**, the constraint it came
 from, and optionally part of its message.
 
+## Two different questions
+
+There are two ways a spec can be about something going wrong, and they are not the same question:
+
+| | Asserts | Field |
+|---|---|---|
+| The engine **accepted** the operation, and the roster it produced is not legal to field | the roster's validation list | `expectedState.errors` |
+| The engine **refused** the operation — it never happened | the refusal itself | `expectFailure` |
+
+A malformed `.ros` never becomes a roster, so it has no validation list to match against; an
+over-limit roster exists perfectly well and merely reports errors. Everything from `## Quick
+Reference` down is the first question. The second is [`expectFailure`](#expectfailure--asserting-that-an-action-was-refused),
+at the end.
+
 ## Quick Reference
 
 | Field | Where | Purpose |
@@ -280,3 +294,106 @@ selection.
       - on: selection ${{ steps.select-unit.selectionId }}
         from: se-1/hidden
 ```
+
+## `expectFailure` — asserting that an action was refused
+
+`expectFailure` goes on an **action step** and says the engine will not do what the step asks. It is
+the other question from the one the rest of this document answers: `errors:` describes a roster the
+engine built, `expectFailure` describes an operation the engine declined.
+
+```yaml
+- action: loadRoster
+  content: |
+    <?xml version="1.0"?>
+    <roster id="ros-broken" name="Broken"
+  expectFailure: true
+```
+
+Three shapes, and per-engine overrides take the same three:
+
+```yaml
+expectFailure: true                        # must be refused; message unconstrained
+expectFailure: false                       # must succeed
+expectFailure:
+  messageContains: "ParseError"            # must be refused, saying this
+  engines:
+    newrecruit: { messageContains: "Unexpected close tag" }
+    newrecruit-ui: false                   # this engine ACCEPTS the payload
+```
+
+`messageContains` is a case-insensitive substring of **the engine's own message**, not of the
+harness framing around it — so an expectation survives the harness rewording its logs.
+
+### The run continues past a refusal
+
+A refused step does not end the spec. That is the point: what a refusal *left behind* is usually the
+conformance question worth asking.
+
+```yaml
+- action: loadRoster
+  content: "<roster truncated"
+  expectFailure:
+    messageContains: "ParseError"
+
+# The refusal changed nothing — the roster the editor built is still the one in hand.
+- expectedState:
+    forceCount: 1
+```
+
+An action that **succeeds** where the spec declared a refusal fails the step, naming the outputs it
+got. The assertion is two-sided.
+
+### Only an engine refusal satisfies it
+
+Four different things can make an action fail, and only one of them is engine behaviour. The other
+three stay fatal:
+
+| What happened | Satisfies `expectFailure`? |
+|---|---|
+| The engine looked at the input and declined | **yes** |
+| The adapter could not resolve an id the spec named | no — a spec bug |
+| The engine does not implement the action at all | no — a capability gap |
+| The harness or transport broke; or the adapter did not classify | no |
+
+Without that line, `expectFailure: true` would be satisfied by a typo in the spec's own payload, by
+an engine that cannot even attempt the action, and by a dead adapter — three ways for a conformance
+test to pass while verifying nothing. It is the same rule as #309 (an engine that cannot load must
+fail, never silently skip) and the same rule as the export gap in `ExecuteFileAssertion`.
+
+Each of the three failing branches says what to do next, so the distinction shows up as a fix and
+not as a puzzle:
+
+```
+Step 4: 'deselectSelection' failed because the adapter could not resolve an id this spec named —
+not because engine 'battlescribe' refused it: "Selection with ID '5515-887b' not found in force
+'edbd-4f03'.". expectFailure asserts engine refusals only: every engine resolves ids through its
+own adapter, so an unresolvable id fails identically everywhere and asserting one would make a spec
+typo pass. Fix the id, or drop expectFailure from this step.
+```
+
+The classification is made by the adapter, which is the last place that still has the exception, and
+travels as [`kind`](adapter-protocol.md#kind--why-the-action-failed-optional) on the action result.
+An adapter that does not send it is fully conformant and simply cannot have its refusals asserted:
+the spec fails, naming the field, rather than passing on a failure nothing examined.
+
+### `expectFailure: false` says more than nothing does
+
+Omitting the field means the load was never in question. `false` means the refusal was the
+hypothesis, it was tested, and the engine accepted — a recorded negative result rather than an
+untested assumption. `specs/roster/roundtrip/roundtrip-load-unknown-game-system.yaml` uses it that
+way: BattleScribe loads a roster naming a game system it does not hold, keeping the dangling
+`gameSystemId` verbatim while resolving everything in the file against the system that *is* loaded.
+
+Use it as a per-engine override for the same reason — an engine that accepts input the others reject
+is a finding, and `skipEngines` would hide it behind "we did not look".
+
+### What it is not for
+
+An operation the engine silently ignores is not a refusal, and `expectFailure` will fail the spec
+for saying it is. `setSelectionCount` with a negative count is a no-op on BattleScribe: the
+selection keeps its previous count and no error is raised. The conformance question there is
+answered by `expectedState`, which is where a no-op's evidence lives.
+
+Nor does it apply to ids that do not exist. A step naming a selection that was already removed fails
+in the adapter's lookup, identically on every engine, before any engine is consulted — that is the
+`address` row in the table above, and it measures the harness rather than the engines.

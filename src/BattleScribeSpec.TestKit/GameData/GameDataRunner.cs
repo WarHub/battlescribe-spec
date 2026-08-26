@@ -16,6 +16,14 @@ public sealed class GameDataRunner
     private string? _specDir;
 
     /// <summary>
+    /// Set when an <c>expectFailure</c> step's expectation was not met. See
+    /// <see cref="ExecuteActionStep"/>; the roster runner carries the same flag for the same reason.
+    /// </summary>
+    private bool _abortRun;
+
+    private string EngineLabel => _engineName ?? "(unnamed engine)";
+
+    /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected side-file from the actual
     /// export instead of comparing. Defaults to the <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var, which is
     /// the only switch: it is read here, so the xUnit conformance harness and <c>bs-spec run</c>
@@ -45,6 +53,7 @@ public sealed class GameDataRunner
         _errors.Clear();
         _specId = spec.Id;
         _specDir = spec.SourceDirectory;
+        _abortRun = false;
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -85,7 +94,7 @@ public sealed class GameDataRunner
                     }
                     else if (step.Action is not null)
                     {
-                        ExecuteAction(step, i);
+                        ExecuteActionStep(step, i);
                     }
                     else if (step.ExpectedState is not null || step.ExpectedFile is not null)
                     {
@@ -104,6 +113,11 @@ public sealed class GameDataRunner
                     }
 
                     NotifyStepCompleted(i, step);
+
+                    if (_abortRun)
+                    {
+                        break;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -243,6 +257,44 @@ public sealed class GameDataRunner
 
         throw new InvalidOperationException(
             $"Step {stepIndex}: openFile requires 'entryId' (open a loaded file), 'content' (inline XML), or a step 'id' matching a side-file");
+    }
+
+    /// <summary>
+    /// Run an action step, applying the step's <c>expectFailure</c> declaration if it carries one.
+    /// Mirrors <c>RosterRunner.ExecuteActionStep</c> exactly; the judgment itself lives in
+    /// <see cref="ExpectFailure"/> so the two runners cannot drift on what a refusal is.
+    /// </summary>
+    private void ExecuteActionStep(GameDataStepDef step, int stepIndex)
+    {
+        var declared = step.ExpectFailure;
+        var expected = declared?.ForEngine(_engineName);
+
+        if (expected is null || !expected.IsExpected)
+        {
+            ExecuteAction(step, stepIndex);
+            return;
+        }
+
+        try
+        {
+            ExecuteAction(step, stepIndex);
+        }
+        catch (Exception ex) when (ExpectFailure.IsSatisfiedBy(ex, expected))
+        {
+            // The refusal the spec asked for. The run continues, so a following expectedState can
+            // assert what the editor kept after refusing the file — which is the half of #268 that
+            // the validation-list mechanism structurally cannot reach.
+            return;
+        }
+        catch (Exception ex)
+        {
+            _errors.Add(ExpectFailure.Explain(ex, expected, stepIndex, step.Action ?? "?", EngineLabel));
+            _abortRun = true;
+            return;
+        }
+
+        _errors.Add(ExpectFailure.ExplainUnexpectedSuccess(stepIndex, step.Action ?? "?", EngineLabel));
+        _abortRun = true;
     }
 
     private void ExecuteAction(GameDataStepDef step, int stepIndex)

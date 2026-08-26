@@ -1,0 +1,51 @@
+id: load-malformed-catalogue
+category: load
+description: >
+  A .cat payload that is not well-formed XML is refused by the editor, and the file that was open
+  stays open. This is the path #268 was carved out of #173 to own: the editor never produces a
+  validation list for a file it will not parse, so expectedState.errors has nothing to match and
+  the refusal itself has to be the assertion.
+
+  The state assertion afterwards is the other half — a refused load must leave the previously
+  opened catalogue untouched, not a partially replaced one.
+
+# The two Data Editor UI lanes are open questions, not capability gaps, and #268 says so: it is not
+# yet known whether a UI-driven lane can assert on a file the editor refuses to open at all (it may
+# show a modal, or reject it silently in the file list). Skipped here rather than guessed at; the
+# skip is what #268 removes once that is measured.
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-seed
+          name: Seed Unit
+          type: unit
+
+steps:
+  # Truncated mid-element: the <catalogue> tag never closes and no element is terminated.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-broken" name="Broken" revision="1" battleScribeVersion="2.03"
+    expectFailure:
+      messageContains: "ParseError"
+
+  # The refusal changed nothing: the seed catalogue is still loaded and still holds its entry.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          name: Seed Catalogue
+          selectionEntries:
+            - id: se-seed
+              name: Seed Unit

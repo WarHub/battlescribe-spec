@@ -349,7 +349,16 @@ public static class AdapterHandler
         }
         catch (Exception ex)
         {
-            return new ActionResult { Ok = false, Error = ex.Message };
+            // The classification happens HERE, adapter-side, because this is the only place that
+            // still has the exception. Downstream it is a JSON string, and a string cannot be told
+            // apart from another string — which is precisely why every action failure used to be
+            // fatal. See ActionFailure.Classify for the rule.
+            return new ActionResult
+            {
+                Ok = false,
+                Error = ex.Message,
+                Kind = ActionFailure.ToWire(ActionFailure.Classify(ex)),
+            };
         }
     }
 
@@ -544,7 +553,12 @@ public static class AdapterHandler
         }
         catch (Exception ex)
         {
-            return new GameDataActionResult { Ok = false, Error = ex.Message };
+            return new GameDataActionResult
+            {
+                Ok = false,
+                Error = ex.Message,
+                Kind = ActionFailure.ToWire(ActionFailure.Classify(ex)),
+            };
         }
     }
 }

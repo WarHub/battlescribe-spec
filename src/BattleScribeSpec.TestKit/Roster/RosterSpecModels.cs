@@ -138,6 +138,19 @@ public sealed class StepDef
     public ExpectedStateDef? ExpectedState { get; set; }
 
     /// <summary>
+    /// Declares that this action is expected to be <b>refused by the engine</b> — the malformed
+    /// payload the parser rejects, the edit the engine declines. Distinct from
+    /// <see cref="ExpectedStateDef.Errors"/>, which asserts the validation list of a roster the
+    /// engine <em>accepted</em>. Action steps only. See <see cref="ExpectFailureDef"/>.
+    /// <para>
+    /// A refused step does not end the run: the next <c>expectedState</c> asserts what the refusal
+    /// left behind, which is the actual conformance question behind a rejected load (does the
+    /// previous roster survive, or is a half-loaded one left in place?).
+    /// </para>
+    /// </summary>
+    public ExpectFailureDef? ExpectFailure { get; set; }
+
+    /// <summary>
     /// Byte-compare the exported roster XML against a per-engine snapshot (or inline content),
     /// mirroring gamedata <c>expectedFile</c>. The step must carry an <c>id</c> (the snapshot key).
     /// </summary>
@@ -170,6 +183,7 @@ public sealed class StepDef
             Action = Action,
             SkipEngines = SkipEngines,
             ExpectedState = ExpectedState,
+            ExpectFailure = ExpectFailure,
             ExpectedFile = ExpectedFile,
             Engines = Engines,
             // Action inputs — overridable per engine.

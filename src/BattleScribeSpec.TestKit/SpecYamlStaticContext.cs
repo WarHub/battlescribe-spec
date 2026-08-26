@@ -17,6 +17,7 @@ namespace BattleScribeSpec;
 [YamlSerializable(typeof(GameSystemDef))]
 [YamlSerializable(typeof(CatalogueDef))]
 [YamlSerializable(typeof(StepDef))]
+[YamlSerializable(typeof(ExpectFailureDef))]
 [YamlSerializable(typeof(ExpectedStateDef))]
 [YamlSerializable(typeof(ErrorAssertionDef))]
 [YamlSerializable(typeof(ExpectedForceDef))]

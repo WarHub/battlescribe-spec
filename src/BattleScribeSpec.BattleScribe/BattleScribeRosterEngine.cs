@@ -24,7 +24,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     public ActionOutputs AddForce(string forceEntryId, string catalogueId)
     {
         var forceEntry = Engine.FindForceEntryById(forceEntryId)
-            ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
+            ?? throw new SpecAddressingException($"ForceEntry '{forceEntryId}' not found.");
 
         var catalogue = Engine.ResolveCatalogue(catalogueId);
         var linked = Engine.ResolveLinkedCatalogues(catalogue);
@@ -61,7 +61,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     {
         var parentForce = FindForceById(parentForceId);
         var forceEntry = Engine.FindForceEntryById(forceEntryId)
-            ?? throw new InvalidOperationException($"ForceEntry '{forceEntryId}' not found.");
+            ?? throw new SpecAddressingException($"ForceEntry '{forceEntryId}' not found.");
 
         var catalogue = Engine.ResolveCatalogue(catalogueId);
 
@@ -84,7 +84,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var entries = Engine.GetEntriesForForce(force);
         var entry = FindEntryById(entries, entryId)
-            ?? throw new InvalidOperationException(
+            ?? throw new SpecAddressingException(
                 $"Entry '{entryId}' not found in force '{forceId}' " +
                 $"(have {entries.Count} entries: [{string.Join(", ", entries.Select(e => $"{e.getId()}/{e.getName()}"))}]).");
 
@@ -115,11 +115,11 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var parentEntryId = parentSelection.getEntryId();
         var parentEntry = Engine.GetEntryById(parentEntryId)
             ?? Engine.GetEntryByCompositeId(parentEntryId)
-            ?? throw new InvalidOperationException($"Parent entry '{parentEntryId}' not found in entry lookup.");
+            ?? throw new SpecAddressingException($"Parent entry '{parentEntryId}' not found in entry lookup.");
 
         var childEntries = FlattenChildEntries(parentEntry);
         var childEntry = FindEntryById(childEntries, entryId)
-            ?? throw new InvalidOperationException(
+            ?? throw new SpecAddressingException(
                 $"Child entry '{entryId}' not found under parent selection '{parentSelectionId}'.");
 
         var createdSelections = Engine.SelectEntry(parentSelection, childEntry);
@@ -152,7 +152,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var entryId = selection.getEntryId();
         var dataEntry = Engine.GetEntryById(entryId)
             ?? Engine.GetEntryByCompositeId(entryId)
-            ?? throw new InvalidOperationException(
+            ?? throw new SpecAddressingException(
                 $"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
         // Find the parent of this selection (the container that holds it)
         var parent = FindSelectionParent(force, selectionId);
@@ -201,7 +201,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     public void SetCostLimit(string costTypeId, decimal value)
     {
         var costType = Engine.GetCostTypeById(costTypeId)
-            ?? throw new InvalidOperationException($"Cost type '{costTypeId}' not found.");
+            ?? throw new SpecAddressingException($"Cost type '{costTypeId}' not found.");
         Engine.SetCostLimit(costType, value);
     }
 
@@ -212,7 +212,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         {
             var categories = JavaListToList<net.battlescribe.model.roster.Category>(force.getCategories());
             var category = categories.FirstOrDefault(c => c.getEntryId() == categoryEntryId)
-                ?? throw new InvalidOperationException($"Category '{categoryEntryId}' not found in force '{forceId}'.");
+                ?? throw new SpecAddressingException($"Category '{categoryEntryId}' not found in force '{forceId}'.");
             if (customName is not null)
             {
                 category.setCustomName(customName);
@@ -359,7 +359,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 return found;
             }
         }
-        throw new InvalidOperationException(
+        throw new SpecAddressingException(
             $"Force with ID '{forceId}' not found in roster " +
             $"({Engine.GetForces().Count} top-level forces).");
     }
@@ -397,7 +397,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 return found;
             }
         }
-        throw new InvalidOperationException(
+        throw new SpecAddressingException(
             $"Selection with ID '{selectionId}' not found in force '{force.getId()}'.");
     }
 
@@ -440,7 +440,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 return parent;
             }
         }
-        throw new InvalidOperationException(
+        throw new SpecAddressingException(
             $"Selection '{selectionId}' not found when looking for parent in force '{force.getId()}'.");
     }
 

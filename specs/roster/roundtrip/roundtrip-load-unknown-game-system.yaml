@@ -1,0 +1,86 @@
+id: roundtrip-load-unknown-game-system
+category: roundtrip
+description: >
+  A well-formed .ros naming a gameSystemId that is not loaded. Semantically invalid rather than
+  unparseable, and BattleScribe does not refuse it: the file loads, every selection resolves
+  against the system that IS loaded, and the roster keeps the dangling gameSystemId verbatim.
+
+  That is the finding, and it is why this spec carries "expectFailure: false" rather than no
+  declaration at all. The two say different things. No declaration means the load was never in
+  question; "false" means the refusal was the hypothesis, it was tested, and the engine accepted.
+  A negative result recorded is worth more than an untested assumption, and the state assertion
+  below pins exactly how far the acceptance goes.
+
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-orphan" name="Orphan" battleScribeVersion="2.03" gameSystemId="gs-does-not-exist" gameSystemName="Missing System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs/>
+        <forces>
+          <force id="f-orphan" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit"/>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+    expectFailure: false
+
+  # It loaded, and fully. The roster keeps its OWN gameSystemId verbatim while everything in it is
+  # resolved against the system actually loaded — note gameSystemName, which comes back as the
+  # loaded system's name and not the payload's "Missing System". The reference is carried, not
+  # checked.
+  - expectedState:
+      name: Orphan
+      gameSystemId: gs-does-not-exist
+      gameSystemName: Test System
+      costs:
+        - typeId: ct-pts
+          value: 10
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          selections:
+            - name: Squad
+              entryId: se-squad
+              costs:
+                - typeId: ct-pts
+                  value: 10

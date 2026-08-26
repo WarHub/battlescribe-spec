@@ -263,6 +263,19 @@ public sealed class ActionResult : ProtocolResponse
 
     public string? Error { get; set; }
 
+    /// <summary>
+    /// Optional protocol addition: why the action failed — <c>"engine"</c> (the engine declined),
+    /// <c>"address"</c> (the adapter could not resolve an id the spec named), or <c>"harness"</c>
+    /// (the adapter itself broke). Only meaningful when <see cref="Ok"/> is false.
+    /// <para>
+    /// A spec's <c>expectFailure</c> is satisfied by <c>"engine"</c> and nothing else. Omitting the
+    /// field is protocol-conformant and costs an adapter only the ability to have its refusals
+    /// asserted — an unclassified failure stays fatal rather than passing unexamined.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Kind { get; set; }
+
     public ActionOutputs? Outputs { get; set; }
 }
 
@@ -1095,6 +1108,13 @@ public sealed class GameDataActionResult : ProtocolResponse
     public bool Ok { get; set; }
 
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Optional protocol addition: why the action failed. Same three values and the same
+    /// <c>expectFailure</c> contract as <see cref="ActionResult.Kind"/>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Kind { get; set; }
 
     /// <summary>Created entry/link id (addEntry, addLink).</summary>
     public string? EntryId { get; set; }

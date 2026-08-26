@@ -161,6 +161,7 @@
           "additionalProperties": { "type": "object" },
           "description": "Per-engine overrides for this step's action inputs (e.g. a different value/count per engine)."
         },
+        "expectFailure": { "$ref": "#/$defs/expectFailure" },
         "expectedState": { "$ref": "#/$defs/expectedState" },
         "expectedFile": { "$ref": "#/$defs/expectedFile" }
       },
@@ -168,6 +169,53 @@
         { "required": ["action"] },
         { "required": ["expectedState"] },
         { "required": ["expectedFile", "id"] }
+      ],
+      "if": { "required": ["expectFailure"] },
+      "then": {
+        "required": ["action"],
+        "description": "expectFailure asserts that an action was refused, so it only belongs on an action step. The validation list of a roster the engine ACCEPTED is expectedState.errors."
+      }
+    },
+
+    "expectFailure": {
+      "description": "Assert that this action is refused by the engine — a parser rejecting the payload, an engine declining the edit. Satisfied ONLY by an engine refusal: a failure the adapter raised while resolving an id the spec named, a harness fault, and a failure from an adapter that sends no 'kind' all stay fatal. Distinct from expectedState.errors, which asserts the validation list of a roster the engine accepted. A refused step does not end the run, so a following expectedState can assert what the refusal left behind.",
+      "oneOf": [
+        {
+          "type": "boolean",
+          "description": "true: the engine must refuse. false: it must succeed (the default), used as a per-engine override to record an engine that accepts input the others reject."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "expected": {
+              "type": "boolean",
+              "description": "Whether this engine is expected to refuse. Defaults to true."
+            },
+            "messageContains": {
+              "type": "string",
+              "description": "Case-insensitive substring the refusal message must contain. Matched against the engine's own message, never the harness framing around it."
+            },
+            "engines": {
+              "type": "object",
+              "description": "Per-engine overrides. Each value takes the same three shapes as the field itself; 'engines' cannot nest inside one.",
+              "propertyNames": { "$ref": "#/$defs/engineName" },
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "boolean" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "expected": { "type": "boolean" },
+                      "messageContains": { "type": "string" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
       ]
     },
 

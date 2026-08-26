@@ -1,0 +1,75 @@
+id: roundtrip-load-malformed-xml
+category: roundtrip
+description: >
+  A .ros payload that is not well-formed XML is refused by the engine, and the roster the editor
+  had built survives the refusal intact. The refusal is asserted with expectFailure, not with
+  expectedState.errors: a payload the parser rejects never becomes a roster, so it has no
+  validation list to match against. The state assertion afterwards is the half that matters —
+  a refused load must leave the previous roster alone, not a half-loaded one.
+
+# Only the in-process reference engine implements roster load today (#450). The other three are
+# opted out explicitly rather than being allowed to no-op their way to a green run: an engine that
+# cannot load must FAIL this spec, never silently skip it (#309). expectFailure enforces the same
+# rule on its own — an engine that does not implement the action reports a capability gap, which is
+# not a refusal and does not satisfy the declaration.
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - expectedState:
+      name: roundtrip-load-malformed-xml
+      costs:
+        - typeId: ct-pts
+          value: 10
+
+  # Truncated mid-element: the opening <roster> tag never closes and no element is terminated.
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-broken" name="Broken" battleScribeVersion="2.03" gameSystemId="gs-1"
+    expectFailure:
+      messageContains: "ParseError"
+
+  # The refusal changed nothing: the editor's roster is still the one in hand.
+  - expectedState:
+      name: roundtrip-load-malformed-xml
+      costs:
+        - typeId: ct-pts
+          value: 10
+      forces:
+        - name: Detachment
+          selections:
+            - name: Squad

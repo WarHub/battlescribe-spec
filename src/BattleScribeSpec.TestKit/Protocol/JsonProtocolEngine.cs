@@ -264,7 +264,13 @@ public sealed class JsonProtocolEngine : IRosterEngine
         return response switch
         {
             ActionResult { Ok: true } ar => ar.Outputs ?? new ActionOutputs(),
-            ActionResult { Ok: false, Error: var error } => throw new InvalidOperationException($"Action '{cmd.Action}' failed: {error}"),
+            // The message keeps the framing the runner has always logged; the adapter's `kind` and
+            // the engine's own words ride along so a spec's expectFailure can be judged against
+            // what the engine said rather than against this sentence.
+            ActionResult { Ok: false } ar => throw new ActionFailedException(
+                $"Action '{cmd.Action}' failed: {ar.Error}",
+                ActionFailure.FromWire(ar.Kind),
+                ar.Error),
             ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
             _ => throw new InvalidOperationException($"Unexpected response type: {response.Type}"),
         };

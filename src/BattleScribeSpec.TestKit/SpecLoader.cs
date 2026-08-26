@@ -13,6 +13,7 @@ public static class SpecLoader
 {
     private static readonly IDeserializer Deserializer = new StaticDeserializerBuilder(new SpecYamlStaticContext())
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
+        .WithTypeConverter(new ExpectFailureYamlConverter())
         .Build();
 
     /// <summary>

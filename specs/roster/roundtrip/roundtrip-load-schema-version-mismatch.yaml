@@ -1,0 +1,80 @@
+id: roundtrip-load-schema-version-mismatch
+category: roundtrip
+description: >
+  A .ros carrying a foreign schema namespace and an out-of-range battleScribeVersion. Well-formed
+  XML in the wrong shape, and BattleScribe loads it anyway — its reader matches on element names,
+  not on the namespace, and battleScribeVersion is carried rather than validated.
+
+  Recorded with "expectFailure: false" for the same reason as the unknown-game-system spec: the
+  refusal was the hypothesis and the engine did not refuse, which is a result and not an absence
+  of one.
+
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-oldschema" name="Old Schema" battleScribeVersion="1.15b" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/NOT-A-REAL-SCHEMA">
+        <costs/>
+        <forces>
+          <force id="f-old" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit"/>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+    expectFailure: false
+
+  # It loaded, and fully: the reader is namespace-blind and battleScribeVersion is carried, not
+  # validated. Every selection resolved and re-costed exactly as it would from a well-formed file.
+  - expectedState:
+      name: Old Schema
+      gameSystemId: gs-1
+      costs:
+        - typeId: ct-pts
+          value: 10
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          selections:
+            - name: Squad
+              entryId: se-squad
+              costs:
+                - typeId: ct-pts
+                  value: 10

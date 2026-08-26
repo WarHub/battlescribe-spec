@@ -100,7 +100,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
     {
         var parent = FindById(parentId)
-            ?? throw new InvalidOperationException($"Parent not found: {parentId}");
+            ?? throw new SpecAddressingException($"Parent not found: {parentId}");
 
         // Fail with a clear error (rather than silently producing an entry the Data Editor
         // would reject) for entry types the editor only adds under a precondition. Keeps the
@@ -168,7 +168,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     public void SetField(string entryId, string field, string? value)
     {
         var entry = FindById(entryId)
-            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+            ?? throw new SpecAddressingException($"Entry not found: {entryId}");
 
         SetFieldOnObject(entry, field, value);
     }
@@ -176,7 +176,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     public void SetCost(string entryId, string costTypeId, string? value)
     {
         var entry = FindById(entryId)
-            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+            ?? throw new SpecAddressingException($"Entry not found: {entryId}");
 
         var costs = GetList(entry, "getCosts")
             ?? throw new InvalidOperationException($"Entry {entryId} has no costs container");
@@ -208,7 +208,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     public void SetCharacteristic(string entryId, string nameOrTypeId, string? value)
     {
         var entry = FindById(entryId)
-            ?? throw new InvalidOperationException($"Entry not found: {entryId}");
+            ?? throw new SpecAddressingException($"Entry not found: {entryId}");
 
         var chars = GetList(entry, "getCharacteristics")
             ?? throw new InvalidOperationException($"Entry {entryId} has no characteristics container (not a profile?)");
@@ -232,7 +232,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
     {
         var parent = FindById(parentId)
-            ?? throw new InvalidOperationException($"Parent not found: {parentId}");
+            ?? throw new SpecAddressingException($"Parent not found: {parentId}");
 
         id ??= Guid.NewGuid().ToString();
 
@@ -270,7 +270,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
 
         var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
-            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+            ?? throw new HarnessFaultException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
 
         // Preserve which file is currently "open" so the reload doesn't reset the primary.
         var openId = _catalogue?.getId();
@@ -313,14 +313,14 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var read = dataUtils.GetMethod(readMethod,
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
             [typeof(java.io.InputStream)])
-            ?? throw new InvalidOperationException($"DataUtils deserialize '{readMethod}(InputStream)' not found.");
+            ?? throw new HarnessFaultException($"DataUtils deserialize '{readMethod}(InputStream)' not found.");
 
         try
         {
             var bytes = SerializeModel(dataUtils, model, modelType);
             var bais = new java.io.ByteArrayInputStream(bytes);
             return read.Invoke(null, [bais])
-                ?? throw new InvalidOperationException($"DataUtils.{readMethod} returned null on reload.");
+                ?? throw new HarnessFaultException($"DataUtils.{readMethod} returned null on reload.");
         }
         catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
         {
@@ -335,7 +335,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var write = dataUtils.GetMethod("a",
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
             [modelType, typeof(java.io.OutputStream)])
-            ?? throw new InvalidOperationException($"DataUtils serialize 'a({modelType.Name}, OutputStream)' not found.");
+            ?? throw new HarnessFaultException($"DataUtils serialize 'a({modelType.Name}, OutputStream)' not found.");
         var baos = new java.io.ByteArrayOutputStream();
         write.Invoke(null, [model, baos]);
         return baos.toByteArray();
@@ -350,7 +350,7 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var model = ActiveModel
             ?? throw new InvalidOperationException("ExportActiveFile: no active file (setup not run?)");
         var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
-            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+            ?? throw new HarnessFaultException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
         var modelType = model is GameSystem ? typeof(GameSystem) : typeof(Catalogue);
         try
         {
@@ -372,18 +372,23 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
     {
         var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(xml, @"<\s*gameSystem\b");
         var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
-            ?? throw new InvalidOperationException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
+            ?? throw new HarnessFaultException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
         var read = dataUtils.GetMethod(isGameSystem ? "e" : "f",
             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
             [typeof(java.io.InputStream)])
-            ?? throw new InvalidOperationException("DataUtils deserialize (e/f) not found.");
+            ?? throw new HarnessFaultException("DataUtils deserialize (e/f) not found.");
 
         try
         {
             var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
             var bais = new java.io.ByteArrayInputStream(bytes);
+            // A null model is BattleScribe declining the payload, not a harness fault — the
+            // deserializer's way of saying it could not make this XML into a file. Worded as the
+            // refusal it is, because a load-failure spec matches on it (#268).
             var model = read.Invoke(null, [bais])
-                ?? throw new InvalidOperationException("LoadFile: DataUtils returned null.");
+                ?? throw new InvalidOperationException(
+                    $"BattleScribe could not parse this {(isGameSystem ? "gameSystem" : "catalogue")} " +
+                    "file: the deserializer returned no model.");
 
             if (isGameSystem)
             {

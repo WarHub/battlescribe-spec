@@ -316,7 +316,7 @@ public static class NrUiActions
 
         if (forceIndex < 0)
         {
-            throw new InvalidOperationException($"NR UI: Force '{forceUid}' not found in army.getForces().");
+            throw new SpecAddressingException($"NR UI: Force '{forceUid}' not found in army.getForces().");
         }
         var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
         await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
@@ -812,7 +812,7 @@ public static class NrUiActions
 
         if (forceIndex < 0)
         {
-            throw new InvalidOperationException($"NR UI: Force '{forceUid}' not found in army.getForces().");
+            throw new SpecAddressingException($"NR UI: Force '{forceUid}' not found in army.getForces().");
         }
 
         var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
