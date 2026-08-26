@@ -8,6 +8,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Action-level failure primitive: `expectFailure` (#23, #25, #268)** — a step can now assert that
+  the engine **refused** its action, which nothing in the spec model could say. The only failure
+  expectation was spec-level `engines: {<name>: fail}` (whole-spec, per-engine), and
+  `expectedState.errors` asserts the *validation list* of a roster the engine **accepted** — so a
+  malformed `.ros`, which never becomes a roster, had nothing to assert against. Three issues in
+  three epics each rediscovered this independently.
+
+  Available on roster and gamedata action steps in three shapes — `true`, `false`, and a mapping
+  with `messageContains` plus per-engine `engines:` overrides taking the same three. A refused step
+  **does not end the run**, so a following `expectedState` asserts what the refusal left behind
+  (whether a rejected load keeps the previous roster is the conformance question, and it is
+  unanswerable if the harness stops at the refusal). An action that *succeeds* under a declared
+  refusal fails the step: the assertion is two-sided.
+
+  **Only an engine refusal satisfies it.** Four layers can make an action fail and they used to
+  arrive at the runner as one thing — an exception message string. Now they are told apart, and the
+  other three stay fatal: an id the spec named that the adapter could not resolve (a spec bug —
+  every engine fails those identically, through its own adapter, so asserting one would make a typo
+  pass), a `NotSupportedException` from an engine that does not implement the action (a capability
+  gap — without this, the three engines that cannot load a roster (#450) would pass every
+  malformed-input spec without parsing a byte, which is #309 at action level), and a harness fault.
+  The classification is made adapter-side, the last place that still has the exception, and rides
+  the wire as an optional `kind` on `actionResult`/`gamedataActionResult`. An adapter that omits it
+  stays conformant and simply cannot have its refusals asserted — the spec fails naming the field
+  rather than passing on an unexamined failure.
+
+  Adapter id lookups now raise `SpecAddressingException` rather than `InvalidOperationException`,
+  and IKVM binding failures raise `HarnessFaultException`; those two declarations are what let the
+  classifier treat its remainder as engine behaviour. `SpecValidator` rejects `expectFailure` on a
+  non-action step and an `id` on a step no engine accepts (it could never be referenced).
+  Documented in `docs/error-assertions.md` and `docs/adapter-protocol.md`.
+- **Roster load-failure specs (#23)** — five specs covering the malformed-input range, and two of
+  them are negative results recorded rather than assumed. BattleScribe refuses truncated XML and an
+  empty payload (`ParseError`), and refuses a roster naming a catalogue it does not hold; it
+  **accepts** a roster naming an unknown `gameSystemId` — keeping the dangling id verbatim while
+  resolving everything in the file against the system that is loaded — and **accepts** a foreign
+  schema namespace with an out-of-range `battleScribeVersion`, its reader matching element names
+  rather than namespaces. Each refusal spec also asserts that the editor's roster survived intact.
+- **GameData `load` spec category (#268)** — the load-failure path, kept separate from
+  `validation/` on purpose: a file the editor refuses to parse produces no validation list, which is
+  why #268 was carved out of #173. Opens with `load-malformed-catalogue`. The two Data Editor UI
+  lanes are skipped as the open question #268 names, not as a capability gap.
 - **Roster load + reload (#201, #279)** — the roster domain gains the persistence half of the
   gamedata lifecycle: `IRosterEngine.LoadRoster(xml)` replaces the engine's roster wholesale from
   a `.ros` payload and re-links it against the setup data, and `IRosterEngine.ReloadRoster()`

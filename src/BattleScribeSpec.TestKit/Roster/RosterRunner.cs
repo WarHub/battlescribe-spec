@@ -23,6 +23,13 @@ public sealed class RosterRunner
     private string? _harnessError;
 
     /// <summary>
+    /// Set when an <c>expectFailure</c> step's expectation was not met. The step loop's own catch
+    /// cannot end the run for this, because a violated expectation is an assertion failure and is
+    /// recorded rather than thrown — see <see cref="ExecuteActionStep"/>.
+    /// </summary>
+    private bool _abortRun;
+
+    /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected snapshot from the actual
     /// export instead of comparing. Mirrors <see cref="GameDataRunner"/>; defaults to the
     /// <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var so the xUnit harness honors it.
@@ -106,6 +113,7 @@ public sealed class RosterRunner
         _specId = spec.Id;
         _specDir = spec.SourceDirectory;
         _harnessError = null;
+        _abortRun = false;
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -152,7 +160,7 @@ public sealed class RosterRunner
                     }
                     else if (step.Action is not null)
                     {
-                        ExecuteAction(step, i);
+                        ExecuteActionStep(step, i);
                     }
                     else if (step.ExpectedState is not null)
                     {
@@ -168,6 +176,11 @@ public sealed class RosterRunner
                     }
 
                     NotifyStepCompleted(i, step);
+
+                    if (_abortRun)
+                    {
+                        break;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -305,6 +318,62 @@ public sealed class RosterRunner
         {
             _errors.Add($"Setup: {err}");
         }
+    }
+
+    /// <summary>
+    /// Run an action step, applying the step's <c>expectFailure</c> declaration if it carries one.
+    /// <para>
+    /// Without a declaration this is <see cref="ExecuteAction"/> and nothing else: the exception
+    /// propagates to the step loop's catch, which records it and ends the run, exactly as every
+    /// action failure has always done. The declaration is the only thing that makes a refusal
+    /// survivable, and it makes exactly one kind of refusal survivable — see
+    /// <see cref="ActionFailureKind"/>.
+    /// </para>
+    /// </summary>
+    private void ExecuteActionStep(StepDef step, int stepIndex)
+    {
+        var declared = step.ExpectFailure;
+        var expected = declared?.ForEngine(OverrideKeyFor(declared.Engines));
+
+        // No declaration, or this engine is the one declared to accept the input: ordinary path,
+        // where any failure is fatal. `expected: false` needs no code of its own — "must succeed"
+        // is what the runner already enforces by treating a throw as fatal.
+        if (expected is null || !expected.IsExpected)
+        {
+            ExecuteAction(step, stepIndex);
+            return;
+        }
+
+        try
+        {
+            ExecuteAction(step, stepIndex);
+        }
+        catch (Exception ex) when (ExpectFailure.IsSatisfiedBy(ex, expected))
+        {
+            // The refusal the spec asked for. The run continues so the next expectedState can
+            // assert what the refusal left behind — for a rejected load, whether the previous
+            // roster survived is the conformance question, and it is unanswerable if the run stops
+            // here.
+            return;
+        }
+        catch (Exception ex)
+        {
+            _errors.Add(ExpectFailure.Explain(ex, expected, stepIndex, step.Action ?? "?", EngineLabel));
+            if (ExpectFailure.IsHarnessFault(ex))
+            {
+                // Only a genuine fault is a harness error. A spec that named a missing id, an
+                // adapter that did not classify, and an engine whose wording moved are all
+                // assertion failures, and reporting them as crashes would mislead every consumer
+                // that reads HarnessError to tell the two apart.
+                _harnessError = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            _abortRun = true;
+            return;
+        }
+
+        _errors.Add(ExpectFailure.ExplainUnexpectedSuccess(stepIndex, step.Action ?? "?", EngineLabel));
+        _abortRun = true;
     }
 
     private void ExecuteAction(StepDef step, int stepIndex)

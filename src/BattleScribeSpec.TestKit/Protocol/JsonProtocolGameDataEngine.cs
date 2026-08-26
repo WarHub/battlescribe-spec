@@ -122,8 +122,10 @@ public sealed class JsonProtocolGameDataEngine : IGameDataEngine
     private GameDataActionResult SendAction(GameDataActionCommand command) => SendCommand(command) switch
     {
         GameDataActionResult { Ok: true } result => result,
-        GameDataActionResult { Ok: false, Error: var error } =>
-            throw new InvalidOperationException($"Action '{command.Action}' failed: {error}"),
+        GameDataActionResult { Ok: false } result => throw new ActionFailedException(
+            $"Action '{command.Action}' failed: {result.Error}",
+            ActionFailure.FromWire(result.Kind),
+            result.Error),
         ProtocolError pe => throw new InvalidOperationException($"Adapter error: {pe.Message}"),
         var other => throw new InvalidOperationException($"Unexpected response type: {other.Type}"),
     };

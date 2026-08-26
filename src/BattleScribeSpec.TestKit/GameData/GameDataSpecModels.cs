@@ -123,6 +123,16 @@ public sealed class GameDataStepDef
     public GameDataExpectedStateDef? ExpectedState { get; set; }
 
     /// <summary>
+    /// Declares that this action is expected to be <b>refused by the engine</b> — an
+    /// <c>openFile</c> whose payload the editor will not parse, an edit it declines. Distinct from
+    /// <see cref="GameDataExpectedStateDef.Errors"/>, which asserts the editor's validation list
+    /// for a file it <em>opened</em>. That is the split #268 was carved out of #173 to name: a file
+    /// the editor refuses to load produces no validation list to match against. Action steps only.
+    /// See <see cref="ExpectFailureDef"/>.
+    /// </summary>
+    public ExpectFailureDef? ExpectFailure { get; set; }
+
+    /// <summary>
     /// Assert the exact serialized content of the active file after this step (byte-exact). The
     /// expected content is either inline (<see cref="ExpectedFileDef.Content"/>) or a side-file
     /// resolved next to the spec, keyed by this step's <see cref="Id"/>.

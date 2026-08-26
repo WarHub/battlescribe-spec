@@ -342,8 +342,46 @@ For `screenshot` and `record` that costs you an artifact and the client moves on
 {"type":"actionResult","ok":true,"outputs":{"forceId":"abc-123","selections":{"se-required":["sel-789","sel-790"]},"categories":{"cat-troops":["cat-node-1"]}}}
 {"type":"actionResult","ok":true,"outputs":{"selectionId":"sel-456"}}
 {"type":"actionResult","ok":true}
-{"type":"actionResult","ok":false,"error":"Force not found with id 'xyz'"}
+{"type":"actionResult","ok":false,"error":"Force not found with id 'xyz'","kind":"address"}
+{"type":"actionResult","ok":false,"error":"ParseError: Premature end of file.","kind":"engine"}
 ```
+
+#### `kind` — why the action failed (optional)
+
+An optional string on a failed result, saying **which layer** produced the failure. Omitting it is
+fully conformant; the field costs an adapter nothing to skip and buys one thing, described below.
+
+| `kind` | Meaning |
+|--------|---------|
+| `engine` | The engine had everything it was given and **declined** — a parser rejecting a payload, an edit the engine's own rules disallow. |
+| `address` | The adapter could not resolve an id the spec named, before the engine was asked anything. |
+| `harness` | The adapter itself broke — a binding that no longer exists, an invariant that does not hold. |
+| *(absent)* | Nothing classified it. |
+
+A spec step can assert that an action was refused, with `expectFailure` (see
+[Error Assertions](error-assertions.md#expectfailure--asserting-that-an-action-was-refused)). **Only
+`kind:"engine"` satisfies that assertion.** Everything else — including an absent `kind` — leaves the
+failure fatal, and the spec fails with a message naming what to do about it.
+
+That asymmetry is deliberate and it is the whole reason the field exists. Without a discriminator,
+"this payload must be refused" would also be satisfied by a typo in the spec's own payload
+reference, by an adapter that died mid-command, and by an adapter that does not implement the action
+at all — three ways for a conformance test to pass while verifying nothing.
+
+So the rule for adapter authors is short:
+
+- Send `kind:"engine"` when your engine looked at the input and said no. This is the only value that
+  makes your refusals assertable.
+- Send `kind:"address"` from your own id lookups — the code that turns a spec's `forceId` into your
+  engine's object. In-box adapters raise `SpecAddressingException` there and the classification is
+  automatic.
+- Send `kind:"harness"` when the failure is your adapter's bug rather than the engine's judgment.
+- Send nothing if you would rather not classify. Your adapter stays conformant; specs that assert
+  refusals will fail on it until you do, rather than passing on an unexamined failure.
+
+An action your adapter does not implement should answer `error` (an unsupported command) rather than
+a refusal — a capability gap is not a judgment about the input, and a spec opts out of it with
+`skipEngines` / `engines: {…: skip}`.
 
 The `outputs` field is present on success for mutating actions that create elements.
 It contains the IDs described in [Action outputs](#action-outputs) above. The client
@@ -669,7 +707,8 @@ externally it is driven the same way as any other engine, through the four comma
 
 One command per `IGameDataEngine` mutation, selected by `action`; unused fields are omitted. Successful
 mutations answer `gamedataActionResult` with `ok:true` and any produced id/xml; failures set `ok:false`
-with `error`.
+with `error`, and optionally [`kind`](#kind--why-the-action-failed-optional) — same three values, same
+contract as on the roster side. A `.cat`/`.gst` the editor will not parse is `kind:"engine"`.
 
 ```json
 {"type":"gamedataAction","action":"openFile","id":"cat-1"}

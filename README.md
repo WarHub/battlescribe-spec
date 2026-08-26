@@ -1,8 +1,8 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 486 spec files — 373 roster specs
-and 113 GameData specs — covering the complete BattleScribe data model and editing operations.
+Any engine, in any language, can validate its behavior against 492 spec files — 378 roster specs
+and 114 GameData specs — covering the complete BattleScribe data model and editing operations.
 
 ## Quick Start
 
@@ -105,7 +105,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 486 declarative spec files (373 roster + 113 GameData) covering all BattleScribe operations |
+| **YAML Specs** | 492 declarative spec files (378 roster + 114 GameData) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -119,7 +119,7 @@ drive a roster engine — add forces, select entries, assert the resulting roste
 specs (`specs/gamedata/`) drive a catalogue editor — create and edit `.cat`/`.gst` data, assert the
 resulting model or the exact serialized file.
 
-### Roster specs — 373 across 23 categories
+### Roster specs — 378 across 23 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
@@ -143,11 +143,11 @@ resulting model or the exact serialized file.
 | protocol | 2 | Protocol smoke tests (kitchen sink, duplicate force) |
 | real-world | 2 | DataSource specs using wh40k-10e external data |
 | roster | 9 | Creation, metadata, cost types, lifecycle |
-| roundtrip | 2 | Save + load fidelity — `reload` preserves state, `loadRoster` re-links a `.ros` payload |
+| roundtrip | 7 | Save + load fidelity — `reload` preserves state, `loadRoster` re-links a `.ros` payload, and refuses the payloads it cannot |
 | scope | 14 | All scope types, child ID filters, include flags |
 | selection | 95 | Lifecycle, groups, links, collective, types, profiles, rules, info groups, publications |
 
-### GameData specs — 113 across 22 categories
+### GameData specs — 114 across 23 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
@@ -160,6 +160,7 @@ resulting model or the exact serialized file.
 | export | 4 | Byte-compare of serialized `.cat`/`.gst` output against per-engine snapshots |
 | force | 1 | Force entries: creation, nesting, category entries |
 | info-group | 1 | Info groups with nested profiles and rules |
+| load | 1 | Load-failure path: payloads the editor refuses to parse, asserted with `expectFailure` |
 | links | 4 | Entry and catalogue links: types, targets, flags (collective, import, hidden) |
 | modifier | 3 | Modifier types (string, list/category) and nested conditions |
 | modifier-group | 1 | Modifier groups with nested modifiers and shared conditions |
@@ -178,7 +179,7 @@ resulting model or the exact serialized file.
 
 ```
 battlescribe-spec/
-├── specs/                          # 486 YAML spec files (373 roster + 113 gamedata)
+├── specs/                          # 492 YAML spec files (378 roster + 114 gamedata)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

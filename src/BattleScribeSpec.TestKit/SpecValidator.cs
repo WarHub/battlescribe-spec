@@ -97,6 +97,8 @@ public static class SpecValidator
                     // expectedFile side-file snapshots are keyed by the step id.
                     errors.Add($"{stepLabel}: 'expectedFile' step requires an 'id' (the snapshot key)");
                 }
+
+                ValidateExpectFailure(step, hasAction, stepLabel, errors);
             }
         }
 
@@ -108,6 +110,47 @@ public static class SpecValidator
         if (errors.Count > 0)
         {
             throw new SpecValidationException(spec.Id, errors);
+        }
+    }
+
+    /// <summary>
+    /// The two ways an <c>expectFailure</c> declaration can be structurally impossible rather than
+    /// merely wrong. Both are caught here so the spec is rejected before it runs, where the message
+    /// names the mistake — the same reason a literal <c>on:</c> id is a lint error and not a
+    /// mysteriously unmatched assertion (#419).
+    /// </summary>
+    private static void ValidateExpectFailure(StepDef step, bool hasAction, string stepLabel, List<string> errors)
+    {
+        if (step.ExpectFailure is not { } expect)
+        {
+            return;
+        }
+
+        if (!hasAction)
+        {
+            errors.Add(
+                $"{stepLabel}: 'expectFailure' belongs on an action step — it asserts that an action was " +
+                "refused. To assert the validation list of a roster the engine accepted, use " +
+                "'expectedState.errors'.");
+            return;
+        }
+
+        if (step.Action == "dump")
+        {
+            errors.Add($"{stepLabel}: 'expectFailure' on 'dump', which performs no engine work and cannot be refused");
+            return;
+        }
+
+        // An id exists to be referenced by a later ${{ steps.… }}. A step that is refused mints
+        // nothing, so the reference cannot resolve — unless some engine is declared to accept the
+        // input, which is the one case where the outputs exist for that engine's run.
+        var someEngineSucceeds = expect.Engines?.Values.Any(e => e.Expected == false) == true;
+        if (step.Id is not null && expect.IsExpected && !someEngineSucceeds)
+        {
+            errors.Add(
+                $"{stepLabel}: an 'expectFailure' step that no engine accepts produces no outputs, so its 'id' " +
+                "can never be referenced. Drop the id, or record the engine that accepts this input with " +
+                "'engines: {<engine>: false}'.");
         }
     }
 

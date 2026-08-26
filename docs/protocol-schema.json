@@ -288,6 +288,7 @@
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "ok": { "type": "boolean" },
         "error": { "type": "string" },
+        "kind": { "enum": ["engine", "address", "harness"], "description": "Optional: which layer produced the failure. Only the engine value — the engine looked at the input and declined — satisfies a spec step expectFailure. Absent means unclassified, which leaves the failure fatal. See docs/adapter-protocol.md." },
         "outputs": { "$ref": "#/$defs/actionOutputs" }
       }
     },
@@ -413,6 +414,7 @@
         "corrId": { "type": "integer", "description": "Optional correlation id (protocol v1.1+); adapters echo it verbatim on the response. Distinct from any domain-specific \"id\" field on this message." },
         "ok": { "type": "boolean" },
         "error": { "type": "string" },
+        "kind": { "enum": ["engine", "address", "harness"], "description": "Optional: which layer produced the failure. Only the engine value — the engine looked at the input and declined — satisfies a spec step expectFailure. Absent means unclassified, which leaves the failure fatal. See docs/adapter-protocol.md." },
         "entryId": { "type": "string" },
         "xml": { "type": "string" },
         "id": { "type": "string" }

@@ -1,0 +1,59 @@
+id: roundtrip-load-empty-payload
+category: roundtrip
+description: >
+  An empty .ros payload is refused by the engine. The degenerate end of the malformed-input range:
+  there is no root element to decide a document type from, so nothing the parser can do with it
+  short of refusing. Asserted with expectFailure for the same reason as every other load failure —
+  a payload that never becomes a roster has no validation list to assert against.
+
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: loadRoster
+    content: ""
+    expectFailure:
+      messageContains: "Premature end of file"
+
+  - expectedState:
+      name: roundtrip-load-empty-payload
+      costs:
+        - typeId: ct-pts
+          value: 10
+      forces:
+        - name: Detachment
+          selections:
+            - name: Squad

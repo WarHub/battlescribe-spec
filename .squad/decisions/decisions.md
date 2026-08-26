@@ -708,3 +708,77 @@ risk"; this decision forgoes that.
   this, and it is mechanical work with no legal question attached.
 - Revisit if NewRecruit publishes Terms of Service, changes `robots.txt`, or objects.
 
+
+---
+
+## Decision: Only an engine refusal may be asserted by `expectFailure`
+
+**Date:** 2026-08-26
+**Status:** Implemented
+**Scope:** The action-level failure primitive — #23, #25, #268
+
+### The decision
+
+A spec step may assert that its action failed (`expectFailure`), and **only a refusal by the engine
+under test satisfies that assertion.** Three other ways for an action to fail stay fatal, and cannot
+be asserted by any spec:
+
+| Kind | What happened | Assertable |
+|---|---|---|
+| `engine` | The engine looked at the input and declined | **yes** |
+| `address` | The adapter could not resolve an id the spec named | no |
+| `unsupported` | The engine does not implement the action at all | no |
+| `harness` / *(absent)* | The harness broke, or nothing classified it | no |
+
+### Why the line is there and not somewhere easier
+
+The cheap version of this primitive is "any failure satisfies it". It was rejected, because the same
+declaration would then be satisfied by:
+
+- a typo in the spec's own payload — the spec asserts its own mistake and passes;
+- an engine that does not implement the action — three of the four cannot load a roster (#450), and
+  the `IRosterEngine` default throws, so all three would pass every malformed-input spec in #23
+  without parsing a byte;
+- an adapter that died mid-command.
+
+That is the vacuous-pass class this repo has removed twice already — #309 (an engine that cannot load
+must fail, never silently skip) and the swallow in `ExecuteFileAssertion`. Adding a primitive whose
+own failure mode is "everything passes" would have reintroduced it under a new name.
+
+### Why the adapter classifies
+
+Only the adapter still has the exception; downstream it is a JSON string, and one string cannot be
+told from another. So the verdict is computed in the catch that already existed and travels as an
+optional `kind` on `actionResult` / `gamedataActionResult`.
+
+The rule's remainder is `engine` — everything not otherwise labelled. That is the honest reading: an
+engine cannot be asked to declare its own refusals, because the BattleScribe Java engine throws what
+it throws through IKVM and wrapping all sixteen adapter methods to relabel it would be a lie about
+where the knowledge lives. So the two kinds that are *not* engine behaviour declare themselves
+instead — `SpecAddressingException` from adapter lookups, `HarnessFaultException` from IKVM binding
+failures — and `NotSupportedException` is read as the capability gap it is.
+
+### The safe direction for an adapter that has not adopted `kind`
+
+An absent `kind` is `Unclassified` and does **not** satisfy the assertion. A third-party adapter
+stays fully conformant without the field; it simply cannot have its refusals asserted, and a spec
+that tries fails with a message naming the field. The alternative — treating absent as `engine` —
+would have made every legacy adapter's typo failures assertable. Same direction as the export
+capability gap in `ExecuteFileAssertion`: an undeclared gap is loud, never silent.
+
+### Consequences
+
+- **#23 and #268 are unblocked and their first specs shipped.** The load path is where the primitive
+  is cleanest: an inline `content:` payload has no id to resolve, so `address` is structurally
+  impossible and only the parser can refuse.
+- **#25's scope is smaller than written.** Its invalid-id and invalid-index cases are `address`
+  failures that measure the harness, not the engines, and belong in `tests/`. Its boundary cases are
+  mostly no-ops — `setSelectionCount` with a negative count leaves BattleScribe's selection untouched
+  and raises nothing — and a no-op's evidence is `expectedState`, not `expectFailure`. What remains
+  is the genuine mutation refusals, which have to be discovered before they can be specified.
+- **A refused step does not end the run**, so a following `expectedState` asserts what the refusal
+  left behind. That is deliberate: for a rejected load, whether the previous roster survives is the
+  conformance question.
+- Engines that have not adopted `SpecAddressingException` classify their lookup failures as `engine`.
+  That is the residual cost of the remainder rule, and it is why adoption is per-engine work rather
+  than a one-time switch.
