@@ -199,7 +199,7 @@ public static class NewRecruitActions
                     const selector = findSelectorById(force, entryId);
                     if (!selector) return `ERROR:Entry '${entryId}' not found in force selector tree`;
 
-                    // Selectors have addInstance; instances have incrementAmount/setAmount.
+                    // Selectors have addInstance; instances have getAmount/setAmount.
                     // findSelectorById returns a selector node — it must have addInstance.
                     if (typeof selector.addInstance !== 'function')
                         return `ERROR:Selector for '${entryId}' has no addInstance (unexpected node type)`;
@@ -268,10 +268,14 @@ public static class NewRecruitActions
                             if (newInst) { newInst.autocheck?.(); return newInst.uid; }
                             return `ERROR:addInstance on '${childEntryId}' returned null`;
                         }
-                        // Non-instanced: increment amount on existing node
-                        if (typeof child.incrementAmount !== 'function')
-                            return `ERROR:Child instance '${childEntryId}' has no incrementAmount (unexpected node type)`;
-                        child.incrementAmount();
+                        // Non-instanced: increment amount on existing node.
+                        // NR v35.72 dropped incrementAmount/decrementAmount; its own stepper now
+                        // expresses "+1" at the call site as setAmount({}, getAmount() + step).
+                        // setAmount has been on the node in every snapshot we have pinned, so this
+                        // is the one form that works across versions.
+                        if (typeof child.setAmount !== 'function' || typeof child.getAmount !== 'function')
+                            return `ERROR:Child instance '${childEntryId}' has no setAmount/getAmount (unexpected node type)`;
+                        child.setAmount({}, child.getAmount() + (child.getStep?.() ?? 1));
                         child.autocheck();
                         return child.uid;
                     }
@@ -331,11 +335,11 @@ public static class NewRecruitActions
 
     /// <summary>
     /// Deselect (decrement) a selection by uid.
-    /// Uses decrementAmount() which reduces the per-model count by 1
-    /// (matching BS's deselect semantics). Falls back to delete() when
-    /// decrementAmount is not available. When decrementAmount reduces
-    /// the count to 0, delete() is called to fully remove the instance
-    /// so NR validation errors are cleared.
+    /// Reduces the per-model count by one step (matching BS's deselect semantics)
+    /// via setAmount({}, getAmount() - step) — the form NR's own stepper uses since
+    /// v35.72 removed decrementAmount. Falls back to delete() when setAmount is not
+    /// available. When the count reaches 0, delete() is called to fully remove the
+    /// instance so NR validation errors are cleared.
     /// </summary>
     public static async Task DeselectSelectionAsync(IPage page, string forceUid, string selectionUid)
     {
@@ -351,18 +355,17 @@ public static class NewRecruitActions
                     const sel = getSelectionByUid(force, selectionUid);
                     if (!sel) return `Selection not found with uid '${selectionUid}'`;
 
-                    if (typeof sel.decrementAmount === 'function') {
-                        sel.decrementAmount();
+                    if (typeof sel.setAmount === 'function' && typeof sel.getAmount === 'function') {
+                        sel.setAmount({}, Math.max(0, sel.getAmount() - (sel.getStep?.() ?? 1)));
                         // If the amount reaches 0, delete the instance entirely so
                         // NR's validation system clears any associated errors.
-                        if (typeof sel.getAmount === 'function' && sel.getAmount() === 0
-                            && typeof sel.delete === 'function') {
+                        if (sel.getAmount() === 0 && typeof sel.delete === 'function') {
                             sel.delete();
                         }
                     } else if (typeof sel.delete === 'function') {
                         sel.delete();
                     } else {
-                        return `Selection '${selectionUid}' has no decrementAmount or delete method`;
+                        return `Selection '${selectionUid}' has no setAmount or delete method`;
                     }
                     return null;
                 } catch(e) {

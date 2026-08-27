@@ -80,7 +80,7 @@ definition (selectionEntry, selectionEntryGroup, categoryLink, etc.).
 | `getName()` | Entry name |
 | `getId()` | Entry ID |
 
-**Does NOT have:** `incrementAmount`, `setAmount`, `getAmount`, `autocheck`,
+**Does NOT have:** `setAmount`, `getAmount`, `autocheck`,
 `dupe`, `getSelectedEntries`
 
 **Key properties:**
@@ -106,7 +106,6 @@ selection in the roster with a count, costs, modifiers applied, etc.
 
 | Method | Description |
 |--------|-------------|
-| `incrementAmount()` | Bump count by 1 (activates amount=0 templates) |
 | `setAmount(ctx, n)` | Set exact count. **Two args required** — `setAmount({}, 5)` |
 | `getAmount()` | Current count (0 = unselected template) |
 | `delete()` | Remove this instance |
@@ -212,7 +211,7 @@ return newSel.uid;
 | Action | Node type | Correct method | Why |
 |--------|-----------|----------------|-----|
 | Select root entry | Selector | `addInstance()` | Creates new instance |
-| Activate child entry (amount 0→1) | Instance | `incrementAmount()` | Bumps existing template |
+| Activate child entry (amount 0→1) | Instance | `setAmount({}, getAmount() + (getStep() ?? 1))` | Bumps existing template |
 | Change selection count | Instance | `setAmount({}, n)` | Exact count, triggers cost propagation |
 | Deselect / remove | Instance | `delete()` | Removes instance entirely |
 | Duplicate selection | Instance | `dupe()` | Async clone |
@@ -228,7 +227,7 @@ if (typeof selector.addInstance !== 'function')
     return 'ERROR: not a selector node';
 
 // On instances
-if (typeof instance.incrementAmount !== 'function')
+if (typeof instance.setAmount !== 'function' || typeof instance.getAmount !== 'function')
     return 'ERROR: not an instance node';
 ```
 

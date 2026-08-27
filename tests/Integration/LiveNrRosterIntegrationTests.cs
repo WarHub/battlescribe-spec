@@ -91,7 +91,7 @@ public sealed class LiveNrRosterIntegrationTests
             _output.WriteLine($"  [{sel.Type}] {sel.Name} (count={sel.Number})");
         }
 
-        // SelectEntry calls incrementAmount — for already-selected entries this increases count
+        // SelectEntry bumps the amount — for already-selected entries this increases count
         // For entries that don't accept more, it may have no effect
         // This test verifies the call doesn't throw
         try

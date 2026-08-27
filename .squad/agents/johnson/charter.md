@@ -15,7 +15,7 @@
 - `NewRecruitRosterEngine.cs`, `NewRecruitActions.cs`, `NewRecruitGameDataEngine.cs`, `HarRecorder.cs`
 - HAR snapshot management — the frozen NR tests replay a single HAR for all specs
 - Pinia store access: `systemsStore` (systems), `lists` (rosters); `window.__bsspec.army` after setup
-- NR-specific behavior: `getBattleScribePath()` composite IDs, `getModelAmount()` for collective, `addInstance()`/`incrementAmount()` for instanced vs. non-instanced
+- NR-specific behavior: `getBattleScribePath()` composite IDs, `getModelAmount()` for collective, `addInstance()`/`setAmount()` for instanced vs. non-instanced
 - NR Editor GameData adapter — static deployment via Playwright route interception
 
 ## How I Work
@@ -23,7 +23,7 @@
 - HAR domain allowlist: newrecruit.eu, raw.githubusercontent.com, Google Fonts — everything else stripped
 - NR composite IDs: `getBattleScribePath()` returns `::` entry ID; `getBattleScribePath(true)` returns group ID; `getId()` is just the plain target ID
 - Collective behavior: `source.collective`, `source.collective_recursive`, `getModelAmount()` — costs multiply, amount stays 1
-- Instanced vs. non-instanced: `isInstanced: true` → `addInstance()` (separate nodes); `false` → `incrementAmount()`
+- Instanced vs. non-instanced: `isInstanced: true` → `addInstance()` (separate nodes); `false` → `setAmount({}, getAmount() + (getStep() ?? 1))` (v35.72 deleted `incrementAmount`)
 - When an NR frozen test fails, I check whether it's HAR drift, a store access change, or a spec mismatch
 - costIndex population is required for NR adapter initialization
 

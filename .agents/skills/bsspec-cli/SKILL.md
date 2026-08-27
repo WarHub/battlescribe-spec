@@ -152,7 +152,7 @@ auto-discovered — no env vars needed. Optional overrides: `BS_UI_JAVA_PATH`, `
 - [NR-ROSTER-UI.md](references/NR-ROSTER-UI.md) — NewRecruit roster UI: probe REPL,
   `NrUiProbe`/`NrUiDiagnostics` APIs, common Pinia/DOM JS snippets, architecture.
 - [NR-INTERNALS.md](references/NR-INTERNALS.md) — deobfuscated NR behaviors: selection
-  mechanics (`addInstance`/`incrementAmount`/`autocheck`), `setAmount` corruption traps,
+  mechanics (`addInstance`/`setAmount`/`autocheck`), the two-arg `setAmount` signature,
   publication resolution, hidden-cost handling.
 - [BS-GAMEDATA-UI.md](references/BS-GAMEDATA-UI.md) — BS Data Editor gamedata driver: Java agent
   RPC routing, edit-panel control-id map, how to extend `DataEditorActions.java`.
