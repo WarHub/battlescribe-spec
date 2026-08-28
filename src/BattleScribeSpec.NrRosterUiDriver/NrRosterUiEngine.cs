@@ -932,13 +932,85 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         var loadedKey = await AdoptImportedListAsync(page, previousKey);
         await Browser.NavigateToRouteAsync($"/app/Lists/{loadedKey}");
-        await NrUiSetup.WaitForEditorLoadedAsync(page);
+        await WaitForEditorOnListAsync(page, loadedKey);
         await NrUiSetup.BypassSupporterPaywallAsync(page);
 
         _listId = loadedKey;
         // A loaded roster is a roster: a later addForce must edit it, not create a second one.
         _rosterCreated = true;
         _childSelectionParent.Clear();
+    }
+
+    /// <summary>
+    /// Waits until the editor is showing <em>the imported list</em>, then points
+    /// <c>window.__bsspec</c> at the roster it re-hydrated.
+    /// <para>
+    /// <see cref="NrUiSetup.WaitForEditorLoadedAsync"/> waits for <c>currentList.book</c> and
+    /// <c>currentList.army</c> to be non-null and syncs whatever it finds — which is right after a
+    /// creation, where the only list in play is the one just made, and wrong here. A load has TWO
+    /// lists in play: the roster the editor was holding and the one that replaced it. If the sync
+    /// runs before NR's route change has landed, <c>currentList</c> is still the old one, and the
+    /// handle every later read goes through ends up on the roster the load was supposed to replace.
+    /// </para>
+    /// <para>
+    /// Keyed to the list and nothing else. It was briefly also keyed to what the imported roster was
+    /// worth, on the theory that NR assigns <c>currentList.army</c> and goes on filling it — a
+    /// full-lane failure showed the loaded roster's Squad with the file's Trooper missing, which
+    /// looks exactly like a half-hydrated read. It was not that: the import had built the roster
+    /// against a stale duplicate of the game system (see <see cref="NrSystemStoreJs"/>), and the
+    /// cost check passed every time because the row's total was computed from the same wrong army.
+    /// A wait that never synchronised anything is not kept for the shape of it.
+    /// </para>
+    /// </summary>
+    private static async Task WaitForEditorOnListAsync(IPage page, string listKey)
+    {
+        try
+        {
+            await page.WaitForFunctionAsync(
+                """
+                (listKey) => {
+                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const current = pinia?._s?.get('lists')?.currentList;
+                    return !!(current?.army && current?.book && current?.row?.list_key === listKey);
+                }
+                """,
+                listKey,
+                new() { Timeout = NrUiTimeouts.Condition });
+        }
+        catch (TimeoutException)
+        {
+            var actual = await page.EvaluateAsync<string?>("""
+                () => {
+                    const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                    const current = pinia?._s?.get('lists')?.currentList;
+                    return JSON.stringify({
+                        path: location.pathname,
+                        currentList: current?.row?.list_key ?? null,
+                        hasArmy: !!current?.army,
+                        hasBook: !!current?.book,
+                    });
+                }
+                """);
+
+            throw new InvalidOperationException(
+                $"NR UI roster import: the editor never opened the imported list '{listKey}'. NR is at: "
+                + $"{actual}. A load that cannot be read back is not a load — every later state read "
+                + "would answer about whichever roster the editor is still holding.");
+        }
+
+        await page.EvaluateAsync("""
+            (listKey) => {
+                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                const current = pinia?._s?.get('lists')?.currentList;
+                if (current?.row?.list_key !== listKey) return;
+                window.__bsspec = {
+                    ...(window.__bsspec ?? {}),
+                    army: current.army,
+                    book: current.book,
+                    row: current.row,
+                };
+            }
+            """, listKey);
     }
 
     /// <summary>
@@ -1154,6 +1226,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     if (!listsStore) return null;
 
                     {{NrListStoreJs.DeleteListsFn}}
+                    {{NrSystemStoreJs.ReleaseLocalSystemsFn}}
 
                     // Drop the open list's forces first (mirrors the store-direct engine).
                     const current = listsStore.getCurrentList?.() ?? listsStore.currentList;
@@ -1221,15 +1294,18 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     // was passing for two of them by reading a roster that had just been emptied.
                     delete window.__bsspec;
 
-                    // Unload game data so the next spec's Setup loads its own cleanly.
-                    for (const k of Object.keys(sysStore?.localLibrary || {})) {
-                        delete sysStore.localLibrary[k];
-                    }
+                    // Unload game data so the next spec's Setup loads its own cleanly — out of every
+                    // registry it was written to, not just localLibrary. Deleting the localLibrary
+                    // entry alone left a duplicate `gs-1` in the shared library for every spec that
+                    // ran, and NR's own roster importer resolves a system BY ID: it found the oldest
+                    // duplicate and built the roster against a previous spec's catalogue. See
+                    // NrSystemStoreJs.
+                    const systemError = bsspecReleaseLocalSystems(sysStore);
 
                     for (const k of Object.keys(localStorage)) {
                         if (/list/i.test(k)) localStorage.removeItem(k);
                     }
-                    return listError;
+                    return [listError, systemError].filter(Boolean).join('; ') || null;
                 } catch (e) {
                     return 'reset error: ' + (e?.stack ?? e?.message ?? String(e));
                 }

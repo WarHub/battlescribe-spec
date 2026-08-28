@@ -957,6 +957,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         if (!sysStore || !listsStore) return null;
 
                         {{NrListStoreJs.DeleteListsFn}}
+                        {{NrSystemStoreJs.ReleaseLocalSystemsFn}}
 
                         let listError = null;
                         const listKey = window.__bsspec?.row?.list_key;
@@ -977,11 +978,14 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                                 listsStore.currentList = null;
                             }
                         }
-                        for (const key of Object.keys(sysStore.localLibrary || {})) {
-                            delete sysStore.localLibrary[key];
-                        }
+                        // Out of every registry Setup wrote it to, not just localLibrary: the shared
+                        // library keeps its own reference, every spec registers the same `gs-1`, and
+                        // NR's roster importer resolves a system BY ID — so a duplicate left here
+                        // becomes the system a later load builds its roster against. See
+                        // NrSystemStoreJs.
+                        const systemError = bsspecReleaseLocalSystems(sysStore);
                         window.__bsspec = undefined;
-                        return listError;
+                        return [listError, systemError].filter(Boolean).join('; ') || null;
                     } catch(e) {
                         const errorText = e?.stack ?? e?.message ?? String(e);
                         return 'Cleanup error: ' + errorText;

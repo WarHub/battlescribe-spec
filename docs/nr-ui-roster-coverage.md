@@ -15,6 +15,10 @@ Measured 2026-08-05, frozen HAR (offline), over **every applicable roster spec**
 | Failed | 23 — every one declared, with a reason, in the spec itself |
 | Skipped | 4 — never run on this engine |
 
+Re-measured 2026-08-28 after #450 gave this engine roster load: **378 specs selected, 354 passed, 23
+declared failures**. The seven `roundtrip` specs this engine used to opt out of — it could not load a
+roster at all — run now, and two more were added alongside them.
+
 Every one of those 363 created its own roster in the same browser session, which is the fact that
 retires the one-spec limit. Wall-clock: **18m17s**, sequential, one shared browser — down from 47
 minutes, see "Where the time went" below.
