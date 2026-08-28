@@ -7,13 +7,12 @@ description: >
   validation list to match against. The state assertion afterwards is the half that matters —
   a refused load must leave the previous roster alone, not a half-loaded one.
 
-# The two UI lanes are opted out explicitly rather than being allowed to no-op their way to a green
+# battlescribe-ui is opted out explicitly rather than being allowed to no-op its way to a green
 # run: an engine that cannot load must FAIL this spec, never silently skip it (#309). expectFailure
 # enforces the same rule on its own — an engine that does not implement the action reports a
 # capability gap, which is not a refusal and does not satisfy the declaration.
 engines:
   battlescribe-ui: skip
-  newrecruit-ui: skip
 
 setup:
   gameSystem:

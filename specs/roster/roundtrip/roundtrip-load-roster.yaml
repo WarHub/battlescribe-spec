@@ -14,12 +14,10 @@ description: >
   own spec (roundtrip-load-selection-no-primary-category). Leaving it out here would have made
   this spec measure that drop instead of the re-linking it is about.
 
-# The two UI lanes are opted out explicitly, and visibly, rather than being allowed to no-op
-# their way to a green run: an engine that cannot load must FAIL this spec, never silently skip
-# it (#309).
+# battlescribe-ui is opted out explicitly, and visibly, rather than being allowed to no-op its way
+# to a green run: an engine that cannot load must FAIL this spec, never silently skip it (#309).
 engines:
   battlescribe-ui: skip
-  newrecruit-ui: skip
 
 setup:
   gameSystem:

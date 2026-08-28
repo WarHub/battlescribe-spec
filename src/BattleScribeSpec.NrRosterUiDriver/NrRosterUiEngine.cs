@@ -844,6 +844,247 @@ public sealed class NrRosterUiEngine : IRosterEngine
         return await _diagnostics.CaptureFullReportAsync();
     }
 
+    // ===== Persistence: load =====
+
+    public void LoadRoster(string xml) => LoadRosterAsync(xml).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Import a <c>.ros</c> the way a user does: go to My Lists and hand the file to the "Import
+    /// BattleScribe file" control, which is a real <c>&lt;input type=file&gt;</c> wired to NR's own
+    /// <c>importBs</c>. Everything after the drop is NewRecruit's code, and everything before it is
+    /// a gesture — no store call stands in for the import itself.
+    /// <para>
+    /// <b>The outcome is read off NR's own messages.</b> Its My Lists handler answers every import
+    /// through the message bar: <c>type: 2</c> for each file it declined, carrying that file's
+    /// reason, and a single <c>type: 0</c> "imported successfully" when at least one landed. So the
+    /// hook below records what NR posted, and the refusal a spec asserts is the sentence NR showed
+    /// the user — not an inference from a row that failed to appear, which would report every
+    /// refusal with the same empty message.
+    /// </para>
+    /// <para>
+    /// The imported list is then opened through the editor route, exactly as the export path
+    /// returns to it, so <c>window.__bsspec</c> ends up on the re-hydrated roster and every later
+    /// action and state read operates on the roster that was loaded.
+    /// </para>
+    /// </summary>
+    private async Task LoadRosterAsync(string xml)
+    {
+        var page = Browser.Page;
+
+        await Browser.NavigateToRouteAsync("/app/MyLists");
+        await page.WaitForFunctionAsync(
+            "() => location.pathname.includes('MyLists')",
+            null,
+            new() { Timeout = NrUiTimeouts.Condition });
+
+        var previousKey = await page.EvaluateAsync<string?>(
+            "() => window.__bsspec?.row?.list_key ?? null");
+
+        await page.EvaluateAsync(ImportHookJs);
+        string messagesJson;
+        try
+        {
+            var input = await LocateImportInputAsync(page);
+            await input.SetInputFilesAsync([
+                new FilePayload
+                {
+                    Name = "spec.ros",
+                    MimeType = "application/xml",
+                    Buffer = System.Text.Encoding.UTF8.GetBytes(xml),
+                },
+            ]);
+
+            // Both outcomes post a message, so this waits for an ANSWER rather than for a row that
+            // a refusal is never going to produce.
+            try
+            {
+                await page.WaitForFunctionAsync(
+                    "() => (window.__bsspec_importMessages || []).length > 0",
+                    null,
+                    new() { Timeout = NrUiTimeouts.Condition });
+            }
+            catch (TimeoutException)
+            {
+                // Fall through: the read below reports the silence in its own words.
+            }
+
+            messagesJson = await page.EvaluateAsync<string>(
+                "() => JSON.stringify(window.__bsspec_importMessages || [])");
+        }
+        finally
+        {
+            await page.EvaluateAsync(RestoreImportHookJs);
+        }
+
+        var messages = System.Text.Json.JsonSerializer.Deserialize<List<NrImportMessage>>(messagesJson) ?? [];
+        if (messages.FirstOrDefault(m => m.Type != 0) is { } refusal)
+        {
+            throw new InvalidOperationException(StripHtml(refusal.Msg ?? "NewRecruit refused the roster."));
+        }
+
+        if (messages.Count == 0)
+        {
+            throw new HarnessFaultException(
+                "NR UI roster import: the file was handed to NR's import control and it posted no "
+                + "message at all — neither a refusal nor the success it posts for every accepted "
+                + "file. The import never ran.");
+        }
+
+        var loadedKey = await AdoptImportedListAsync(page, previousKey);
+        await Browser.NavigateToRouteAsync($"/app/Lists/{loadedKey}");
+        await NrUiSetup.WaitForEditorLoadedAsync(page);
+        await NrUiSetup.BypassSupporterPaywallAsync(page);
+
+        _listId = loadedKey;
+        // A loaded roster is a roster: a later addForce must edit it, not create a second one.
+        _rosterCreated = true;
+        _childSelectionParent.Clear();
+    }
+
+    /// <summary>
+    /// The My Lists import control. Scoped to NR's own import row first, because the page can carry
+    /// other file inputs and "the first one" is not a claim about which. Falls back to any file
+    /// input, and reports what it found when there is none — a selector that has aged out should
+    /// say so rather than time out somewhere later.
+    /// </summary>
+    private static async Task<ILocator> LocateImportInputAsync(IPage page)
+    {
+        foreach (var selector in new[] { ".importRow input[type=file]", ".importButtons input[type=file]", "input[type=file]" })
+        {
+            var candidate = page.Locator(selector);
+            if (await candidate.CountAsync() > 0)
+            {
+                return candidate.First;
+            }
+        }
+
+        var dump = await page.EvaluateAsync<string>("""
+            () => {
+                const out = [];
+                for (const el of document.querySelectorAll('button, [class*=import], [class*=Import]')) {
+                    const t = (el.innerText || el.textContent || '').trim();
+                    if (t && t.length < 40) out.push(el.className + ': ' + t);
+                }
+                return JSON.stringify([...new Set(out)].slice(0, 30));
+            }
+            """);
+
+        throw new HarnessFaultException(
+            "NR UI roster import: My Lists has no file input to hand the .ros to. Import controls "
+            + "visible: " + dump);
+    }
+
+    /// <summary>
+    /// Make the just-imported list the one under test: find the row NR added, and retire the one it
+    /// replaced. A roster is a singleton that is replaced, not added to — and NR's importer adds
+    /// without selecting, so nothing else would clear the old row, which is the accumulation that
+    /// makes a later spec's list lookup miss.
+    /// </summary>
+    private static async Task<string> AdoptImportedListAsync(IPage page, string? previousKey)
+    {
+        var result = await page.EvaluateAsync<string?>($$"""
+            async (previousKey) => {
+                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                const listsStore = pinia?._s?.get('lists');
+                if (!listsStore) return 'ERROR:no lists store after import';
+
+                // addList unshifts, so the import is the newest row that is not the one it replaced.
+                const rows = listsStore.listData || [];
+                const imported = rows.find(r => r.list_key !== previousKey);
+                if (!imported) return 'ERROR:no imported row in listData';
+
+                {{NrListStoreJs.DeleteListsFn}}
+
+                if (previousKey && previousKey !== imported.list_key) {
+                    if (listsStore.currentList?.row?.list_key === previousKey) {
+                        listsStore.currentList = null;
+                    }
+                    const problem = await bsspecDeleteLists(listsStore, [previousKey]);
+                    if (problem) console.warn('[bsspec] loadRoster: ' + problem);
+                }
+
+                return imported.list_key;
+            }
+            """, previousKey);
+
+        return result is null || result.StartsWith("ERROR:", StringComparison.Ordinal)
+            ? throw new HarnessFaultException(
+                "NR UI roster import: " + (result?[6..] ?? "the page returned nothing"))
+            : result;
+    }
+
+    /// <summary>NR writes its messages as HTML; a spec matches on what the user reads.</summary>
+    private static string StripHtml(string message)
+        => System.Text.RegularExpressions.Regex.Replace(message, "<[^>]+>", string.Empty).Trim();
+
+    private sealed class NrImportMessage
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
+        public int Type { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("msg")]
+        public string? Msg { get; set; }
+    }
+
+    // Record what NR posts to its message bar while an import runs. Hooked on every store that has
+    // an errorManager rather than on one named store: the id is NR's to change, and the shape —
+    // showMessages([{type, msg}]) — is what the app's own import handler calls.
+    private const string ImportHookJs = """
+        () => {
+            window.__bsspec_importMessages = [];
+            const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+            const hooked = [];
+            for (const store of (pinia?._s?.values?.() ?? [])) {
+                const manager = store?.errorManager;
+                if (!manager || typeof manager.showMessages !== 'function') continue;
+                if (!manager.__bsspecOrigShowMessages) {
+                    manager.__bsspecOrigShowMessages = manager.showMessages;
+                }
+                const original = manager.__bsspecOrigShowMessages;
+                manager.showMessages = function (messages) {
+                    try {
+                        for (const m of messages || []) {
+                            window.__bsspec_importMessages.push({
+                                type: typeof m?.type === 'number' ? m.type : 2,
+                                msg: typeof m === 'string' ? m : (m?.msg ?? String(m)),
+                            });
+                        }
+                    } catch (e) { /* never let observation break the app */ }
+                    return original.call(this, messages);
+                };
+                hooked.push(manager);
+            }
+            window.__bsspec_importHooked = hooked;
+        }
+        """;
+
+    private const string RestoreImportHookJs = """
+        () => {
+            for (const manager of (window.__bsspec_importHooked || [])) {
+                if (manager.__bsspecOrigShowMessages) {
+                    manager.showMessages = manager.__bsspecOrigShowMessages;
+                    delete manager.__bsspecOrigShowMessages;
+                }
+            }
+            window.__bsspec_importHooked = undefined;
+        }
+        """;
+
+    // ===== Persistence: reload =====
+
+    public void ReloadRoster() => ReloadRosterAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Save and load back, both halves through the UI: NR's own <c>.ros</c> export from the editor's
+    /// Export menu, handed straight back to the My Lists import control. What survives that is what
+    /// survives a user exporting a list and importing the file again.
+    /// </summary>
+    private async Task ReloadRosterAsync()
+    {
+        var xml = await ExportRosterXmlAsync();
+        await LoadRosterAsync(xml);
+    }
+
     // ===== Lifecycle =====
 
     public void Cleanup()

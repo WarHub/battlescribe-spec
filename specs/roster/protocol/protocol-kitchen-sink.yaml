@@ -1520,9 +1520,9 @@ steps:
   # roundtrip category (roundtrip-reload-roster, roundtrip-load-roster); what this covers is that
   # both dispatch across the adapter protocol like every other action.
   #
-  # The two UI lanes do not implement either action yet, so they skip both steps. That skip is
+  # battlescribe-ui does not implement either action yet, so it skips both steps. That skip is
   # explicit and visible here — never a swallowed NotSupportedException in the runner — and the
-  # assertion below spells out that they still hold the roster the earlier steps built.
+  # assertion below spells out that it still holds the roster the earlier steps built.
   #
   # The payload is a roster every engine can take: one Battalion holding one Required Unit, with
   # the primary <category> that a unit selection carries in any file an exporter wrote. A
@@ -1531,10 +1531,10 @@ steps:
   # (roundtrip-load-forceless-roster) rather than inside the protocol smoke test, where it would
   # only obscure the thing this step is for.
   - action: reload
-    skipEngines: [battlescribe-ui, newrecruit-ui]
+    skipEngines: [battlescribe-ui]
 
   - action: loadRoster
-    skipEngines: [battlescribe-ui, newrecruit-ui]
+    skipEngines: [battlescribe-ui]
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <roster id="ks-loaded" name="Kitchen Sink Loaded" battleScribeVersion="2.03" gameSystemId="ks-gs" gameSystemName="Kitchen Sink GS" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
@@ -1552,20 +1552,16 @@ steps:
         </forces>
       </roster>
 
-  # Both engines that ran the two steps now hold the loaded roster: one force, costless, and
+  # The three engines that ran the two steps now hold the loaded roster: one force, costless, and
   # therefore inside the 200pt limit — so the cost-limit error the built roster carried is gone,
-  # and the Required Unit's min-1 is satisfied by the file itself. The UI lanes, which skipped
-  # both steps, still hold the built roster — same forces, same one error.
+  # and the Required Unit's min-1 is satisfied by the file itself. battlescribe-ui, which skipped
+  # both steps, still holds the built roster — same forces, same one error.
   - expectedState:
       name: Kitchen Sink Loaded
       forceCount: 1
       errorCount: 0
       engines:
         battlescribe-ui:
-          name: protocol-kitchen-sink
-          forceCount: 1
-          errorCount: 1
-        newrecruit-ui:
           name: protocol-kitchen-sink
           forceCount: 1
           errorCount: 1
