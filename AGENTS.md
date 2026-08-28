@@ -123,10 +123,12 @@ gh api repos/WarHub/battlescribe-spec/issues/281/dependencies/blocking   --jq '.
 Unlink with `DELETE …/dependencies/blocked_by/{database id}`. The POST and DELETE responses are the
 whole issue object — pipe through `--jq .issue_dependencies_summary` unless you want a screenful.
 
-Link only **live** constraints. A closed blocker adds a satisfied row that reads as noise, and a
-blocker that merely *relates* overstates the constraint — if the work can proceed with an opt-out or
-against one engine, it is not blocked. As with parentage, **delete the body-text equivalent** once
-the link exists.
+Link only **real** constraints: a blocker that merely *relates* overstates it — if the work can
+proceed with an opt-out or against one engine, it is not blocked. But once a link is real it
+**stays**. Closing the blocker satisfies the row, it does not make it noise — the link is the record
+of what unblocked the work, and it outlives the blocker exactly as parentage outlives a closed
+epic. Unlink only a constraint that was never real. As with parentage, **delete the body-text
+equivalent** once the link exists.
 
 **Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `go:*`,
 `release:*`, `thorough-ci`, `scheduled-ci-failure`. The `type:*` and `priority:*` label sets were
