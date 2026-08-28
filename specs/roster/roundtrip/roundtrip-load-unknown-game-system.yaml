@@ -2,17 +2,18 @@ id: roundtrip-load-unknown-game-system
 category: roundtrip
 description: >
   A well-formed .ros naming a gameSystemId that is not loaded. Semantically invalid rather than
-  unparseable, and BattleScribe does not refuse it: the file loads, every selection resolves
-  against the system that IS loaded, and the roster keeps the dangling gameSystemId verbatim.
+  unparseable, and every engine refuses it: a roster is edited against a game system, and a
+  reference to one the engine does not hold cannot be resolved into the one it does.
 
-  That is the finding, and it is why this spec carries "expectFailure: false" rather than no
-  declaration at all. The two say different things. No declaration means the load was never in
-  question; "false" means the refusal was the hypothesis, it was tested, and the engine accepted.
-  A negative result recorded is worth more than an untested assumption, and the state assertion
-  below pins exactly how far the acceptance goes.
+  This spec used to say the opposite — "BattleScribe accepts it, keeping the dangling id verbatim"
+  — recorded from the in-process adapter, which was the only engine that could load anything at
+  the time. It was the adapter that accepted, not BattleScribe: the desktop app's own loader
+  answers "you do not have the right data files to be able to edit this roster" and stops, and the
+  battlescribe-ui lane driving that path refuses like the other two. The adapter now makes the same
+  check the app makes, and the override this spec carried is gone rather than doubled.
 
-engines:
-  battlescribe-ui: skip
+  Which is the point of running the UI lanes at all: an expectation written against a store-direct
+  adapter alone has never been checked against the app.
 
 setup:
   gameSystem:
@@ -59,24 +60,17 @@ steps:
           </force>
         </forces>
       </roster>
-    expectFailure:
-      expected: false
-      engines:
-        # NewRecruit does check. Its importer resolves the payload's gameSystemId against the
-        # library before anything else, and declines when nothing answers — so the same file that
-        # BattleScribe loads with a dangling reference is refused here. The wording is left
-        # unconstrained on purpose: which of NR's two refusal messages you get depends on what its
-        # backend says about an unknown id, and the conformance claim is the refusal, not the
-        # sentence.
-        newrecruit: true
+    # No messageContains: three engines refuse in three sentences — the app's "you do not have the
+    # right data files", NewRecruit's report from its own library lookup, and the adapter's. The
+    # conformance claim is the refusal, and pinning one wording would make every other engine
+    # reproduce one adapter's prose.
+    expectFailure: true
 
-  # It loaded, and fully. The roster keeps its OWN gameSystemId verbatim while everything in it is
-  # resolved against the system actually loaded — note gameSystemName, which comes back as the
-  # loaded system's name and not the payload's "Missing System". The reference is carried, not
-  # checked.
+  # The half of a refusal worth asserting: what it left behind. The roster still in hand is the one
+  # the editor built — its own name, its own game system — and not a half-loaded "Orphan".
   - expectedState:
-      name: Orphan
-      gameSystemId: gs-does-not-exist
+      name: roundtrip-load-unknown-game-system
+      gameSystemId: gs-1
       gameSystemName: Test System
       costs:
         - typeId: ct-pts
@@ -92,11 +86,10 @@ steps:
                 - typeId: ct-pts
                   value: 10
       engines:
-        # The other half of NewRecruit's refusal, and the half worth asserting: it changed nothing.
-        # The roster still in hand is the one the editor built — its own name, its own game system —
-        # and not a half-loaded "Orphan". Everything below the two overridden fields is identical to
-        # the base assertion because both rosters carry the same force and the same Squad; only the
-        # roster's identity tells them apart.
-        newrecruit:
-          name: roundtrip-load-unknown-game-system
-          gameSystemId: gs-1
+        # Except in the app, which closes the open roster before it discovers it cannot load the
+        # replacement — the same order roundtrip-load-unknown-catalogue records, and the reason a
+        # refusal is not free for a battlescribe-ui user. Three engines refuse and keep what they
+        # had; this one refuses and keeps nothing.
+        battlescribe-ui:
+          costs: []
+          forces: []

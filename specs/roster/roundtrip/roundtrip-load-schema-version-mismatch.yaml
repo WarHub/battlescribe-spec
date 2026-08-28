@@ -9,9 +9,6 @@ description: >
   refusal was the hypothesis and the engine did not refuse, which is a result and not an absence
   of one.
 
-engines:
-  battlescribe-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

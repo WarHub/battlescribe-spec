@@ -11,9 +11,6 @@ description: >
   engine reproduce our sentence. The conformance claim is the one every engine must satisfy: a
   roster naming a catalogue the engine does not hold is not loadable.
 
-engines:
-  battlescribe-ui: skip
-
 setup:
   gameSystem:
     id: gs-1
@@ -61,8 +58,22 @@ steps:
       </roster>
     expectFailure: true
 
+  # Three engines of the four keep the roster they had: the refusal cost nothing.
   - expectedState:
       name: roundtrip-load-unknown-catalogue
       costs:
         - typeId: ct-pts
           value: 10
+      engines:
+        # The desktop app is the exception, and this is the finding. Its File → Open closes the
+        # open roster BEFORE it knows the replacement will load — actLoadRoster clears the trees and
+        # the engine state, then discovers it has no catalogue to link the new file against, shows
+        # its error and stops. So a refused open leaves the editor empty, and battlescribe-ui, which
+        # drives that same path, ends the step with no roster rather than the one it started with.
+        #
+        # Recorded rather than smoothed over: the in-process adapter refuses in its own pre-flight
+        # check, before touching the roster, which is kinder than the app and therefore not what the
+        # app does. Only the UI lane can say what a user gets.
+        battlescribe-ui:
+          forceCount: 0
+          costs: []

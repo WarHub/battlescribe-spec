@@ -11,9 +11,6 @@ description: >
   exactly this payload and, once NewRecruit could load at all, would have failed on it for a
   reason that had nothing to do with what that step is for.
 
-engines:
-  battlescribe-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

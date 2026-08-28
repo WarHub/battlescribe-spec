@@ -399,7 +399,7 @@ public class EngineAccessor {
         }
 
         try {
-            Object roster = getRosterMethod.invoke(engineInstance);
+            Object roster = getCurrentRoster();
             if (roster == null) {
                 return errorJson("No roster loaded");
             }
@@ -419,7 +419,7 @@ public class EngineAccessor {
             return errorJson("Engine not found. Call findEngine first.");
         }
         try {
-            Object roster = getRosterMethod.invoke(engineInstance);
+            Object roster = getCurrentRoster();
             if (roster == null) {
                 return errorJson("No roster loaded.");
             }
@@ -785,9 +785,38 @@ public class EngineAccessor {
 
     // --- Reflection helpers ---
 
+    /**
+     * The roster the engine currently holds, or {@code null} when it holds none.
+     *
+     * <p>"None" is a state the app can genuinely be in — File → Open on a roster whose catalogue is
+     * missing clears the editor before it discovers it cannot load the replacement, and leaves it
+     * that way. BattleScribe reports it by THROWING from its roster getter
+     * ({@code IllegalStateException: getRoster: not loaded}), which is fine for the app and wrong
+     * for a reader: {@link #getValidationErrors()} turned it into
+     * {@code "getValidationErrors failed: …"}, so a spec asserting an empty roster got a validation
+     * error about our reflection instead of the empty list the same method returns two lines later
+     * for a null roster.
+     *
+     * <p>So the throw is translated back into the null it means. Only that one: any other failure
+     * still propagates, because "the engine has no roster" and "we could not ask" must not read the
+     * same.
+     */
     private Object getCurrentRoster() throws Exception {
         ensureEngineFound();
-        return getRosterMethod != null ? getRosterMethod.invoke(engineInstance) : null;
+        if (getRosterMethod == null) {
+            return null;
+        }
+        try {
+            return getRosterMethod.invoke(engineInstance);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IllegalStateException
+                    && cause.getMessage() != null
+                    && cause.getMessage().contains("not loaded")) {
+                return null;
+            }
+            throw e;
+        }
     }
 
     private void ensureEngineFound() {

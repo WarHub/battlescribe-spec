@@ -1156,6 +1156,24 @@ public sealed class BattleScribeEngine : IDisposable
             throw; // unreachable
         }
 
+        // The roster has to name the game system that is loaded. The desktop app checks this — its
+        // loader answers "you do not have the right data files to be able to edit this roster" and
+        // refuses — and this adapter did not, so it accepted a roster carrying a dangling
+        // gameSystemId, resolved every selection against whatever system happened to be loaded, and
+        // kept the reference verbatim. That produced a roster the app would never produce, and
+        // `roundtrip-load-unknown-game-system` recorded it for a while as a BattleScribe behaviour.
+        // It was ours: the battlescribe-ui lane, driving the same app through its own load path,
+        // refuses. The check belongs here, in the same place the app makes it — before the roster in
+        // hand is disturbed.
+        var rosterGameSystemId = roster.getGameSystemId();
+        if (!string.IsNullOrEmpty(rosterGameSystemId)
+            && !string.Equals(rosterGameSystemId, gameSystem.getId(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"LoadRosterXml: roster names game system '{rosterGameSystemId}', which is not loaded " +
+                $"(have: '{gameSystem.getId()}').");
+        }
+
         // Map every force (including child forces) to its catalogue and that catalogue's linked
         // catalogues — the engine resolves each force's entries through this map.
         var forceCatMap = new JavaHashMap();

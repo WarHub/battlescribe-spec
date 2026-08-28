@@ -12,9 +12,6 @@ description: >
   instead, and the roundtrip-load-roster payload was one attribute away from measuring this
   instead of the re-linking it is about.
 
-engines:
-  battlescribe-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

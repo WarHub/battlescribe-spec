@@ -393,9 +393,13 @@ the spec fails, naming the field, rather than passing on a failure nothing exami
 
 Omitting the field means the load was never in question. `false` means the refusal was the
 hypothesis, it was tested, and the engine accepted — a recorded negative result rather than an
-untested assumption. `specs/roster/roundtrip/roundtrip-load-unknown-game-system.yaml` uses it that
-way: BattleScribe loads a roster naming a game system it does not hold, keeping the dangling
-`gameSystemId` verbatim while resolving everything in the file against the system that *is* loaded.
+untested assumption. `specs/roster/roundtrip/roundtrip-load-schema-version-mismatch.yaml` uses it
+that way: a `.ros` carrying a foreign schema namespace and an out-of-range `battleScribeVersion`
+loads on every engine, because the readers match on element names and carry the version rather than
+validating it. The refusal was the hypothesis; it was tested; nobody refuses.
+
+`roundtrip-load-forceless-roster.yaml` shows the two halves together — `expected: false` for the
+engines that take an empty roster, and a per-engine override for the one that does not.
 
 Use it as a per-engine override for the same reason — an engine that accepts input the others reject
 is a finding, and `skipEngines` would hide it behind "we did not look".

@@ -123,6 +123,8 @@ public class RosterActions {
                 return setCostLimitAction(params);
             case "rosterSetCustomizationAction":
                 return setCustomizationAction(params);
+            case "rosterLoadRosterAction":
+                return loadRosterAction(params);
             default:
                 throw new IllegalArgumentException("Unknown action: " + method);
         }
@@ -2737,6 +2739,262 @@ public class RosterActions {
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException("Engine did not become available within " + WINDOW_TIMEOUT_MS + "ms");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Persistence
+    // ═══════════════════════════════════════════════════════════════════
+
+    /** The roster model class DataUtils reads into and the app's loader takes. */
+    private static final String ROSTER_CLASS = "net.battlescribe.model.roster.Roster";
+
+    /** LoadDataParams — what the app's loader returns, and where it says why a load failed. */
+    private static final String LOAD_DATA_PARAMS_CLASS = "net.battlescribe.engine.b.d";
+
+    /** DataUtils: {@code g(InputStream)} is the roster-side reader, the counterpart of the writer. */
+    private static final String DATA_UTILS_CLASS = "net.battlescribe.a.c.e";
+
+    /**
+     * Loads a roster from a staged {@code .ros} file through the Roster Editor's own load path.
+     *
+     * <p>This is {@code actLoadRoster} with the two things a driver cannot have taken out: the
+     * native file chooser, and the dialogs the app puts on screen when a load goes wrong. What the
+     * app does after its chooser returns is
+     *
+     * <pre>
+     *   Roster r = j();              // read the chosen file
+     *   a(r);                        // -> x(); a(r, false); a(loadParams, true)
+     * </pre>
+     *
+     * and that is exactly the sequence below: clear what is open, build the LoadDataParams under
+     * the app's own "Loading data..." task, then apply them — {@code setRoster} plus the tree
+     * rebuild. The catalogue-to-force mapping, the re-linking and the recalculation are all the
+     * app's; nothing here reimplements them.
+     *
+     * <p>The one deliberate difference is what happens when the load fails. The app shows an
+     * exception dialog and returns; a driver has to RAISE it, because a dialog left on screen is
+     * not a result — the dispatcher's post-condition would report it as an unexpected modal, which
+     * names the symptom and not the roster that could not be loaded. So the LoadDataParams are
+     * inspected here and turned into an error carrying the app's own reasons, which is what a
+     * spec's {@code expectFailure} then asserts against.
+     *
+     * <p>Note the order, because it is observable: {@code x()} runs BEFORE the load is known to
+     * work, so a refused load leaves the editor with no roster at all rather than the one it had.
+     * That is the app's order, not this action's choice, and the roundtrip specs record it for
+     * {@code battlescribe-ui} rather than smoothing it away — no user of the desktop app gets the
+     * old roster back either.
+     *
+     * @param params JSON: {path}
+     */
+    public String loadRosterAction(String params) {
+        JsonObject p = parseParams(params);
+        String path = requireString(p, "path");
+
+        waitForEngineAvailable();
+        Object controller = engineAccessor.getControllerInstance();
+        if (controller == null) {
+            throw new RuntimeException(
+                    "rosterLoadRosterAction: the Roster Editor controller has not been discovered — "
+                            + "findEngine reported the engine but not the controller that owns the load path.");
+        }
+
+        Class<?> rosterClass = requireClass(ROSTER_CLASS);
+        Class<?> loadParamsClass = requireClass(LOAD_DATA_PARAMS_CLASS);
+        Method close = requirePrivateMethod(controller.getClass(), "x");
+        Method build = requirePrivateMethod(controller.getClass(), "a", rosterClass, boolean.class);
+        Method apply = requirePrivateMethod(controller.getClass(), "a", loadParamsClass, boolean.class);
+
+        // Read the file OFF the FX thread: a malformed payload throws here, and it is the parser's
+        // own exception that a spec matches on.
+        Object roster = readRosterFile(path, rosterClass);
+        String loadedName = stringGetter(roster, "getName");
+
+        // false = this roster was SAVED, so its selections are already in it. The flag suppresses
+        // the engine's "select default root entries" pass, which would otherwise duplicate them.
+        // It is what the app passes on this path, for the same reason.
+        Object loadParams = runOnFxGet(() -> {
+            try {
+                close.invoke(controller);
+                return build.invoke(controller, roster, false);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                // Unwrapped here rather than by the FX plumbing, which would report the whole thing
+                // as "InvocationTargetException" and lose the only sentence that says what happened.
+                throw describeAppFailure("Failed to load roster", e);
+            }
+        });
+
+        if (loadParams == null) {
+            throw new RuntimeException("Failed to load roster: the app's loader returned no result for " + path);
+        }
+        // d.b() — the load failed, and d.c() carries the app's own reasons.
+        if (booleanCall(loadParams, "b")) {
+            throw new RuntimeException("Failed to load roster: " + describeLoadErrors(loadParams));
+        }
+        // d.e() — the data on hand cannot EDIT this roster (a catalogue or game system it names is
+        // not loaded). The app offers to open it read-only; this protocol has no read-only roster,
+        // and an engine that cannot edit what it loaded has not loaded it.
+        if (!booleanCall(loadParams, "e")) {
+            throw new RuntimeException(
+                    "Failed to load roster: the loaded data files cannot edit it — a game system or "
+                            + "catalogue it names is not loaded. " + describeLoadErrors(loadParams));
+        }
+
+        runOnFx(() -> {
+            try {
+                apply.invoke(controller, loadParams, true);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw describeAppFailure("Failed to apply the loaded roster", e);
+            }
+        });
+
+        // The roster is in hand only once the engine reports it. Same poll every other action ends
+        // with, so "loaded" means the same thing here as "selected" does there.
+        waitForStateChange(
+                state -> loadedName == null || loadedName.equals(getStringField(state, "name")),
+                state -> "the engine still reports roster '" + getStringField(state, "name")
+                        + "' after loading '" + loadedName + "'");
+        return "{}";
+    }
+
+    /**
+     * Deserializes a {@code .ros} with DataUtils {@code g(InputStream)} — the roster-side
+     * counterpart of the catalogue and game-system readers, and the call the app's file chooser
+     * step ends in.
+     */
+    private Object readRosterFile(String path, Class<?> rosterClass) {
+        java.io.File file = new java.io.File(path);
+        if (!file.isFile()) {
+            throw new RuntimeException("rosterLoadRosterAction: no staged roster file at " + path);
+        }
+
+        Class<?> dataUtils = requireClass(DATA_UTILS_CLASS);
+        Method read = null;
+        for (Method m : dataUtils.getDeclaredMethods()) {
+            if (m.getName().equals("g")
+                    && m.getParameterCount() == 1
+                    && m.getParameterTypes()[0] == java.io.InputStream.class
+                    && rosterClass.isAssignableFrom(m.getReturnType())) {
+                read = m;
+                break;
+            }
+        }
+        if (read == null) {
+            throw new RuntimeException(
+                    "rosterLoadRosterAction: DataUtils roster reader 'g(InputStream)' not found on "
+                            + DATA_UTILS_CLASS + " — the obfuscated jar changed.");
+        }
+        read.setAccessible(true);
+
+        // g() marks and resets the stream while sniffing the document, so it needs one that
+        // supports it.
+        try (java.io.InputStream in =
+                     new java.io.BufferedInputStream(new java.io.FileInputStream(file))) {
+            Object roster = read.invoke(null, in);
+            if (roster == null) {
+                throw new RuntimeException("Failed to load roster: the reader returned nothing for " + path);
+            }
+            return roster;
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            // The parser's own words — "ParseError at […]", "Premature end of file" — are what a
+            // spec's messageContains matches, so they are carried through verbatim.
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new RuntimeException(
+                    cause.getClass().getSimpleName() + ": " + cause.getMessage(), cause);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("rosterLoadRosterAction: could not read " + path + ": " + e, e);
+        }
+    }
+
+    /** The app's own load errors, rendered for a spec to read. */
+    private String describeLoadErrors(Object loadParams) {
+        Object errors = callNoArg(loadParams, "c");
+        if (!(errors instanceof java.util.Collection)) {
+            return "(the loader reported no detail)";
+        }
+        java.util.Collection<?> list = (java.util.Collection<?>) errors;
+        if (list.isEmpty()) {
+            return "(the loader reported no detail)";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Object error : list) {
+            if (sb.length() > 0) {
+                sb.append("; ");
+            }
+            sb.append(String.valueOf(error));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Turns a reflective call's wrapper into the app's own failure. Reflection reports everything
+     * the target threw as {@code InvocationTargetException}, whose message is the class name; the
+     * sentence a spec matches on is one level down.
+     */
+    private static RuntimeException describeAppFailure(String what, java.lang.reflect.InvocationTargetException e) {
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
+        return new RuntimeException(
+                what + ": " + cause.getClass().getSimpleName() + ": " + cause.getMessage(), cause);
+    }
+
+    private static Class<?> requireClass(String name) {
+        try {
+            return Class.forName(name);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("rosterLoadRosterAction: class " + name + " not loaded.", e);
+        }
+    }
+
+    /**
+     * Resolves a private member by exact signature, and says which one is missing when it is not
+     * there. These are obfuscated single-letter names: a jar that renames one has to fail loudly
+     * here, not silently take a different path.
+     */
+    private static Method requirePrivateMethod(Class<?> owner, String name, Class<?>... parameterTypes) {
+        Class<?> cls = owner;
+        while (cls != null && cls != Object.class) {
+            try {
+                Method m = cls.getDeclaredMethod(name, parameterTypes);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {
+                cls = cls.getSuperclass();
+            }
+        }
+        StringBuilder sig = new StringBuilder();
+        for (Class<?> t : parameterTypes) {
+            if (sig.length() > 0) {
+                sig.append(", ");
+            }
+            sig.append(t.getSimpleName());
+        }
+        throw new RuntimeException("rosterLoadRosterAction: " + owner.getName() + "." + name
+                + "(" + sig + ") not found — the obfuscated jar changed.");
+    }
+
+    private static Object callNoArg(Object target, String name) {
+        try {
+            Method m = target.getClass().getMethod(name);
+            m.setAccessible(true);
+            return m.invoke(target);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static boolean booleanCall(Object target, String name) {
+        Object value = callNoArg(target, name);
+        if (!(value instanceof Boolean)) {
+            throw new RuntimeException("rosterLoadRosterAction: " + target.getClass().getName() + "."
+                    + name + "() did not answer a boolean — the obfuscated jar changed.");
+        }
+        return (Boolean) value;
+    }
+
+    private static String stringGetter(Object target, String name) {
+        Object value = callNoArg(target, name);
+        return value != null ? String.valueOf(value) : null;
     }
 
     // ═══════════════════════════════════════════════════════════════════

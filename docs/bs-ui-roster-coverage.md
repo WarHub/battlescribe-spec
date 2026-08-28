@@ -15,6 +15,11 @@ what it turned into. It is wired in now; see [In CI](#in-ci).
 | Failed | 83 | 0 |
 | Wall-clock | 29m02s | 3m55s / 3m36s, 2 shards in parallel (jobs 6m33s / 6m20s) |
 
+The corpus has grown since: the lane selects every roster spec, and #450 both un-skipped the
+`roundtrip` category for this engine and added two specs to it. Re-measured unsharded on 2026-08-28
+against that stack — **383 tests, 383 passed, 0 failed, 9m17s** — which is the first run in which
+`battlescribe-ui` executes roster load at all.
+
 **Zero regressions** against the first measurement, spec-for-spec, at every step. The first
 measurement was reproduced exactly on a second run before anything was changed — which matters more
 than usual here, because a third of those failures were timeouts, and a timeout that moves between

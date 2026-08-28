@@ -28,6 +28,14 @@ public sealed class BsRosterApp : IAsyncDisposable
     /// <summary>Path to the BattleScribe data directory within the isolated home.</summary>
     public string DataDirectoryPath => Path.Combine(_homePath, "BattleScribe", "data");
 
+    /// <summary>
+    /// Where a <c>loadRoster</c> payload is staged before the app is asked to open it — the app's
+    /// own roster folder, and deliberately not <see cref="DataDirectoryPath"/>: BattleScribe walks
+    /// the data directory looking for game systems and catalogues every time the New Roster dialog
+    /// opens, and a <c>.ros</c> sitting in it is one more file for that walk to consider.
+    /// </summary>
+    public string RosterDirectoryPath => Path.Combine(_homePath, "BattleScribe", "rosters");
+
     public BsRosterApp(string javaPath, string rosterEditorJarPath, string agentJarPath, string? isolatedHomePath = null)
     {
         _javaPath = javaPath;
