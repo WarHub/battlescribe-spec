@@ -324,6 +324,19 @@ expectFailure:
 `messageContains` is a case-insensitive substring of **the engine's own message**, not of the
 harness framing around it — so an expectation survives the harness rewording its logs.
 
+An override's fields replace the base's one by one, with one field that carries more than itself:
+naming a `messageContains` **implies** `expected: true` for that engine. A message is what a refusal
+said, so there is nothing else it could mean, and inheriting `expected: false` underneath it would
+be the same contradiction the loader rejects outright when the two are written together at the top
+level. This is what makes the `newrecruit` override below a complete declaration:
+
+```yaml
+expectFailure:
+  expected: false                            # BattleScribe takes this file
+  engines:
+    newrecruit: { messageContains: "This file is not a roster" }   # NewRecruit does not
+```
+
 ### The run continues past a refusal
 
 A refused step does not end the spec. That is the point: what a refusal *left behind* is usually the
