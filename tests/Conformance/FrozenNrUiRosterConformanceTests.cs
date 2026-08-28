@@ -80,7 +80,34 @@ public sealed class FrozenNrUiRosterConformanceTests
     /// plausibly lift the limitation, so the spec still RUNS and an unexpected pass is reported.
     /// </para>
     /// </remarks>
-    private static bool InFullSet(string _) => true;
+    /// <summary>
+    /// Optional comma-separated spec-name prefixes narrowing the full set, e.g.
+    /// <c>NR_UI_ROSTER_FILTER=force/,roundtrip/</c>.
+    /// <para>
+    /// This lane's distinguishing feature is that one browser runs every spec in order, and some
+    /// failures exist only in that condition — a spec that passes alone and fails here is the whole
+    /// point of running it. Reproducing one used to cost the entire 378-spec run, which is half an
+    /// hour per attempt and makes bisecting "which earlier spec poisons this one" impractical. The
+    /// filter keeps the lane's execution shape and narrows only what it selects, so a warm-session
+    /// failure can be reproduced in a few minutes.
+    /// </para>
+    /// <para>
+    /// Deliberately not a substitute for the full set: the lane's own guard against a "full" run
+    /// that silently shrank stays on whenever the filter is unset, which is how CI runs it.
+    /// </para>
+    /// </summary>
+    internal const string FilterVariable = "NR_UI_ROSTER_FILTER";
+
+    private static string[] FullSetFilters =>
+        (Environment.GetEnvironmentVariable(FilterVariable) ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool InFullSet(string name)
+    {
+        var filters = FullSetFilters;
+        return filters.Length == 0
+            || filters.Any(f => name.StartsWith(f, StringComparison.Ordinal));
+    }
 
     /// <summary>The concrete engine this lane drives, as specs address it.</summary>
     private const string EngineIdentity = "newrecruit-ui";
@@ -136,8 +163,9 @@ public sealed class FrozenNrUiRosterConformanceTests
                 ? $"{FullVariable} is set but no applicable specs were discovered."
                 : $"No matching specs found for targets: {string.Join(", ", SmokeSpecs)}");
 
-        // A "full" run that selected a single spec is the shrink this guard exists to catch.
-        Assert.False(full && loadedSpecs.Count < 2,
+        // A "full" run that selected a single spec is the shrink this guard exists to catch. It does
+        // not apply to a deliberately filtered run, which is allowed to select exactly one.
+        Assert.False(full && FullSetFilters.Length == 0 && loadedSpecs.Count < 2,
             $"{FullVariable} is set but only {loadedSpecs.Count} spec(s) were selected — the full set "
             + "should be the whole applicable suite, not kitchen-sink.");
 
