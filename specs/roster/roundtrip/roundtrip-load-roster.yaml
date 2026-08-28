@@ -8,12 +8,17 @@ description: >
   assertion afterwards can only pass if the engine re-resolved every selection against the
   catalogue and recalculated, rather than merely echoing the XML back.
 
-# Only the in-process reference engine implements roster load today. The other three are opted out
-# here, explicitly and visibly, rather than being allowed to no-op their way to a green run: an
-# engine that cannot load must FAIL this spec, never silently skip it (#309).
+  What the payload does NOT omit is the primary <category> on the unit selection, because no
+  exporter omits it: it is the one field NewRecruit's importer keys the restore on, and a
+  selection that arrives without it is dropped — silently, which is its own finding and has its
+  own spec (roundtrip-load-selection-no-primary-category). Leaving it out here would have made
+  this spec measure that drop instead of the re-linking it is about.
+
+# The two UI lanes are opted out explicitly, and visibly, rather than being allowed to no-op
+# their way to a green run: an engine that cannot load must FAIL this spec, never silently skip
+# it (#309).
 engines:
   battlescribe-ui: skip
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:
@@ -81,6 +86,9 @@ steps:
           <force id="f-imported" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
             <selections>
               <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <categories>
+                  <category id="c-squad" name="Uncategorized" entryId="(No Category)" primary="true"/>
+                </categories>
                 <selections>
                   <selection id="s-trooper" name="Trooper" entryId="se-trooper" number="2" type="model"/>
                 </selections>
@@ -125,3 +133,34 @@ steps:
                     - name: pts
                       typeId: ct-pts
                       value: 14
+      engines:
+        # Same roster, one spelling apart: NewRecruit's synthesized no-category fallback is US
+        # "Uncategorized" where BattleScribe writes UK "Uncategorised". A long-standing difference
+        # of the two apps (category/category-uncategorized-fallback), not of this load path — but
+        # `forces` replaces wholesale, so the whole block is restated to change the one word.
+        newrecruit:
+          forces:
+            - name: Detachment
+              entryId: fe-1
+              catalogueId: cat-1
+              catalogueName: Test Catalogue
+              categories:
+                - name: Uncategorized
+              selections:
+                - name: Squad
+                  entryId: se-squad
+                  type: unit
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 10
+                  children:
+                    - name: Trooper
+                      entryId: se-trooper
+                      type: model
+                      number: 2
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 14

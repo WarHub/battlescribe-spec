@@ -11,7 +11,6 @@ description: >
 
 engines:
   battlescribe-ui: skip
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:
@@ -54,7 +53,11 @@ steps:
         <forces>
           <force id="f-old" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
             <selections>
-              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit"/>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <categories>
+                  <category id="c-squad" name="Uncategorized" entryId="(No Category)" primary="true"/>
+                </categories>
+              </selection>
             </selections>
           </force>
         </forces>

@@ -1,0 +1,81 @@
+id: roundtrip-load-forceless-roster
+category: roundtrip
+description: >
+  A well-formed .ros with no forces at all. BattleScribe takes it: an empty roster is a roster,
+  and loading one is how the app clears the board. NewRecruit refuses it outright — its importer
+  requires at least one force before it will build anything, and says so.
+
+  Recorded because the file is legal on both sides of the divergence: nothing in the schema makes
+  <forces/> invalid, and either answer is defensible. What is not defensible is not knowing, which
+  is what a skipEngines here would have bought. The kitchen-sink's loadRoster step used to carry
+  exactly this payload and, once NewRecruit could load at all, would have failed on it for a
+  reason that had nothing to do with what that step is for.
+
+engines:
+  battlescribe-ui: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-empty" name="Forceless Roster" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs/>
+        <forces/>
+      </roster>
+    expectFailure:
+      expected: false
+      engines:
+        # NR cannot tell this file from one that is not a roster at all: its XML-to-object step
+        # drops empty containers, so <forces/> arrives as no forces key rather than an empty one
+        # and trips the "is this a roster?" guard one check before the "has it any forces?" one
+        # that was written for it. The wording is the observable consequence, so it is what the
+        # spec pins.
+        newrecruit:
+          messageContains: "This file is not a roster"
+
+  # BattleScribe holds the empty roster it was given. NewRecruit refused, so it still holds the
+  # one the editor built — which is the other half of the finding: the refusal cost nothing.
+  # An empty roster carries no cost entries at all on BattleScribe — not a zero, an absence —
+  # which is why only the NewRecruit side asserts a cost here.
+  - expectedState:
+      name: Forceless Roster
+      forceCount: 0
+      engines:
+        newrecruit:
+          name: roundtrip-load-forceless-roster
+          forceCount: 1
+          costs:
+            - typeId: ct-pts
+              value: 10

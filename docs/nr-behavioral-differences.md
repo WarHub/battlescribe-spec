@@ -22,6 +22,7 @@
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
 | [Other behavioral differences](#5-other-behavioral-differences) | 4 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 | [Naming/spelling](#6-namingspelling) | 3 | Info | Default category name spelling, force category entryId path, selection entryGroupId unavailable |
+| [Roster load](#7-roster-load-ros-import) | 4 | Medium | NR refuses forceless rosters and unknown game systems, and drops a selection with no primary category without saying so |
 
 ---
 
@@ -678,6 +679,66 @@ NR does **not** expose `entryGroupId` on selections. Neither the instance nor it
 Confirmed via live Playwright probing: `source.entryGroupId` is `undefined` on child
 entries (Bold, Cunning) within a selection entry group (Traits), both before and after
 selection via `addInstance()`.
+
+---
+
+## 7. Roster Load (`.ros` Import)
+
+**4 specs** — NewRecruit reaches roster load through `listsStore.importBs(File)`, the action
+behind My Lists' "Import BattleScribe file" button. It is a different shape of loader from
+BattleScribe's, and the differences are visible from the first payload.
+
+### It refuses three files BattleScribe accepts
+
+| Payload | BattleScribe | NewRecruit | Spec |
+|---|---|---|---|
+| No `<forces>` at all | loads the empty roster | **refuses** — "This file is not a roster" | `roundtrip-load-forceless-roster` |
+| `gameSystemId` that is not loaded | loads it, keeping the dangling id verbatim | **refuses** — it resolves the id before anything else | `roundtrip-load-unknown-game-system` |
+| Selection with no `<categories>` | restores the selection | **drops it, silently** — see below | `roundtrip-load-selection-no-primary-category` |
+
+The forceless case is worth reading twice: NR's guard for it (`"Roster contains no forces!"`)
+is unreachable, because its XML-to-object step drops empty containers. `<forces/>` arrives as
+*no* `forces` key, which trips the earlier "is this a roster?" check instead.
+
+### A selection with no primary category is dropped without a word
+
+`BH()`, NR's per-force restore, requires each top-level selection to carry a
+`<category primary="true">` and `console.warn`s past any selection that does not:
+
+```js
+const u = l.categories?.find(b => b.primary);
+if (!u) { console.warn("found Unit without Primary Category", l.name, l.entryId); continue; }
+```
+
+The load reports success, the force arrives, and the unit that was in the file is not in the
+roster. Nothing in the schema requires the element — BattleScribe re-derives categorisation
+from the catalogue and writes no `<categories>` on a selection that has none — so a
+BattleScribe-exported roster of uncategorised units imports into NewRecruit as empty forces.
+
+Every real exporter writes the primary category, NR's and BattleScribe's both, which is why
+no user has hit this; it is also why spec payloads carry the element rather than omitting it.
+
+### Refusals are return values, not throws
+
+`importBs` answers a **string** for every case it declines, and `{row, army, book}` when it
+succeeds. An adapter that treats the string as success reports every refusal as a silent pass —
+so both NR adapters convert it into a throw, and the message a spec matches with
+`expectFailure.messageContains` is NR's own sentence.
+
+### Loading resolves against the library, not against `Setup`
+
+`IRosterEngine.LoadRoster` is specified as re-linking against the game system and catalogues
+from `Setup`. NR does something subtly different: it reads `gameSystemId` out of the payload,
+resolves it through `systemStore.getSystem`, and **selects** that system before building the
+roster. With one system loaded the two are indistinguishable; with a dangling id they are not,
+which is what the unknown-game-system spec measures.
+
+### Import adds a list, it does not replace one
+
+`importBs` ends in `addList(list, false)` — a new row, and no selection. Both NR adapters
+therefore re-point `window.__bsspec` at the imported list and delete the row it replaced: a
+roster is a singleton that is replaced, and a load that only ever appends leaves one dead row
+per load for NR's own `findListByKey` to trip over later.
 
 ---
 

@@ -13,7 +13,6 @@ description: >
 
 engines:
   battlescribe-ui: skip
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:
@@ -61,7 +60,16 @@ steps:
           </force>
         </forces>
       </roster>
-    expectFailure: false
+    expectFailure:
+      expected: false
+      engines:
+        # NewRecruit does check. Its importer resolves the payload's gameSystemId against the
+        # library before anything else, and declines when nothing answers — so the same file that
+        # BattleScribe loads with a dangling reference is refused here. The wording is left
+        # unconstrained on purpose: which of NR's two refusal messages you get depends on what its
+        # backend says about an unknown id, and the conformance claim is the refusal, not the
+        # sentence.
+        newrecruit: true
 
   # It loaded, and fully. The roster keeps its OWN gameSystemId verbatim while everything in it is
   # resolved against the system actually loaded — note gameSystemName, which comes back as the
@@ -84,3 +92,12 @@ steps:
               costs:
                 - typeId: ct-pts
                   value: 10
+      engines:
+        # The other half of NewRecruit's refusal, and the half worth asserting: it changed nothing.
+        # The roster still in hand is the one the editor built — its own name, its own game system —
+        # and not a half-loaded "Orphan". Everything below the two overridden fields is identical to
+        # the base assertion because both rosters carry the same force and the same Squad; only the
+        # roster's identity tells them apart.
+        newrecruit:
+          name: roundtrip-load-unknown-game-system
+          gameSystemId: gs-1

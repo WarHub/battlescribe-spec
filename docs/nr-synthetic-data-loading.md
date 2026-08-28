@@ -6,7 +6,7 @@ NR's internal `systemsStore.loadSystemFromFs()` API loads custom BattleScribe XM
 (`.gst`/`.cat` files) as local game systems. The NR adapter uses this single API for
 **both** synthetic specs (inline YAML → generated XML) and real-world DataSource specs
 (git-cloned BSData repos → raw XML files). Between them those two modes cover every roster
-spec: all 378 roster specs run through this path. The GameData specs under `specs/gamedata/`
+spec: all 380 roster specs run through this path. The GameData specs under `specs/gamedata/`
 do not — they drive the NR Editor app rather than the NR roster app, and load their data
 through it.
 
