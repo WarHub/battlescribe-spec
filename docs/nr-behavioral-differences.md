@@ -688,17 +688,24 @@ selection via `addInstance()`.
 behind My Lists' "Import BattleScribe file" button. It is a different shape of loader from
 BattleScribe's, and the differences are visible from the first payload.
 
-### It refuses three files BattleScribe accepts
+### It refuses files BattleScribe accepts — two of the three it first appeared to
 
 | Payload | BattleScribe | NewRecruit | Spec |
 |---|---|---|---|
 | No `<forces>` at all | loads the empty roster | **refuses** — "This file is not a roster" | `roundtrip-load-forceless-roster` |
-| `gameSystemId` that is not loaded | loads it, keeping the dangling id verbatim | **refuses** — it resolves the id before anything else | `roundtrip-load-unknown-game-system` |
+| `gameSystemId` that is not loaded | refuses (see note) | **refuses** — it resolves the id before anything else | `roundtrip-load-unknown-game-system` |
 | Selection with no `<categories>` | restores the selection | **drops it, silently** — see below | `roundtrip-load-selection-no-primary-category` |
 
 The forceless case is worth reading twice: NR's guard for it (`"Roster contains no forces!"`)
 is unreachable, because its XML-to-object step drops empty containers. `<forces/>` arrives as
 *no* `forces` key, which trips the earlier "is this a roster?" check instead.
+
+**The unknown-game-system row is a correction, not a divergence.** NewRecruit refusing that file was
+first recorded against a BattleScribe that accepted it — which turned out to be the in-process
+adapter, not the app. The desktop app's own loader answers "you do not have the right data files to
+be able to edit this roster", the `battlescribe-ui` lane refuses accordingly, and the adapter now
+makes the same check. All four engines agree; the row stays because the measurement is what found
+the adapter gap.
 
 ### A selection with no primary category is dropped without a word
 
@@ -730,8 +737,9 @@ so both NR adapters convert it into a throw, and the message a spec matches with
 `IRosterEngine.LoadRoster` is specified as re-linking against the game system and catalogues
 from `Setup`. NR does something subtly different: it reads `gameSystemId` out of the payload,
 resolves it through `systemStore.getSystem`, and **selects** that system before building the
-roster. With one system loaded the two are indistinguishable; with a dangling id they are not,
-which is what the unknown-game-system spec measures.
+roster. With one system loaded the two are indistinguishable; with a dangling id they are not —
+and measuring that is what surfaced the adapter gap above, because the two BattleScribe lanes
+disagreed with each other about the same file.
 
 ### Import adds a list, it does not replace one
 

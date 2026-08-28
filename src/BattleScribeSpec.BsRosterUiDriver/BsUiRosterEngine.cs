@@ -695,6 +695,48 @@ public sealed class BsUiRosterEngine : IRosterEngine
                 "produce a roster — this is an agent/app fault, not a missing capability.");
     }
 
+    // ===== Persistence: load / reload =====
+
+    public void LoadRoster(string xml) => RunAsync(() => LoadRosterAsync(xml));
+
+    /// <summary>
+    /// Loads a <c>.ros</c> payload by staging it into the app's own roster folder and asking the
+    /// agent to open it through the Roster Editor's load path — the same shape the Data Editor
+    /// driver uses for game data, and for the same reason: the app's open flow starts at a native
+    /// file chooser, which cannot be driven, and ends in code that can.
+    /// <para>
+    /// Everything downstream of the staged path is BattleScribe's: its reader deserializes the
+    /// file, its loader maps each force to its catalogue and the catalogue's linked catalogues,
+    /// and its <c>setRoster</c> re-links and recalculates. That is what makes the roundtrip specs
+    /// a statement about the desktop app rather than about this driver.
+    /// </para>
+    /// </summary>
+    private async Task LoadRosterAsync(string xml)
+    {
+        var app = _app ?? throw new InvalidOperationException("loadRoster: engine not set up.");
+
+        // One file per spec, overwritten by a reload: the payload has to exist on disk for the app
+        // to open, and naming it after the spec keeps a failed run's staging readable.
+        Directory.CreateDirectory(app.RosterDirectoryPath);
+        var path = Path.Combine(app.RosterDirectoryPath, $"{_specId ?? "spec"}.ros");
+        await File.WriteAllTextAsync(path, xml);
+
+        await CallActionAsync("rosterLoadRosterAction", new JsonObject { ["path"] = path });
+    }
+
+    public void ReloadRoster() => RunAsync(ReloadRosterAsync);
+
+    /// <summary>
+    /// Serializes the open roster and loads it straight back. Both halves are the app's own — the
+    /// DataUtils writer behind Save, and the load path behind Open — so what survives a reload here
+    /// is what survives saving a roster and opening the file again.
+    /// </summary>
+    private async Task ReloadRosterAsync()
+    {
+        var xml = await ExportRosterXmlAsync();
+        await LoadRosterAsync(xml);
+    }
+
     /// <summary>Captures a screenshot of the current JavaFX scene as PNG bytes.</summary>
     public async Task<byte[]?> CaptureScreenshotAsync()
     {

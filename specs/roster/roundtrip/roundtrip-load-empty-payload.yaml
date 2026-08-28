@@ -6,9 +6,6 @@ description: >
   short of refusing. Asserted with expectFailure for the same reason as every other load failure —
   a payload that never becomes a roster has no validation list to assert against.
 
-engines:
-  battlescribe-ui: skip
-
 setup:
   gameSystem:
     id: gs-1

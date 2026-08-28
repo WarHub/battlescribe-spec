@@ -937,6 +937,45 @@ a flake.
 | `duplicateForceAction` | `forceId` | Duplicates via Ctrl+D |
 | `setCostLimitAction` | `costTypeId`, `costName`, `value` | Sets cost limit via Edit Roster spinner |
 | `setCustomizationAction` | `forceId`, `selectionId?`, `categoryEntryId?`, `customName?`, `customNotes?` | Sets custom name/notes via context menu. Supports forces, categories, and selections. |
+| `loadRosterAction` | `path` | Opens a staged `.ros` through the app's own load path (see below) |
+
+##### `loadRosterAction`: the app's Open, minus the file chooser
+
+`actLoadRoster` — the handler behind `#btnLoadRoster` — is three steps, and only the first cannot be
+driven:
+
+```java
+Roster r = j();   // the native FileChooser, then the file
+a(r);             // -> x();  a(r, false);  a(loadDataParams, true)
+```
+
+So the action stages the payload to the isolated home's `BattleScribe/rosters/` (the C# side writes
+it; `BsRosterApp.RosterDirectoryPath`), reads it with DataUtils `g(InputStream)` — the roster-side
+counterpart of the catalogue and game-system readers — and then makes the same three calls the app
+makes: clear what is open, build the `LoadDataParams` under the app's own "Loading data..." task,
+apply them. The force-to-catalogue mapping, the re-linking and the recalculation are all
+BattleScribe's, which is the point: nothing here reimplements a loader.
+
+`false` in `a(r, false)` is the app's own argument on this path, and it means "this roster was
+saved" — it suppresses the engine's *select default root entries* pass, which would otherwise
+duplicate the selections the file already carries.
+
+**Failures are raised, not shown.** Where the app puts up an exception dialog and returns, this
+action inspects the `LoadDataParams` and throws:
+
+| Condition | What it means | Message |
+|---|---|---|
+| `d.b()` | the load failed | `Failed to load roster: <the app's own reasons>` |
+| `!d.e()` | the data on hand cannot *edit* this roster — a catalogue or game system it names is not loaded | `Failed to load roster: the loaded data files cannot edit it — …` |
+
+A dialog left on screen is not a result: `dispatch()`'s post-condition would report it as an
+unexpected modal, naming the symptom instead of the roster that could not be loaded. Raising it
+instead is also what lets a spec assert the refusal with `expectFailure` — see
+[error-assertions.md](error-assertions.md).
+
+The app's second branch (`!d.e()` → "Would you like to open it for viewing?") is a refusal here
+because this protocol has no read-only roster. An engine that cannot edit what it loaded has not
+loaded it.
 
 #### Action Patterns
 
@@ -946,6 +985,10 @@ Actions follow common patterns:
 2. **Tree actions** (selectEntry, duplicateSelection): Select in roster tree → perform action → poll for state change
 3. **Edit panel actions** (selectChildEntry, deselectSelection, setSelectionCount): Select parent → interact with edit panel → poll for state change
 4. **Context menu actions** (setCustomization): Select entity → right-click → select menu item → fill dialog → confirm
+5. **Whole-document actions** (loadRoster): stage the file → call the app's own load path → poll for the loaded roster
+
+`reload` needs no action of its own: the driver exports with `exportRosterXml` and hands the result
+straight back to `loadRosterAction`, so both halves are the app's own serializers.
 
 ---
 
