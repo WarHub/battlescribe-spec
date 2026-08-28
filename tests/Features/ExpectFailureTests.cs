@@ -363,6 +363,41 @@ public class ExpectFailureTests(ITestOutputHelper output)
         Assert.True(spec.Steps[0].ExpectFailure!.ForEngine("battlescribe").IsExpected);
     }
 
+    /// <summary>
+    /// An override that names a message is an override that expects a refusal. Without this, a base
+    /// of <c>expected: false</c> was inherited under the message and the step failed with the
+    /// engine's refusal reported as an unexpected exception — the one shape where the merge could
+    /// produce a declaration that contradicts itself.
+    /// </summary>
+    [Fact]
+    public void AnOverridesMessage_ImpliesThatEngineRefuses()
+    {
+        var spec = SpecLoader.LoadFromYaml("""
+            id: expect-failure-message-implies
+            category: roundtrip
+            description: harness
+            setup:
+              gameSystem:
+                forceEntries: [{ id: fe-1, name: Force }]
+              catalogues: [{ id: cat-1 }]
+            steps:
+              - action: loadRoster
+                content: "<roster/>"
+                expectFailure:
+                  expected: false
+                  engines:
+                    newrecruit:
+                      messageContains: "no forces"
+            """);
+
+        var newrecruit = spec.Steps[0].ExpectFailure!.ForEngine("newrecruit");
+        Assert.True(newrecruit.IsExpected);
+        Assert.Equal("no forces", newrecruit.MessageContains);
+
+        // The base is untouched: every other engine still has to succeed.
+        Assert.False(spec.Steps[0].ExpectFailure!.ForEngine("battlescribe").IsExpected);
+    }
+
     [Fact]
     public void AnUnknownKeyIsRejectedByName()
     {

@@ -57,6 +57,14 @@ public sealed class ExpectFailureDef
     /// same merge every other <c>ForEngine</c> in the model performs. A consequence worth knowing:
     /// an override cannot <em>widen</em> the base's <see cref="MessageContains"/> back to
     /// unconstrained, because null means "inherit" and not "no constraint".
+    /// <para>
+    /// One field does more than replace: an override that names a <see cref="MessageContains"/>
+    /// <b>implies</b> <c>expected: true</c>. There is no other reading of it — a message is what a
+    /// refusal said, so asserting one over an inherited <c>expected: false</c> would be the exact
+    /// contradiction the converter rejects when both are written together at the top level. Before
+    /// this, that shape parsed, ran, and failed the step with the engine's refusal reported as an
+    /// unexpected exception, which names neither the contradiction nor the fix.
+    /// </para>
     /// </summary>
     public ExpectFailureDef ForEngine(string? engineName)
     {
@@ -67,7 +75,7 @@ public sealed class ExpectFailureDef
 
         return new ExpectFailureDef
         {
-            Expected = over.Expected ?? Expected,
+            Expected = over.Expected ?? (over.MessageContains is not null ? true : Expected),
             MessageContains = over.MessageContains ?? MessageContains,
             // Engines is deliberately not propagated — an override is a leaf.
         };
