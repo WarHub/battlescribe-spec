@@ -7,12 +7,10 @@ description: >
   proving persistence preserved forces, selections, nesting, counts, categories, and recalculated
   costs. The roster-side counterpart to gamedata roundtrip-add-entry.
 
-# Only the in-process reference engine implements roster load today. The other three are opted out
-# here, explicitly and visibly, rather than being allowed to no-op their way to a green run: an
-# engine that cannot load must FAIL this spec, never silently skip it (#309).
+# The two UI lanes are opted out explicitly, and visibly, rather than being allowed to no-op their
+# way to a green run: an engine that cannot load must FAIL this spec, never silently skip it (#309).
 engines:
   battlescribe-ui: skip
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:

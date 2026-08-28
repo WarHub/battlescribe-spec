@@ -8,7 +8,6 @@ description: >
 
 engines:
   battlescribe-ui: skip
-  newrecruit: skip
   newrecruit-ui: skip
 
 setup:
@@ -47,6 +46,12 @@ steps:
     content: ""
     expectFailure:
       messageContains: "Premature end of file"
+      engines:
+        # NR gets a document out of the empty string and only then finds no <roster> in it, so it
+        # declines one step later than BattleScribe's parser does — at "is this a roster?" rather
+        # than at "is this XML?". Both refuse; neither wording is the other's.
+        newrecruit:
+          messageContains: "This file is not a roster"
 
   - expectedState:
       name: roundtrip-load-empty-payload

@@ -798,6 +798,134 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         }
         """;
 
+    // ===== Persistence: load =====
+
+    public void LoadRoster(string xml) => LoadRosterAsync(xml).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Load a <c>.ros</c> payload through NewRecruit's own importer — the <c>importBs(File)</c> action
+    /// on the <c>lists</c> store, which is what the "Import BattleScribe file" button on My Lists
+    /// calls. Store-direct, so the file never touches an <c>&lt;input type=file&gt;</c>; everything
+    /// downstream of that input is NR's code.
+    /// <para>
+    /// <b>A refusal is a return value here, not a throw.</b> <c>importBs</c> answers a string for
+    /// every case it declines — an unparseable file, a document that is not a roster, a roster with
+    /// no forces, a game system it does not hold — and answers <c>{row, army, book}</c> on success.
+    /// Taking the string as success is the silent-pass this suite exists to prevent (#309), so the
+    /// string becomes the exception, and the exception carries NR's own wording for
+    /// <c>expectFailure.messageContains</c> to match.
+    /// </para>
+    /// <para>
+    /// The distinction the JS draws between <c>engine</c> and <c>adapter</c> is the one
+    /// <see cref="ActionFailureKind"/> draws: NR declining the payload is engine behaviour a spec may
+    /// assert; NR's store not having <c>importBs</c> at all is our problem and must never satisfy an
+    /// <c>expectFailure</c>.
+    /// </para>
+    /// </summary>
+    private async Task LoadRosterAsync(string xml)
+    {
+        var json = await Browser.Page.EvaluateAsync<string?>(LoadRosterJs, xml)
+            ?? throw new HarnessFaultException("loadRoster: the page returned nothing.");
+
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("kind", out var kind))
+        {
+            var message = root.TryGetProperty("message", out var m) ? m.GetString() : null;
+            Exception failure = kind.GetString() == "engine"
+                ? new InvalidOperationException(message ?? "NewRecruit refused the roster.")
+                : new HarnessFaultException(message ?? "loadRoster failed inside the adapter.");
+            throw failure;
+        }
+
+        // Row cleanup that could not be completed is a tidiness problem, not a failed load: the
+        // roster asked for is in hand. Said out loud rather than swallowed, because a surviving row
+        // is exactly the accumulation that makes a later spec's editor navigation bounce.
+        if (root.TryGetProperty("leftover", out var leftover) && leftover.ValueKind == System.Text.Json.JsonValueKind.String)
+        {
+            Console.Error.WriteLine($"[NewRecruitRosterEngine] loadRoster: {leftover.GetString()}");
+        }
+    }
+
+    private static readonly string LoadRosterJs = $$"""
+        async (xml) => {
+            const fail = (kind, message) => JSON.stringify({ kind, message });
+            try {
+                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+                if (!pinia) return fail('adapter', 'loadRoster: Pinia store not found');
+                const listsStore = pinia._s.get('lists');
+                if (!listsStore) return fail('adapter', 'loadRoster: lists store not found');
+                // Checked by name so a vanished action says which one, rather than surfacing as a
+                // bare "is not a function" — and so it can never be read as an engine refusal.
+                if (typeof listsStore.importBs !== 'function') {
+                    return fail('adapter', "loadRoster: NR's lists store has no importBs() action — its API changed.");
+                }
+
+                const previousKey = window.__bsspec?.row?.list_key ?? null;
+
+                // NR reads the file by EXTENSION before it reads a byte (.ros/.rosz/.xml), so the
+                // name matters as much as the content.
+                const file = new File([xml], 'spec.ros', { type: 'application/xml' });
+
+                let loaded;
+                try {
+                    loaded = await listsStore.importBs(file);
+                } catch (e) {
+                    return fail('engine', e?.message ?? String(e));
+                }
+                if (typeof loaded === 'string') return fail('engine', loaded);
+                if (!loaded || !loaded.army || !loaded.row) {
+                    return fail('adapter', 'loadRoster: importBs returned neither a refusal nor a list');
+                }
+
+                // The roster is a singleton that is REPLACED: every later read and action has to
+                // land on the imported one. `books`/`bookCatalogueIds` are carried over — they are
+                // the setup's catalogue handles, which a load does not change.
+                window.__bsspec = {
+                    ...(window.__bsspec ?? {}),
+                    army: loaded.army,
+                    book: loaded.book,
+                    row: loaded.row,
+                };
+
+                // importBs calls addList(list, false) — it adds the row without selecting it, so
+                // currentList still points at the roster that was just replaced.
+                if (listsStore.currentList?.row?.list_key === previousKey) {
+                    listsStore.currentList = loaded;
+                }
+
+                {{NrListStoreJs.DeleteListsFn}}
+
+                // Replaced, not accumulated: the row the load superseded goes, or a suite run ends
+                // carrying one dead row per load and NR's own findListByKey starts missing.
+                const leftover = previousKey && previousKey !== loaded.row.list_key
+                    ? await bsspecDeleteLists(listsStore, [previousKey])
+                    : null;
+
+                return JSON.stringify({ ok: true, leftover });
+            } catch (e) {
+                return fail('adapter', 'loadRoster: ' + (e?.stack ?? e?.message ?? String(e)));
+            }
+        }
+        """;
+
+    // ===== Persistence: reload =====
+
+    public void ReloadRoster() => ReloadRosterAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Serialize the roster with NewRecruit's own <c>.ros</c> exporter and import it straight back,
+    /// so what comes out of a reload is what a fresh import of the saved file produces. Both halves
+    /// are NR's — <c>exportRos()</c> and <c>importBs()</c> — which is what makes the round-trip a
+    /// statement about NewRecruit rather than about this adapter.
+    /// </summary>
+    private async Task ReloadRosterAsync()
+    {
+        var xml = await ExportRosterXmlAsync();
+        await LoadRosterAsync(xml);
+    }
+
     public void Cleanup()
     {
         CleanupAsync().GetAwaiter().GetResult();

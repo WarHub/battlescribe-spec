@@ -190,6 +190,14 @@ public interface IRosterEngine : IDisposable
     /// that is replaced, never added to; nothing addresses it by id, and <see cref="RosterState"/>
     /// does not even expose one.
     /// </para>
+    /// <para>
+    /// "Re-link against the setup data" is what the contract asks for and not, in every engine, how
+    /// the engine gets there: NewRecruit resolves the payload's own <c>gameSystemId</c> through its
+    /// library and selects that system before building anything. With one system loaded the two are
+    /// the same thing; with a dangling reference they are not, and the difference is a conformance
+    /// finding the specs record per engine rather than something an adapter should paper over. See
+    /// <c>docs/nr-behavioral-differences.md</c>, "Roster Load".
+    /// </para>
     /// </summary>
     /// <param name="xml">The <c>.ros</c> XML to load. The root element is <c>roster</c>.</param>
     void LoadRoster(string xml)
