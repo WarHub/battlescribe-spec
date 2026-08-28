@@ -91,9 +91,11 @@ public class ExpectFailureTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// #309, restated at action level. Three of the four engines do not implement roster load
-    /// (#450), and the interface default throws <see cref="NotSupportedException"/>. Were that a
-    /// refusal, all three would pass every malformed-input spec in #23 without parsing a byte.
+    /// #309, restated at action level. The interface default throws
+    /// <see cref="NotSupportedException"/>, and three of the four engines inherited it until #450:
+    /// were that a refusal, all three would have passed every malformed-input spec in #23 without
+    /// parsing a byte. The rule outlives the gap — the next engine to arrive inherits the same
+    /// default.
     /// </summary>
     [Fact]
     public void AnEngineThatDoesNotImplementTheAction_DoesNotSatisfyIt()

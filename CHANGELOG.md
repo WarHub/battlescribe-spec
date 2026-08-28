@@ -8,6 +8,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Roster load in all four engines (#450)** — `LoadRoster`/`ReloadRoster` shipped implemented in
+  one engine of four, with the other three opted out of every spec that loads a roster. All four
+  implement them now, no spec opts an engine out of the persistence actions, and
+  `EveryRosterEngineTheHostCanServe_LoadsAndReloads` fails if a future engine quietly inherits the
+  throwing default.
+  - `newrecruit` loads through NewRecruit's own `listsStore.importBs(File)` — the action behind My
+    Lists' "Import BattleScribe file". It answers a **string** for every file it declines and an
+    object when it succeeds, so the adapter converts the string into a throw: read as a truthy
+    result it would have made every refusal a silent pass. It also *adds* a list rather than
+    replacing one, so the adapter re-points at the imported list and deletes the row it replaced.
+  - `newrecruit-ui` does the same import through the real file input, and reads the outcome off
+    NR's own message bar — the sentence a spec's `messageContains` matches is the one the user saw.
+  - `battlescribe-ui` gains a `rosterLoadRosterAction`: the payload is staged into the app's roster
+    folder and opened through `actLoadRoster`'s own sequence minus the native file chooser, so the
+    force-to-catalogue mapping, the re-linking and the recalculation are all BattleScribe's. Where
+    the app shows a dialog and returns, the action raises the app's own reasons — a dialog is not a
+    result, and only a raised refusal can be asserted.
+  - **Three engine differences the roundtrip specs now record**, each with a spec of its own rather
+    than a skip: NewRecruit refuses a roster with no forces where BattleScribe loads it
+    (`roundtrip-load-forceless-roster`); NewRecruit drops a selection carrying no primary
+    `<category>` **silently** where BattleScribe restores it
+    (`roundtrip-load-selection-no-primary-category`); and the desktop app closes the open roster
+    *before* discovering it cannot load the replacement, so a refused load costs a
+    `battlescribe-ui` user the roster they had.
+  - **A reference-adapter gap the UI lane found.** `roundtrip-load-unknown-game-system` recorded
+    that BattleScribe accepts a roster naming a game system it does not hold. It was the in-process
+    adapter that accepted: the app answers "you do not have the right data files to be able to edit
+    this roster", and `battlescribe-ui` refuses. `BattleScribeEngine.LoadRosterXml` now makes the
+    same check, all four engines agree, and the spec lost an override instead of gaining one.
+  - `protocol-kitchen-sink`'s load payload was a roster with no forces, which only the reference
+    engine could take; it is now one every engine can load.
+  - Also fixed on the way: the Java agent turned "the app has no roster open" — a state the app can
+    genuinely be in — into `getValidationErrors failed: …`, because BattleScribe reports it by
+    throwing from its roster getter.
+  - **And a cleanup leak that only a load could see.** Both NewRecruit engines released a spec's
+    synthetic game system from `localLibrary` and nowhere else; NR also registers it in the shared
+    library, which was never cleared. Nothing resolved a system by id — until roster load, because
+    NewRecruit's own importer reads `gameSystemId` out of the file and calls `selectSystem(id)`.
+    `roundtrip-load-roster` then built its roster against a system left over from an earlier spec:
+    right forces, right Squad, and the file's Trooper simply absent. It passed alone and failed in
+    the lane, which is what the lane is for. Cleanup now releases the system from every registry it
+    was registered in, and `NR_UI_ROSTER_FILTER` narrows that lane's spec set without changing its
+    one-browser execution shape, so a warm-session failure costs 90 seconds to reproduce rather
+    than half an hour.
+
 - **Action-level failure primitive: `expectFailure` (#23, #25, #268)** — a step can now assert that
   the engine **refused** its action, which nothing in the spec model could say. The only failure
   expectation was spec-level `engines: {<name>: fail}` (whole-spec, per-engine), and
@@ -39,13 +84,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   classifier treat its remainder as engine behaviour. `SpecValidator` rejects `expectFailure` on a
   non-action step and an `id` on a step no engine accepts (it could never be referenced).
   Documented in `docs/error-assertions.md` and `docs/adapter-protocol.md`.
-- **Roster load-failure specs (#23)** — five specs covering the malformed-input range, and two of
-  them are negative results recorded rather than assumed. BattleScribe refuses truncated XML and an
-  empty payload (`ParseError`), and refuses a roster naming a catalogue it does not hold; it
-  **accepts** a roster naming an unknown `gameSystemId` — keeping the dangling id verbatim while
-  resolving everything in the file against the system that is loaded — and **accepts** a foreign
-  schema namespace with an out-of-range `battleScribeVersion`, its reader matching element names
-  rather than namespaces. Each refusal spec also asserts that the editor's roster survived intact.
+- **Roster load-failure specs (#23)** — five specs covering the malformed-input range, and one of
+  them is a negative result recorded rather than assumed. BattleScribe refuses truncated XML and an
+  empty payload (`ParseError`), refuses a roster naming a catalogue it does not hold, and refuses
+  one naming an unknown `gameSystemId`; it **accepts** a foreign schema namespace with an
+  out-of-range `battleScribeVersion`, its reader matching element names rather than namespaces.
+  Each refusal spec also asserts what the refusal left behind. (The unknown-`gameSystemId` case was
+  first recorded as an acceptance; #450 found that to be the in-process adapter missing a check the
+  app makes, and corrected both.)
 - **GameData `load` spec category (#268)** — the load-failure path, kept separate from
   `validation/` on purpose: a file the editor refuses to parse produces no validation list, which is
   why #268 was carved out of #173. Opens with `load-malformed-catalogue`. The two Data Editor UI
@@ -64,9 +110,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `skipEngines`. Implemented for the in-process `battlescribe` reference engine via DataUtils
   `g(InputStream)` — the roster-side counterpart of `e` (game system) / `f` (catalogue) — followed by
   the desktop app's own load sequence (`setRoster` with default-root-entry selection suppressed, as
-  the app does for a saved roster). `battlescribe-ui`, `newrecruit` and `newrecruit-ui` keep the
-  defaulted throw and are opted out per spec. Covered by the new `roundtrip` roster category
-  (`roundtrip-reload-roster`, `roundtrip-load-roster`) and by `protocol-kitchen-sink`.
+  the app does for a saved roster). `battlescribe-ui`, `newrecruit` and `newrecruit-ui` kept the
+  defaulted throw and were opted out per spec — #450, above, implemented all three. Covered by the
+  new `roundtrip` roster category (`roundtrip-reload-roster`, `roundtrip-load-roster`) and by
+  `protocol-kitchen-sink`.
 - **Cross-engine roster export byte-compare** — roster specs now support `expectedFile`
   (mirroring gamedata), byte-comparing an engine's exported `.ros` XML against a
   per-engine snapshot. Adds `IRosterEngine.ExportRosterXml()` for **both** engines —
