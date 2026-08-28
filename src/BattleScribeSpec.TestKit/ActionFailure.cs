@@ -39,9 +39,10 @@ public enum ActionFailureKind
     /// <summary>
     /// The engine does not implement this action at all — the <see cref="NotSupportedException"/>
     /// the <see cref="Roster.IRosterEngine"/> defaults throw. A capability gap, not a refusal, and
-    /// the difference is the whole of #309: three of the four engines cannot load a roster (#450),
-    /// so if "did not support it" satisfied <c>expectFailure</c> they would every one of them pass
-    /// #23's malformed-input specs without ever parsing a byte. Opting an engine out is the spec's
+    /// the difference is the whole of #309: three of the four engines could not load a roster when
+    /// this was written (#450 has since implemented all three), so had "did not support it"
+    /// satisfied <c>expectFailure</c> they would every one of them have passed #23's malformed-input
+    /// specs without ever parsing a byte. Opting an engine out is the spec's
     /// job — <c>skipEngines</c>, or <c>engines: {…: skip}</c> — never the harness's, via a kind that
     /// happens to match.
     /// </summary>

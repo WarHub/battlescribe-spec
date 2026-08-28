@@ -2,22 +2,35 @@
 
 ## 1. Engine API Coverage
 
-All `IRosterEngine` methods are exercised by the conformance suite.
+Every member of `IRosterEngine` is exercised by the conformance suite, and this table lists every
+member — which it did not until 2026-08-28, when it omitted the three persistence members while
+claiming completeness one line above itself. `EngineApiCoverageDocTests` now reflects over the
+interface and fails if a member is missing from the table or a row names one that no longer exists,
+so the claim is checked rather than asserted.
+
+Counts are of roster spec files that drive the member: for an action, files carrying that
+`action:`; for the rest, files carrying the assertion or setup shape named in the last column.
 
 | Method | Specs Using | Key Evidence |
 |--------|----------:|--------------|
-| `Setup` | 244 | Every inline spec (implicit setup path) |
+| `Setup` | 378 | Every inline spec (implicit setup path) |
 | `SetupFromFiles` | 2 | DataSource specs: wh40k-10e-create-army, wh40k-10e-space-marines-army |
-| `AddForce` | 246 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
-| `RemoveForce` | 5 | force-remove, force-remove-second, force-add-and-remove-all, roster-full-lifecycle |
-| `SelectEntry` | 296 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
-| `SelectChildEntry` | 9 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
-| `DeselectSelection` | 23 | selection-remove, selection-deselect-last, roster-full-lifecycle |
-| `SetSelectionCount` | 2 | selection-set-count |
-| `DuplicateSelection` | 5 | selection-duplicate, cost-duplicate-increases |
-| `SetCostLimit` | 1 | cost-set-limit |
-| `GetRosterState` | 201 | Specs using `rosterState` assertions |
-| `GetValidationErrors` | 20 | Specs using `errors` assertions: constraint-*, cost-default-limit-positive |
+| `AddForce` | 378 | force-add-single, force-add-multiple, force-nested-basic, force-multi-catalogue-two-forces |
+| `AddChildForce` | 14 | force-nested-basic, force-nested-multiple, force-nested-remove-child |
+| `RemoveForce` | 8 | force-remove, force-remove-second, force-add-and-remove-all, roster-full-lifecycle |
+| `SelectEntry` | 345 | selection-add-unit, selection-with-cost, selection-multiple-entries, import-*-entry-* |
+| `SelectChildEntry` | 51 | selection-child-entry, selection-child-multiple, nested-children-deep, selection-model-with-cost |
+| `DeselectSelection` | 20 | selection-remove, selection-deselect-last, roster-full-lifecycle |
+| `SetSelectionCount` | 17 | selection-set-count, roundtrip-reload-roster |
+| `DuplicateSelection` | 4 | selection-duplicate, cost-duplicate-increases |
+| `DuplicateForce` | 2 | force-duplicate, protocol-duplicate-force |
+| `SetCostLimit` | 3 | cost-set-limit, protocol-kitchen-sink |
+| `SetCustomization` | 4 | customization-* , protocol-kitchen-sink |
+| `GetRosterState` | 379 | Specs using `expectedState` assertions |
+| `GetValidationErrors` | 54 | Specs asserting `errors` / `errorsContain` / `errorCount` (every other `expectedState` asserts zero errors through the same call) |
+| `ExportRosterXml` | 2 | `expectedFile` byte-compare: roster-fractional-cost-export, protocol-kitchen-sink |
+| `LoadRoster` | 9 | The `roundtrip` category, plus protocol-kitchen-sink |
+| `ReloadRoster` | 2 | roundtrip-reload-roster, protocol-kitchen-sink |
 
 ---
 

@@ -124,6 +124,43 @@ public sealed class ServeCommandCapabilityTests
     }
 
     /// <summary>
+    /// Every engine the host can serve implements roster load, which is the state #450 left the
+    /// suite in and the state a spec's <c>expectFailure</c> now depends on: a defaulted member
+    /// throws <see cref="NotSupportedException"/>, the runner classifies that as
+    /// <see cref="ActionFailureKind.Unsupported"/>, and an unimplemented engine therefore fails
+    /// every roundtrip spec rather than passing one.
+    /// <para>
+    /// Worth a gate rather than a note because of how the gap arrives: adding a member to
+    /// <see cref="IRosterEngine"/> with a default body compiles everywhere and warns nowhere, so a
+    /// fifth engine — or a refactor that drops an override — reads as "still supported" until a
+    /// spec run says otherwise. This is the same falsifiability the export test above buys, applied
+    /// to the pair that had no engines behind it at all a release ago.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void EveryRosterEngineTheHostCanServe_LoadsAndReloads()
+    {
+        var engines = RosterEngineTypesTheHostReferences();
+
+        Assert.Contains(typeof(BattleScribeRosterEngine), engines);
+        Assert.Contains(typeof(NewRecruitRosterEngine), engines);
+        Assert.Contains(typeof(NrRosterUiEngine), engines);
+        Assert.Contains(typeof(BsUiRosterEngine), engines);
+
+        foreach (var member in new[] { nameof(IRosterEngine.LoadRoster), nameof(IRosterEngine.ReloadRoster) })
+        {
+            var missing = engines.Where(t => !Overrides(t, member)).ToArray();
+
+            Assert.True(
+                missing.Length == 0,
+                $"These roster engines inherit IRosterEngine.{member}'s throwing default: "
+                + $"[{string.Join(", ", missing.Select(t => t.Name))}]. Implement it, or opt the engine "
+                + "out of the roundtrip specs explicitly ('engines: {<engine>: skip}') and say so here — "
+                + "an engine that cannot load must FAIL those specs, never pass them (#309, #450).");
+        }
+    }
+
+    /// <summary>
     /// Concrete <see cref="IRosterEngine"/> implementations in the <c>BattleScribeSpec.*</c> assemblies
     /// <c>bs-engine-host</c> references — i.e. exactly the engines <c>HostEngineFactory</c> can hand to
     /// the adapter loop, discovered rather than transcribed into a list that can go stale.
@@ -150,13 +187,20 @@ public sealed class ServeCommandCapabilityTests
     /// </para>
     /// </summary>
     private static bool ProvidesRosterXmlExport(Type engineType)
+        => Overrides(engineType, nameof(IRosterEngine.ExportRosterXml));
+
+    /// <summary>
+    /// Does <paramref name="engineType"/> genuinely implement <paramref name="member"/>, or would it
+    /// fall through to the interface's default body — which, for every member asked about here,
+    /// throws <see cref="NotSupportedException"/>?
+    /// </summary>
+    private static bool Overrides(Type engineType, string member)
     {
         // The interface map, not GetMethod: an explicit interface implementation is a real override
         // and must count, while the inherited default implementation must NOT — and the default is
         // reported here as a target method still declared on IRosterEngine itself.
         var map = engineType.GetInterfaceMap(typeof(IRosterEngine));
-        var index = Array.FindIndex(
-            map.InterfaceMethods, m => m.Name == nameof(IRosterEngine.ExportRosterXml));
+        var index = Array.FindIndex(map.InterfaceMethods, m => m.Name == member);
 
         return index >= 0 && map.TargetMethods[index].DeclaringType != typeof(IRosterEngine);
     }
