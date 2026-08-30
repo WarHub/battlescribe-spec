@@ -1,0 +1,86 @@
+id: load-missing-required-attribute
+category: load
+description: >
+  A .cat or .gst whose root element is missing an attribute the model declares required is refused
+  by the editor. This is the second half of what #268 owns, and it fails at a different layer from
+  the malformed-XML specs: the document is well-formed, the parser is content, and the refusal
+  comes from binding the parsed attributes onto the model — which is why the message names the
+  field rather than a row and column.
+
+  The last step is the half that makes the boundary readable. 'name' is absent there too and the
+  file loads, so the refusals above are the model enforcing a specific required set and not the
+  reader rejecting anything it finds incomplete. Recorded with expectFailure: false, because
+  "we looked and it loads" and "we did not look" are different results.
+
+# Opted out for two measured reasons rather than an untested assumption. The UI lanes are #268's
+# open question, and this class of payload is the one that most nearly answers it: the BS Data
+# Editor does refuse these files, through a modal dialog ("File was corrupted and has been
+# deleted"), and unlike a truncated payload their root tag is complete, so BsGameDataUiEngine can
+# read the id it stages the file under. What is missing is only a DataEditorActions handler that
+# reports the dialog as a refusal instead of as an unhandled modal. The NR store-direct lane parses
+# the payload with a DOMParser call inside our own adapter, so what it accepts or refuses there is
+# our parser's answer and not NewRecruit's.
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Seed System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-seed
+          name: Seed Unit
+          type: unit
+
+steps:
+  # No id. Every other required attribute is present, so the binder names this one and only this
+  # one — each payload below drops exactly one attribute for the same reason.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue name="No Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: "on field 'id'"
+
+  # No gameSystemId — required on the catalogue itself rather than inherited from a base type.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-no-gsid" name="No Game System Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: "on field 'gameSystemId'"
+
+  # A .gst missing revision. The required set is per file type — a game system has no
+  # gameSystemId to omit — so the .cat refusals above say nothing about this one.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <gameSystem id="gs-no-revision" name="No Revision" battleScribeVersion="2.03" xmlns="http://www.battlescribe.net/schema/gameSystemSchema"/>
+    expectFailure:
+      messageContains: "on field 'revision'"
+
+  # And the boundary: name is absent, and this file loads. The editor takes it and leaves the name
+  # empty rather than refusing or substituting one.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-no-name" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure: false
+
+  # Three refusals left the seed catalogue alone; the fourth file loaded alongside it, nameless.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          name: Seed Catalogue
+          selectionEntries:
+            - id: se-seed
+              name: Seed Unit
+        - id: cat-no-name
+          name: ""

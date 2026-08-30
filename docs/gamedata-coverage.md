@@ -2,16 +2,18 @@
 
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
-engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **109
+engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **119
 GameData specs**. NewRecruit (`newrecruit`, `newrecruit-ui`) is not a gate, but **both NR engines
 drive the real NR Editor's Pinia store**: store-direct `newrecruit` mutates the real
 `loadedCatalogues` objects via direct JS, and `newrecruit-ui` mutates the same store through rendered
-widgets. **`newrecruit` runs all 109 specs; `newrecruit-ui` runs all but one** (only
-`export/openfile-inline` carries `newrecruit-ui: skip` — mid-spec file load through the SPA file-list
-is flaky). The validation specs (see "Validation / data-integrity errors" below) stage data and read
-the engine's error list. Where a single field is a genuine NR limitation (it derives or doesn't model
-the value), or an error class NR's reference validator doesn't model, the spec still runs on the NR
-engines and overrides just that field / error via a per-engine `expectedState`.
+widgets. **`newrecruit` runs all but the six `load/` specs; `newrecruit-ui` runs all but those six
+and one more** (`export/openfile-inline` — mid-spec file load through the SPA file-list is flaky).
+The `load/` skips are explained under "Load failures" below: they are about whose parser answers,
+not about what NR can drive. The validation specs (see "Validation / data-integrity errors" below)
+stage data and read the engine's error list. Where a single field is a genuine NR limitation (it
+derives or doesn't model the value), or an error class NR's reference validator doesn't model, the
+spec still runs on the NR engines and overrides just that field / error via a per-engine
+`expectedState`.
 
 ## NewRecruit schema additions (NR-superset specs)
 
@@ -302,11 +304,12 @@ asserted on the engines that model it. `error-cleared-after-fix` and the entry-l
   but one *edited* to a dangling target in a live session is retained and flagged (see
   `links/catalogue-link`, which creates the dangling state by edit).
 
-**Not yet covered (needs new infra, deferred):** malformed / schema-invalid `.gst`/`.cat` *load*
-(#31 / #268). GameData specs declare setup as a structured game-system + catalogue model, not raw
-file content; asserting load-time XML/schema failures would require a raw-file setup mode
-(a `setupFromFiles` path for gamedata) plumbed through every engine — out of scope for the
-spec-only validation matrix here.
+**Malformed / schema-invalid `.gst`/`.cat` load is covered (#268), in `load/…` rather than here.**
+It needed no `setupFromFiles` infra after all: the `openFile` action already takes inline `content:`
+XML, so a spec hands the engine the raw bytes as a step and asserts the refusal with `expectFailure`
+(#461). It stays out of this matrix because it is a different question — these are validation-list
+assertions about files the editor *opened*, and a file it refuses to parse produces no validation
+list at all. See "Load failures" below.
 
 ## Round-trip (save → reload)  (`roundtrip/…`)  — issue #30
 The `reload` action serializes the current edited state to its on-disk `.cat`/`.gst` form and loads
@@ -334,6 +337,46 @@ and loads back.
 - **`newrecruit`** (store-direct) and **`newrecruit-ui`** (real NR Editor) both serialize the real NR
   store via NR's own writer (`saveCatalogueInFiles`) and feed the XML back through NR's `BSXmlToJson`
   parse, reopening the active file — so the two NR engines round-trip identically (byte-for-byte).
+
+## Load failures  (`load/…`)  — issue #268
+The other half of "something is wrong with this file", and structurally not the validation matrix
+above: a file the editor **refuses to parse** never becomes a model, so it has no validation list to
+assert against. The refusal itself is the assertion, declared with `expectFailure` on the `openFile`
+step (#461); the payload is inline `content:` XML, so no raw-file setup mode was needed. Every spec
+also asserts what the refusal left behind — a rejected load must leave the open file alone.
+
+| Spec | Payload | Outcome |
+|------|---------|---------|
+| `load-malformed-catalogue` | truncated `.cat` | refused — `ParseError` |
+| `load-malformed-game-system` | truncated `.gst` | refused — `ParseError` |
+| `load-not-well-formed-catalogue` | wrong end tag; bare `&`; empty document | refused — `ParseError` ×3 |
+| `load-missing-required-attribute` | `.cat` without `id`; without `gameSystemId`; `.gst` without `revision` | refused — binder names the field |
+| `load-missing-required-attribute` | `.cat` without `name` | **loads**, nameless — `name` is not required |
+| `load-wrong-attribute-type` | `revision="not-a-number"`; `constraint value="lots"` | refused — quotes the unconvertible string |
+| `load-wrong-attribute-type` | `library="perhaps"`, `collective="maybe"`, `hidden="perhaps"` | **loads** — every boolean becomes `false` |
+| `load-wrong-root-element` | `<roster>` root, catalogue attributes incomplete | refused — for the attribute, never the element |
+| `load-wrong-root-element` | `<roster>` root, catalogue attributes complete | **loads** as a catalogue |
+
+Two layers, and they refuse differently. XML well-formedness is decided before anything BattleScribe
+wrote sees the bytes, so those all say `ParseError` with a row and column. Everything else is the
+model binder: a missing required attribute names the field, a bad number quotes the value and names
+nothing. Below the binder there is no schema check at all — booleans are compared rather than
+parsed (anything not `"true"` is `false`), and the root element's *name* is never examined, so what
+makes a file a catalogue is the set of attributes on its root. The three acceptances are recorded
+with `expectFailure: false` rather than skipped: "we looked and it loads" and "we did not look" are
+different results.
+
+**Engine coverage: `battlescribe` only, and the skips are measured, not assumed.** The Data Editor
+**does** refuse these files — with a modal dialog (`File was corrupted and has been deleted`), which
+answers #268's open question about whether a UI lane can assert on a file the editor will not open.
+What the lane still lacks is a `DataEditorActions` handler that reports that dialog as a refusal
+instead of as an unhandled modal (the same mechanism the round-trip section describes for the
+external-change `Confirm`). Truncated and empty payloads need one thing more:
+`BsGameDataUiEngine.LoadFile` stages the file under an id read from the root tag, which those
+payloads never finish writing — the schema-violation payloads have a complete root tag and do not.
+`newrecruit` is skipped for an unrelated reason: its store-direct `LoadFile` parses the payload with
+a `DOMParser` call inside our own adapter, so what it accepts or refuses is our parser's answer, not
+NewRecruit's, and recording it would pin our leniency as NR's conformance result.
 
 ## File export & snapshot assertions  (`expectedFile`)  — issue #30
 A step with `expectedFile` exports the **active file's exact serialized XML** (`ExportActiveFile`) and

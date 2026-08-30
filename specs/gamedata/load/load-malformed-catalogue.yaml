@@ -9,10 +9,14 @@ description: >
   The state assertion afterwards is the other half — a refused load must leave the previously
   opened catalogue untouched, not a partially replaced one.
 
-# The two Data Editor UI lanes are open questions, not capability gaps, and #268 says so: it is not
-# yet known whether a UI-driven lane can assert on a file the editor refuses to open at all (it may
-# show a modal, or reject it silently in the file list). Skipped here rather than guessed at; the
-# skip is what #268 removes once that is measured.
+# Opted out for two measured reasons rather than an untested assumption. The UI lanes are #268's
+# open question, and half of it is now answered: the Data Editor does refuse this class of file, and
+# it does so with a modal dialog rather than a silent rejection, so the lane is not structurally
+# mute — what it lacks is a handler in DataEditorActions that reports the dialog as a refusal
+# instead of as an unhandled modal. A truncated payload needs more than that, because
+# BsGameDataUiEngine.LoadFile stages the file under an id read from a root tag this payload never
+# finishes writing. The NR store-direct lane parses the payload with a DOMParser call inside our own
+# adapter, so what it accepts or refuses there is our parser's answer and not NewRecruit's.
 engines:
   battlescribe-ui: skip
   newrecruit: skip

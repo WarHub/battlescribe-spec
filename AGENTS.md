@@ -287,7 +287,7 @@ pwsh -File tools/format-specs.ps1                                               
 | Path | What |
 |------|------|
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (380 total, 23 categories) |
-| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (114 total, 23 categories) |
+| `specs/gamedata/{category}/{id}.yaml` | GameData spec files (119 total, 23 categories) |
 | `docs/error-assertions.md` | The two ways a spec is about something going wrong, and they are not the same: `expectedState.errors` asserts the validation list of a roster the engine **accepted**; `expectFailure` asserts an action the engine **refused** |
 | `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |

@@ -94,8 +94,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   app makes, and corrected both.)
 - **GameData `load` spec category (#268)** — the load-failure path, kept separate from
   `validation/` on purpose: a file the editor refuses to parse produces no validation list, which is
-  why #268 was carved out of #173. Opens with `load-malformed-catalogue`. The two Data Editor UI
-  lanes are skipped as the open question #268 names, not as a capability gap.
+  why #268 was carved out of #173. Six specs now, covering the two halves #268 owns, and the
+  interesting result is where the refusals stop.
+
+  **Malformed XML is refused at the parser, in every shape.** Truncated `.cat`
+  (`load-malformed-catalogue`) and truncated `.gst` (`load-malformed-game-system`) — separate specs
+  because the reader is chosen from the root element, so the two file types are read by two
+  different deserializer entry points and a refusal on one is no evidence about the other. Plus the
+  shapes that end where they should and are still not XML (`load-not-well-formed-catalogue`): an
+  element closed by the wrong tag, a bare `&` that starts an entity reference and never names one,
+  and the empty document. All `ParseError`; each spec also asserts that the refusal left the open
+  file alone.
+
+  **Schema violations split three ways, and only the first is a refusal.** A root missing a
+  required attribute is refused by the model binder rather than the parser — the message names the
+  field, not a row and column — and the required set is per file type
+  (`load-missing-required-attribute`, which also records `name` as *not* required: it is absent, the
+  file loads, and the catalogue is simply nameless). A numeric attribute holding a non-number is
+  refused too, quoting the string it could not convert. But a **boolean** attribute holding a
+  non-boolean is absorbed (`load-wrong-attribute-type`): a boolean is compared rather than parsed,
+  so anything that is not `"true"` becomes `false` and the file loads carrying a setting nobody
+  wrote. And the **root element's name is not checked at all** (`load-wrong-root-element`) — a
+  document whose root is `<roster>` loads as a catalogue provided it carries a catalogue's
+  attributes, and is refused for the missing attribute when it does not, never for being a roster.
+  The three acceptances carry `expectFailure: false` rather than a skip: "we looked and it loads"
+  and "we did not look" are different results.
+
+  **The engine bar is still `battlescribe` only, and the skips now say why.** #268's open question
+  was whether a UI lane can assert on a file the editor refuses to open at all. Measured: the Data
+  Editor **does** refuse, with a modal dialog (`File was corrupted and has been deleted`), so the
+  lane is not structurally mute — what it lacks is a handler in `DataEditorActions` reporting the
+  dialog as a refusal instead of as an unhandled modal. Truncated and empty payloads need more than
+  that, because `BsGameDataUiEngine.LoadFile` stages the file under an id read from a root tag those
+  payloads never finish writing; the schema-violation payloads have a complete root tag and do not.
+  `newrecruit` is skipped for a different reason: its store-direct gamedata `LoadFile` parses the
+  payload with a `DOMParser` call inside our own adapter, so what it accepts or refuses is our
+  parser's answer and not NewRecruit's — recording it would pin our leniency as NR's conformance
+  result. (It accepts a mismatched end tag, for the record.)
 - **Roster load + reload (#201, #279)** — the roster domain gains the persistence half of the
   gamedata lifecycle: `IRosterEngine.LoadRoster(xml)` replaces the engine's roster wholesale from
   a `.ros` payload and re-links it against the setup data, and `IRosterEngine.ReloadRoster()`

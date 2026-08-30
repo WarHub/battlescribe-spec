@@ -1,0 +1,53 @@
+id: load-malformed-game-system
+category: load
+description: >
+  A .gst payload that is not well-formed XML is refused by the editor, and the game system that
+  was open stays open. The .gst twin of load-malformed-catalogue, and not a restatement of it:
+  the reader is chosen from the root element, so a catalogue and a game system are read by two
+  different deserializer entry points and a refusal on one is no evidence about the other.
+
+  The state assertion afterwards is the other half — a refused load must leave the game system
+  that was open untouched, not a partially replaced one.
+
+# Opted out for two measured reasons rather than an untested assumption. The UI lanes are #268's
+# open question: the BS Data Editor does refuse this class of file, through a modal dialog, so the
+# lane is not structurally mute — but DataEditorActions has no handler that reports the dialog as a
+# refusal, and a truncated payload needs more than that, because BsGameDataUiEngine.LoadFile stages
+# the file under an id read from a root tag this payload never finishes writing. The NR
+# store-direct lane parses the payload with a DOMParser call inside our own adapter, so what it
+# accepts or refuses there is our parser's answer and not NewRecruit's.
+engines:
+  battlescribe-ui: skip
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: gs-1
+  gameSystem:
+    id: gs-1
+    name: Seed System
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+
+steps:
+  # Truncated mid-element: the <gameSystem> tag never closes and no element is terminated.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <gameSystem id="gs-broken" name="Broken System" revision="1" battleScribeVersion="2.03"
+    expectFailure:
+      messageContains: "ParseError"
+
+  # The refusal changed nothing: the seed system is still loaded and still holds its categories.
+  - expectedState:
+      gameSystem:
+        id: gs-1
+        name: Seed System
+        categoryEntries:
+          - id: ce-troops
+            name: Troops
+          - id: ce-elites
+            name: Elites
