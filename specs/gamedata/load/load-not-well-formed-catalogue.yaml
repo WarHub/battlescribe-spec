@@ -1,0 +1,79 @@
+id: load-not-well-formed-catalogue
+category: load
+description: >
+  Three .cat payloads that are broken somewhere other than the end are each refused by the editor.
+  load-malformed-catalogue covers the truncated shape — a file that simply stops — and truncation
+  is the easy case, because the parser runs out of input. These are the shapes that end where they
+  should and are still not XML: an element closed by the wrong tag, a bare '&' that starts an
+  entity reference and never names one, and the degenerate document with no root element at all.
+
+  Grouped into one spec because they are one mechanism seen three ways. Well-formedness is decided
+  before anything BattleScribe wrote gets a look at the bytes, so all three refuse at the same
+  layer and say ParseError; what differs is only the sentence the parser adds after it.
+
+# newrecruit is opted out because its store-direct gamedata LoadFile parses the payload with a
+# DOMParser call inside our own adapter, so what it accepts or refuses is our parser's answer and not
+# NewRecruit's. newrecruit-ui uploads through NR's own file input and does carry the other load
+# specs — but not this one: NR TAKES at least one payload here (measured), and opening a file it has
+# taken, mid-spec, through the SPA file list is the flake export/openfile-inline is already opted out
+# for. What NR does with these payloads is recorded in docs/gamedata-coverage.md until that lands.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-seed
+          name: Seed Unit
+          type: unit
+
+steps:
+  # Closed by the wrong tag: <selectionEntry> is terminated by </selectionEntries>. Every byte of
+  # the file is present and the root element is complete — the nesting is what is wrong.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-broken" name="Broken" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+        <selectionEntries>
+          <selectionEntry id="se-x" name="X" type="unit"></selectionEntries>
+        </selectionEntry>
+      </catalogue>
+    expectFailure:
+      # Each payload is pinned to the parser's own sentence about it rather than to a framing word
+      # like "ParseError": both BattleScribe lanes reach the same complaint, through a StAX reader in
+      # process and a SAX one in the Data Editor, and only the complaint is common to them.
+      messageContains: "must be terminated by the matching end-tag"
+
+  # A bare '&' in an attribute value. The document is well-nested; it is the character data that is
+  # not, which is the corruption a hand-edited data file most often actually has.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-broken" name="Fire & Steel" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: "entity name must immediately follow"
+
+  # The degenerate end of the range: no root element, so there is no document type to decide and
+  # nothing the parser can do short of refusing. The roster suite records the same payload, and the
+  # same refusal, in roundtrip-load-empty-payload.
+  - action: openFile
+    content: ""
+    expectFailure:
+      messageContains: "Premature end of file"
+
+  # Three refusals changed nothing: the seed catalogue is still loaded and still holds its entry.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          name: Seed Catalogue
+          selectionEntries:
+            - id: se-seed
+              name: Seed Unit

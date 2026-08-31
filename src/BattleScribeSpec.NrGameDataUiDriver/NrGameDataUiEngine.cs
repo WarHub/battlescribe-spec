@@ -389,28 +389,61 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     /// <summary>
     /// Load a catalogue/game system from XML into the editor (single-file upload, no reset) and open
     /// it for editing. Returns the loaded file's root id, tracked for export/reopen.
+    /// <para>
+    /// The payload is handed to NR whatever shape it is in. A root id is only used to name the
+    /// uploaded file, and a payload too broken to carry one used to be rejected here — which meant
+    /// the files a load-failure spec is about never reached NR's importer, and the refusal under test
+    /// was raised by this driver instead (#268). What NR made of the file is read back from the
+    /// outcome rather than assumed from the payload.
+    /// </para>
     /// </summary>
     private async Task<string> LoadFileAsync(string xml)
     {
         if (_page is null)
         { throw new InvalidOperationException("Page not initialized"); }
 
-        var (id, name, isGameSystem) = NrEditorStore.ParseRoot(xml);
-        if (id.Length == 0)
+        var (id, _, isGameSystem) = NrEditorStore.ParseRoot(xml);
+        var stem = id.Length > 0 ? id : $"{(_specId.Length > 0 ? _specId : "spec")}-load";
+        var fileName = isGameSystem ? stem + ".gst" : stem + ".cat";
+
+        var outcome = await NrEditorStore.LoadFileAsync(_page, fileName, xml);
+        if (outcome.Errors.Count > 0)
         {
-            throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
+            // Uploading has to happen from the file list, so a refusal leaves the editor there rather
+            // than on the file it had open. Put it back before raising: what a rejected load left
+            // behind is the half of a load-failure spec that comes after the refusal, and it cannot
+            // be asserted from a page with no open catalogue.
+            await ReopenAfterFailedLoadAsync();
+            throw new InvalidOperationException("LoadFile failed: " + string.Join("; ", outcome.Errors));
         }
 
-        var fileName = isGameSystem ? "system.gst" : id + ".cat";
-        var errors = await NrEditorStore.LoadFileAsync(_page, fileName, xml, id, name);
-        if (errors.Count > 0)
+        var imported = outcome.Imported
+            ?? throw new InvalidOperationException("LoadFile: NR reported no error and no imported file.");
+        _idToName[imported.Id] = imported.Name;
+        _openId = imported.Id;
+        return imported.Id;
+    }
+    /// <summary>
+    /// Reopens whatever was open before a load that NR declined. Best effort by design: the caller is
+    /// already raising the refusal, and failing to restore the view must not replace the engine's own
+    /// reason with a navigation complaint.
+    /// </summary>
+    private async Task ReopenAfterFailedLoadAsync()
+    {
+        if (_page is null || string.IsNullOrEmpty(_openId))
         {
-            throw new InvalidOperationException("LoadFile failed: " + string.Join("; ", errors));
+            return;
         }
 
-        _idToName[id] = name;
-        _openId = id;
-        return id;
+        try
+        {
+            await NrEditorStore.NavigateToFileAsync(_page, _openId);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"[nr-gamedata-ui] could not reopen '{_openId}' after a refused load: {ex.Message}");
+        }
     }
 
     public void Reload() => ReloadAsync().GetAwaiter().GetResult();

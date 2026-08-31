@@ -62,6 +62,15 @@ public static class NrEditorStore
     /// <summary>Selector for the file-list rows (one per uploaded game system / catalogue).</summary>
     private const string FileListItemSelector = ".item.unselectable:not(.add)";
 
+    /// <summary>
+    /// How long an import gets to show up in the store before it is read as declined. Generous on
+    /// purpose: a file NR rejects is normally settled in milliseconds by its console error, so this
+    /// budget is only ever spent on a file it is slowly accepting — and calling one of those a
+    /// refusal would put a falsehood in a spec.
+    /// </summary>
+    private const int ImportPollAttempts = 60;
+    private const int ImportPollIntervalMs = 250;
+
     private static readonly Dictionary<string, string> MimeTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         [".html"] = "text/html",
@@ -292,11 +301,19 @@ public static class NrEditorStore
                 const sId = new URLSearchParams(location.search).get('systemId');
                 const loaded = ed?.gameSystems?.[sId]?.loadedCatalogues ?? {};
                 if (loaded[id]?.name) return loaded[id].name;
-                // Fall back to scanning all systems' catalogue indexes.
+                // Fall back to scanning all systems' catalogue indexes. catalogueFiles is included
+                // because loadedCatalogues only holds files the editor has OPENED — so resolving a
+                // name from the file list, which is where this call starts, found nothing there.
                 for (const gs of Object.values(ed?.gameSystems ?? {})) {
                     for (const c of Object.values(gs?.cataloguesById ?? gs?.catalogues ?? {})) {
                         if (c?.id === id && c?.name) return c.name;
                     }
+                    for (const f of Object.values(gs?.catalogueFiles ?? {})) {
+                        const c = f?.catalogue ?? f;
+                        if (c?.id === id && c?.name) return c.name;
+                    }
+                    const sys = gs?.gameSystem?.gameSystem;
+                    if (sys?.id === id && sys?.name) return sys.name;
                 }
                 return null;
             }
@@ -596,8 +613,24 @@ public static class NrEditorStore
     /// state, then open it. The hidden file input is only actionable on the file-list view, so this
     /// returns there client-side (preserving the in-memory store) before uploading. Used by
     /// <c>openFile</c> with a source.
+    /// <para>
+    /// <b>A file NR declines is reported as a refusal, in NR's own words.</b> Its importer parses
+    /// each uploaded file and then keeps only what came back as a catalogue or a game system
+    /// (<c>files.filter(f =&gt; f.catalogue)</c>); anything else is dropped without a dialog, a toast,
+    /// or any store state — the single place it says so is <c>console.error</c>, from the one
+    /// <c>catch</c> in its upload handler. So the refusal is detected structurally, by the file not
+    /// arriving, and described with the console error NR emitted while it was being read.
+    /// </para>
+    /// <para>
+    /// Detection is by <em>diffing the file set</em> rather than by looking for the id the caller
+    /// expects: a payload broken enough to be refused is usually too broken to have a readable root
+    /// id, and asking for one first meant the driver rejected those files before NR ever saw them.
+    /// Before this, a declined file surfaced 30 seconds later as "the row was located but the
+    /// double-click never completed" — our navigation timeout, describing our own driver rather than
+    /// anything NR did, which is why <c>newrecruit-ui</c> could not carry a load-failure spec (#268).
+    /// </para>
     /// </summary>
-    public static async Task<IReadOnlyList<string>> LoadFileAsync(IPage page, string fileName, string xml, string newId, string newName)
+    public static async Task<NrImportOutcome> LoadFileAsync(IPage page, string fileName, string xml)
     {
         var errors = new List<string>();
 
@@ -613,21 +646,162 @@ public static class NrEditorStore
             // Possibly already on the list view; the upload below will fail clearly if not.
         }
 
-        var payload = new FilePayload
-        {
-            Name = fileName,
-            MimeType = "application/xml",
-            Buffer = Encoding.UTF8.GetBytes(xml),
-        };
-        await page.Locator("input[type=file]").SetInputFilesAsync([payload]);
+        var before = await ReadImportedFilesAsync(page);
 
-        var navResult = await NavigateToEditableAsync(page, newName);
-        if (navResult is not null)
+        // NR only ever writes to console.error on this path, so collect for the upload's duration.
+        var consoleErrors = new List<string>();
+        void OnConsole(object? sender, IConsoleMessage message)
         {
-            errors.Add($"NR Editor could not open loaded file '{newId}' ({newName}): {navResult}");
+            if (message.Type == "error")
+            {
+                consoleErrors.Add(message.Text);
+            }
         }
 
-        return errors;
+        page.Console += OnConsole;
+        NrImportedFile? added;
+        try
+        {
+            var payload = new FilePayload
+            {
+                Name = fileName,
+                MimeType = "application/xml",
+                Buffer = Encoding.UTF8.GetBytes(xml),
+            };
+            await page.Locator("input[type=file]").SetInputFilesAsync([payload]);
+
+            added = await WaitForImportedFileAsync(page, before, consoleErrors);
+        }
+        finally
+        {
+            page.Console -= OnConsole;
+        }
+
+        if (added is null)
+        {
+            errors.Add(DescribeImportRefusal(fileName, consoleErrors));
+            return new NrImportOutcome(null, errors);
+        }
+
+        var navResult = await NavigateToEditableAsync(page, added.Name);
+        if (navResult is not null)
+        {
+            errors.Add($"NR Editor could not open loaded file '{added.Id}' ({added.Name}): {navResult}");
+        }
+
+        return new NrImportOutcome(added, errors);
+    }
+
+    /// <summary>What an import did: the file NR took (null when it took none) and any errors.</summary>
+    public sealed record NrImportOutcome(NrImportedFile? Imported, IReadOnlyList<string> Errors);
+
+    /// <summary>One file NR's importer has taken: which system it filed it under, its id and name.</summary>
+    public sealed record NrImportedFile(string SystemKey, string Id, string Name, bool IsGameSystem);
+
+    /// <summary>
+    /// Every catalogue and game system NR currently holds, across all systems. Read as a set so an
+    /// import can be detected by what it adds, without knowing what to look for.
+    /// <para>
+    /// Returned as delimited text rather than JSON on purpose: the fields are read positionally, so
+    /// there is no property-name mapping to get wrong. It was wrong — camelCase keys against a
+    /// PascalCase record deserialized to a list of empty rows, every row hashed to the same key, and
+    /// no import was ever detected as new. A silent shape mismatch, and it read as "NR refused this
+    /// file" for every file.
+    /// </para>
+    /// </summary>
+    private static async Task<IReadOnlyList<NrImportedFile>> ReadImportedFilesAsync(IPage page)
+    {
+        var text = await page.EvaluateAsync<string>(
+            """
+            () => {
+              const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
+              const ed = pinia?._s?.get('editor');
+              const rows = [];
+              const clean = v => String(v ?? '').replace(/[\t\n\r]/g, ' ');
+              for (const [key, sys] of Object.entries(ed?.gameSystems ?? {})) {
+                const gs = sys?.gameSystem?.gameSystem;
+                if (gs?.id) rows.push([clean(key), clean(gs.id), clean(gs.name), 'gst'].join('\t'));
+                for (const [fileId, file] of Object.entries(sys?.catalogueFiles ?? {})) {
+                  const cat = file?.catalogue ?? file;
+                  rows.push([clean(key), clean(cat?.id ?? fileId), clean(cat?.name), 'cat'].join('\t'));
+                }
+              }
+              return rows.join('\n');
+            }
+            """);
+
+        var result = new List<NrImportedFile>();
+        foreach (var line in (text ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length == 4)
+            {
+                result.Add(new NrImportedFile(parts[0], parts[1], parts[2], parts[3] == "gst"));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Waits for NR to take the uploaded file, returning what it took, or null when it declined.
+    /// <para>
+    /// Two signals, because one is not enough. NR writes <c>console.error</c> from the single
+    /// <c>catch</c> in its upload handler the moment a file fails to parse, so an error settles the
+    /// question at once and the wait ends there. Absent that, the only evidence is the file arriving
+    /// in the store — and that is <b>slow</b>: the import survives a round trip through IndexedDB and
+    /// Vue reactivity, and was measured arriving more than three seconds after the upload. A short
+    /// budget read those late arrivals as refusals, which is the worse error of the two: it would
+    /// have had a spec record that NR rejects a file it accepts.
+    /// </para>
+    /// </summary>
+    private static async Task<NrImportedFile?> WaitForImportedFileAsync(
+        IPage page, IReadOnlyList<NrImportedFile> before, IReadOnlyList<string> consoleErrors)
+    {
+        var seen = before.Select(Key).ToHashSet(StringComparer.Ordinal);
+        for (var attempt = 0; attempt < ImportPollAttempts; attempt++)
+        {
+            await page.WaitForTimeoutAsync(ImportPollIntervalMs);
+            if (consoleErrors.Count > 0)
+            {
+                return null;
+            }
+
+            var after = await ReadImportedFilesAsync(page);
+            var added = after.FirstOrDefault(f => !seen.Contains(Key(f)));
+            if (added is not null)
+            {
+                return added;
+            }
+        }
+
+        return null;
+
+        static string Key(NrImportedFile f) => $"{f.SystemKey}/{f.Id}/{f.IsGameSystem}";
+    }
+
+    /// <summary>
+    /// The refusal message. NR's own console error is quoted when it produced one; when it produced
+    /// none — its importer drops an unparsed file by filtering, not by throwing — the message says
+    /// exactly that rather than inventing a reason NR never gave.
+    /// </summary>
+    private static string DescribeImportRefusal(string fileName, IReadOnlyList<string> consoleErrors)
+    {
+        if (consoleErrors.Count == 0)
+        {
+            return $"NewRecruit's importer did not take '{fileName}': no catalogue or game system was "
+                + "added, and it reported nothing. Its upload handler keeps only the files that parsed "
+                + "into a catalogue or a game system and silently drops the rest.";
+        }
+
+        return $"NewRecruit's importer did not take '{fileName}', reporting: "
+            + string.Join(" | ", consoleErrors.Select(FirstLine));
+
+        static string FirstLine(string text)
+        {
+            var end = text.IndexOfAny(['\r', '\n']);
+            return end < 0 ? text.Trim() : text[..end].Trim();
+        }
     }
 
     /// <summary>Reads the id of the catalogue/game-system currently open in the editor (URL <c>id</c> param).</summary>
@@ -1048,9 +1222,12 @@ public static class NrEditorStore
     /// <summary>Reads the root id, name and game-system flag from a catalogue/game-system XML string.</summary>
     public static (string Id, string Name, bool IsGameSystem) ParseRoot(string xml)
     {
-        var rootTag = Regex.Match(xml, @"<\s*(catalogue|gameSystem)\b[^>]*>").Value;
-        var isGameSystem = rootTag.Contains("<gameSystem", StringComparison.Ordinal)
-            || Regex.IsMatch(rootTag, @"<\s*gameSystem\b");
+        // The root tag is matched by shape, not by name, and game-system-ness is decided by a
+        // <gameSystem element appearing at all rather than by a complete tag — the same rule the
+        // BattleScribe engines apply. A truncated game system never closes its root tag, so the
+        // stricter form read one as a catalogue and named the staged upload .cat (#268).
+        var rootTag = Regex.Match(xml, @"<\s*[A-Za-z_][\w.:-]*\b[^>]*>").Value;
+        var isGameSystem = Regex.IsMatch(xml, @"<\s*gameSystem\b");
         var id = Regex.Match(rootTag, @"\bid=""([^""]*)""").Groups[1].Value;
         var name = Regex.Match(rootTag, @"\bname=""([^""]*)""").Groups[1].Value;
         return (id, name, isGameSystem);

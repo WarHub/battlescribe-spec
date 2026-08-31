@@ -1,0 +1,111 @@
+id: load-wrong-attribute-type
+category: load
+description: >
+  An attribute whose value is not of its declared type is refused when the type is numeric and
+  absorbed when the type is boolean. Both halves are recorded here, because the asymmetry is the
+  finding: the same file, wrong in the same way twice, is a refusal in one field and a silent
+  false in the other.
+
+  A number is parsed, and a value that is not one has no answer to give, so the load fails naming
+  the offending string. A boolean is not parsed but compared — anything that is not "true" is
+  false — so a value the schema never allowed becomes a legal one, and the file loads carrying a
+  setting nobody wrote. That is a quieter failure mode than the refusal above it, and it is
+  invisible unless a spec goes looking for it.
+
+# newrecruit is opted out because its store-direct gamedata LoadFile parses the payload with a
+# DOMParser call inside our own adapter, so what it accepts or refuses is our parser's answer and not
+# NewRecruit's. newrecruit-ui uploads through NR's own file input and does carry the other load
+# specs — but not this one: NR TAKES at least one payload here (measured), and opening a file it has
+# taken, mid-spec, through the SPA file list is the flake export/openfile-inline is already opted out
+# for. What NR does with these payloads is recorded in docs/gamedata-coverage.md until that lands.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Seed System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-seed
+          name: Seed Unit
+          type: unit
+
+steps:
+  # revision is an int. The refusal quotes the value it could not convert and nothing else — no
+  # field, no line — so a data author reading it has to find the string themselves.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-bad-revision" name="Bad Revision" revision="not-a-number" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: 'For input string: "not-a-number"'
+
+  # The same conversion, nested rather than on the root: a constraint's value. Refused the same
+  # way, which says the check is the type's and not the root element's.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-bad-constraint" name="Bad Constraint" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+        <selectionEntries>
+          <selectionEntry id="se-x" name="X" type="unit" collective="false" hidden="false">
+            <constraints>
+              <constraint id="con-x" field="selections" scope="parent" value="lots" percentValue="false" shared="true" includeChildSelections="false" includeChildForces="false" type="max"/>
+            </constraints>
+          </selectionEntry>
+        </selectionEntries>
+      </catalogue>
+    expectFailure:
+      messageContains: 'For input string: "lots"'
+
+  # Three booleans, none of them a boolean, on the root and on an entry. The file loads.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-bad-bools" name="Bad Bools" revision="1" battleScribeVersion="2.03" library="perhaps" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+        <selectionEntries>
+          <selectionEntry id="se-x" name="X" type="unit" collective="maybe" hidden="perhaps"/>
+        </selectionEntries>
+      </catalogue>
+    expectFailure: false
+
+  # And every one of them is now false — not rejected, not left unset, but decided. Only two are
+  # written below: 'hidden: false' is the default reading of an entry and the spec formatter strips
+  # it as redundant, so the coerced boolean that can be asserted here is the one that is not a
+  # first-class field.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          name: Seed Catalogue
+          selectionEntries:
+            - id: se-seed
+              name: Seed Unit
+        - id: cat-bad-bools
+          name: Bad Bools
+          fields:
+            library: "false"
+          selectionEntries:
+            - id: se-x
+              name: X
+              fields:
+                collective: "false"
+      engines:
+        # The Data Editor edits one document at a time and its state is that document, so the file
+        # just loaded replaced the seed catalogue rather than joining it. The coercions are the
+        # assertion either way, and both lanes report them identically.
+        battlescribe-ui:
+          catalogues:
+            - id: cat-bad-bools
+              name: Bad Bools
+              fields:
+                library: "false"
+              selectionEntries:
+                - id: se-x
+                  name: X
+                  fields:
+                    collective: "false"

@@ -1,0 +1,99 @@
+id: load-missing-required-attribute
+category: load
+description: >
+  A .cat or .gst whose root element is missing an attribute the model declares required is refused
+  by the editor. This is the second half of what #268 owns, and it fails at a different layer from
+  the malformed-XML specs: the document is well-formed, the parser is content, and the refusal
+  comes from binding the parsed attributes onto the model — which is why the message names the
+  field rather than a row and column.
+
+  The last step is the half that makes the boundary readable. 'name' is absent there too and the
+  file loads, so the refusals above are the model enforcing a specific required set and not the
+  reader rejecting anything it finds incomplete. Recorded with expectFailure: false, because
+  "we looked and it loads" and "we did not look" are different results.
+
+# newrecruit is opted out because its store-direct gamedata LoadFile parses the payload with a
+# DOMParser call inside our own adapter, so what it accepts or refuses is our parser's answer and not
+# NewRecruit's. newrecruit-ui uploads through NR's own file input and does carry the other load
+# specs — but not this one: NR TAKES at least one payload here (measured), and opening a file it has
+# taken, mid-spec, through the SPA file list is the flake export/openfile-inline is already opted out
+# for. What NR does with these payloads is recorded in docs/gamedata-coverage.md until that lands.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Seed System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-seed
+          name: Seed Unit
+          type: unit
+
+steps:
+  # No id. Every other required attribute is present, so the binder names this one and only this
+  # one — each payload below drops exactly one attribute for the same reason.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue name="No Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: "on field 'id'"
+
+  # No gameSystemId — required on the catalogue itself rather than inherited from a base type.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-no-gsid" name="No Game System Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: "on field 'gameSystemId'"
+
+  # A .gst missing revision. The required set is per file type — a game system has no
+  # gameSystemId to omit — so the .cat refusals above say nothing about this one.
+  #
+  # And it is refused one step earlier than they are, which is why this is the only payload here
+  # whose message names no field. Before the binder runs, both engines take a shallow read of the
+  # root to build the file-list index entry, and that read parses revision as an int — so a missing
+  # one dies at Integer.parseInt(null). The exception carries no message of its own; the only thing
+  # in it that says what happened is the NumberFormatException underneath, which is what is pinned.
+  # The .cat payloads above reach the binder because their scan reads a revision that is present.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <gameSystem id="gs-no-revision" name="No Revision" battleScribeVersion="2.03" xmlns="http://www.battlescribe.net/schema/gameSystemSchema"/>
+    expectFailure:
+      messageContains: "NumberFormatException"
+
+  # And the boundary: name is absent, and this file loads. The editor takes it and leaves the name
+  # empty rather than refusing or substituting one.
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-no-name" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure: false
+
+  # Three refusals left the seed catalogue alone; the fourth file loaded alongside it, nameless.
+  #
+  # The Data Editor edits one document at a time, and its state is that document — a loaded file
+  # REPLACES the open one rather than joining a list, so the seed catalogue is not in its answer.
+  # That is the lane's shape and not a difference in what loaded: the same four steps happened.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          name: Seed Catalogue
+          selectionEntries:
+            - id: se-seed
+              name: Seed Unit
+        - id: cat-no-name
+          name: ""
+      engines:
+        battlescribe-ui:
+          catalogues:
+            - id: cat-no-name
+              name: ""

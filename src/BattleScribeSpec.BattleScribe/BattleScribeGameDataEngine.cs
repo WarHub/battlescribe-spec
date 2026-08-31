@@ -373,14 +373,32 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(xml, @"<\s*gameSystem\b");
         var dataUtils = System.Reflection.Assembly.Load("DataUtils").GetType("net.battlescribe.a.c.e")
             ?? throw new HarnessFaultException("DataUtils serializer type 'net.battlescribe.a.c.e' not found.");
-        var read = dataUtils.GetMethod(isGameSystem ? "e" : "f",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-            [typeof(java.io.InputStream)])
+        const System.Reflection.BindingFlags Statics =
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static;
+        var read = dataUtils.GetMethod(isGameSystem ? "e" : "f", Statics, [typeof(java.io.InputStream)])
             ?? throw new HarnessFaultException("DataUtils deserialize (e/f) not found.");
+        // The (InputStream, boolean) overload is the SHALLOW read — the one the Data Editor's data
+        // source runs to build a file-list index entry. It reads the root element and its attributes
+        // and stops, so it is not a substitute for the full read (it returns a catalogue with no
+        // entries); it is the pre-flight the app performs before loading, and the only place the two
+        // checks below live.
+        var scan = dataUtils.GetMethod(isGameSystem ? "e" : "f", Statics, [typeof(java.io.InputStream), typeof(bool)])
+            ?? throw new HarnessFaultException("DataUtils index scan (e/f with flag) not found.");
 
         try
         {
             var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
+
+            // Pre-flight exactly as the app does, on its own stream. Without it this adapter was more
+            // permissive than the application it is the reference for, in two ways #268 measured
+            // against battlescribe-ui: it took a file whose ROOT ELEMENT is not catalogue/gameSystem
+            // (the full reader binds a root by its attributes and never asks what it is called, so a
+            // <roster> carrying a catalogue's attributes loaded), and it never ran the attribute
+            // parses the index entry needs, so a .gst missing `revision` failed later and elsewhere.
+            // Both now refuse here, in BattleScribe's own words, and the specs that recorded the
+            // divergence lost their per-engine overrides rather than gaining more (#450's shape).
+            scan.Invoke(null, [new java.io.ByteArrayInputStream(bytes), false]);
+
             var bais = new java.io.ByteArrayInputStream(bytes);
             // A null model is BattleScribe declining the payload, not a harness fault — the
             // deserializer's way of saying it could not make this XML into a file. Worded as the
@@ -418,9 +436,31 @@ public sealed class BattleScribeGameDataEngine : IGameDataEngine
         }
         catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
         {
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-            throw; // unreachable
+            throw new InvalidOperationException(DescribeWithCauses(ex.InnerException), ex.InnerException);
         }
+    }
+
+    /// <summary>
+    /// Renders a BattleScribe read failure as its message followed by its cause chain, the same
+    /// shape the Java agent's RPC layer produces for <c>battlescribe-ui</c>.
+    /// <para>
+    /// Needed because some of BattleScribe's own refusals carry no message of their own: the index
+    /// scan wraps the <c>NumberFormatException</c> from a missing numeric attribute in an exception
+    /// whose message is literally <c>"null"</c>. Reporting only the top frame gave a spec nothing to
+    /// match on, while the sentence that says what happened sat one link down. Appending rather than
+    /// replacing keeps every existing <c>messageContains</c> a substring of the result.
+    /// </para>
+    /// </summary>
+    private static string DescribeWithCauses(Exception exception)
+    {
+        var parts = new List<string>();
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            var text = string.IsNullOrWhiteSpace(e.Message) ? e.GetType().Name : e.Message;
+            parts.Add(parts.Count == 0 ? text : $"Caused by: {e.GetType().Name}: {text}");
+        }
+
+        return string.Join(" | ", parts);
     }
 
     public GameDataState GetState()

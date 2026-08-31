@@ -1,13 +1,13 @@
-id: load-malformed-catalogue
+id: load-malformed-game-system
 category: load
 description: >
-  A .cat payload that is not well-formed XML is refused by the editor, and the file that was open
-  stays open. This is the path #268 was carved out of #173 to own: the editor never produces a
-  validation list for a file it will not parse, so expectedState.errors has nothing to match and
-  the refusal itself has to be the assertion.
+  A .gst payload that is not well-formed XML is refused by the editor, and the game system that
+  was open stays open. The .gst twin of load-malformed-catalogue, and not a restatement of it:
+  the reader is chosen from the root element, so a catalogue and a game system are read by two
+  different deserializer entry points and a refusal on one is no evidence about the other.
 
-  The state assertion afterwards is the other half — a refused load must leave the previously
-  opened catalogue untouched, not a partially replaced one.
+  The state assertion afterwards is the other half — a refused load must leave the game system
+  that was open untouched, not a partially replaced one.
 
 # newrecruit-ui runs this spec: NR's own importer refuses the payload, and says so in the one place
 # it says anything — a console.error from the single catch in its upload handler. newrecruit (store
@@ -17,25 +17,22 @@ engines:
   newrecruit: skip
 
 setup:
-  edit: cat-1
+  edit: gs-1
   gameSystem:
     id: gs-1
-    name: Test System
-  catalogues:
-    - id: cat-1
-      name: Seed Catalogue
-      gameSystemId: gs-1
-      selectionEntries:
-        - id: se-seed
-          name: Seed Unit
-          type: unit
+    name: Seed System
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
 
 steps:
-  # Truncated mid-element: the <catalogue> tag never closes and no element is terminated.
+  # Truncated mid-element: the <gameSystem> tag never closes and no element is terminated.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <catalogue id="cat-broken" name="Broken" revision="1" battleScribeVersion="2.03"
+      <gameSystem id="gs-broken" name="Broken System" revision="1" battleScribeVersion="2.03"
     expectFailure:
       # The parser's own sentence, which both BattleScribe lanes emit — the in-process reader wraps
       # it in "ParseError at [row,col]" and the Data Editor in a SAXParseException, and pinning
@@ -49,11 +46,13 @@ steps:
         newrecruit-ui:
           messageContains: "reading 'tagName'"
 
-  # The refusal changed nothing: the seed catalogue is still loaded and still holds its entry.
+  # The refusal changed nothing: the seed system is still loaded and still holds its categories.
   - expectedState:
-      catalogues:
-        - id: cat-1
-          name: Seed Catalogue
-          selectionEntries:
-            - id: se-seed
-              name: Seed Unit
+      gameSystem:
+        id: gs-1
+        name: Seed System
+        categoryEntries:
+          - id: ce-troops
+            name: Troops
+          - id: ce-elites
+            name: Elites

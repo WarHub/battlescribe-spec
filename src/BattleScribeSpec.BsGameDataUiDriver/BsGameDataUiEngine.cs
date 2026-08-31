@@ -66,8 +66,25 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     private string? _gameSystemId;
     private bool _disposed;
 
+    /// <summary>
+    /// Names the staged file for a mid-spec load whose payload is too broken to carry a root id.
+    /// Counted rather than fixed so two such loads in one spec do not overwrite each other — the
+    /// editor deletes a file it finds corrupt, and a reused name would have the second load racing
+    /// the first one being removed.
+    /// </summary>
+    private int _unnamedLoadCount;
+
     /// <summary>Engine name constant for per-engine spec overrides.</summary>
     public const string EngineName = "battlescribe-ui";
+
+    /// <summary>
+    /// Mirrors <c>DataEditorActions.ADAPTER_GAP</c>: the agent stamps this on a failure it raised
+    /// because it did not know what to do, so this side can call it a harness fault instead of an
+    /// engine refusal. Without it an unhandled dialog reaches the classifier as an ordinary
+    /// exception, whose remainder rule is <c>Engine</c> — and every <c>expectFailure</c> spec on
+    /// this lane would pass on the agent giving up.
+    /// </summary>
+    private const string AgentGapMarker = "[bs-ui-agent-gap] ";
 
     /// <summary>
     /// When true, <see cref="Cleanup"/> preserves the running app and agent connection
@@ -106,10 +123,17 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         var path = id == _gameSystemId
             ? Path.Combine(gsDir, "system.gst")
             : Path.Combine(gsDir, $"{id}.cat");
+        // A second game system loaded mid-spec is staged as {id}.gst, not as the setup system's
+        // system.gst, so it is reachable by id here too.
         if (!File.Exists(path))
         {
-            throw new InvalidOperationException(
-                $"openFile: no staged file for id '{id}' (expected {path}).");
+            path = Path.Combine(gsDir, $"{id}.gst");
+        }
+
+        if (!File.Exists(path))
+        {
+            throw new SpecAddressingException(
+                $"openFile: no staged file for id '{id}' (expected {Path.Combine(gsDir, $"{id}.cat")}).");
         }
 
         await CallActionAsync("gamedataOpenFileAction", new JsonObject { ["path"] = path });
@@ -180,8 +204,20 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         => RunAsync(() => LoadFileAsync(xml));
 
     /// <summary>
-    /// Load a catalogue/game system from XML: stage it to the data directory (matching the setup
-    /// naming) and open it through the Data Editor's real open path. Returns the loaded root id.
+    /// Load a catalogue/game system from XML: stage it to the data directory and open it through the
+    /// Data Editor's real open path. Returns the loaded root id.
+    /// <para>
+    /// The staged name matters twice over. It has to match <see cref="OpenFileAsync"/>'s id-to-path
+    /// mapping, so a later <c>openFile</c> by id finds this file; and it must never be a name setup
+    /// staged, because the editor <b>deletes</b> a file it finds corrupt — staging a broken game
+    /// system as <c>system.gst</c> would take the spec's own game system with it.
+    /// </para>
+    /// <para>
+    /// A payload whose root id cannot be read is staged anyway, under a name derived from the spec.
+    /// It used to be rejected here, which meant the one class of file this lane most needs to ask the
+    /// editor about — one too broken to name itself — was refused by the driver before the app ever
+    /// saw it, and the refusal under test arrived as a harness error (#268).
+    /// </para>
     /// </summary>
     private async Task<string> LoadFileAsync(string xml)
     {
@@ -191,24 +227,43 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         }
 
         var (id, isGameSystem) = ParseRoot(xml);
-        if (id.Length == 0)
-        {
-            throw new InvalidOperationException("LoadFile: could not read a root id from the XML.");
-        }
 
         var gsDir = Path.Combine(_app.DataDirectoryPath, _gameSystemId ?? "");
         Directory.CreateDirectory(gsDir);
-        var path = Path.Combine(gsDir, isGameSystem ? "system.gst" : $"{id}.cat");
+        var extension = isGameSystem ? "gst" : "cat";
+        var fileName = id.Length > 0
+            ? $"{id}.{extension}"
+            : $"{_specId ?? "spec"}-load-{++_unnamedLoadCount}.{extension}";
+        var path = Path.Combine(gsDir, fileName);
         await File.WriteAllTextAsync(path, xml);
 
         await CallActionAsync("gamedataOpenFileAction", new JsonObject { ["path"] = path });
         return id;
     }
 
+    /// <summary>
+    /// Reads the root element's name and <c>id</c> from a payload that may not be well-formed.
+    /// <para>
+    /// The root is whatever element comes first, matched by shape rather than by name, because
+    /// whether the name is acceptable is the app's question and not this driver's. The Data Editor
+    /// does check it — a <c>&lt;roster&gt;</c> root comes back <c>Invalid data XML</c> — and that
+    /// refusal is a conformance result worth having (see <c>load-wrong-root-element</c>, where the
+    /// in-process reader gives the opposite answer). Matching only <c>catalogue|gameSystem</c> here
+    /// pre-empted it: the file failed in this method, so the app was never asked.
+    /// </para>
+    /// <para>
+    /// Whether this is a game system is decided by a <c>&lt;gameSystem</c> element appearing at all,
+    /// not by a complete root tag — the same test <c>BattleScribeGameDataEngine.LoadFile</c> makes,
+    /// deliberately, because the two BattleScribe lanes must ask the same reader about the same
+    /// payload or they are not comparable. A truncated game system never closes its root tag, so the
+    /// stricter test staged it as a <c>.cat</c> and had the app read a catalogue where the spec said
+    /// game system.
+    /// </para>
+    /// </summary>
     private static (string Id, bool IsGameSystem) ParseRoot(string xml)
     {
-        var rootTag = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*(catalogue|gameSystem)\b[^>]*>").Value;
-        var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(rootTag, @"<\s*gameSystem\b");
+        var rootTag = System.Text.RegularExpressions.Regex.Match(xml, @"<\s*[A-Za-z_][\w.:-]*\b[^>]*>").Value;
+        var isGameSystem = System.Text.RegularExpressions.Regex.IsMatch(xml, @"<\s*gameSystem\b");
         var id = System.Text.RegularExpressions.Regex.Match(rootTag, @"\bid=""([^""]*)""").Groups[1].Value;
         return (id, isGameSystem);
     }
@@ -437,6 +492,11 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                 $"Run `bs-spec probe --engine battlescribe --ui` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
         }
+        catch (AgentException ex) when (ex.Message.Contains(AgentGapMarker, StringComparison.Ordinal))
+        {
+            throw new HarnessFaultException(
+                $"[bs-gamedata-ui] the Java agent could not drive {method} and said so: {ex.Message}", ex);
+        }
     }
 
     private async Task<T> CallActionAsync<T>(string method, JsonObject? parameters)
@@ -458,6 +518,11 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
                 $"[bs-gamedata-ui] {method} is not yet implemented in the Java agent. " +
                 $"Run `bs-spec probe --engine battlescribe --ui` to probe the data editor UI, " +
                 $"then implement DataEditorActions.{method}(). Agent error: {ex.Message}", ex);
+        }
+        catch (AgentException ex) when (ex.Message.Contains(AgentGapMarker, StringComparison.Ordinal))
+        {
+            throw new HarnessFaultException(
+                $"[bs-gamedata-ui] the Java agent could not drive {method} and said so: {ex.Message}", ex);
         }
     }
 
