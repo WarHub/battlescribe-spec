@@ -895,11 +895,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
             ]);
 
             // Both outcomes post a message, so this waits for an ANSWER rather than for a row that
-            // a refusal is never going to produce.
+            // a refusal is never going to produce. The server-save refusal is not an answer to this
+            // question — waiting on it instead would read the import's verdict before it was posted.
             try
             {
                 await page.WaitForFunctionAsync(
-                    "() => (window.__bsspec_importMessages || []).length > 0",
+                    "() => (window.__bsspec_importMessages || []).some(m => !m.serverSave)",
                     null,
                     new() { Timeout = NrUiTimeouts.Condition });
             }
@@ -916,7 +917,8 @@ public sealed class NrRosterUiEngine : IRosterEngine
             await page.EvaluateAsync(RestoreImportHookJs);
         }
 
-        var messages = System.Text.Json.JsonSerializer.Deserialize<List<NrImportMessage>>(messagesJson) ?? [];
+        var all = System.Text.Json.JsonSerializer.Deserialize<List<NrImportMessage>>(messagesJson) ?? [];
+        var messages = all.Where(m => !m.ServerSave).ToList();
         if (messages.FirstOrDefault(m => m.Type != 0) is { } refusal)
         {
             throw new InvalidOperationException(StripHtml(refusal.Msg ?? "NewRecruit refused the roster."));
@@ -927,7 +929,11 @@ public sealed class NrRosterUiEngine : IRosterEngine
             throw new HarnessFaultException(
                 "NR UI roster import: the file was handed to NR's import control and it posted no "
                 + "message at all — neither a refusal nor the success it posts for every accepted "
-                + "file. The import never ran.");
+                + "file. The import never ran."
+                + (all.Count == 0
+                    ? string.Empty
+                    : " The only messages posted were the server-save refusals the offline fixture "
+                        + "always produces: " + string.Join(" | ", all.Select(m => StripHtml(m.Msg ?? "")))));
         }
 
         var loadedKey = await AdoptImportedListAsync(page, previousKey);
@@ -1096,17 +1102,61 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         [System.Text.Json.Serialization.JsonPropertyName("msg")]
         public string? Msg { get; set; }
+
+        /// <summary>
+        /// True when NR posted this from its server-save reporter rather than from the import — see
+        /// <see cref="ImportHookJs"/>.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("serverSave")]
+        public bool ServerSave { get; set; }
     }
 
     // Record what NR posts to its message bar while an import runs. Hooked on every store that has
     // an errorManager rather than on one named store: the id is NR's to change, and the shape —
     // showMessages([{type, msg}]) — is what the app's own import handler calls.
+    //
+    // The message bar is shared, and since v35.76 the import is not its only writer. Saving a list
+    // kicks off a server sync, and `reportListSaveRejected` posts its refusal — type 2, the same
+    // type a rejected import uses — through this very channel:
+    //
+    //     reportListSaveRejected(t) { ... errorManager.showMessages([
+    //         { type: 2, msg: `${t.name}: ${getString("list_server_save_rejected")}` }]) }
+    //
+    // Under HAR replay that fires on every import by construction: there is no server, every /api/
+    // call is fulfilled with `{}`, and the save is therefore always "rejected". Read as the import's
+    // answer it says NR refused the roster, which is the opposite of what happened — the list
+    // imported fine and only its upload failed. Five specs, all of them roster loads, failed that
+    // way against a v35.76 snapshot.
+    //
+    // So the reporter is wrapped too, and what it posts is tagged rather than dropped: the harness
+    // then answers "did the IMPORT object", not "did anything object". Tagging by call site and not
+    // by message text because the text is a translation string and the type is shared with real
+    // refusals — neither can tell the two apart. A build without the function installs no wrapper
+    // and behaves as before.
     private const string ImportHookJs = """
         () => {
             window.__bsspec_importMessages = [];
+            window.__bsspec_inServerSaveReport = false;
             const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
             const hooked = [];
+            const reporters = [];
             for (const store of (pinia?._s?.values?.() ?? [])) {
+                if (typeof store?.reportListSaveRejected === 'function') {
+                    if (!store.__bsspecOrigReportListSaveRejected) {
+                        store.__bsspecOrigReportListSaveRejected = store.reportListSaveRejected;
+                    }
+                    const originalReport = store.__bsspecOrigReportListSaveRejected;
+                    store.reportListSaveRejected = function (...args) {
+                        window.__bsspec_inServerSaveReport = true;
+                        try {
+                            return originalReport.apply(this, args);
+                        } finally {
+                            window.__bsspec_inServerSaveReport = false;
+                        }
+                    };
+                    reporters.push(store);
+                }
+
                 const manager = store?.errorManager;
                 if (!manager || typeof manager.showMessages !== 'function') continue;
                 if (!manager.__bsspecOrigShowMessages) {
@@ -1119,6 +1169,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                             window.__bsspec_importMessages.push({
                                 type: typeof m?.type === 'number' ? m.type : 2,
                                 msg: typeof m === 'string' ? m : (m?.msg ?? String(m)),
+                                serverSave: !!window.__bsspec_inServerSaveReport,
                             });
                         }
                     } catch (e) { /* never let observation break the app */ }
@@ -1127,6 +1178,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                 hooked.push(manager);
             }
             window.__bsspec_importHooked = hooked;
+            window.__bsspec_importReporters = reporters;
         }
         """;
 
@@ -1138,7 +1190,15 @@ public sealed class NrRosterUiEngine : IRosterEngine
                     delete manager.__bsspecOrigShowMessages;
                 }
             }
+            for (const store of (window.__bsspec_importReporters || [])) {
+                if (store.__bsspecOrigReportListSaveRejected) {
+                    store.reportListSaveRejected = store.__bsspecOrigReportListSaveRejected;
+                    delete store.__bsspecOrigReportListSaveRejected;
+                }
+            }
             window.__bsspec_importHooked = undefined;
+            window.__bsspec_importReporters = undefined;
+            window.__bsspec_inServerSaveReport = false;
         }
         """;
 
