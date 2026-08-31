@@ -20,7 +20,6 @@ description: >
 # for. What NR does with these payloads is recorded in docs/gamedata-coverage.md until that lands.
 engines:
   newrecruit: skip
-  newrecruit-ui: skip
 
 setup:
   edit: cat-1
@@ -45,6 +44,9 @@ steps:
       <catalogue id="cat-bad-revision" name="Bad Revision" revision="not-a-number" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
     expectFailure:
       messageContains: 'For input string: "not-a-number"'
+      engines:
+        # NR takes it: revision is never converted, so there is no conversion to fail.
+        newrecruit-ui: false
 
   # The same conversion, nested rather than on the root: a constraint's value. Refused the same
   # way, which says the check is the type's and not the root element's.
@@ -62,6 +64,8 @@ steps:
       </catalogue>
     expectFailure:
       messageContains: 'For input string: "lots"'
+      engines:
+        newrecruit-ui: false
 
   # Three booleans, none of them a boolean, on the root and on an entry. The file loads.
   - action: openFile
@@ -74,10 +78,15 @@ steps:
       </catalogue>
     expectFailure: false
 
-  # And every one of them is now false — not rejected, not left unset, but decided. Only two are
-  # written below: 'hidden: false' is the default reading of an entry and the spec formatter strips
-  # it as redundant, so the coerced boolean that can be asserted here is the one that is not a
-  # first-class field.
+  # And on BattleScribe every one of them is now false — not rejected, not left unset, but decided.
+  # Only two are written below: 'hidden: false' is the default reading of an entry and the spec
+  # formatter strips it as redundant, so the coerced boolean that can be asserted here is the one
+  # that is not a first-class field.
+  #
+  # NR keeps what was written. Same file, same acceptance, and the two engines now hold different
+  # values for the same attribute — which is the other half of "there is no type checking here":
+  # BattleScribe compares rather than parses, and so decides false; NR does not even compare, and so
+  # decides nothing. A reader of either catalogue is looking at a boolean nobody wrote.
   - expectedState:
       catalogues:
         - id: cat-1
@@ -109,3 +118,19 @@ steps:
                   name: X
                   fields:
                     collective: "false"
+        newrecruit-ui:
+          catalogues:
+            - id: cat-1
+              name: Seed Catalogue
+              selectionEntries:
+                - id: se-seed
+                  name: Seed Unit
+            - id: cat-bad-bools
+              name: Bad Bools
+              fields:
+                library: "perhaps"
+              selectionEntries:
+                - id: se-x
+                  name: X
+                  fields:
+                    collective: "maybe"

@@ -189,6 +189,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   for. Store-direct `newrecruit` stays out of all six for an unrelated reason: its `LoadFile` parses
   with a `DOMParser` call inside our own adapter, so what it accepts or refuses is our parser's
   answer and not NewRecruit's.
+- **The NR Editor file list was never flaky (#268)** — "mid-spec file load through the SPA file-list
+  is flaky" had kept `export/openfile-inline` off `newrecruit-ui` since it was written, and three
+  `load/` specs after it. It is not flaky, it is deterministic, and the cause is one line of NR's own
+  upload handler: it ends in `$router.push('/?id=' + gameSystemIds)`, which for a **catalogue-only**
+  import is a push to the route already showing. The list is built when its route is entered, not
+  from the store, so no update fires and the imported file — which is in the store — has no row. The
+  driver then waited for a row that would never exist, three times, and reported a lost double-click.
+
+  Measured rather than assumed: the row is still absent twelve seconds later, one route push makes it
+  appear at once, and a full reload is worse (the rows collapse to the game system alone).
+
+  So the list route is now always **re-entered**, with a query that differs from the last one, which
+  is what makes it an update rather than a no-op. That is strictly less machinery than before: it
+  replaced the "am I on the editor route? then go back" question at both call sites, so `GoBackAsync`
+  — which navigated by history depth rather than to a destination, and was right only as long as the
+  step before it was the one that put us there — is gone from this driver. Import detection also
+  keys on the file's name as well as its id, because a payload carrying an id the editor already
+  holds is a legitimate load that a set-diff on id alone cannot see arrive.
+
+  **Four specs come off the bench**, and NR disagrees with BattleScribe in both directions, all of it
+  now recorded rather than skipped. `export/openfile-inline` runs with no per-engine block at all. NR
+  accepts a mismatched end tag, a bare `&`, a non-numeric `revision`, a bad constraint `value`, and a
+  `.gst` with no `revision` — and where BattleScribe *decides* a malformed boolean is `false`, NR
+  keeps what was written, so the same accepted file leaves the two engines holding different values
+  for one attribute. It is stricter in one place: a catalogue with no `name` is refused, because it
+  derives a short name before checking there is one. And loading a `.gst` switches the session to
+  that game system, which is why `load-missing-required-attribute` ends on a different system there.
+
+  **`load-missing-game-system-id` is new, and exists to be opted out of one lane.** NR reads the
+  absent `gameSystemId` as the string `undefined`, files the catalogue under a game system by that
+  name and opens it — after which its editor throws `Cannot read properties of null (reading
+  'showImported')` and its file list can no longer render, so nothing later in the session can be
+  driven. Splitting that payload out of `load-missing-required-attribute` is what lets the rest of
+  the missing-attribute family run on `newrecruit-ui` instead of being lost behind it.
 - **Roster load + reload (#201, #279)** — the roster domain gains the persistence half of the
   gamedata lifecycle: `IRosterEngine.LoadRoster(xml)` replaces the engine's roster wholesale from
   a `.ros` payload and re-links it against the setup data, and `IRosterEngine.ReloadRoster()`

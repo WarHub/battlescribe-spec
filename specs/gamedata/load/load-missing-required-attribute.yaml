@@ -20,7 +20,6 @@ description: >
 # for. What NR does with these payloads is recorded in docs/gamedata-coverage.md until that lands.
 engines:
   newrecruit: skip
-  newrecruit-ui: skip
 
 setup:
   edit: cat-1
@@ -45,14 +44,15 @@ steps:
       <catalogue name="No Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
     expectFailure:
       messageContains: "on field 'id'"
+      engines:
+        # NR refuses it too, and from further inside: it hashes the id to key the file and the hash
+        # walks off the missing value. No designed message — a TypeError from its own parser, written
+        # to console.error, is the whole of what it says.
+        newrecruit-ui:
+          messageContains: "reading 'length'"
 
-  # No gameSystemId — required on the catalogue itself rather than inherited from a base type.
-  - action: openFile
-    content: |
-      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <catalogue id="cat-no-gsid" name="No Game System Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
-    expectFailure:
-      messageContains: "on field 'gameSystemId'"
+  # The other catalogue-declared required attribute, gameSystemId, has a spec of its own —
+  # load-missing-game-system-id — because NewRecruit does not merely disagree about it, it breaks.
 
   # A .gst missing revision. The required set is per file type — a game system has no
   # gameSystemId to omit — so the .cat refusals above say nothing about this one.
@@ -69,20 +69,33 @@ steps:
       <gameSystem id="gs-no-revision" name="No Revision" battleScribeVersion="2.03" xmlns="http://www.battlescribe.net/schema/gameSystemSchema"/>
     expectFailure:
       messageContains: "NumberFormatException"
+      engines:
+        # NR takes it: revision is carried, never parsed, so a missing one costs nothing to read.
+        newrecruit-ui: false
 
-  # And the boundary: name is absent, and this file loads. The editor takes it and leaves the name
-  # empty rather than refusing or substituting one.
+  # And the boundary, which is only a boundary on BattleScribe: name is absent, and the file loads,
+  # nameless rather than refused or given a substitute. NewRecruit will not have it — it derives a
+  # short name from the name, and derives it before checking there is one.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <catalogue id="cat-no-name" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
-    expectFailure: false
+    expectFailure:
+      expected: false
+      engines:
+        newrecruit-ui:
+          messageContains: "reading 'toLowerCase'"
 
-  # Three refusals left the seed catalogue alone; the fourth file loaded alongside it, nameless.
+  # The refusals left the seed catalogue alone; the file each engine accepted loaded alongside it.
   #
   # The Data Editor edits one document at a time, and its state is that document — a loaded file
   # REPLACES the open one rather than joining a list, so the seed catalogue is not in its answer.
-  # That is the lane's shape and not a difference in what loaded: the same four steps happened.
+  # That is the lane's shape and not a difference in what loaded: the same steps happened.
+  #
+  # NR ends up somewhere else entirely, and the .gst step is why: loading a game system SWITCHES the
+  # editor to it, so the session is now on "No Revision" — a system with no catalogues — and the seed
+  # catalogue is not merely unasserted but gone from the state. Recorded as what it is; a spec that
+  # inherited the base list here would be asserting a file NR is no longer looking at.
   - expectedState:
       catalogues:
         - id: cat-1
@@ -97,3 +110,8 @@ steps:
           catalogues:
             - id: cat-no-name
               name: ""
+        newrecruit-ui:
+          catalogues: []
+          gameSystem:
+            id: gs-no-revision
+            name: No Revision

@@ -19,7 +19,6 @@ description: >
 # for. What NR does with these payloads is recorded in docs/gamedata-coverage.md until that lands.
 engines:
   newrecruit: skip
-  newrecruit-ui: skip
 
 setup:
   edit: cat-1
@@ -51,15 +50,24 @@ steps:
       # like "ParseError": both BattleScribe lanes reach the same complaint, through a StAX reader in
       # process and a SAX one in the Data Editor, and only the complaint is common to them.
       messageContains: "must be terminated by the matching end-tag"
+      engines:
+        # NR takes it. Its parser recovers a document from the mis-nesting and hands the importer
+        # something with a catalogue in it, so the file lands in the editor and this payload stops
+        # being a load failure at all on that engine — recorded, not skipped.
+        newrecruit-ui: false
 
   # A bare '&' in an attribute value. The document is well-nested; it is the character data that is
   # not, which is the corruption a hand-edited data file most often actually has.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-      <catalogue id="cat-broken" name="Fire & Steel" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+      <catalogue id="cat-entity" name="Fire & Steel" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
     expectFailure:
       messageContains: "entity name must immediately follow"
+      engines:
+        # Taken as well, and the name it ends up with is the interesting part: NR keeps reading past
+        # the bare ampersand rather than stopping at it.
+        newrecruit-ui: false
 
   # The degenerate end of the range: no root element, so there is no document type to decide and
   # nothing the parser can do short of refusing. The roster suite records the same payload, and the
@@ -68,6 +76,11 @@ steps:
     content: ""
     expectFailure:
       messageContains: "Premature end of file"
+      engines:
+        # The one payload here NR does refuse, and it refuses at the far end of its pipeline: the
+        # document parses, and only then does nothing in it turn out to be a catalogue.
+        newrecruit-ui:
+          messageContains: "not a valid system or catalogue"
 
   # Three refusals changed nothing: the seed catalogue is still loaded and still holds its entry.
   - expectedState:

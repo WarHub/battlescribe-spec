@@ -2,15 +2,14 @@
 
 Tracks progress toward **100% coverage of the BattleScribe GameData model surface** — every
 data-model entity type and every settable field — verified against the two BattleScribe anchor
-engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **119
+engines (`battlescribe` in-process reference + `battlescribe-ui` Data Editor). The suite is **120
 GameData specs**. NewRecruit (`newrecruit`, `newrecruit-ui`) is not a gate, but **both NR engines
 drive the real NR Editor's Pinia store**: store-direct `newrecruit` mutates the real
 `loadedCatalogues` objects via direct JS, and `newrecruit-ui` mutates the same store through rendered
-widgets. **`newrecruit` runs all but the six `load/` specs; `newrecruit-ui` runs all but four**
-(`export/openfile-inline`, plus the three `load/` specs that contain a payload NR accepts). Both sets
-of skips are explained under "Load failures" below, and neither is a capability gap: the store-direct
-lane is out because its parser is ours rather than NewRecruit's, and those `newrecruit-ui` ones
-because opening a file NR *has* taken, mid-spec, is the flake `export/openfile-inline` is out for.
+widgets. **`newrecruit` runs all but the seven `load/` specs; `newrecruit-ui` runs all but one**
+(`load-missing-game-system-id`). Both are explained under "Load failures" below and neither is a
+capability gap: the store-direct lane is out because its parser is ours rather than NewRecruit's, and
+that one spec because its payload leaves the NR Editor unable to render its file list.
 The validation specs (see "Validation / data-integrity errors" below) stage data and read the
 engine's error list. Where a single field is a genuine NR limitation (it derives or does not
 model the value), or an error class NR's reference validator doesn't model, the
@@ -348,22 +347,23 @@ assert against. The refusal itself is the assertion, declared with `expectFailur
 step (#461); the payload is inline `content:` XML, so no raw-file setup mode was needed. Every spec
 also asserts what the refusal left behind — a rejected load must leave the open file alone.
 
-Six specs. Both BattleScribe engines — the in-process reference reader and the real Data Editor —
-run all six and agree on every row. Three also run on `newrecruit-ui`, driving NR's own importer.
+Seven specs. Both BattleScribe engines — the in-process reference reader and the real Data Editor —
+run all seven and agree on every row. `newrecruit-ui` runs six of them, against NR's own importer.
 
 | Spec | Payload | BattleScribe (both) | `newrecruit-ui` |
 |------|---------|---------------------|-----------------|
 | `load-malformed-catalogue` | truncated `.cat` | refused | refused |
 | `load-malformed-game-system` | truncated `.gst` | refused | refused |
-| `load-not-well-formed-catalogue` | wrong end tag; bare `&` | refused | **accepts** — not run |
-| `load-not-well-formed-catalogue` | empty document | refused | refused, but the spec is not run |
-| `load-missing-required-attribute` | `.cat` without `id` | refused, binder names the field | refused |
-| `load-missing-required-attribute` | `.cat` without `gameSystemId` | refused, binder names the field | **accepts**, files it under a system named `undefined` |
-| `load-missing-required-attribute` | `.gst` without `revision` | refused at the index scan | not run |
-| `load-missing-required-attribute` | `.cat` without `name` | **loads**, nameless | not run |
-| `load-wrong-attribute-type` | `revision="not-a-number"` | refused, quotes the string | **accepts** — JS does not type-check |
-| `load-wrong-attribute-type` | `constraint value="lots"` | refused, quotes the string | not run |
-| `load-wrong-attribute-type` | `library="perhaps"`, `collective="maybe"` | **loads**, every boolean `false` | not run |
+| `load-not-well-formed-catalogue` | wrong end tag | refused | **accepts** |
+| `load-not-well-formed-catalogue` | bare `&` | refused | **accepts** |
+| `load-not-well-formed-catalogue` | empty document | refused | refused |
+| `load-missing-required-attribute` | `.cat` without `id` | refused, binder names the field | refused, hashing the absent id |
+| `load-missing-required-attribute` | `.gst` without `revision` | refused at the index scan | **accepts**, and switches the session to that system |
+| `load-missing-required-attribute` | `.cat` without `name` | **loads**, nameless | **refused** — it derives a short name first |
+| `load-missing-game-system-id` | `.cat` without `gameSystemId` | refused | **accepts**, then breaks — see below |
+| `load-wrong-attribute-type` | `revision="not-a-number"` | refused, quotes the string | **accepts** |
+| `load-wrong-attribute-type` | `constraint value="lots"` | refused, quotes the string | **accepts** |
+| `load-wrong-attribute-type` | `library="perhaps"`, `collective="maybe"` | **loads**, every boolean `false` | **loads**, both kept as written |
 | `load-wrong-root-element` | `<roster>` root, attributes incomplete | refused | refused |
 | `load-wrong-root-element` | `<roster>` root, attributes complete | refused | refused |
 
@@ -388,6 +388,15 @@ adapter used to skip that shallow read, and did load it. Running the UI lane fou
 `load-wrong-root-element` carries no per-engine override — the shape #450 ended in for the roster
 reader, and the outcome AGENTS.md asks for: one fewer override, not one more.
 
+**NewRecruit is a good deal more permissive, and disagrees in both directions.** It recovers a
+document from a mismatched end tag and from a bare `&`; it does not type-check `revision` or a
+constraint's `value`; and where BattleScribe *decides* a malformed boolean is `false`, NR keeps what
+was written — so the same accepted file leaves the two engines holding different values for the same
+attribute. It is also stricter in one place: a catalogue with no `name` is refused, because NR
+derives a short name from it before checking there is one. And loading a `.gst` **switches the
+session to that game system**, which is why `load-missing-required-attribute` carries an NR
+`expectedState` naming a different system rather than the seed catalogue.
+
 **How each editor refuses, and how the driver gets it.**
 
 - **Data Editor**, two routes. A payload its data source cannot read throws straight out of that
@@ -406,20 +415,30 @@ reader, and the outcome AGENTS.md asks for: one fewer override, not one more.
   acceptance as refusal; and `loadedCatalogues` holds only files the editor has **opened**, so the
   file list lives in `catalogueFiles`.
 
-**Why only three specs run on `newrecruit-ui`.** Not a capability gap — the other three each contain
-at least one payload NR *takes*, and opening a file NR has taken, mid-spec, through the SPA file
-list is the flake `export/openfile-inline` is already opted out for. What NR does with those payloads
-is in the table above, so nothing is unmeasured; the specs are opted out rather than the findings
-lost. NR is markedly more permissive than BattleScribe here: it recovers a document from a mismatched
-end tag and from a bare `&`, it does not type-check `revision`, and a catalogue with no
-`gameSystemId` is filed under a game system whose key is the string `undefined` — which looks like an
-NR bug worth reporting upstream rather than a difference of policy.
+**The NR file list is built when its route is entered, not from the store.** NR's upload handler ends
+in `$router.push('/?id=' + gameSystemIds)`, which for a catalogue-only import is a push to the route
+already showing — no route update fires, and the imported file has no row. This is what read for a
+long time as "mid-spec file load through the SPA file-list is flaky"; it is not flaky, it is
+deterministic, and waiting does not help (measured: still absent after twelve seconds) while
+reloading is worse (the rows collapse to the game system alone). The driver now always *re-enters*
+the list route, with a query that differs from the last one so it is an update rather than a no-op.
+That replaced the older "am I on the editor route? then go back" question at both call sites, so
+`GoBackAsync` — which navigated by history depth rather than to a destination — is gone from this
+driver. `export/openfile-inline`, opted out of `newrecruit-ui` since it was written, runs there now
+with no per-engine block at all.
 
-**Store-direct `newrecruit` stays opted out of all six**, for a different reason: its `LoadFile`
+**One spec is still opted out of `newrecruit-ui`, and it is not a skip for convenience.**
+`load-missing-game-system-id` gives NR a catalogue with no `gameSystemId`. NR reads the absent
+attribute as the string `undefined`, files the catalogue under a game system by that name and opens
+it — after which its editor throws `Cannot read properties of null (reading 'showImported')` and its
+file list can no longer render, so nothing later in the session can be driven. That is an NR defect,
+not a difference of policy; the payload has a spec of its own precisely so the rest of the
+missing-attribute family can run on NR instead of being lost behind it.
+
+**Store-direct `newrecruit` stays opted out of all seven**, for a different reason: its `LoadFile`
 parses the payload with a `DOMParser` call inside our own adapter, so what it accepts or refuses is
 our parser's answer and not NewRecruit's. It loads a catalogue, entries and all, out of the
 mismatched-end-tag payload; recording that would pin our leniency as NR's conformance result.
-
 
 ## File export & snapshot assertions  (`expectedFile`)  — issue #30
 A step with `expectedFile` exports the **active file's exact serialized XML** (`ExportActiveFile`) and
