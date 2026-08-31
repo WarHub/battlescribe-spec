@@ -204,13 +204,10 @@ public static class HarRecorder
         }
         catch { /* may not appear in all versions */ }
 
-        // The roster editor, on the list the warm-up just added. `/app/Lists/:list?` is its own route
-        // chunk, and it is where the store-direct adapter goes to export and to reload.
-        //
-        // Reached by route for the same reason MySystems is. This replaced an `a[href*='Lists']`
+        // Every route the adapters push, each its own chunk. This replaced an `a[href*='Lists']`
         // click guarded by IsVisibleAsync, and on v35.76 that hop no longer reached the page:
-        // recording without this step captured neither the route chunk nor anything the editor
-        // mounts (44 entries' worth, `TableList` and `UnitEditor` among them), and 3 specs — export,
+        // recording without it captured neither the Lists route chunk nor anything the editor mounts
+        // (44 entries' worth, `TableList` and `UnitEditor` among them), and 3 specs — export,
         // roundtrip-reload, kitchen-sink — failed on the missing import while the recorder reported
         // success. Whether the link moved or the click landed elsewhere, a guarded click cannot say;
         // the route can.
@@ -219,9 +216,9 @@ public static class HarRecorder
         // after the warm-up rather than instead of it.
         try
         {
-            await VisitRosterEditorAsync(page);
+            await WalkDriverRoutesAsync(page, settleMs: 10_000);
         }
-        catch { /* editor may bounce; the route resolution is what pulls the chunk */ }
+        catch { /* a route may bounce; resolving it is what pulls the chunk */ }
 
         // Open the Create List dialog the UI driver uses
         try
@@ -288,7 +285,7 @@ public static class HarRecorder
             return setupError;
         }
 
-        await VisitRosterEditorAsync(browser.Page);
+        await WalkDriverRoutesAsync(browser.Page, settleMs: 5_000);
 
         lock (missingModules)
         {
@@ -300,19 +297,40 @@ public static class HarRecorder
     }
 
     /// <summary>
-    /// Puts the app on the roster editor route the adapters use for export and reload
-    /// (<c>/app/Lists/{listKey}</c>), which resolves to its own lazily-imported route component.
+    /// Every route the adapters push, in the order they push them. Each is its own lazily-imported
+    /// component, so a route missing from the snapshot is a route the drivers cannot reach.
     /// </summary>
-    private static async Task VisitRosterEditorAsync(IPage page)
+    /// <remarks>
+    /// The whole list rather than the one route a given failure named, because they fail the same
+    /// way and only one of them had been noticed. <c>/app/MyLists</c> is the worst of them: when its
+    /// import is aborted Vue Router cannot complete the navigation, the app falls back to
+    /// <c>/</c> — losing the loaded system, the selection and the roster — and the next thing the
+    /// driver looks at is simply the wrong page, with no error naming the missing chunk. That
+    /// surfaced as a create-list dialog offering Age of Sigmar factions to a spec whose system had
+    /// been loaded and selected correctly moments earlier.
+    /// </remarks>
+    private static IEnumerable<string> DriverRoutes(string? listKey)
+    {
+        yield return "/app/MySystems";
+        yield return "/app/MyLists";
+        if (listKey is not null)
+        {
+            yield return $"/app/Lists/{listKey}";
+        }
+    }
+
+    /// <summary>
+    /// Walks <see cref="DriverRoutes"/> on <paramref name="page"/>, settling after each so the
+    /// chunks the route pulls are fetched.
+    /// </summary>
+    private static async Task WalkDriverRoutesAsync(IPage page, int settleMs)
     {
         var listKey = await page.EvaluateAsync<string?>("window.__bsspecHarWarmup?.listKey");
-        if (listKey is null)
+        foreach (var route in DriverRoutes(listKey))
         {
-            return;
+            await NewRecruitBrowser.PushRouteAsync(page, route);
+            await WaitForNetworkSettledAsync(page, timeoutMs: settleMs);
         }
-
-        await NewRecruitBrowser.PushRouteAsync(page, $"/app/Lists/{listKey}");
-        await WaitForNetworkSettledAsync(page, timeoutMs: 10_000);
     }
 
     private const string WarmupSystemId = "har-warmup-gs";
