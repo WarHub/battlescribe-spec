@@ -102,8 +102,7 @@ gh api --method POST repos/WarHub/battlescribe-spec/issues/419/sub_issues -F sub
 Children keep insertion order, so add them in the order they should read. Link a new child **at
 creation time**, and **delete the body-text equivalents** — the `Part of #N` line on the child and
 any `## Children` checklist on the parent. Prose and metadata drift apart, and only the metadata
-drives the hierarchy and the progress rollup. See `.squad/decisions/decisions.md` — "Sub-issue
-parentage is a real link, not body prose".
+drives the hierarchy and the progress rollup.
 
 **Dependencies are a real link too**, and a separate one. A `## Depends on` list in a body is prose
 GitHub does not parse, for exactly the reason `Part of #N` is not parentage. GitHub has native
@@ -130,10 +129,10 @@ of what unblocked the work, and it outlives the blocker exactly as parentage out
 epic. Unlink only a constraint that was never real. As with parentage, **delete the body-text
 equivalent** once the link exists.
 
-**Labels are for what fields cannot express**: `area: *`, `needs-design`, `squad:*`, `go:*`,
-`release:*`, `thorough-ci`, `scheduled-ci-failure`. The `type:*` and `priority:*` label sets were
-deleted on 2026-08-13 after their values were migrated into the fields above — do not recreate them.
-A label that restates a field is a second record that drifts from the first.
+**Labels are for what fields cannot express**: `area: *`, `needs-design`, `go:*`, `release:*`,
+`thorough-ci`, `scheduled-ci-failure`. The `type:*` and `priority:*` label sets were deleted on
+2026-08-13 after their values were migrated into the fields above — do not recreate them. A label
+that restates a field is a second record that drifts from the first.
 
 ## Build & test
 
