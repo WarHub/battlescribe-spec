@@ -333,7 +333,8 @@ and loads back.
 - **`battlescribe-ui`** (real Data Editor) serializes the open document's live model back to its
   file via the same DataUtils serializer (Java-agent `gamedataSaveAndReloadAction`) and re-opens it
   through the editor's real open path. (Rewriting the open file trips the editor's external-change
-  watcher; the agent answers that specific `Confirm` dialog and fails loudly on any unknown modal.)
+  watcher; the agent answers that specific `Confirm` dialog, answers the load-failure `Error` dialog
+  by raising it as a refusal, and fails loudly on any other modal.)
 - **`newrecruit`** (store-direct) and **`newrecruit-ui`** (real NR Editor) both serialize the real NR
   store via NR's own writer (`saveCatalogueInFiles`) and feed the XML back through NR's `BSXmlToJson`
   parse, reopening the active file — so the two NR engines round-trip identically (byte-for-byte).
@@ -345,38 +346,71 @@ assert against. The refusal itself is the assertion, declared with `expectFailur
 step (#461); the payload is inline `content:` XML, so no raw-file setup mode was needed. Every spec
 also asserts what the refusal left behind — a rejected load must leave the open file alone.
 
-| Spec | Payload | Outcome |
-|------|---------|---------|
-| `load-malformed-catalogue` | truncated `.cat` | refused — `ParseError` |
-| `load-malformed-game-system` | truncated `.gst` | refused — `ParseError` |
-| `load-not-well-formed-catalogue` | wrong end tag; bare `&`; empty document | refused — `ParseError` ×3 |
-| `load-missing-required-attribute` | `.cat` without `id`; without `gameSystemId`; `.gst` without `revision` | refused — binder names the field |
-| `load-missing-required-attribute` | `.cat` without `name` | **loads**, nameless — `name` is not required |
-| `load-wrong-attribute-type` | `revision="not-a-number"`; `constraint value="lots"` | refused — quotes the unconvertible string |
-| `load-wrong-attribute-type` | `library="perhaps"`, `collective="maybe"`, `hidden="perhaps"` | **loads** — every boolean becomes `false` |
-| `load-wrong-root-element` | `<roster>` root, catalogue attributes incomplete | refused — for the attribute, never the element |
-| `load-wrong-root-element` | `<roster>` root, catalogue attributes complete | **loads** as a catalogue |
+Six specs, on **both BattleScribe engines**: the in-process reference reader and the real Data
+Editor. Outcomes agree except where the last column says otherwise, and those rows are the reason
+the UI lane exists.
 
-Two layers, and they refuse differently. XML well-formedness is decided before anything BattleScribe
-wrote sees the bytes, so those all say `ParseError` with a row and column. Everything else is the
-model binder: a missing required attribute names the field, a bad number quotes the value and names
-nothing. Below the binder there is no schema check at all — booleans are compared rather than
-parsed (anything not `"true"` is `false`), and the root element's *name* is never examined, so what
-makes a file a catalogue is the set of attributes on its root. The three acceptances are recorded
-with `expectFailure: false` rather than skipped: "we looked and it loads" and "we did not look" are
+| Spec | Payload | `battlescribe` | `battlescribe-ui` |
+|------|---------|----------------|-------------------|
+| `load-malformed-catalogue` | truncated `.cat` | refused | same |
+| `load-malformed-game-system` | truncated `.gst` | refused | same |
+| `load-not-well-formed-catalogue` | wrong end tag; bare `&`; empty document | refused ×3 | same |
+| `load-missing-required-attribute` | `.cat` without `id`; without `gameSystemId` | refused, binder names the field | same |
+| `load-missing-required-attribute` | `.gst` without `revision` | refused, binder names the field | refused **earlier**, `NumberFormatException` |
+| `load-missing-required-attribute` | `.cat` without `name` | **loads**, nameless | same |
+| `load-wrong-attribute-type` | `revision="not-a-number"`; `constraint value="lots"` | refused, quotes the string | same |
+| `load-wrong-attribute-type` | `library="perhaps"`, `collective="maybe"`, `hidden="perhaps"` | **loads**, every boolean `false` | same |
+| `load-wrong-root-element` | `<roster>` root, catalogue attributes incomplete | refused for the missing attribute | refused for **being a roster** |
+| `load-wrong-root-element` | `<roster>` root, catalogue attributes complete | **loads** as a catalogue | **refused** — `Invalid data XML` |
+
+**Two layers refuse, and a third does not.** XML well-formedness is decided before anything
+BattleScribe wrote sees the bytes; both engines reach the same parser sentence there, one wrapped in
+`ParseError at [row,col]` and the other in a `SAXParseException`, which is why the specs pin the
+sentence and not the wrapper. Below that is the model binder: a missing required attribute names the
+field, a bad number quotes the value and names nothing. Below the binder there is no type checking
+at all — a boolean is compared rather than parsed, so anything that is not `"true"` becomes `false`
+and the file loads carrying a setting nobody wrote. The three acceptances are recorded with
+`expectFailure: false` rather than skipped: "we looked and it loads" and "we did not look" are
 different results.
 
-**Engine coverage: `battlescribe` only, and the skips are measured, not assumed.** The Data Editor
-**does** refuse these files — with a modal dialog (`File was corrupted and has been deleted`), which
-answers #268's open question about whether a UI lane can assert on a file the editor will not open.
-What the lane still lacks is a `DataEditorActions` handler that reports that dialog as a refusal
-instead of as an unhandled modal (the same mechanism the round-trip section describes for the
-external-change `Confirm`). Truncated and empty payloads need one thing more:
-`BsGameDataUiEngine.LoadFile` stages the file under an id read from the root tag, which those
-payloads never finish writing — the schema-violation payloads have a complete root tag and do not.
-`newrecruit` is skipped for an unrelated reason: its store-direct `LoadFile` parses the payload with
-a `DOMParser` call inside our own adapter, so what it accepts or refuses is our parser's answer, not
-NewRecruit's, and recording it would pin our leniency as NR's conformance result.
+**Two divergences, both found by turning the UI lane on.**
+
+- **A `.gst` missing `revision`.** The Data Editor scans a game system with a SAX handler first, to
+  build the index entry its file list is made of, and that handler runs `Integer.parseInt` over the
+  raw attribute — so a missing one dies at `NumberFormatException: null` before the binder is
+  reached. The `.cat` rows do not diverge, because their scan reads a `revision` that is present.
+  A per-engine `messageContains`; both refuse.
+- **The root element's name.** The Data Editor checks it (`Invalid data XML`); the in-process
+  adapter does not, because it reaches DataUtils' catalogue reader directly and that reader binds a
+  root by its attributes. So a `<roster>` carrying a catalogue's attributes **loads** in process and
+  is **refused** by the app. By AGENTS.md the app is normative, which makes this a gap in the
+  reference adapter rather than a fact about BattleScribe: the fix is for
+  `BattleScribeGameDataEngine.LoadFile` to make the same check and for the spec to lose its
+  override, the shape #450 ended in for the roster reader. Recorded as a divergence until then.
+
+**How the Data Editor refuses, and what it costs it.** Two different routes, both now driven. A
+payload the data source cannot read at all throws straight out of its own reader. A payload that
+gets past that and fails later is reported the way the app reports it to a user — a modal `Error`
+dialog saying `File was corrupted and has been deleted`, with the underlying exception in its
+Details pane — and `DataEditorActions` dismisses it and raises its text, because a dialog left on
+screen is not a result (the same move `RosterActions.loadRosterAction` makes with `LoadDataParams`).
+Any *other* modal at that moment still fails loudly and is now marked as an adapter gap, so an
+unexamined dialog cannot be mistaken for the app refusing a file.
+
+Note also what the state assertions have to say differently: the Data Editor edits **one document at
+a time** and its state is that document, so a file it accepts *replaces* the open one instead of
+joining a list. The specs carry a `battlescribe-ui` `expectedState` for that, and it is a property of
+the lane rather than a difference in what loaded.
+
+**Both NewRecruit lanes are opted out, and neither is a guess.** Store-direct `newrecruit` parses the
+payload with a `DOMParser` call inside our own adapter, so what it accepts or refuses is our parser's
+answer and not NewRecruit's — recording it would pin our leniency as NR's conformance result. (It
+loads a catalogue, entries and all, out of the mismatched-end-tag payload.) `newrecruit-ui` does
+upload through NR's own file input, but a file NR rejects surfaces only as our navigation timeout
+(`Navigation to editor failed … the double-click never completed`) rather than as anything NR said,
+and mid-spec load through the SPA file list is the flake `export/openfile-inline` is already opted
+out for. Making that lane assertable means reading NR's own message bar, the way #468 did for the
+roster lane.
 
 ## File export & snapshot assertions  (`expectedFile`)  — issue #30
 A step with `expectedFile` exports the **active file's exact serialized XML** (`ExportActiveFile`) and

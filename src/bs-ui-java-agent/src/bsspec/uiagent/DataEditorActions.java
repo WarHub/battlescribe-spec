@@ -52,6 +52,14 @@ public class DataEditorActions {
     /** No dialog is allowed to be open when a high-level gamedata action returns — the default (empty) post-condition. */
     private static final String[] NO_DIALOGS_ALLOWED = {};
 
+    /**
+     * Prefix marking a failure this agent raised because it does not know what to do — an adapter
+     * gap, never engine behaviour. The C# driver maps it to a harness fault so a spec cannot assert
+     * it: {@code expectFailure} is satisfied only by an engine refusal, and a dialog nobody has
+     * written a handler for would otherwise satisfy it while proving nothing (#268).
+     */
+    static final String ADAPTER_GAP = "[bs-ui-agent-gap] ";
+
     @SuppressWarnings("unused")
     private final EngineAccessor engineAccessor;
     /** Cached controller — cleared on each new setup call. */
@@ -143,6 +151,9 @@ public class DataEditorActions {
      * then the window controller's private {@code a(BaseRootEntry)} display method, exactly as
      * {@code actLoadDataFile} runs after the (un-driveable) native file picker. The C# side passes
      * the staged path for the requested id.
+     *
+     * <p>A file the editor cannot read is refused rather than reported: the app's Error dialog is
+     * dismissed and raised as an exception carrying its own words. See {@link #openCataloguePath}.
      */
     private String openFile(JsonObject params) {
         idLessEntries.clear(); // reopening rebuilds the tree; old identity refs are stale
@@ -167,14 +178,17 @@ public class DataEditorActions {
             try { loadMethod.invoke(ctrl, finalFlat); future.complete(null); }
             catch (Exception e) { future.completeExceptionally(e); }
         });
-        // Poll the load future. If the editor's display logic blocks the FX thread on a modal dialog
-        // (e.g. the on-disk-change watcher popping "reload from disk?" after a saveAndReload rewrote
-        // the open file), don't guess at it — fail loudly with the dialog's identity so it becomes a
-        // known, deterministically-handled modal rather than an intermittent 90s deadlock. We can then
-        // add an explicit handler for that specific dialog at this specific moment. Platform.runLater
-        // tasks still run inside a modal showAndWait nested loop, so the detection probe succeeds even
-        // while the load is "stuck".
+        // Poll the load future. The editor's display logic can block the FX thread on a modal
+        // dialog, and there are exactly two it is known to raise here: the on-disk-change watcher's
+        // "reload from disk?" Confirm (after a saveAndReload rewrote the open file), and the Error
+        // dialog reporting that this file could not be read at all. Both are answered below. Any
+        // other modal is not guessed at — it fails loudly with the dialog's identity, so it becomes
+        // a known, deterministically-handled modal rather than an intermittent 75s deadlock, and so
+        // that an unexamined dialog can never be mistaken for the app refusing a file.
+        // Platform.runLater tasks still run inside a modal showAndWait nested loop, so the detection
+        // probe succeeds even while the load is "stuck".
         long start = System.currentTimeMillis();
+        String refusal = null;
         while (true) {
             try {
                 future.get(1000, TimeUnit.MILLISECONDS);
@@ -188,20 +202,43 @@ public class DataEditorActions {
                         // the reload. Firing the button unblocks the FX thread so the load completes.
                         System.err.println("[agent] reopen: answering external-change 'Confirm' dialog NO; " + modal);
                         answerModalButton("btnNegative");
+                    } else if (isLoadFailureError(modal)) {
+                        // Known: the app read the file, could not make a document of it, and said so.
+                        // Keep its words, dismiss the dialog so the FX thread is released, and raise
+                        // below — a dialog is not a result. This is the Data Editor's half of what
+                        // RosterActions.loadRosterAction does with LoadDataParams: where the app tells
+                        // a user and returns, a driver has to raise, or the refusal it is being asked
+                        // to demonstrate arrives as an unexpected modal instead (#268).
+                        //
+                        // The dialog's own Details pane carries the underlying exception — the
+                        // ParseError, or simple-xml's "Unable to satisfy ... on field 'x'" — so the
+                        // sentence a spec's messageContains matches is the app's, not ours.
+                        if (refusal == null) refusal = modal;
+                        System.err.println("[agent] open: app refused " + path + "; " + modal);
+                        answerModalButton("btnDone");
                     } else {
                         // Unknown modal: don't guess. Fail loudly with its identity so it can be given
-                        // an explicit handler at this specific moment.
-                        throw new RuntimeException("Unhandled modal dialog blocked the reopen of " + path
-                                + " — add an explicit handler in DataEditorActions. " + modal);
+                        // an explicit handler at this specific moment. Marked as an ADAPTER GAP so the
+                        // C# side can classify it as a harness fault: an unhandled dialog is this
+                        // agent not knowing what to do, and if it read as an engine refusal every
+                        // expectFailure spec would pass on it without the app having refused anything.
+                        throw new RuntimeException(ADAPTER_GAP + "Unhandled modal dialog blocked the reopen of "
+                                + path + " — add an explicit handler in DataEditorActions. " + modal);
                     }
                 }
                 if (System.currentTimeMillis() - start > LOAD_TIMEOUT_MS) {
                     throw new RuntimeException("File loading timed out after " + LOAD_TIMEOUT_MS
-                            + "ms (no modal dialog detected) for " + path);
+                            + "ms (" + (refusal == null ? "no modal dialog detected" : "after " + refusal)
+                            + ") for " + path);
                 }
             } catch (Exception e) {
                 throw new RuntimeException("File loading failed", e);
             }
+        }
+        if (refusal != null) {
+            // The load "completed" only in the sense that the app finished failing it. Nothing is
+            // open that was not open before, so lastOpenedPath is deliberately left alone.
+            throw new RuntimeException("The Data Editor refused to open " + path + ". " + refusal);
         }
         lastOpenedPath = path;
     }
@@ -1627,7 +1664,9 @@ public class DataEditorActions {
 
     private Method getMethod(Class<?> cls, String name, Class<?>... types) {
         try { return cls.getMethod(name, types); }
-        catch (NoSuchMethodException e) { throw new RuntimeException("Method not found: " + name, e); }
+        // A member the obfuscated jar no longer exposes is this agent being out of date, never the app
+        // declining anything — marked so a spec asserting a refusal cannot be satisfied by it.
+        catch (NoSuchMethodException e) { throw new RuntimeException(ADAPTER_GAP + "Method not found: " + name, e); }
     }
 
     private Object invoke(Method m, Object obj, Object... args) {
@@ -1646,7 +1685,7 @@ public class DataEditorActions {
             }
             cls = cls.getSuperclass();
         }
-        throw new RuntimeException("Could not find private a(BaseRootEntry) load method");
+        throw new RuntimeException(ADAPTER_GAP + "Could not find private a(BaseRootEntry) load method");
     }
 
     // ─── FX thread dispatch ───────────────────────────────────────────────────
@@ -1715,6 +1754,22 @@ public class DataEditorActions {
                 && modalDesc.contains("title='Confirm'")
                 && modalDesc.contains("id=btnPositive")
                 && modalDesc.contains("id=btnNegative");
+    }
+
+    /**
+     * Recognizes the Data Editor's own load-failure report: the "Error" dialog it puts up when it
+     * read a file and could not make a document of it (a malformed payload, a root missing a
+     * required attribute, a value it cannot convert). Identified by the {@code Error} title plus the
+     * {@code btnDone} button that dialog carries — deliberately not by its wording, which differs
+     * per failure and belongs in the message rather than in the predicate.
+     *
+     * <p>Any other unknown modal still fails loudly. That asymmetry is the point: recognising too
+     * much here would turn a dialog nobody has looked at into an assertable "refusal".
+     */
+    private boolean isLoadFailureError(String modalDesc) {
+        return modalDesc != null
+                && modalDesc.contains("title='Error'")
+                && modalDesc.contains("id=btnDone");
     }
 
     /**

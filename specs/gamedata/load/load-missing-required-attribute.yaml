@@ -12,16 +12,13 @@ description: >
   reader rejecting anything it finds incomplete. Recorded with expectFailure: false, because
   "we looked and it loads" and "we did not look" are different results.
 
-# Opted out for two measured reasons rather than an untested assumption. The UI lanes are #268's
-# open question, and this class of payload is the one that most nearly answers it: the BS Data
-# Editor does refuse these files, through a modal dialog ("File was corrupted and has been
-# deleted"), and unlike a truncated payload their root tag is complete, so BsGameDataUiEngine can
-# read the id it stages the file under. What is missing is only a DataEditorActions handler that
-# reports the dialog as a refusal instead of as an unhandled modal. The NR store-direct lane parses
-# the payload with a DOMParser call inside our own adapter, so what it accepts or refuses there is
-# our parser's answer and not NewRecruit's.
+# Both NewRecruit lanes are opted out, and neither is a guess. The store-direct gamedata LoadFile
+# parses the payload with a DOMParser call inside our own adapter, so what it accepts or refuses is
+# our parser's answer and not NewRecruit's. newrecruit-ui does upload through NR's own file input,
+# but a file NR rejects surfaces only as a navigation timeout in our words rather than as NR saying
+# anything, and mid-spec load through the SPA file list is the flake export/openfile-inline is
+# already opted out for.
 engines:
-  battlescribe-ui: skip
   newrecruit: skip
   newrecruit-ui: skip
 
@@ -65,6 +62,15 @@ steps:
       <gameSystem id="gs-no-revision" name="No Revision" battleScribeVersion="2.03" xmlns="http://www.battlescribe.net/schema/gameSystemSchema"/>
     expectFailure:
       messageContains: "on field 'revision'"
+      engines:
+        # Both refuse; they refuse at different depths and say so differently. The in-process reader
+        # goes straight to the model binder, which names the field it could not satisfy. The Data
+        # Editor scans a .gst with a SAX handler first, to build the index entry the file list is
+        # made of, and that handler parses revision as an int — so a missing one dies at
+        # Integer.parseInt(null) before the binder is ever reached. The .cat refusals above do not
+        # diverge, because their scan reads a revision that is present.
+        battlescribe-ui:
+          messageContains: "NumberFormatException"
 
   # And the boundary: name is absent, and this file loads. The editor takes it and leaves the name
   # empty rather than refusing or substituting one.
@@ -75,6 +81,10 @@ steps:
     expectFailure: false
 
   # Three refusals left the seed catalogue alone; the fourth file loaded alongside it, nameless.
+  #
+  # The Data Editor edits one document at a time, and its state is that document — a loaded file
+  # REPLACES the open one rather than joining a list, so the seed catalogue is not in its answer.
+  # That is the lane's shape and not a difference in what loaded: the same four steps happened.
   - expectedState:
       catalogues:
         - id: cat-1
@@ -84,3 +94,8 @@ steps:
               name: Seed Unit
         - id: cat-no-name
           name: ""
+      engines:
+        battlescribe-ui:
+          catalogues:
+            - id: cat-no-name
+              name: ""

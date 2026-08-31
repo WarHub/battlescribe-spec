@@ -1,30 +1,28 @@
 id: load-wrong-root-element
 category: load
 description: >
-  The root element's name is not checked. A document whose root is <roster> loads as a catalogue,
-  provided it carries the attributes a catalogue requires — and is refused when it does not, with
-  a message naming the missing attribute and never the element.
+  A document whose root element is <roster> is refused by the Data Editor and accepted by the
+  in-process reader, which binds it as a catalogue on the strength of its attributes alone. The
+  same payload, twice, with the second one wearing a complete catalogue attribute set: the app
+  says "Invalid data XML" to both, and the reference engine takes the second.
 
-  This is the "missing required element" end of #268's schema-violation scope, and the answer is
-  that there is no such check to violate. What decides whether a file is a catalogue is the set of
-  attributes on its root, so the two steps below are the same wrong document twice: the first is
-  refused for a reason that has nothing to do with it being a roster, and the second, wrong in
-  exactly the same way and merely better dressed, is accepted as a catalogue.
+  This is the "missing required element" end of #268's schema-violation scope, and the answer
+  turned out to depend on which BattleScribe you ask. The app checks what the root element is
+  called. The in-process adapter reaches DataUtils' catalogue reader directly, so nothing ever
+  asks — a spec written against it alone would have recorded "the root element is not checked" as
+  BattleScribe's behaviour, and that is exactly what running the UI lane was for.
 
-  Which reader is even asked is decided one level further out, by the adapter, from the presence
-  of a <gameSystem> element — so this file never had a chance to be read as the roster it says it
-  is. That is worth pinning: a spec that assumed the root element identified the file would be
-  asserting a check that does not exist.
+  Recorded as a divergence rather than smoothed over, but it should not stay one: by the rule in
+  AGENTS.md the app is normative and the reference adapter has the gap, so the fix is for
+  BattleScribeGameDataEngine.LoadFile to make the same check and for this spec to lose its
+  override — the shape #450 ended in for the roster reader's unknown-game-system check.
 
-# Opted out for two measured reasons rather than an untested assumption. The UI lanes are #268's
-# open question: the BS Data Editor does refuse a file whose attributes do not bind, through a
-# modal dialog ("File was corrupted and has been deleted"), and this payload's root tag is
-# complete, so BsGameDataUiEngine can read the id it stages the file under. What is missing is only
-# a DataEditorActions handler that reports the dialog as a refusal instead of as an unhandled
-# modal. The NR store-direct lane picks its root with a DOMParser query inside our own adapter, so
-# what it makes of a mislabelled root is our parser's answer and not NewRecruit's.
+# newrecruit is skipped for a reason unrelated to the above: its store-direct gamedata LoadFile
+# picks the root with a DOMParser query inside our own adapter, so what it makes of a mislabelled
+# root is our parser's answer and not NewRecruit's. newrecruit-ui uploads through NR's own file
+# input, but reports a rejected file only as a navigation timeout in our words, and mid-spec load
+# through the SPA file list is the flake that already opts export/openfile-inline out.
 engines:
-  battlescribe-ui: skip
   newrecruit: skip
   newrecruit-ui: skip
 
@@ -43,23 +41,32 @@ setup:
           type: unit
 
 steps:
-  # A roster, with a roster's attributes. Refused — but for the missing catalogue attribute, which
-  # is the point: the complaint is that this catalogue is incomplete, not that it is a roster.
+  # A roster, with a roster's attributes. Both refuse — and the two reasons are the whole finding:
+  # the app refuses it for being a roster, the reference reader for being an incomplete catalogue.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <roster id="ros-1" name="An Actual Roster" battleScribeVersion="2.03" gameSystemId="gs-1"/>
     expectFailure:
       messageContains: "on field 'revision'"
+      engines:
+        battlescribe-ui:
+          messageContains: "Invalid data XML"
 
-  # The same root element, now carrying a full catalogue attribute set. It loads.
+  # The same root element, now carrying a full catalogue attribute set — so the only thing still
+  # wrong with it is its name. The app still refuses. The reference reader loads it as a catalogue.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <roster id="cat-disguised" name="Disguised" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
-    expectFailure: false
+    expectFailure:
+      expected: false
+      engines:
+        battlescribe-ui:
+          messageContains: "Invalid data XML"
 
-  # And it is a catalogue, sitting in the catalogue list beside the one that was already open.
+  # Where that leaves each: a catalogue the reference engine did not know it should refuse, and for
+  # the app the file it had open all along, untouched by two refusals.
   - expectedState:
       catalogues:
         - id: cat-1
@@ -69,3 +76,11 @@ steps:
               name: Seed Unit
         - id: cat-disguised
           name: Disguised
+      engines:
+        battlescribe-ui:
+          catalogues:
+            - id: cat-1
+              name: Seed Catalogue
+              selectionEntries:
+                - id: se-seed
+                  name: Seed Unit
