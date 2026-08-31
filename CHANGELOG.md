@@ -139,30 +139,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the catalogue reader for a truncated `.gst`; it now reads the first element whatever it is called,
   and decides game-system-ness the way the in-process engine does.
 
-  **Two divergences, both found by turning the lane on.** A `.gst` missing `revision` is refused by
-  the Data Editor *earlier* — it scans a game system with a SAX handler to build its file-list index
-  entry, and that handler runs `Integer.parseInt` over the raw attribute, so a missing one dies at
-  `NumberFormatException: null` before the binder is reached. A per-engine `messageContains`; both
-  refuse. And **the root element's name is checked by the app and not in process**: a `<roster>`
-  carrying a catalogue's attributes is `Invalid data XML` to the Data Editor and loads as a
-  catalogue in process (`load-wrong-root-element`). By AGENTS.md the app is normative, so that is a
-  gap in the reference adapter rather than a fact about BattleScribe — `BattleScribeGameDataEngine`
-  should make the same check and the spec should lose its override, the shape #450 ended in for the
-  roster reader. Recorded as a divergence until then.
+  **Two divergences the UI lane found, and both ended in a fix rather than an override.** Before the
+  binder runs, the Data Editor takes a shallow read of the root to build its file-list index entry,
+  and two refusals live there: a `.gst` missing `revision`, because that read parses it as an int and
+  dies at `Integer.parseInt(null)`; and any root element that is not `catalogue`/`gameSystem`, which
+  the binder never asks about — it binds a root by its attributes, so a `<roster>` carrying a
+  catalogue's attributes is `Invalid data XML` to the app. The in-process adapter skipped that read
+  entirely: it reported a different reason for the first and **loaded** the second.
+  `BattleScribeGameDataEngine.LoadFile` now takes the same pre-flight, so both engines agree and
+  `load-wrong-root-element` carries no per-engine block at all — the shape #450 ended in for the
+  roster reader, and what AGENTS.md asks for: one fewer override, not one more. It also renders a
+  read failure's cause chain, because BattleScribe's index scan wraps that `NumberFormatException` in
+  an exception whose own message is literally `"null"` — the sentence that says what happened was one
+  link down, where no spec could match it.
 
   Note what the state assertions say differently: the Data Editor edits **one document at a time**
   and its state is that document, so a file it accepts replaces the open one rather than joining a
   list. That is a property of the lane, and the specs carry a `battlescribe-ui` `expectedState` for
   it.
 
-  **Both NewRecruit lanes stay opted out, and neither is a guess.** Store-direct `newrecruit` parses
-  the payload with a `DOMParser` call inside our own adapter, so what it accepts or refuses is our
-  parser's answer and not NewRecruit's — recording it would pin our leniency as NR's conformance
-  result. (It loads a catalogue, entries and all, out of the mismatched-end-tag payload.)
-  `newrecruit-ui` uploads through NR's own file input, but a file NR rejects surfaces only as our
-  navigation timeout rather than as anything NR said, and mid-spec load through the SPA file list is
-  the flake `export/openfile-inline` is already opted out for. Making it assertable means reading
-  NR's own message bar, the way #468 did for the roster lane.
+- **NR Editor load failures, through NR's own importer (#268)** — `newrecruit-ui` now runs three of
+  the six `load/` specs. It could run none of them, because a file NR declined surfaced as *our*
+  30-second navigation timeout ("the row was located but the double-click never completed"), which
+  describes this driver rather than anything NewRecruit did.
+
+  NR's importer is quiet by design: it parses each uploaded file and keeps only what came back as a
+  catalogue or a game system, dropping the rest with no dialog, no toast and no store state. The one
+  place it says anything is a `console.error` from the single `catch` in its upload handler. So the
+  driver now detects a refusal **structurally** — by diffing NR's file set across the upload — and
+  describes it with the console error NR emitted, which is what a spec's `messageContains` matches.
+  The payload is also handed over whatever shape it is in: a root id is only used to name the upload,
+  and requiring one meant the files these specs are about never reached NR's importer at all.
+
+  Three things had to be right for that to be true rather than merely green. A file NR **accepts**
+  can take seconds to appear (IndexedDB plus Vue reactivity), so the wait ends early only on NR's own
+  error and is otherwise generous — a short poll read late acceptance as refusal, which would have
+  put a falsehood in a spec. `loadedCatalogues` holds only files the editor has *opened*, so the file
+  list had to be read from `catalogueFiles` — the same mistake made name resolution fail from the
+  list view, now fixed for every caller. And because uploading happens from the file list, a refusal
+  left the editor there; it now reopens what was open, so the `expectedState` after a refusal has a
+  page to read.
+
+  **What NR does with these payloads** is a good deal more permissive than BattleScribe, and is
+  recorded in `docs/gamedata-coverage.md` whether or not a spec runs it: NR recovers a document from
+  a mismatched end tag and from a bare `&`, does not type-check `revision`, and files a catalogue
+  with no `gameSystemId` under a game system whose key is the string `undefined` — which looks like
+  an NR bug worth reporting upstream. The three specs containing a payload NR takes stay opted out,
+  because opening a file NR has taken, mid-spec, is the flake `export/openfile-inline` is already out
+  for. Store-direct `newrecruit` stays out of all six for an unrelated reason: its `LoadFile` parses
+  with a `DOMParser` call inside our own adapter, so what it accepts or refuses is our parser's
+  answer and not NewRecruit's.
 - **Roster load + reload (#201, #279)** — the roster domain gains the persistence half of the
   gamedata lifecycle: `IRosterEngine.LoadRoster(xml)` replaces the engine's roster wholesale from
   a `.ros` payload and re-links it against the setup data, and `IRosterEngine.ReloadRoster()`

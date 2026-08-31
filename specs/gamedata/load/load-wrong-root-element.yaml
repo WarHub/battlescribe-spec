@@ -1,30 +1,27 @@
 id: load-wrong-root-element
 category: load
 description: >
-  A document whose root element is <roster> is refused by the Data Editor and accepted by the
-  in-process reader, which binds it as a catalogue on the strength of its attributes alone. The
-  same payload, twice, with the second one wearing a complete catalogue attribute set: the app
-  says "Invalid data XML" to both, and the reference engine takes the second.
+  The root element has to be the one the file type says it is. A document whose root is <roster> is
+  refused as "Invalid data XML" even when it carries a complete, valid catalogue attribute set — so
+  the second payload below is wrong in exactly one way, its name, and that is enough.
 
-  This is the "missing required element" end of #268's schema-violation scope, and the answer
-  turned out to depend on which BattleScribe you ask. The app checks what the root element is
-  called. The in-process adapter reaches DataUtils' catalogue reader directly, so nothing ever
-  asks — a spec written against it alone would have recorded "the root element is not checked" as
-  BattleScribe's behaviour, and that is exactly what running the UI lane was for.
+  This is the "missing required element" end of #268's schema-violation scope, and the check turns
+  out to sit somewhere unexpected: not in the model binder, which never asks what a root is called
+  and would happily bind this one as a catalogue, but in the shallow read the editor takes first to
+  build the file-list index entry. Which is why the refusal arrives before any attribute is
+  complained about — the first payload here is missing 'revision' too, and never gets told so.
 
-  Recorded as a divergence rather than smoothed over, but it should not stay one: by the rule in
-  AGENTS.md the app is normative and the reference adapter has the gap, so the fix is for
-  BattleScribeGameDataEngine.LoadFile to make the same check and for this spec to lose its
-  override — the shape #450 ended in for the roster reader's unknown-game-system check.
+  The spec is also the reason the reference adapter now takes that shallow read at all. It went
+  straight to the binder, so it loaded the second payload as a catalogue while the Data Editor
+  refused it; running the UI lane found that, and it was fixed rather than recorded as a per-engine
+  override (AGENTS.md: the app is normative, and the divergence was our artefact).
 
-# newrecruit is skipped for a reason unrelated to the above: its store-direct gamedata LoadFile
-# picks the root with a DOMParser query inside our own adapter, so what it makes of a mislabelled
-# root is our parser's answer and not NewRecruit's. newrecruit-ui uploads through NR's own file
-# input, but reports a rejected file only as a navigation timeout in our words, and mid-spec load
-# through the SPA file list is the flake that already opts export/openfile-inline out.
+# newrecruit-ui runs this spec: NR's own importer refuses the payload, and says so in the one place
+# it says anything — a console.error from the single catch in its upload handler. newrecruit (store
+# direct) stays out, because its LoadFile parses the payload with a DOMParser call inside our own
+# adapter, so what it accepts or refuses would be our parser's answer and not NewRecruit's.
 engines:
   newrecruit: skip
-  newrecruit-ui: skip
 
 setup:
   edit: cat-1
@@ -41,32 +38,35 @@ setup:
           type: unit
 
 steps:
-  # A roster, with a roster's attributes. Both refuse — and the two reasons are the whole finding:
-  # the app refuses it for being a roster, the reference reader for being an incomplete catalogue.
+  # A roster, with a roster's attributes — so it is both mislabelled and missing what a catalogue
+  # needs. The complaint is about the label, because that is what gets looked at first.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <roster id="ros-1" name="An Actual Roster" battleScribeVersion="2.03" gameSystemId="gs-1"/>
     expectFailure:
-      messageContains: "on field 'revision'"
+      messageContains: "Invalid data XML"
       engines:
-        battlescribe-ui:
-          messageContains: "Invalid data XML"
+        # NR reaches the same verdict from the other end: it parses the document happily and then
+        # finds no catalogue or gameSystem in what came back.
+        newrecruit-ui:
+          messageContains: "not a valid system or catalogue"
 
-  # The same root element, now carrying a full catalogue attribute set — so the only thing still
-  # wrong with it is its name. The app still refuses. The reference reader loads it as a catalogue.
+  # The same root element, now carrying a full and valid catalogue attribute set. Still refused, and
+  # with the same sentence: nothing about this file is wrong except what its root element is called.
   - action: openFile
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <roster id="cat-disguised" name="Disguised" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
     expectFailure:
-      expected: false
+      messageContains: "Invalid data XML"
       engines:
-        battlescribe-ui:
-          messageContains: "Invalid data XML"
+        # NR reaches the same verdict from the other end: it parses the document happily and then
+        # finds no catalogue or gameSystem in what came back.
+        newrecruit-ui:
+          messageContains: "not a valid system or catalogue"
 
-  # Where that leaves each: a catalogue the reference engine did not know it should refuse, and for
-  # the app the file it had open all along, untouched by two refusals.
+  # Two refusals, nothing loaded: the file that was open is still the only one there.
   - expectedState:
       catalogues:
         - id: cat-1
@@ -74,13 +74,3 @@ steps:
           selectionEntries:
             - id: se-seed
               name: Seed Unit
-        - id: cat-disguised
-          name: Disguised
-      engines:
-        battlescribe-ui:
-          catalogues:
-            - id: cat-1
-              name: Seed Catalogue
-              selectionEntries:
-                - id: se-seed
-                  name: Seed Unit
