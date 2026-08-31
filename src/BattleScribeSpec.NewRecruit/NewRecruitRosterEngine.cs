@@ -945,6 +945,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         try
         {
             await Browser.WaitForPiniaAsync();
+            await LeaveRosterEditorAsync();
 
             var cleanupError = await Browser.Page.EvaluateAsync<string?>($$"""
                 async () => {
@@ -1002,6 +1003,39 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         {
             Console.Error.WriteLine($"[NewRecruitRosterEngine] Cleanup failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Takes the page off the roster editor before the list it is showing is deleted, so the editor
+    /// unmounts while its list still resolves and has nothing left to react to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ExportRosterXmlAsync"/> leaves the page on <c>/app/Lists/{listKey}</c>, and cleanup
+    /// then deletes that list underneath it. The mounted editor keeps reacting: on v35.76 it first
+    /// rewrites its own route to <c>?view=main</c>, then — once <c>findListByKey</c> stops resolving
+    /// — falls through to <c>router.push({name:'app-MyLists'})</c>. Both land <em>after</em> cleanup
+    /// returns, so the call they destroy is whatever the next spec evaluates first, which is its
+    /// Setup. That surfaced as "Step 0: Execution context was destroyed" on a different spec each
+    /// run, and only in the pooled lanes — <c>bs-spec run</c> gives every spec a fresh engine, so
+    /// there is no previous spec's editor to race. The same shape as the four navigation races in
+    /// docs/nr-ui-roster-coverage.md §5, in the store-direct engine.
+    /// </para>
+    /// <para>
+    /// Before the delete rather than after it: leaving first means the bounce never has a reason to
+    /// fire, where leaving afterwards would only be racing it from the other side. The route is
+    /// <c>/app/MySystems</c> because that is where NR's own <c>/app</c> redirect puts the page, and
+    /// so it is the state Setup's frozen-mode fast path already assumes.
+    /// </para>
+    /// </remarks>
+    private async Task LeaveRosterEditorAsync()
+    {
+        if (!Browser.Page.Url.Contains("/app/Lists/", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await NewRecruitBrowser.PushRouteAsync(Browser.Page, "/app/MySystems");
     }
 
     public void Dispose()
