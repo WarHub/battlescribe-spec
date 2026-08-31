@@ -82,12 +82,43 @@ dotnet run --project src/BattleScribeSpec.NewRecruit.HarTool -- -o my-output/
 The tool:
 - Navigates newrecruit.eu landing page and `/app` route
 - Dismisses consent dialogs
+- **Loads a synthetic game system through `systemsStore.loadSystemFromFs`**, then selects it, opens
+  its book, builds a roster and adds it to the lists store — the adapter's own setup sequence
+  (see below)
+- Walks the pages the drivers use: MySystems, Add More Games, **the roster editor at
+  `/app/Lists/{listKey}`** (its own route chunk, and where the adapter exports and reloads), and the
+  Create List dialog
 - Captures all network traffic
 - Post-processes: keeps an allowlist of required domains (`newrecruit.eu`, `raw.githubusercontent.com`, Google Fonts), strips everything else, deduplicates requests
+- **Replays the finished HAR offline and re-runs that setup sequence**, refusing to write
+  `metadata.json` if the snapshot cannot serve it
 - Extracts the NR `clientVersion` from `__NUXT_CONFIG__`
 - Computes and prints the SHA256 hash of the HAR file
 - Writes `newrecruit.har` and `metadata.json`
 - Prints a suggested `gh release create` command
+
+### Why the recorder loads a system
+
+A recording is a *guess* about which chunks NR loads eagerly, and the file-loading path is the one
+the adapters depend on that no UI journey reaches — NR imports game data from GitHub or a directory
+picker, neither of which a recorder can drive. Whichever chunks that path pulls were captured only
+as long as NR happened to bundle them into the eager entry chunk.
+
+v35.76 stopped doing that: it split the XML parser into a chunk fetched on first parse. The
+recording never parsed anything, so the chunk never entered the snapshot, and offline replay aborted
+the import. NR catches parse errors internally, so `loadSystemFromFs` returned an empty array rather
+than surfacing the missing module, and all ~500 frozen NR specs failed at setup with
+`System not found in localLibrary after load` — a message that points at the store, not at a
+missing bundle.
+
+Driving the same store call the adapters make keeps that class of split captured by construction,
+and the offline replay afterwards proves it rather than assuming it: a snapshot with a hole fails
+the recorder instead of turning CI red a day later.
+
+The verification watches for the browser's own
+`Failed to fetch dynamically imported module` rather than for aborted requests. Nuxt prefetches
+route chunks it never uses, so a plain "did any `/_nuxt/` request fail" check reports every route
+the recording did not visit; only code that actually awaited an import produces this message.
 
 ### Publishing a Snapshot
 
