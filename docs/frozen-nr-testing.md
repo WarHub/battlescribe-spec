@@ -85,9 +85,9 @@ The tool:
 - **Loads a synthetic game system through `systemsStore.loadSystemFromFs`**, then selects it, opens
   its book, builds a roster and adds it to the lists store — the adapter's own setup sequence
   (see below)
-- Walks the pages the drivers use: MySystems, Add More Games, **the roster editor at
-  `/app/Lists/{listKey}`** (its own route chunk, and where the adapter exports and reloads), and the
-  Create List dialog
+- **Walks every route the drivers push** — `/app/MySystems`, `/app/MyLists`,
+  `/app/Lists/{listKey}` — each of which is its own lazily-imported component, plus the Add More
+  Games and Create List dialogs
 - Captures all network traffic
 - Post-processes: keeps an allowlist of required domains (`newrecruit.eu`, `raw.githubusercontent.com`, Google Fonts), strips everything else, deduplicates requests
 - **Replays the finished HAR offline and re-runs that setup sequence**, refusing to write
@@ -119,6 +119,18 @@ The verification watches for the browser's own
 `Failed to fetch dynamically imported module` rather than for aborted requests. Nuxt prefetches
 route chunks it never uses, so a plain "did any `/_nuxt/` request fail" check reports every route
 the recording did not visit; only code that actually awaited an import produces this message.
+
+### Why the routes are a list
+
+A missing route chunk does not always announce itself. When `/app/Lists/{listKey}`'s import is
+aborted the export throws and the message names the module. When `/app/MyLists`' import is aborted,
+Vue Router cannot complete the navigation and the app falls back to `/` — losing the loaded system,
+the selection and the roster — so the driver's next step simply sees the wrong page. That one
+surfaced as a Create List dialog offering Age of Sigmar factions to a spec whose own system had
+been loaded and selected correctly moments earlier.
+
+So the recorder walks the whole list of routes the drivers push and the verification re-walks it,
+rather than each being extended whenever a particular route is missed.
 
 ### Publishing a Snapshot
 
