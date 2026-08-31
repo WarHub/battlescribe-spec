@@ -422,15 +422,9 @@ public static class NrEditorStore
 
             try
             {
-                // 1. File list. Right after an upload we are already there; after a failed attempt we
-                //    may be half-navigated instead, so step back onto the list deterministically.
-                if (IsOnEditorRoute(page))
-                {
-                    await page.GoBackAsync(new PageGoBackOptions { Timeout = timeout });
-                }
-
-                await page.WaitForSelectorAsync(FileListItemSelector,
-                    new PageWaitForSelectorOptions { Timeout = ListTimeoutMs });
+                // 1. File list, always re-entered so its rows are current — see GoToFileListAsync for
+                //    why being on it already is not the same as it being up to date.
+                await GoToFileListAsync(page, ListTimeoutMs);
 
                 // 2. Activate. Double-click (not single click) is what opens the editor.
                 stage = NavStage.Activate;
@@ -485,6 +479,51 @@ public static class NrEditorStore
             + $"on catalogue route: {(IsOnEditorRoute(page) ? "yes" : "no")}. "
             + $"Attempts: {string.Join("; ", failures)}";
     }
+
+    /// <summary>
+    /// Puts the page on the file-list view with its rows rebuilt, and returns once they have rendered.
+    /// <para>
+    /// <b>The list is built when its route is entered, not from the store.</b> NR's own upload handler
+    /// ends in <c>$router.push('/?id=' + gameSystemIds)</c>, which for a catalogue-only import is a
+    /// push to the route already showing — so no route update fires and the imported catalogue, which
+    /// is in the store, has no row. A driver that then looks for that row waits for something that
+    /// will never appear; this is what read as "mid-spec file load is flaky" (#268). Waiting does not
+    /// help (measured: still absent after twelve seconds) and reloading is worse (the rows collapse to
+    /// the game system alone).
+    /// </para>
+    /// <para>
+    /// So the route is always <em>re-entered</em>, with a query that differs from the last one, which
+    /// is what makes it an update rather than a no-op. Unconditional on purpose: it is correct from
+    /// the editor route and from the list, which is what lets both callers drop the
+    /// "am I on the editor route? then go back" question they used to ask. It also replaces
+    /// <c>GoBackAsync</c>, which navigated by history depth — right only as long as the step before it
+    /// was the one that put us here.
+    /// </para>
+    /// </summary>
+    private static async Task GoToFileListAsync(IPage page, int timeoutMs)
+    {
+        var nonce = Interlocked.Increment(ref _fileListNonce);
+        await page.EvaluateAsync(
+            """
+            (nonce) => {
+                const router = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$router;
+                if (!router) throw new Error('NR Editor UI: no Vue router on the page.');
+                return router.push({ path: '/', query: { bsspec: String(nonce) } });
+            }
+            """,
+            nonce);
+
+        await page.WaitForSelectorAsync(FileListItemSelector,
+            new PageWaitForSelectorOptions { Timeout = timeoutMs });
+    }
+
+    /// <summary>
+    /// Makes each <see cref="GoToFileListAsync"/> a different route from the one before it. Shared
+    /// across pages, which costs nothing: it only has to differ from what this page last pushed, and a
+    /// number that never repeats does that.
+    /// </summary>
+    private static int _fileListNonce;
 
     /// <summary>True when the page is on the catalogue-editor route rather than the file list.</summary>
     private static bool IsOnEditorRoute(IPage page)
@@ -634,17 +673,9 @@ public static class NrEditorStore
     {
         var errors = new List<string>();
 
-        // Return to the file-list view (client-side back — does NOT reset the Pinia store), where the
-        // hidden file input lives.
-        try
-        {
-            await page.GoBackAsync(new PageGoBackOptions { Timeout = ListTimeoutMs });
-            await page.WaitForSelectorAsync(FileListItemSelector, new() { Timeout = ListTimeoutMs });
-        }
-        catch
-        {
-            // Possibly already on the list view; the upload below will fail clearly if not.
-        }
+        // The hidden file input lives on the file-list view, so go there (client-side — this does NOT
+        // reset the Pinia store).
+        await GoToFileListAsync(page, ListTimeoutMs);
 
         var before = await ReadImportedFilesAsync(page);
 
@@ -777,7 +808,11 @@ public static class NrEditorStore
 
         return null;
 
-        static string Key(NrImportedFile f) => $"{f.SystemKey}/{f.Id}/{f.IsGameSystem}";
+        // Name is part of the key because an import may REPLACE a file rather than add one: a payload
+        // carrying an id the editor already holds is a legitimate load, and a key of system+id alone
+        // cannot see it arrive. Two files identical in system, id and name are indistinguishable here,
+        // and a load of one is the one import this cannot detect.
+        static string Key(NrImportedFile f) => $"{f.SystemKey}/{f.Id}/{f.Name}/{f.IsGameSystem}";
     }
 
     /// <summary>

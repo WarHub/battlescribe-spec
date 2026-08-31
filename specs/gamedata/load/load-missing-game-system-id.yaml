@@ -1,0 +1,57 @@
+id: load-missing-game-system-id
+category: load
+description: >
+  A .cat with no gameSystemId is refused by BattleScribe and taken by NewRecruit, and what NewRecruit
+  does with it afterwards is the reason this payload has a spec to itself rather than sitting with
+  the other missing-attribute cases in load-missing-required-attribute.
+
+  gameSystemId is the one required attribute a catalogue declares itself rather than inheriting, and
+  it is the one that says which game system the file belongs to. BattleScribe will not build a
+  catalogue without it. NewRecruit reads the absent attribute as the string "undefined", files the
+  catalogue under a game system by that name, and opens it — after which its editor throws
+  "Cannot read properties of null (reading 'showImported')" and its file list can no longer render,
+  so nothing further can be driven in that session. That is an NR defect rather than a difference of
+  policy, and it is why the newrecruit-ui lane stops here instead of at the assertion.
+
+# newrecruit-ui is opted out of this spec alone — it runs the rest of the load/ family. NR does not
+# refuse this payload, it breaks on it: the import succeeds, the editor opens the catalogue under a
+# game system keyed "undefined", and the next navigation throws. Recorded here rather than asserted,
+# because there is no engine answer to assert — the session is unusable from that point.
+#
+# newrecruit (store-direct) is out for the reason it is out of every load spec: its LoadFile parses
+# the payload with a DOMParser call inside our own adapter, so what it accepts would be our parser's
+# answer and not NewRecruit's.
+engines:
+  newrecruit: skip
+  newrecruit-ui: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Seed System
+  catalogues:
+    - id: cat-1
+      name: Seed Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-seed
+          name: Seed Unit
+          type: unit
+
+steps:
+  - action: openFile
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <catalogue id="cat-no-gsid" name="No Game System Id" revision="1" battleScribeVersion="2.03" library="false" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema"/>
+    expectFailure:
+      messageContains: "on field 'gameSystemId'"
+
+  # The refusal changed nothing: the seed catalogue is still the file in hand.
+  - expectedState:
+      catalogues:
+        - id: cat-1
+          name: Seed Catalogue
+          selectionEntries:
+            - id: se-seed
+              name: Seed Unit
