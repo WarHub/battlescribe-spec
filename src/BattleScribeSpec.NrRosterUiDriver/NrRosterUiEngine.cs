@@ -104,6 +104,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
             await Browser.WaitForPiniaAsync();
         }
 
+        // Before any list exists. Frozen only: against a live NR a refused save is real news.
+        if (Browser.IsFrozen)
+        {
+            await NrUiSetup.SuppressServerSaveNoticeAsync(Browser.Page);
+        }
+
         // Load game data into NR (only once per unique system in frozen mode)
         if (!_systemLoaded || _loadedSystemId != gameSystem.Id)
         {

@@ -370,10 +370,11 @@ public static class NrUiSetup
         string? preferredCatalogueName = null,
         string? preferredForceEntryId = null)
     {
-        // Navigate to MyLists
-        var listsLink = page.Locator("a[href*='MyLists']").First;
+        // By route, not by clicking the navbar link: NR's message bar renders over that link, and
+        // Playwright will not click an element another one covers. Routes are the stable contract
+        // (see NewRecruitBrowser.PushRouteAsync); navbar controls are NR's to restyle.
         await NrUiTiming.MeasureAsync("create-roster/click-mylists", () =>
-            ClickWhenReadyAsync(page, listsLink, "MyLists nav link"));
+            NewRecruitBrowser.PushRouteAsync(page, "/app/MyLists"));
 
         // Wait for the MyLists route, rather than for 500ms to pass.
         //
@@ -1060,5 +1061,68 @@ public static class NrUiSetup
                 }
             }
             """);
+    }
+
+    /// <summary>
+    /// Stops NR reporting the server-save refusal that frozen replay manufactures, so its message bar
+    /// never covers the controls setup has to click. Idempotent; call once Pinia exists.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Frozen replay fulfils every <c>/api/</c> call with <c>{}</c> because there is no server, so
+    /// every list save comes back "rejected" and NR reports it. The notice is never news here, and it
+    /// is expensive: Playwright will not click an element the banner covers.
+    /// </para>
+    /// <para>
+    /// Silenced at NR's reporter rather than by clearing the message bar, which cannot distinguish a
+    /// manufactured notice from a message a spec asserts on. Throws rather than skipping if it cannot
+    /// install — a suppression that quietly does nothing costs the lane twice its runtime with
+    /// nothing to point at. See docs/nr-ui-roster-coverage.md.
+    /// </para>
+    /// </remarks>
+    public static async Task SuppressServerSaveNoticeAsync(IPage page)
+    {
+        var status = await page.EvaluateAsync<string>("""
+            () => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const lists = pinia?._s?.get('lists');
+                if (!lists) { return 'no-store'; }
+                if (lists.__bsspecServerSaveNoticeSuppressed) { return 'already'; }
+                if (typeof lists.reportListSaveRejected !== 'function') { return 'no-reporter'; }
+                const stub = function (row) {
+                    console.warn('[bsspec] server-save refusal suppressed (frozen replay has no server): '
+                        + (row && row.list_key));
+                };
+                stub.__bsspecStub = true;
+                lists.reportListSaveRejected = stub;
+                // Pinia hands out a proxy; a write it declines to keep would suppress nothing. Read
+                // back by marker as well as by identity, because a store that re-binds its actions
+                // would hand back a different function object having kept the write.
+                const back = lists.reportListSaveRejected;
+                if (back !== stub && back?.__bsspecStub !== true) { return 'write-ignored'; }
+                lists.__bsspecServerSaveNoticeSuppressed = true;
+                return 'installed';
+            }
+            """);
+
+        if (status is "installed" or "already")
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(status switch
+        {
+            "no-store" => "NR UI: no 'lists' Pinia store, so NR's server-save refusal could not be "
+                + "silenced. The store id is what moved — every other step that reaches this store "
+                + "is about to fail too.",
+            "no-reporter" => "NR UI: lists.reportListSaveRejected is gone. If NR renamed it, find the "
+                + "new name and stub that — the banner it posts covers the controls setup clicks, "
+                + "and waiting each one out costs the lane roughly double its runtime. If NR stopped "
+                + "reporting refusals at all, delete this method and its caller.",
+            "write-ignored" => "NR UI: assigning lists.reportListSaveRejected did not stick, so the "
+                + "refusal banner will still be posted. NR's store proxy now refuses the write.",
+            _ => $"NR UI: server-save notice suppression reported '{status}'.",
+        });
     }
 }
