@@ -464,10 +464,14 @@ public class RosterActions {
         JsonObject p = parseParams(params);
         String forceId = requireString(p, "forceId");
 
+        // "Force not found" on its own cannot say whether the force was never added, was added
+        // somewhere else, or is gone because the roster under the app changed. Name what IS there,
+        // which is how the difference shows up: a warm instance that reloaded a roster reports a
+        // roster full of ids the spec has never seen.
         JsonObject before = readRosterState();
-        // Verify force exists
         if (findForceById(before, forceId) == null) {
-            throw new RuntimeException("Force not found: " + forceId);
+            throw new RuntimeException(
+                    "Force not found: " + forceId + "; forces present: " + describeIds(allForces(before)));
         }
 
         // Open Edit Roster
