@@ -13,7 +13,7 @@ what it turned into. It is wired in now; see [In CI](#in-ci).
 | Specs selected | 367 | 367 |
 | **Passed** | **284 (77%)** | **367 (100%)** |
 | Failed | 83 | 0 |
-| Wall-clock | 29m02s | 3m55s / 3m36s, 2 shards in parallel (jobs 6m33s / 6m20s) |
+| Wall-clock | 29m02s | ~13m, one job (measured 3m55s / 3m36s when the lane was still split in two) |
 
 The corpus has grown since: the lane selects every roster spec, and #450 both un-skipped the
 `roundtrip` category for this engine and added two specs to it. Re-measured unsharded on 2026-08-28
@@ -288,12 +288,15 @@ success. The failure surfaced four steps later, as a value:
 
 ### The shards hid it, by luck
 
-`scope/scope-roster` hashes to shard 0; `condition/condition-scope-roster` and
+`scope/scope-roster` hashed to shard 0; `condition/condition-scope-roster` and
 `scope/scope-roster-cross-force` both to shard 1. No shard held both, so no CI run ever put the
 decoy in front of the victim — established by enumerating the real test list, not by recomputing the
-hash. That is a property of where the current 2-way boundary happens to fall and of nothing else:
-adding one spec, or changing `ShardCount`, re-rolls every assignment. The lane's green in CI was
-never evidence the defect was absent.
+hash. That was a property of where the 2-way boundary happened to fall and of nothing else: adding
+one spec, or changing the shard count, re-rolled every assignment. The lane's green in CI was never
+evidence the defect was absent.
+
+**The lane no longer shards** — see [In CI](#in-ci). A split lane splits the cross-spec chain, and
+the chain is the thing a warm-reuse lane exists to test.
 
 ### The second victim passed
 
@@ -380,10 +383,17 @@ two together. Recorded as a lead, not diagnosed, and not fixed here.
 
 ## In CI
 
-The lane now runs as the `roster` half of `thorough-ui-bs`, sharded 2 ways on the same `Shard` trait
-as the gamedata half — a `suite` axis on the existing job rather than a second job, because the two
-halves need identical artifacts, JDK, agent build and `xvfb`, and a copied setup block is one that
-drifts.
+The lane runs as the `roster` half of `thorough-ui-bs` — a `suite` axis on the existing job rather
+than a second job, because the two halves need identical artifacts, JDK, agent build and `xvfb`, and
+a copied setup block is one that drifts.
+
+**It runs whole.** It was split two ways for a while, and the split was a mistake of exactly the kind
+this document records twice: both defects the lane has found lived in what one spec leaves for the
+next, and a shard boundary between two specs is a boundary the defect cannot cross. Sharding also
+made the `Shard` trait load-bearing, so a test that carried none — `BsUiGameSystemSelectionTests`,
+which had to be traited by hand — ran in neither job while looking covered. ~13 minutes in one job,
+inside an opt-in workflow whose long pole is a 33-minute `thorough-conformance`, is not a cost worth
+that.
 
 It is **opt-in**, like every other thorough lane: `workflow_dispatch`, the weekly Monday schedule, a
 `thorough-ci` label on a PR, a `[nr-test]` commit message, or a PR touching `testdata.json`. So a
@@ -399,10 +409,8 @@ zero skipped, on either.** It was not a dedicated run: #338 is the NR-snapshot b
 the `thorough-ci` label, so the opt-in lanes fired on it and the confirmation arrived as a by-product
 of the bump.
 
-That run predates the game-system commits above, and two things about it have moved since. Shard 0
-now selects 196 tests rather than 195, because `BsUiGameSystemSelectionTests` is traited `Shard 0` —
-a test carrying no `Shard` trait matches neither filter and would run nowhere while looking covered.
-And one of the 367 greens was not what it looked like: `profile-publication` passed on
-`infolink-profile-publication`'s data, in that run and in every one before it. The counts stand as
-measured; what one of the passes established does not. No sharded run has been made on the current
-stack — the four unsharded runs above are what confirms it.
+That run predates both the game-system commits above and the return to one job, so read it as the
+lane clearing its own bar rather than as a current measurement. One of its 367 greens was also not
+what it looked like: `profile-publication` passed on `infolink-profile-publication`'s data, in that
+run and in every one before it. The counts stand as measured; what one of the passes established
+does not. The unsharded runs above are what confirms the current stack.

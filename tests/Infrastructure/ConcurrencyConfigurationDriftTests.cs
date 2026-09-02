@@ -652,7 +652,7 @@ public sealed class ConcurrencyConfigurationDriftTests
         ("FrozenNrGameDataUi", true, "Playwright over the frozen NR Editor snapshot; 51.8s"),
 
         // ── Excluded: needs the BattleScribe desktop app (setup.ps1 artifacts + Java agent + a
-        //    display). CI's `thorough-ui-bs` job runs both halves, sharded.
+        //    display). CI's `thorough-ui-bs` job runs both halves, whole.
         ("BsRosterUi", false, "launches the BattleScribe desktop app; 687.8s, 367 specs, sequential"),
         ("BsGameDataUi", false, "launches the BattleScribe desktop app"),
 
