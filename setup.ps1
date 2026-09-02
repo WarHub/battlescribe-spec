@@ -169,6 +169,36 @@ Re-pin it:
     if (Test-Path $gitDir) { Remove-Item $gitDir -Recurse -Force }
 }
 
+# Checks the SHA-256 content pins an entry declares, and returns the first mismatch as a sentence
+# or $null when every declared file matches.
+#
+# A release tag is a label the publisher can move, and the marker beside a fixture records the tag
+# that was ASKED for, not the bytes that arrived — so a fixture edited in place, half-downloaded, or
+# served from a re-cut release passes a tag check and replays as if it were the pin. A hash is the
+# only part of this that the fixture itself has to satisfy.
+#
+# Archive entries need none: a commit SHA already is a content hash, and Install-PinnedArchive
+# refuses any checkout that is not at it. A content pin covers exactly the files it names.
+function Get-ContentPinMismatch {
+    param(
+        [Parameter(Mandatory)]$Sha256,
+        [Parameter(Mandatory)][string]$Destination
+    )
+
+    foreach ($file in $Sha256.PSObject.Properties.Name) {
+        $path = Join-Path $Destination $file
+        if (-not (Test-Path $path)) { return "'$file' is missing" }
+
+        $expected = "$($Sha256.$file)".Trim()
+        $actual = (Get-FileHash $path -Algorithm SHA256).Hash
+        if ($actual -ne $expected.ToUpperInvariant()) {
+            return "'$file' is sha256 $($actual.ToLowerInvariant()), testdata.json pins $expected"
+        }
+    }
+
+    return $null
+}
+
 Write-Host "Setting up battlescribe-spec dependencies..." -ForegroundColor Cyan
 Write-Host "  Repo root: $repoRoot"
 Write-Host ""
@@ -226,10 +256,18 @@ if (Test-Path $configPath) {
                 $pattern = if ($entry.PSObject.Properties['pattern']) { $entry.pattern } else { $null }
                 Write-Host "[$key] release: $repo @ $tag" -ForegroundColor Cyan
 
+                $contentPins = if ($entry.PSObject.Properties['sha256']) { $entry.sha256 } else { $null }
+
                 $tagMarker = Join-Path $destDir '.tag'
                 if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $tag)) {
-                    Write-Host "  [OK] Already downloaded ($tag)" -ForegroundColor Green
-                    continue
+                    $mismatch = if ($contentPins) { Get-ContentPinMismatch $contentPins $destDir } else { $null }
+                    if (-not $mismatch) {
+                        Write-Host "  [OK] Already downloaded ($tag)" -ForegroundColor Green
+                        continue
+                    }
+                    # The marker claims the pin and the bytes say otherwise, so the marker is the
+                    # thing that is wrong. Re-download over it rather than trusting either.
+                    Write-Warning "[$key] $mismatch — re-downloading."
                 }
 
                 if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force }
@@ -255,6 +293,18 @@ if (Test-Path $configPath) {
                     Remove-Item $zip.FullName -Force
                 }
 
+                if ($contentPins) {
+                    $mismatch = Get-ContentPinMismatch $contentPins $destDir
+                    if ($mismatch) {
+                        throw "[$key] release $tag of $repo does not match its content pin: $mismatch. " +
+                            "Refusing to write the marker: either the release was re-cut under the same " +
+                            "tag, or the download is damaged. Fix the pin in testdata.json (both 'tag' " +
+                            "and 'sha256') rather than the fixture."
+                    }
+                }
+
+                # Written last, and only after both the tag and the declared bytes are accounted for:
+                # the marker is an assertion that the pin is on disk, not a log of what was fetched.
                 $tag | Out-File -FilePath $tagMarker -NoNewline -Encoding utf8
                 Write-Host "  [OK] Downloaded to $destDir" -ForegroundColor Green
             }

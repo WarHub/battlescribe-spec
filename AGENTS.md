@@ -203,6 +203,11 @@ editing specs requires no HAR changes; new specs work immediately. The HAR is ve
 NR client version (pinned in `testdata.json`), updated separately via
 [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) releases.
 
+The pin has two halves: a `tag` naming the release and a `sha256` map naming the bytes it must
+contain. `setup.ps1` refuses a download that misses the hash, and `TestDataPinDriftTests` fails a
+working copy whose fixture is not what the pin declares — so a HAR swapped in by hand is a failed
+lint run, not a green suite replaying something nobody chose.
+
 
 **A snapshot is a freeze over a moving target.** NR is actively developed; each bump replaces the
 whole application, and the app owes us nothing — routes, controls, stores and messages all change
