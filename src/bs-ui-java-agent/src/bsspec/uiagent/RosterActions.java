@@ -58,6 +58,18 @@ public class RosterActions {
      */
     private static final String CONTINUE_WINDOW = "Continue?";
 
+    /**
+     * The distinguishing text of BattleScribe's reload prompt, which shares the generic "Confirm"
+     * title with other dialogs and can only be told apart by what it says.
+     */
+    private static final String RELOAD_PROMPT_TEXT = "modified outside of BattleScribe";
+
+    /**
+     * The distinguishing text of BattleScribe's unsaved-roster prompt. Matched alongside the title
+     * so a future dialog reusing {@value #CONTINUE_WINDOW} is not dismissed by accident.
+     */
+    private static final String UNSAVED_PROMPT_TEXT = "has not been saved";
+
     /** Passed as currentCount when the control must be a spinner and no count applies. */
     private static final int NO_COUNT_CONTEXT = -1;
 
@@ -2097,12 +2109,57 @@ public class RosterActions {
         return sb.append("]").toString();
     }
 
+
+    /**
+     * Answers the prompts warm reuse makes reachable — BattleScribe's "A file was modified outside
+     * of BattleScribe. Would you like to reload your roster?" and its "Roster has not been saved.
+     * Do you want to save the Roster now?" — with NO, wherever they appear. Reports whether it did.
+     *
+     * <p>Both are the app noticing the harness rather than news about the roster under test. The
+     * harness stages game data and roster payloads on disk under a running app that watches what it
+     * loaded, and it abandons each spec's roster unsaved by design. Neither prompt can be tolerated
+     * where it lands: they are modal, so one left standing outlives the spec that provoked it and
+     * arrives in the NEXT spec's setup as an unexpected dialog, which poisons the engine and forces
+     * a cold start.
+     *
+     * <p>NO in both cases, and for one reason: a spec's roster is the one it built through the UI.
+     * Saving would leak it into the next spec; reloading would replace it with one re-read from
+     * disk, which is where "Force not found" against ids no spec has seen comes from.
+     *
+     * <p>The reload prompt is matched on TEXT, because it wears the generic {@value #CONFIRM_WINDOW}
+     * title that other dialogs also use and matching the title alone would dismiss confirmations a
+     * spec is asserting on. {@link #waitForNewRosterWindowDismissingContinuePrompt} handles the
+     * unsaved prompt itself in the one wait that expects it; this covers every other wait, which is
+     * the gap that let it through.
+     */
+    private boolean dismissWarmReusePromptIfPresent() {
+        String window = runOnFxGet(() -> {
+            for (DialogInspector.DialogInfo dialog : DialogInspector.listOpenDialogs()) {
+                if (dialog.title == null || dialog.text == null) {
+                    continue;
+                }
+                if (dialog.title.contains(CONFIRM_WINDOW) && dialog.text.contains(RELOAD_PROMPT_TEXT)) {
+                    return CONFIRM_WINDOW;
+                }
+                if (dialog.title.contains(CONTINUE_WINDOW) && dialog.text.contains(UNSAVED_PROMPT_TEXT)) {
+                    return CONTINUE_WINDOW;
+                }
+            }
+            return null;
+        });
+        if (window == null) {
+            return false;
+        }
+        runOnFx(() -> fireButtonAsync("#btnNegative", window));
+        return true;
+    }
     private void waitForWindow(String titleFragment, String... alsoAllowed) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
         String[] allowed = withTitle(titleFragment, alsoAllowed);
         while (System.currentTimeMillis() < deadline) {
             Boolean found = runOnFxGet(() -> hasWindow(titleFragment));
             if (found) return;
+            if (dismissWarmReusePromptIfPresent()) { sleep(POLL_INTERVAL_MS); continue; }
             DialogInspector.assertNoUnexpectedModals(allowed);
             sleep(POLL_INTERVAL_MS);
         }
@@ -2134,6 +2191,7 @@ public class RosterActions {
             // Both NEW_ROSTER_WINDOW (what we're waiting for — it can open in the gap between the
             // hasWindow check above and this assert) and CONTINUE_WINDOW (declared expected by this
             // action; may still be closing after we fired NO) are legitimate here.
+            if (dismissWarmReusePromptIfPresent()) { sleep(POLL_INTERVAL_MS); continue; }
             DialogInspector.assertNoUnexpectedModals(NEW_ROSTER_WINDOW, CONTINUE_WINDOW);
             sleep(POLL_INTERVAL_MS);
         }
@@ -2153,6 +2211,7 @@ public class RosterActions {
         while (System.currentTimeMillis() < deadline) {
             Boolean found = runOnFxGet(() -> hasWindow(titleFragment));
             if (!found) return;
+            if (dismissWarmReusePromptIfPresent()) { sleep(POLL_INTERVAL_MS); continue; }
             DialogInspector.assertNoUnexpectedModals(allowed);
             sleep(POLL_INTERVAL_MS);
         }
