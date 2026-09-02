@@ -492,28 +492,34 @@ jobs:
           path: artifacts/telemetry/
           if-no-files-found: ignore
 
-  # ── THOROUGH: the BS desktop UI, BOTH halves of it (opt-in). Warm start + sharded across N jobs.
+  # ── THOROUGH: the BS desktop UI, BOTH halves of it (opt-in). Warm start, one job per half. ──
   #
   #    The `suite` axis exists because this job used to run one half. `BsGameDataUiConformanceTests`
   #    covered the Data Editor; `BsRosterUiConformanceTests` covered the Roster Editor and ran
   #    nowhere — so every change to BsUiRosterEngine and RosterActions.java reached main having been
-  #    exercised by unit tests and one teardown test. That class was written to be sharded on the
-  #    same trait for exactly this, and then not wired up (#355): the lane was held back until its
-  #    failures were each fixed or declared, which #354 completed at 367/367.
+  #    exercised by unit tests and one teardown test (#355).
   #
   #    A matrix axis and not a second job: the two halves need identical artifacts, JDK, agent build
   #    and xvfb, and a copy of fifty lines of setup is a copy that drifts. Only the filter and the
   #    artifact names differ.
   #
-  #    The shard axis MUST match ConformanceTestBase.ShardCount and
-  #    GameDataConformanceTestBase.ShardCount, which are equal for this reason.
+  #    UNSHARDED, deliberately. Each half reuses one warm app across its specs, so what a spec leaves
+  #    behind is what the next one starts from — and splitting the lane splits exactly the chain the
+  #    lane exists to exercise. Both defects found in it so far lived in that chain and neither could
+  #    reach a split lane: a roster built on the PREVIOUS spec's game system (the two specs landed in
+  #    different shards — docs/bs-ui-roster-coverage.md, "The shards hid it, by luck") and a modal
+  #    prompt left standing into the next spec's setup. Sharding also cost a `Shard` trait on every
+  #    row, and a test that carried none ran in neither job while looking covered.
+  #
+  #    It is bought with wall-clock nobody waits on: ~13m for the roster half against a
+  #    thorough-conformance that takes ~33m in the same run.
   thorough-ui-bs:
     needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
     runs-on: ubuntu-latest
-    # A ceiling, not a target: the roster lane measures ~13m unsharded and the gamedata lane less,
-    # so anything approaching this is a hang. Without it both inherit GitHub's 6-hour default, and a
-    # wedged JavaFX app is the failure this suite has most often had.
+    # A ceiling, not a target: the roster lane measures ~13m and the gamedata lane less, so anything
+    # approaching this is a hang. Without it both inherit GitHub's 6-hour default, and a wedged
+    # JavaFX app is the failure this suite has most often had.
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -521,7 +527,6 @@ jobs:
         suite:
           - { name: gamedata, engine: BsGameDataUi, diagnostics: artifacts/bs-gamedata-ui-diagnostics/ }
           - { name: roster, engine: BsRosterUi, diagnostics: artifacts/bs-ui-diagnostics/ }
-        shard: [0, 1]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -564,13 +569,13 @@ jobs:
       # "warm start" is ConcurrencyPolicy.For(machine, battlescribe-ui).ReuseGameData — the fixture
       # asks the policy. It used to be BS_UI_KEEP_ALIVE, set here and nowhere else, so this suite ran
       # warm in CI and cold on every developer's machine. Both now run warm, from one decision.
-      - name: BS ${{ matrix.suite.name }} UI (shard ${{ matrix.shard }}, warm start)
-        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=${{ matrix.suite.engine }}&Shard=${{ matrix.shard }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+      - name: BS ${{ matrix.suite.name }} UI (warm start)
+        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=${{ matrix.suite.engine }}" --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: thorough-ui-bs-diagnostics-${{ matrix.suite.name }}-${{ matrix.shard }}
+          name: thorough-ui-bs-diagnostics-${{ matrix.suite.name }}
           path: |
             ${{ matrix.suite.diagnostics }}
           # The gamedata half writes none today — BsGameDataUiDiagnostics has no caller — so an empty

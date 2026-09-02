@@ -19,14 +19,13 @@ namespace BattleScribeSpec.Tests;
 /// so a shared home would hand every later conformance spec an extra system to match against.
 /// </para>
 /// <para>
-/// <c>Engine=BsRosterUi</c> is what keeps this out of <c>pre-push</c>, which does not launch the
-/// desktop app. <c>Shard</c> has to be set by hand: CI's <c>thorough-ui-bs</c> matrix filters
-/// <c>Engine=…&amp;Shard=…</c>, so a test carrying no <c>Shard</c> trait runs in neither job.
+/// <c>Engine=BsRosterUi</c> is the whole selection: it is what puts this in CI's
+/// <c>thorough-ui-bs</c> lane and what keeps it out of <c>pre-push</c>, which does not launch the
+/// desktop app.
 /// </para>
 /// </remarks>
 [Collection("BsRosterUi")]
 [Trait("Engine", "BsRosterUi")]
-[Trait("Shard", "0")]
 public sealed class BsUiGameSystemSelectionTests
 {
     private const string TargetGameSystemId = "collide-target";

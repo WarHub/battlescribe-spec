@@ -32,8 +32,9 @@ namespace BattleScribeSpec.Tests;
 /// pass is reported — the same contract the NR-UI roster lane uses.
 /// </para>
 /// <para>
-/// Sequential by design: one desktop app instance handles one spec at a time. Sharded on the same
-/// <c>Shard</c> trait as the gamedata lane so CI's existing 2-way matrix covers both halves.
+/// Sequential by design: one desktop app instance handles one spec at a time, and it is reused
+/// across them — so the lane runs whole, in one job. Splitting it splits the cross-spec chain that
+/// is the only thing exercising reuse.
 /// </para>
 /// <para>
 /// Skipped when the fixture is unavailable (BattleScribe artifacts or the agent JAR absent — run

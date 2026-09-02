@@ -26,13 +26,6 @@ public abstract class GameDataConformanceTestBase
     /// </summary>
     protected abstract IGameDataEngine? GetEngine();
 
-    /// <summary>
-    /// Number of shards the GameData UI suites can be split across in CI (see the
-    /// <c>Shard</c> trait below and the matrix in <c>.github/workflows/ci.yml</c>).
-    /// Changing this MUST be mirrored in the CI matrix.
-    /// </summary>
-    public const int ShardCount = 2;
-
     public static TheoryDataRow<string, string>[] AllGameDataSpecs()
     {
         var specsDir = SpecLoader.FindGameDataSpecsDirectory();
@@ -45,9 +38,6 @@ public abstract class GameDataConformanceTestBase
         {
             var specName = $"{s.Category}/{s.Id}";
             var row = new TheoryDataRow<string, string>(s.Path, specName);
-            // Stable, process-independent shard assignment (string.GetHashCode is randomized
-            // per run and would make Shard filters non-deterministic across CI matrix jobs).
-            row.Traits.Add("Shard", [(StableHash(specName) % ShardCount).ToString()]);
             try
             {
                 var spec = SpecLoader.LoadGameData(s.Path);
@@ -62,22 +52,6 @@ public abstract class GameDataConformanceTestBase
             }
             return row;
         })];
-    }
-
-    /// <summary>Deterministic FNV-1a 32-bit hash, stable across processes and platforms.</summary>
-    private static int StableHash(string value)
-    {
-        unchecked
-        {
-            const uint offset = 2166136261;
-            const uint prime = 16777619;
-            var hash = offset;
-            foreach (var c in value)
-            {
-                hash = (hash ^ c) * prime;
-            }
-            return (int)(hash & 0x7FFFFFFF);
-        }
     }
 
     protected void RunSpec(string specPath, string specName)

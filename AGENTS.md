@@ -177,7 +177,7 @@ Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
 
 | Not in `pre-push` | Run it with | Covered in CI by |
 |---|---|---|
-| `BsRosterUi`, `BsGameDataUi` — launch the real BattleScribe desktop app | `-p:TestProfile=bs-ui-roster` / `bs-ui-gamedata` | `thorough-ui-bs` (sharded, opt-in) |
+| `BsRosterUi`, `BsGameDataUi` — launch the real BattleScribe desktop app | `-p:TestProfile=bs-ui-roster` / `bs-ui-gamedata` | `thorough-ui-bs` (opt-in) |
 | `LiveNr*` — traffic to a third party's production site | `-p:TestProfile=nr-live*`, `nr-editor-*-live` | `nr-conformance` (opt-in) |
 | `Mode=Sequential` — manual-only, gated behind `NR_SEQUENTIAL` | `NR_SEQUENTIAL=1` + the matching profile | — |
 
@@ -243,11 +243,11 @@ and the Roster Editor. Mutations go through the real UI; state is read via the J
 
 ```bash
 dotnet test -p:TestProfile=bs-ui-gamedata   # Data Editor  (Engine=BsGameDataUi)
-dotnet test -p:TestProfile=bs-ui-roster     # Roster Editor (Engine=BsRosterUi) — 367 specs, ~11.5 min
+dotnet test -p:TestProfile=bs-ui-roster     # Roster Editor (Engine=BsRosterUi) — every roster spec, ~13 min
 ```
 
 **Neither is in `pre-push`**, and that is deliberate: they need the app, a display, and minutes.
-CI's `thorough-ui-bs` job runs both halves sharded, but nothing runs them on your machine unless you
+CI's `thorough-ui-bs` job runs both halves whole, but nothing runs them on your machine unless you
 do — so run them when you touch `BsUiRosterEngine`, `BsGameDataUiEngine`, or
 `src/bs-ui-java-agent/`.
 

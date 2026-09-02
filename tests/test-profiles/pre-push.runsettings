@@ -8,7 +8,7 @@
      table stop agreeing:
 
        * BsRosterUi / BsGameDataUi — launch the real BattleScribe desktop app. Run them deliberately
-         (bs-ui-roster / bs-ui-gamedata profiles); CI's `thorough-ui-bs` job runs both, sharded.
+         (bs-ui-roster / bs-ui-gamedata profiles); CI's `thorough-ui-bs` job runs both, whole.
        * LiveNr* — open sessions on a third party's production website.
        * Mode=Sequential — manual-only, gated behind NR_SEQUENTIAL.
 
