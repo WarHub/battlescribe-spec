@@ -7,26 +7,37 @@ description: >
   NewRecruit's UI has no count control on a root selection at all. It is legal XML all the same,
   and the two applications read it differently.
 
-  BattleScribe restores the numbers and costs them: 3×25 + 2×10 + 5×7 = 130. NewRecruit clamps
-  every root selection to 1 and the same file becomes a 70-point army — two Characters and a
-  Squad gone, no error, no refusal, the load reported as successful.
+  BattleScribe restores the numbers and costs them: 3×25 + 2×10 + 5×7 = 130. Read that last term
+  slowly, because it is the one a reader gets wrong — the Trooper sits inside a Squad of 2 and
+  still costs 35, not 70. A .ros number is absolute, not per-parent, so five Troopers is five
+  Troopers however many Squads they are written under.
+
+  NewRecruit clamps every root selection to 1 and the same file becomes a 70-point army — two
+  Characters and a Squad gone, no error, no refusal, the load reported as successful.
 
   This one is an application difference and not an adapter's: both BattleScribe lanes give 130 and
   both NewRecruit lanes give 70, so the store-direct engine and the app driven through its own
   import control agree with each other. Worth stating because the sibling spec
   roundtrip-load-number-on-parent-selection looks similar and is not — there the two NR lanes
-  disagree, and the divergence turned out to belong to our adapter rather than to NewRecruit.
+  disagree, and they do not even read the same object, so whose divergence it is stays open.
 
-  Tagged as a bug rather than a design difference because the loss is the importer's and not the
-  model's. NR's model has no root selection with number=3, but it does have three root selections,
-  which is exactly how NR itself represents the same army when a user builds it; the faithful
-  import was available and was not taken. What is lost is silent and arithmetic, which is the
-  worst combination — a roster that still looks like a roster and no longer costs what it did.
+  Tagged `undefined-behavior` rather than `newrecruit-bug`, and the distinction is worth stating
+  because the temptation runs the other way. Nothing defines this input: BattleScribe's own editor
+  no more writes a quantified root than NewRecruit's does, so preserving the number is as much an
+  answer to an unasked question as discarding it, and "which of the two is the bug" is a verdict
+  the measurement does not reach.
+
+  What the measurement does reach is that one of the two answers loses information silently. NR's
+  model has no root selection with number=3, but it does have three root selections — exactly how
+  NR represents that army when a user builds it — so a faithful import was available and was not
+  taken. The loss is silent and arithmetic, which is the worst combination: a roster that still
+  looks like a roster and no longer costs what it did. That is the argument for NR refusing this
+  file rather than accepting it lossily, and it is an argument, not a finding.
 
   The nested Trooper is the control. It keeps its number 5 and its 35 points on all four lanes, so
   what the assertion measures is the clamp on the root level specifically, not a general inability
   to carry a quantity through a load (roundtrip-load-selection-numbers is that, and passes).
-tags: [number, newrecruit-bug]
+tags: [number, undefined-behavior]
 
 setup:
   gameSystem:
@@ -68,8 +79,8 @@ setup:
 
 steps:
   # A force before the load, so the payload replaces a roster rather than arriving into an empty
-  # one — and because battlescribe-ui's load path needs the editor engaged once first
-  # (roundtrip-load-simple-roster is where that is recorded).
+  # one — and because battlescribe-ui reads back an empty roster when a load is a spec's first
+  # step, which roundtrip-load-simple-roster records rather than works around.
   - action: addForce
     forceEntryId: fe-1
 

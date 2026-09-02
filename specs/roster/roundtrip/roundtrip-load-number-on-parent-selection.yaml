@@ -13,19 +13,32 @@ description: >
   four on the fourth, and asking how many Veterans there are gets a different answer depending on
   whether it counts nodes or reads numbers.
 
-  The split is one adapter's, not one application's, which is why the base expectation is the
-  app's. `newrecruit-ui` drives NewRecruit through the import control a user would use and gets
-  one node at number 3; `newrecruit` reaches the same lists-store importBs() action directly and
-  gets three. AGENTS.md settles which of those speaks for NewRecruit — the app does — so the base
-  holds for three lanes, `newrecruit-ui` restates it to stop inheriting the store-direct block,
-  and that block records a deviation rather than a difference between two engines.
+  The base expectation is what a user of NewRecruit ends up with: `newrecruit-ui` imports the file
+  through the control a user would use and shows one node at number 3, the same as both
+  BattleScribe lanes. That is the answer the suite should hold every engine to, and the
+  `newrecruit-ui` block restates it only to stop that lane inheriting the store-direct block below.
 
-  What the deviation is NOT is a limit of that adapter's model. Build the same shape through the
-  editor on the same engine — select a Veteran, give it a Grenade, set its count to 3 — and it
-  reports one node at number 3, exactly as the app does. So the model holds this shape fine and
-  something on the import path does not produce it. Whether the three nodes are created by the
-  import or merely surfaced by that adapter's state reader is the open question, and it is a
-  question about our adapter rather than about NewRecruit.
+  WHOSE the split is, though, is deliberately not claimed here, because the two NewRecruit lanes do
+  not read the same object. `newrecruit` reads `loaded.army` — the value `importBs` returns, in
+  memory, immediately. `newrecruit-ui` navigates to the saved list and reads the roster NewRecruit
+  re-hydrated from it. So this is NR's import output measured against NR's persisted-and-reloaded
+  roster, and at least three explanations fit: our adapter reconstructs the tree wrongly, NR's
+  importer really does make three nodes and NR's own rehydrate collapses them, or the two lanes'
+  state readers disagree about how to present the same store. Only the second makes the divergence
+  NewRecruit's, and nothing measured so far separates them.
+
+  What is ruled out is a limit of the store-direct adapter's model: build the same shape through
+  the editor on that engine — select a Veteran, give it a Grenade, set its count to 3 — and it
+  reports one node at number 3. The model holds the shape; something about arriving by file does
+  not produce it.
+
+  Worth knowing while reading this: the same signature — N nodes at amount 1 where NR itself makes
+  one node at amount N — was found and fixed once before in this adapter, on the setSelectionCount
+  path, where it was an `addInstance()` loop standing in for NR's own `setAmount` (see
+  docs/nr-behavioral-differences.md, "setSelectionCount on Child Entries — Fixed"). That is a lead,
+  not the conclusion, and AGENTS.md is explicit that a divergence which turns out to be one
+  implementation's artefact should end with one fewer override in the suite. If it does, this
+  block and the `newrecruit-ui` one both go.
 tags: [number, nested]
 
 setup:
@@ -76,8 +89,8 @@ setup:
 
 steps:
   # A force before the load, so the payload replaces a roster rather than arriving into an empty
-  # one — and because battlescribe-ui's load path needs the editor engaged once first
-  # (roundtrip-load-simple-roster is where that is recorded).
+  # one — and because battlescribe-ui reads back an empty roster when a load is a spec's first
+  # step, which roundtrip-load-simple-roster records rather than works around.
   - action: addForce
     forceEntryId: fe-1
 

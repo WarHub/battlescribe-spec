@@ -11,9 +11,13 @@ description: >
   one it must derive — and the roster-level totals (15 and 6) are reachable only by recosting
   every selection against the catalogue, per type, and summing the types independently.
 
-  Relic precedes Squad in the payload only so that payload order and the alphabetical order a
-  force imposes on its selections (ordering-selections-alphabetical) are the same order. Nothing
-  here is a claim about ordering, and the names are picked so that this spec cannot become one.
+  Relic precedes Squad in the payload only so that payload order and alphabetical order are the
+  same order, which keeps the assertion true whatever the engines do with a loaded force's
+  selections. Note that nothing pins what they do: ordering-selections-alphabetical establishes
+  the alphabetical rule for selections added through the editor, not for selections arriving from
+  a file, and roundtrip-load-multiple-forces records that load ordering was in fact surprising at
+  the force level. Nothing here is a claim about ordering; the names are picked so that this spec
+  cannot become one.
 tags: [cost, multi-type]
 
 setup:
@@ -56,8 +60,8 @@ setup:
 
 steps:
   # A force before the load, so the payload replaces a roster rather than arriving into an empty
-  # one — and because battlescribe-ui's load path needs the editor engaged once first
-  # (roundtrip-load-simple-roster is where that is recorded).
+  # one — and because battlescribe-ui reads back an empty roster when a load is a spec's first
+  # step, which roundtrip-load-simple-roster records rather than works around.
   - action: addForce
     forceEntryId: fe-1
 
@@ -117,6 +121,7 @@ steps:
                 - name: PL
                   typeId: ct-pl
                   value: 4
+              childCount: 0
             - name: Squad
               entryId: se-squad
               type: unit
@@ -128,3 +133,4 @@ steps:
                 - name: PL
                   typeId: ct-pl
                   value: 2
+              childCount: 0

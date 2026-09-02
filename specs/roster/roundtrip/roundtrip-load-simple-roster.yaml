@@ -16,17 +16,26 @@ description: >
   writing the spec: three engines load a roster into an empty session and the fourth quietly does
   not, and nothing in the suite could have said so.
 
-  The payload's roster-level <costs> is empty and no selection carries one at all, and the force
-  carries no <categories>, so 35 = 25 + 10 and the categorisation are the engine's answers rather
-  than the file's. No error assertion appears anywhere in the spec: a step's expectedState without
-  one asserts zero validation errors, which is exactly the claim a happy-path load wants to make.
+  The payload's roster-level <costs> is empty and no selection carries one at all, so 35 = 25 + 10
+  is the engine's answer rather than the file's. The force's <categories> are absent too, and the
+  assertion pins them — HQ and Troops come from fe-1's categoryLinks and nothing in the payload
+  mentions them, so that list can only have been derived. The per-selection categories, by
+  contrast, are exactly what the payload states and an engine that echoed them back would pass;
+  they are asserted because a load that dropped them would not, not as evidence of derivation.
+
+  No error assertion appears anywhere in the spec: a step's expectedState without one asserts zero
+  validation errors, which is exactly the claim a happy-path load wants to make.
 engines:
   # battlescribe-ui alone cannot do this, and the failure is silent: the staged .ros is handed to
-  # the app, the action returns without complaint, and the roster afterwards is still the empty one
-  # Setup created — right name, no forces, no costs. Add a single addForce ahead of the load and
-  # the identical payload loads correctly, which is what the other six specs in this batch do and
-  # why they pass here; so the driver's load path needs the Roster Editor engaged once before it
-  # will take a file, and an untouched session is the case nothing had covered.
+  # the app, the action returns without complaint, and the roster read back afterwards is still the
+  # empty one Setup created — right name, no forces, no costs. Add a single addForce ahead of the
+  # load and the identical payload comes back correctly, which is what the other six specs in this
+  # batch do and why they pass here.
+  #
+  # Recorded as the observation, not as a mechanism: what has been measured is that a load reads
+  # back as nothing when it is the first step, and that one prior action is enough to fix it.
+  # Whether the app declined to load or the driver declined to look is not something this spec can
+  # tell apart, and guessing in a comment would be inventing the diagnosis.
   #
   # `fail` rather than `skip`, so the spec still RUNS on the lane and the day the driver learns to
   # open into an empty session is reported as an unexpected pass rather than going unnoticed. A
@@ -124,6 +133,12 @@ steps:
           entryId: fe-1
           catalogueId: cat-1
           catalogueName: Test Catalogue
+          categories:
+            - name: Uncategorised
+            - name: HQ
+              entryId: cat-hq
+            - name: Troops
+              entryId: cat-troops
           selections:
             - name: Captain
               entryId: se-captain
@@ -151,3 +166,45 @@ steps:
                   entryId: cat-troops
                   primary: true
               childCount: 0
+      engines:
+        # NewRecruit synthesizes no "no category" fallback on a force whose entry links real
+        # categories, so its list is the two linked ones and nothing else. The same one-word/one-row
+        # family of differences roundtrip-load-roster records — not a fact about this load path.
+        newrecruit:
+          forces:
+            - name: Detachment
+              entryId: fe-1
+              catalogueId: cat-1
+              catalogueName: Test Catalogue
+              categories:
+                - name: HQ
+                  entryId: cat-hq
+                - name: Troops
+                  entryId: cat-troops
+              selections:
+                - name: Captain
+                  entryId: se-captain
+                  type: unit
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 25
+                  categories:
+                    - name: HQ
+                      entryId: cat-hq
+                      primary: true
+                  childCount: 0
+                - name: Squad
+                  entryId: se-squad
+                  type: unit
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 10
+                  categories:
+                    - name: Troops
+                      entryId: cat-troops
+                      primary: true
+                  childCount: 0

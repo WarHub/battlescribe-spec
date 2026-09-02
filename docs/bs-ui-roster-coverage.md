@@ -162,11 +162,16 @@ Two diagnostic switches are kept, both off by default and both justified by a bu
 
 ## The last 5 — and why none of them was declared
 
-**Seven specs are declared `engines: {battlescribe-ui: fail}`**, and the number did not grow to
-twelve. The seven are three cost limits, two `real-world` specs whose DATA BattleScribe refuses to
+**Eight specs are declared `engines: {battlescribe-ui: fail}`**, and the number did not grow to
+twelve. Seven are three cost limits, two `real-world` specs whose DATA BattleScribe refuses to
 parse, and two limitations that only became legible once grouped controls were driven: a `max=1`
 group is a RadioButton, so its violation is unreachable rather than unreported, and an entry whose
 primary category is not one of its force's is absent from the catalogue tree entirely.
+
+The eighth is `roundtrip-load-simple-roster`, and it is the only one of the eight that is about
+this driver rather than about the app: a `loadRoster` that is a spec's FIRST step reads back as an
+empty roster here, while one preceded by any other action loads correctly. It is declared `fail`,
+not skipped, so it runs and reports the fix as an unexpected pass.
 
 Every declaration records what was NOT checked. The cost-limit three say the Edit Roster dialog has
 not been examined for per-cost-type limit fields. The `real-world` two name the four modifiers

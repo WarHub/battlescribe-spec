@@ -697,7 +697,7 @@ selection via `addInstance()`.
 
 ## 7. Roster Load (`.ros` Import)
 
-**4 specs** — NewRecruit reaches roster load through `listsStore.importBs(File)`, the action
+**6 specs** — NewRecruit reaches roster load through `listsStore.importBs(File)`, the action
 behind My Lists' "Import BattleScribe file" button. It is a different shape of loader from
 BattleScribe's, and the differences are visible from the first payload.
 
@@ -712,6 +712,26 @@ BattleScribe's, and the differences are visible from the first payload.
 The forceless case is worth reading twice: NR's guard for it (`"Roster contains no forces!"`)
 is unreachable, because its XML-to-object step drops empty containers. `<forces/>` arrives as
 *no* `forces` key, which trips the earlier "is this a roster?" check instead.
+
+### It reads `number` differently — one difference confirmed, one still open
+
+| Payload | BattleScribe | NewRecruit | Spec |
+|---|---|---|---|
+| `number > 1` on a FORCE-LEVEL selection | restores it (130 pts) | **clamps every root to 1** (70 pts), silently | `roundtrip-load-root-selection-number` |
+| `number > 1` on a selection that has CHILDREN | one node at number 3 | store-direct: **three nodes at number 1**; through the UI: one node at number 3 | `roundtrip-load-number-on-parent-selection` |
+
+The first is NewRecruit's, and both NR lanes agree on it, which places it inside `importBs`
+rather than in either observation point. The roster still validates and still looks like a
+roster; it just costs 60 points less than the file said.
+
+The second is **not yet attributed**, and the table above is deliberately worded as two lanes
+rather than as one engine. `newrecruit` reads `importBs`'s in-memory return value; `newrecruit-ui`
+reads the roster NR re-hydrated from the saved list — different objects, so the disagreement could
+be our reconstruction, NR's importer and rehydrate disagreeing with each other, or the two state
+readers. Note the identical signature (N nodes at amount 1 versus one node at amount N) in
+"setSelectionCount on Child Entries — Fixed" above, which turned out to be an `addInstance()` loop
+in our adapter — a lead, not a verdict. Both quantities survive a load intact when the quantified
+selection is childless, which is what `roundtrip-load-selection-numbers` pins.
 
 **The unknown-game-system row is a correction, not a divergence.** NewRecruit refusing that file was
 first recorded against a BattleScribe that accepted it — which turned out to be the in-process
