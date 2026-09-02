@@ -45,9 +45,9 @@ public static class NrUiSetup
         //
         // The four steps below (be on MySystems, open the install popup, choose Add From Folder, and
         // see the system land in the store) are one unit of work, and the page can be taken out from
-        // under any of them: the previous spec's navigation is still in flight — its
-        // CreateRosterAsync clicked the MyLists nav link — and when it lands it takes this page with
-        // it. The controls used here exist only on MySystems, so they were visible, then gone.
+        // under any of them: the previous spec's CreateRosterAsync returns while NR's own navigation
+        // to the editor may still be in flight, and when it lands it takes this page with it. The
+        // controls used here exist only on MySystems, so they were visible, then gone.
         //
         // That was misread twice, as an animating element and then as a re-render, and "fixed" twice
         // by guarding a single step. Guarding the WAIT was not enough precisely because the drift
@@ -841,6 +841,12 @@ public static class NrUiSetup
             }
             """));
 
+        // Returns with NR's own navigation to the editor possibly still in flight: creating the list
+        // routes the page to /app/Lists/<key>, nothing here asked for it, and it usually — not
+        // always — lands before this returns. That is the one remaining source of the drift
+        // LoadGameDataAsync retries; left to that retry deliberately (docs/nr-ui-roster-coverage.md
+        // §5), because awaiting it means naming a route NR is free to move, to remove a race the
+        // guard there already absorbs.
         return listKey;
     }
 
