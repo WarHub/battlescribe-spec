@@ -88,12 +88,7 @@ setup:
                       value: 2
 
 steps:
-  # A force before the load, so the payload replaces a roster rather than arriving into an empty
-  # one — and because battlescribe-ui reads back an empty roster when a load is a spec's first
-  # step, which roundtrip-load-simple-roster records rather than works around.
-  - action: addForce
-    forceEntryId: fe-1
-
+  # Step 1. The roster arrives whole, as a file — see roundtrip-load-simple-roster.
   - action: loadRoster
     content: |
       <?xml version="1.0" encoding="UTF-8" standalone="yes"?>

@@ -162,16 +162,11 @@ Two diagnostic switches are kept, both off by default and both justified by a bu
 
 ## The last 5 — and why none of them was declared
 
-**Eight specs are declared `engines: {battlescribe-ui: fail}`**, and the number did not grow to
-twelve. Seven are three cost limits, two `real-world` specs whose DATA BattleScribe refuses to
+**Seven specs are declared `engines: {battlescribe-ui: fail}`**, and the number did not grow to
+twelve. The seven are three cost limits, two `real-world` specs whose DATA BattleScribe refuses to
 parse, and two limitations that only became legible once grouped controls were driven: a `max=1`
 group is a RadioButton, so its violation is unreachable rather than unreported, and an entry whose
 primary category is not one of its force's is absent from the catalogue tree entirely.
-
-The eighth is `roundtrip-load-simple-roster`, and it is the only one of the eight that is about
-this driver rather than about the app: a `loadRoster` that is a spec's FIRST step reads back as an
-empty roster here, while one preceded by any other action loads correctly. It is declared `fail`,
-not skipped, so it runs and reports the fix as an unexpected pass.
 
 Every declaration records what was NOT checked. The cost-limit three say the Edit Roster dialog has
 not been examined for per-cost-type limit fields. The `real-world` two name the four modifiers
@@ -419,3 +414,34 @@ lane clearing its own bar rather than as a current measurement. One of its 367 g
 what it looked like: `profile-publication` passed on `infolink-profile-publication`'s data, in that
 run and in every one before it. The counts stand as measured; what one of the passes established
 does not. The unsharded runs above are what confirms the current stack.
+
+## The lane's first driver bug found by a spec, not by a run
+
+Everything above is a lane finding what the APP does. `roundtrip-load-simple-roster` (2026-09-03)
+found what this DRIVER does, and it is the first entry here of that kind.
+
+The spec opens with `loadRoster` — no `addForce`, no `selectEntry`, a roster arriving whole as a
+file into an untouched session. That is legal in the spec model (engine `Setup` runs before the step
+loop) and every other engine did it. This one read back the empty roster `Setup` had made: right
+name, no forces, no cost types, and no error anywhere.
+
+The app was never the problem. It loaded the file correctly the whole time — the agent's
+`loadRosterAction` builds and applies the app's own `LoadDataParams` synchronously and raises
+BattleScribe's load errors before applying. What was missing was one line of bookkeeping:
+`_engineLocated` is the flag saying a roster exists, `ReadRosterStateOrEmptyAsync` answers
+`EmptyRosterState()` while it is false, and only an action returning a `ForceId` was setting it.
+`loadRoster` returns none.
+
+Two things are worth carrying forward from it:
+
+- **A driver can be wrong in a direction the corpus cannot see.** Every load spec written before
+  this one adds a force first, so the flag was always already set by the time a load happened. The
+  gap was not a hard case — it was the ordinary case, in an ordering nothing had tried. 367 green
+  specs said nothing about it.
+- **The `fail` declaration is what turned the fix into a signal.** The spec ran on this lane
+  declaring `engines: {battlescribe-ui: fail}`, so the moment the driver was fixed the lane reported
+  *"was expected to fail but now passes"* — which is how the fix was confirmed, and why a `skip`
+  would have been worthless here.
+
+All seven of that batch's specs now open with `loadRoster`, so the path has seven regression tests
+rather than the one that found it.

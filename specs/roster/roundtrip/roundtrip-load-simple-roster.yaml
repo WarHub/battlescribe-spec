@@ -1,20 +1,23 @@
 id: roundtrip-load-simple-roster
 category: roundtrip
 description: >
-  The smallest happy-path load: one force, two flat selections, one cost type — and the only spec
-  in the suite whose FIRST step is loadRoster. Nothing is built through the editor beforehand, so
-  what the assertion describes came out of the payload and the setup data alone.
+  The smallest happy-path load: one force, two flat selections, one cost type, and loadRoster as
+  the FIRST step. Nothing is built through the editor beforehand, so what the assertion describes
+  came out of the payload and the setup data alone.
 
-  That ordering is the point, not an accident of brevity. Every other load spec, the ones written
-  before this batch and the six beside it, adds a force first and loads over it, so the suite had
-  only ever exercised loadRoster as a replacement. Opening with it is legal — the engine's Setup
-  runs from the `setup:` block before the step loop begins, so the game system and catalogue are
-  already there when step 1 executes, and nothing constrains what the first step may be. Legal and
-  exercised are different things, and until this spec only the first was true.
+  That ordering is the point, not an accident of brevity. Every load spec written before this
+  batch adds a force first and loads over it, so the suite had only ever exercised loadRoster as a
+  replacement. Opening with it is legal — the engine's Setup runs from the `setup:` block before
+  the step loop begins, so the game system and catalogue are already there when step 1 executes,
+  and nothing constrains what the first step may be. Legal and exercised are different things, and
+  until this batch only the first was true.
 
-  Exercising it is what found the battlescribe-ui gap below, which is the whole argument for
-  writing the spec: three engines load a roster into an empty session and the fourth quietly does
-  not, and nothing in the suite could have said so.
+  Exercising it is what found the `battlescribe-ui` bug fixed alongside this spec: three engines
+  loaded the file and the fourth reported an empty roster, with no error anywhere. The app had
+  loaded it correctly all along and the driver's bookkeeping had not caught up — the diagnosis is
+  in docs/bs-ui-roster-coverage.md, and it is deliberately not repeated here, because what a spec
+  can attest to is the reading, not the reason. All seven specs in this batch now open this way, so
+  the path has seven regression tests rather than the one that found it.
 
   The payload's roster-level <costs> is empty and no selection carries one at all, so 35 = 25 + 10
   is the engine's answer rather than the file's. The force's <categories> are absent too, and the
@@ -25,23 +28,6 @@ description: >
 
   No error assertion appears anywhere in the spec: a step's expectedState without one asserts zero
   validation errors, which is exactly the claim a happy-path load wants to make.
-engines:
-  # battlescribe-ui alone cannot do this, and the failure is silent: the staged .ros is handed to
-  # the app, the action returns without complaint, and the roster read back afterwards is still the
-  # empty one Setup created — right name, no forces, no costs. Add a single addForce ahead of the
-  # load and the identical payload comes back correctly, which is what the other six specs in this
-  # batch do and why they pass here.
-  #
-  # Recorded as the observation, not as a mechanism: what has been measured is that a load reads
-  # back as nothing when it is the first step, and that one prior action is enough to fix it.
-  # Whether the app declined to load or the driver declined to look is not something this spec can
-  # tell apart, and guessing in a comment would be inventing the diagnosis.
-  #
-  # `fail` rather than `skip`, so the spec still RUNS on the lane and the day the driver learns to
-  # open into an empty session is reported as an unexpected pass rather than going unnoticed. A
-  # skip here would have bought a green run that proves nothing — which, for the one spec written
-  # to prove this path empirically, would be the whole spec wasted.
-  battlescribe-ui: fail
 
 setup:
   gameSystem:
