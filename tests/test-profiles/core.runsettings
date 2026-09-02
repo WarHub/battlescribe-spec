@@ -2,7 +2,19 @@
 <!-- Core offline suite: everything except the NR / NR-UI engines and the BattleScribe
      desktop Data Editor UI engine (BsGameDataUi — needs the app + Java agent + a display,
      run under xvfb via the bs-ui-gamedata profile). Covers unit, lint, protocol, and the
-     in-process BattleScribe reference engine tests. -->
+     in-process BattleScribe reference engine tests.
+
+     THIS PROFILE MEANS TWO DIFFERENT THINGS, and knowing which one you are running matters.
+     BsRosterUi is NOT excluded, so on a developer machine this launches the real BattleScribe
+     desktop app and drives every roster spec through it, which takes minutes and wants a display.
+     CI's offline lanes run `setup.ps1 -SkipJavaAgent`, so the agent jar is absent there and every
+     one of those tests skips — the same profile name, a fraction of the coverage.
+
+     Kept that way on purpose: the local half is what has caught the cross-spec reuse defects this
+     suite has had, each of them invisible to CI at the time. To sit out the app for one run, set
+     `BS_UI_SKIP=true` — a command-line `--filter` REPLACES the filter below rather than narrowing
+     it, so it is not the way to subtract one engine from a profile. -->
+
 <RunSettings>
   <RunConfiguration>
     <TestCaseFilter>Engine!=FrozenNrRoster&amp;Engine!=FrozenNrGameData&amp;Engine!=LiveNrRoster&amp;Engine!=LiveNrGameData&amp;Engine!=FrozenNrUiRoster&amp;Engine!=LiveNrUiRoster&amp;Engine!=FrozenNrGameDataUi&amp;Engine!=LiveNrGameDataUi&amp;Engine!=BsGameDataUi</TestCaseFilter>
