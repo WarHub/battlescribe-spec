@@ -12,8 +12,8 @@
 
      Kept that way on purpose: the local half is what has caught the cross-spec reuse defects this
      suite has had, each of them invisible to CI at the time. To sit out the app for one run, set
-     `BS_UI_SKIP=true` — a command-line `--filter` REPLACES the filter below rather than narrowing
-     it, so it is not the way to subtract one engine from a profile. -->
+     `BS_UI_SKIP=true`; a filter passed on the command line REPLACES the TestCaseFilter below rather
+     than narrowing it, so it is not the way to subtract one engine from a profile. -->
 
 <RunSettings>
   <RunConfiguration>
