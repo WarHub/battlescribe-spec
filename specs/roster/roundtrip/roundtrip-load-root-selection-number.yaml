@@ -2,9 +2,10 @@ id: roundtrip-load-root-selection-number
 category: roundtrip
 description: >
   A .ros whose FORCE-LEVEL selections carry number > 1 — three Characters and two Squads. This is
-  a file neither editor writes: a root entry taken twice becomes two nodes in both of them
-  (collective-root-ignored), and setSelectionCount refuses a root target outright. It is legal XML
-  all the same, and the two applications read it differently.
+  a file neither editor writes: taking a root entry twice makes two nodes rather than one node at
+  number 2 (selection-same-entry-twice, and collective-root-ignored for the number 1 on each), and
+  NewRecruit's UI has no count control on a root selection at all. It is legal XML all the same,
+  and the two applications read it differently.
 
   BattleScribe restores the numbers and costs them: 3×25 + 2×10 + 5×7 = 130. NewRecruit clamps
   every root selection to 1 and the same file becomes a 70-point army — two Characters and a

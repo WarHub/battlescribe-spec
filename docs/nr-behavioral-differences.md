@@ -345,10 +345,23 @@ the size of what that hid. The corpus records both engines now, and the pass is 
 | `selection/selection-set-child-count-instance-model` | ✅ Both engines agree |
 | `selection/selection-set-child-count-collective` | ✅ Both engines agree |
 
-**Protocol validation**: `setSelectionCount` now rejects root selections (target must be
-a child selection). Root selection count is managed via
-`selectEntry`/`deselectSelection`. A lint rule (`SetSelectionCountTargetsChildOnly`)
-enforces this in specs.
+**Root selections take their count a different way**: `selectEntry` to add one and
+`deselectSelection` to remove one, because a root entry taken twice is two nodes rather than
+one node at number 2 (`selection/selection-same-entry-twice`,
+`selection/collective-root-ignored`).
+
+That is a convention, not an enforced rule, and this paragraph used to say otherwise — it
+claimed protocol validation rejecting root targets and a lint rule
+`SetSelectionCountTargetsChildOnly` enforcing it in specs. **Neither exists.** Nothing in
+`AdapterHandler`, `BattleScribeRosterEngine.SetSelectionCount` or
+`NewRecruitActions.SetSelectionCountAsync` refuses a root target, and the only lint rule on
+the action is `SpecLintTests.CheckSetSelectionCountHasSelectionId`, which requires a
+`selectionId` and says nothing about what it points at. The one real refusal is per-engine and
+narrower than the claim: `NrUiActions.SetSelectionCountAsync` throws `NotSupportedException`
+for a root selection, because NR's UI renders no number input for one.
+
+Corrected 2026-09-03, after the sentence was taken at face value and repeated into a spec
+description that had to be corrected too.
 
 ### Cost-Field Repeat Evaluation Model
 
