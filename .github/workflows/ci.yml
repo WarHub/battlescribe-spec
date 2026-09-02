@@ -111,7 +111,7 @@ jobs:
       # #401), and the patch step runs `java PatchJarMain`. This lane skips the JavaFX agent build,
       # so it has no in-repo JDK — provide a plain one for the patch tool.
       - name: Setup Java (engine-jar patch tool)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'liberica'
           java-version: '11'
@@ -319,7 +319,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Setup Liberica JDK (with JavaFX)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'liberica'
           java-version: '11'
@@ -425,7 +425,7 @@ jobs:
       # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, #401);
       # its patch step runs `java PatchJarMain`. This lane skips the agent build, so provide a JDK.
       - name: Setup Java (engine-jar patch tool)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'liberica'
           java-version: '11'
@@ -552,7 +552,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Setup Liberica JDK (with JavaFX)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'liberica'
           java-version: '11'
@@ -616,7 +616,7 @@ jobs:
       # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, #401);
       # its patch step runs `java PatchJarMain`. This lane skips the agent build, so provide a JDK.
       - name: Setup Java (engine-jar patch tool)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: 'liberica'
           java-version: '11'
