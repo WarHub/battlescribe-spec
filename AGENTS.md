@@ -203,6 +203,22 @@ editing specs requires no HAR changes; new specs work immediately. The HAR is ve
 NR client version (pinned in `testdata.json`), updated separately via
 [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) releases.
 
+
+**A snapshot is a freeze over a moving target.** NR is actively developed; each bump replaces the
+whole application, and the app owes us nothing — routes, controls, stores and messages all change
+between snapshots. Two consequences for anything written against it:
+
+- **Do not hard-code a client version into driver code, comments or docs.** Describe the behaviour
+  and why it matters, not the release that introduced it. A workaround pinned to "v35.76" reads as
+  obsolete the moment the pin moves, when the code is usually still needed.
+- **Prefer contracts NR is least likely to move**, and fail loudly when one does. Routes over navbar
+  controls; store actions over rendered text. A driver that silently no-ops when NR renames something
+  hands back a green run that proves nothing — see `NrUiSetup.SuppressServerSaveNoticeAsync` for the
+  shape (install, verify, throw with the fix in the message).
+
+Anything that must reach into the app rather than drive it belongs behind a named helper that says
+what it assumes, so the next bump breaks it in one place with a message that names the assumption.
+
 ## NR Editor frozen tests
 
 The frozen NR Editor GameData tests serve the **gh-pages static deployment** of the

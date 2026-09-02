@@ -155,7 +155,8 @@ indistinguishable from a bug someone decided to stop looking at. So the lane gre
 classifications did, and the allow-list was deleted the moment it had nothing left to exclude.
 
 **The lane is opt-in only** — label, schedule or manual dispatch — so per-PR CI is untouched. It
-was 47 minutes when first widened to 363 specs; it is now 18m17s. See below.
+was 47 minutes when first widened to 363 specs; it is now 18m17s. See below; §8 covers a
+snapshot-introduced cost that none of these sleeps could explain.
 
 ## Where the time went — 47m to 18m17s
 
@@ -246,7 +247,7 @@ the one-spec lane, which has no previous spec to race with at all.
 | `LoadGameDataAsync` mock injection | Injected as the method's FIRST action, between the previous spec's cleanup navigation and its own. Moved to after the navigation, where the mock is actually read. |
 | `LoadGameDataAsync` popup close | `IsVisibleAsync` is a snapshot, not a wait, so `if (visible) click()` is check-then-act. When NR closed its own popup in between, the click burned Playwright's full 30s default and failed Setup. Bounded and tolerated — "already closed" is success for that step. |
 | `PushRouteAsync` | The evaluate **awaits the `router.push` it triggered**, so a navigation that replaces the execution context kills the very call that caused it. The push had succeeded; only the reporting channel died. Now tolerated, then the new context's router is awaited. Deliberately without re-asserting the route: `/app` legitimately redirects to `/app/MySystems`. |
-| `LoadGameDataAsync` whole install sequence | The route push to MySystems **succeeds and is then overridden**: the previous spec's navigation (its `CreateRosterAsync` clicks the MyLists nav link) is still in flight, and when it lands it takes the page with it. The install controls exist only on MySystems, so they were visible, then gone. Retried at SEQUENCE level, re-pushing only when the page really has drifted. Fires 5 times across 363 specs. |
+| `LoadGameDataAsync` whole install sequence | The route push to MySystems **succeeds and is then overridden**: the previous spec's navigation (its `CreateRosterAsync` navigates; §8 made that hop an awaited route push, which settles before it returns, but the retry still fires, so this window has another source) is still in flight, and when it lands it takes the page with it. The install controls exist only on MySystems, so they were visible, then gone. Retried at SEQUENCE level, re-pushing only when the page really has drifted. Fires 5 times across 363 specs. |
 
 The fourth is worth reading for how it was found rather than what it was. It was misdiagnosed twice
 — as an animating element, then as a re-render — and "fixed" twice by guarding a single step, which
@@ -478,3 +479,42 @@ two messages named there). It now reports the observation instead:
     under selection 'jzhjg8v'. route=/app unitRows=0 editing=0 rows=[]
 
 `route=/app unitRows=0` is the whole diagnosis, in the message, on the first run.
+
+## 8. The snapshot's message bar covers the navbar
+
+Frozen replay fulfils every `/api/` call with `{}` because there is no server, so **every list save
+comes back "rejected"** and NR reports it in the shared message bar. The notice is manufactured by
+replay and is never news.
+
+It is also expensive. The bar renders as a full-width strip across the top of the page, over the
+navbar, and Playwright will not click an element that another one covers — so any control underneath
+waits out the notice's life. When a snapshot introduced this reporter it cost ~4.5s per spec and
+roughly doubled the lane, all of it inside one click.
+
+Two changes, and the first alone is not enough:
+
+- **`CreateRosterAsync` reaches MyLists by route.** A route push never asks whether a pixel is
+  covered. On its own it only moves the stall onto the next control the bar happens to cover.
+- **`SuppressServerSaveNoticeAsync` stubs NR's reporter**, so the notice is never posted. This is
+  what removes the cost. It is silenced at the reporter rather than by clearing the message bar,
+  because the bar cannot distinguish a manufactured notice from a message a spec asserts on: the
+  text is a translation string and its `type` is shared with real refusals. Frozen only — against a
+  live NR a refused save is real news.
+
+The suppression throws rather than skipping when it cannot install, because one that quietly does
+nothing gives back a lane at twice the runtime with nothing to point at.
+
+**Why the save is attempted at all.** NR only syncs a list when `!systemsStore.local && userStore.user
+!= null`, and `systemsStore.init()` sets `local = false` in any browser (it stays true only under
+Electron, or with `localStorage.local === "true"`). The `user` is ours: `BypassSupporterPaywallAsync`
+sets a fake supporter to unlock Custom Names/Notes. That is why this is a UI-lane problem only — the
+store-direct engine sets no user, so the sync is unreachable there, and the pooled engines replay
+with `HarNotFound.Abort`, which makes `/api/` calls throw instead of returning a rejection.
+
+Setting `localStorage.local = "true"` would switch the sync off at the app level. It is not used:
+local mode also skips the online library load and makes `installedSystems()` read `localLibrary`,
+changing how game data is discovered for the whole lane.
+
+**Diagnosing a repeat.** If a future snapshot makes setup slow again, `NR_UI_TIMINGS=1` names the
+phase, and `document.elementFromPoint` at the stalled control's centre says what is covering it — a
+covered click and a slow one are indistinguishable in the timings alone.
