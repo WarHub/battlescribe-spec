@@ -1,0 +1,286 @@
+id: roundtrip-load-number-on-parent-selection
+category: roundtrip
+description: >
+  A .ros in which one quantified selection has children and another does not, so the payload
+  carries its own control. Five Troopers, childless, arrive as one node of number 5 everywhere.
+  Three Veterans, each holding a Grenade, arrive as one node of number 3 on BattleScribe and in
+  NewRecruit's own web app — and as three nodes of number 1 on the store-direct `newrecruit`
+  adapter alone.
+
+  The roster costs 78 whichever shape it takes. That is what makes this worth a spec: a load that
+  only checked totals would report agreement, and the shape of the tree underneath is the thing
+  that differs. A caller walking the roster finds two children of the Squad on three lanes and
+  four on the fourth, and asking how many Veterans there are gets a different answer depending on
+  whether it counts nodes or reads numbers.
+
+  The split is one adapter's, not one application's, which is why the base expectation is the
+  app's. `newrecruit-ui` drives NewRecruit through the import control a user would use and gets
+  one node at number 3; `newrecruit` reaches the same lists-store importBs() action directly and
+  gets three. AGENTS.md settles which of those speaks for NewRecruit — the app does — so the base
+  holds for three lanes, `newrecruit-ui` restates it to stop inheriting the store-direct block,
+  and that block records a deviation rather than a difference between two engines.
+
+  What the deviation is NOT is a limit of that adapter's model. Build the same shape through the
+  editor on the same engine — select a Veteran, give it a Grenade, set its count to 3 — and it
+  reports one node at number 3, exactly as the app does. So the model holds this shape fine and
+  something on the import path does not produce it. Whether the three nodes are created by the
+  import or merely surfaced by that adapter's state reader is the open question, and it is a
+  question about our adapter rather than about NewRecruit.
+tags: [number, nested]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 7
+            - id: se-veteran
+              name: Veteran
+              type: model
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 9
+              selectionEntries:
+                - id: se-grenade
+                  name: Grenade
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 2
+
+steps:
+  # A force before the load, so the payload replaces a roster rather than arriving into an empty
+  # one — and because battlescribe-ui's load path needs the editor engaged once first
+  # (roundtrip-load-simple-roster is where that is recorded).
+  - action: addForce
+    forceEntryId: fe-1
+
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-parent-number" name="Quantified Parent" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs/>
+        <forces>
+          <force id="f-1" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <categories>
+                  <category id="c-squad" name="Uncategorized" entryId="(No Category)" primary="true"/>
+                </categories>
+                <selections>
+                  <selection id="s-trooper" name="Trooper" entryId="se-trooper" number="5" type="model"/>
+                  <selection id="s-veteran" name="Veteran" entryId="se-veteran" number="3" type="model">
+                    <selections>
+                      <selection id="s-grenade" name="Grenade" entryId="se-grenade" number="3" type="upgrade"/>
+                    </selections>
+                  </selection>
+                </selections>
+              </selection>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+
+  # One Veteran node at number 3, its Grenade at number 3. 10 + 35 + 27 + 6 = 78.
+  - expectedState:
+      name: Quantified Parent
+      gameSystemId: gs-1
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 78
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          selections:
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+              children:
+                - name: Trooper
+                  entryId: se-trooper
+                  type: model
+                  number: 5
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 35
+                  childCount: 0
+                - name: Veteran
+                  entryId: se-veteran
+                  type: model
+                  number: 3
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 27
+                  children:
+                    - name: Grenade
+                      entryId: se-grenade
+                      type: upgrade
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 6
+                      childCount: 0
+      engines:
+        # The store-direct adapter alone: three Veteran nodes at number 1, one Grenade each. The
+        # Trooper above them is restated unchanged — it is the control, and it is what says the
+        # split follows owning children rather than carrying a number.
+        newrecruit:
+          forces:
+            - name: Detachment
+              entryId: fe-1
+              catalogueId: cat-1
+              selections:
+                - name: Squad
+                  entryId: se-squad
+                  type: unit
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 10
+                  children:
+                    - name: Trooper
+                      entryId: se-trooper
+                      type: model
+                      number: 5
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 35
+                      childCount: 0
+                    - name: Veteran
+                      entryId: se-veteran
+                      type: model
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 9
+                      children:
+                        - name: Grenade
+                          entryId: se-grenade
+                          type: upgrade
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: ct-pts
+                              value: 2
+                          childCount: 0
+                    - name: Veteran
+                      entryId: se-veteran
+                      type: model
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 9
+                      children:
+                        - name: Grenade
+                          entryId: se-grenade
+                          type: upgrade
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: ct-pts
+                              value: 2
+                          childCount: 0
+                    - name: Veteran
+                      entryId: se-veteran
+                      type: model
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 9
+                      children:
+                        - name: Grenade
+                          entryId: se-grenade
+                          type: upgrade
+                          number: 1
+                          costs:
+                            - name: pts
+                              typeId: ct-pts
+                              value: 2
+                          childCount: 0
+        # NewRecruit's own app, through the import control: the base shape, one Veteran node at
+        # number 3. Restated in full because a UI lane with no entry of its own inherits its base
+        # engine's block, and inheriting the one above would assert the adapter's answer against
+        # the application that disagrees with it.
+        newrecruit-ui:
+          forces:
+            - name: Detachment
+              entryId: fe-1
+              catalogueId: cat-1
+              selections:
+                - name: Squad
+                  entryId: se-squad
+                  type: unit
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 10
+                  children:
+                    - name: Trooper
+                      entryId: se-trooper
+                      type: model
+                      number: 5
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 35
+                      childCount: 0
+                    - name: Veteran
+                      entryId: se-veteran
+                      type: model
+                      number: 3
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 27
+                      children:
+                        - name: Grenade
+                          entryId: se-grenade
+                          type: upgrade
+                          number: 3
+                          costs:
+                            - name: pts
+                              typeId: ct-pts
+                              value: 6
+                          childCount: 0

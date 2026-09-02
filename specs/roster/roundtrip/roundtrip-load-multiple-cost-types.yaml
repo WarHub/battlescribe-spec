@@ -1,0 +1,130 @@
+id: roundtrip-load-multiple-cost-types
+category: roundtrip
+description: >
+  A load under two cost types at once. The game system prices everything in both pts and PL, and
+  the two are deliberately not proportional to each other (10/2 against 5/4), so a roster total
+  that came from scaling one type into the other cannot pass by accident.
+
+  The payload is inconsistent on purpose, and differently so for each type. The Squad carries a
+  <costs> block naming pts at 999 and no PL cost at all; the Relic carries none. So each type has
+  to survive a different failure mode — pts a stale value the engine must overrule, PL an absent
+  one it must derive — and the roster-level totals (15 and 6) are reachable only by recosting
+  every selection against the catalogue, per type, and summing the types independently.
+
+  Relic precedes Squad in the payload only so that payload order and the alphabetical order a
+  force imposes on its selections (ordering-selections-alphabetical) are the same order. Nothing
+  here is a claim about ordering, and the names are picked so that this spec cannot become one.
+tags: [cost, multi-type]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+      - id: ct-pl
+        name: PL
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+            - name: PL
+              typeId: ct-pl
+              value: 2
+        - id: se-relic
+          name: Relic
+          type: upgrade
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 5
+            - name: PL
+              typeId: ct-pl
+              value: 4
+
+steps:
+  # A force before the load, so the payload replaces a roster rather than arriving into an empty
+  # one — and because battlescribe-ui's load path needs the editor engaged once first
+  # (roundtrip-load-simple-roster is where that is recorded).
+  - action: addForce
+    forceEntryId: fe-1
+
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-costs" name="Two Currencies" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs>
+          <cost name="pts" typeId="ct-pts" value="999"/>
+          <cost name="PL" typeId="ct-pl" value="999"/>
+        </costs>
+        <forces>
+          <force id="f-1" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-relic" name="Relic" entryId="se-relic" number="1" type="upgrade">
+                <categories>
+                  <category id="c-relic" name="Uncategorized" entryId="(No Category)" primary="true"/>
+                </categories>
+              </selection>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <categories>
+                  <category id="c-squad" name="Uncategorized" entryId="(No Category)" primary="true"/>
+                </categories>
+                <costs>
+                  <cost name="pts" typeId="ct-pts" value="999"/>
+                </costs>
+              </selection>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+
+  # Both types recomputed and summed apart: pts 5 + 10, PL 4 + 2. Neither is the payload's 999.
+  - expectedState:
+      name: Two Currencies
+      gameSystemId: gs-1
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 15
+        - name: PL
+          typeId: ct-pl
+          value: 6
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          selections:
+            - name: Relic
+              entryId: se-relic
+              type: upgrade
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 5
+                - name: PL
+                  typeId: ct-pl
+                  value: 4
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+                - name: PL
+                  typeId: ct-pl
+                  value: 2

@@ -1,0 +1,153 @@
+id: roundtrip-load-simple-roster
+category: roundtrip
+description: >
+  The smallest happy-path load: one force, two flat selections, one cost type — and the only spec
+  in the suite whose FIRST step is loadRoster. Nothing is built through the editor beforehand, so
+  what the assertion describes came out of the payload and the setup data alone.
+
+  That ordering is the point, not an accident of brevity. Every other load spec, the ones written
+  before this batch and the six beside it, adds a force first and loads over it, so the suite had
+  only ever exercised loadRoster as a replacement. Opening with it is legal — the engine's Setup
+  runs from the `setup:` block before the step loop begins, so the game system and catalogue are
+  already there when step 1 executes, and nothing constrains what the first step may be. Legal and
+  exercised are different things, and until this spec only the first was true.
+
+  Exercising it is what found the battlescribe-ui gap below, which is the whole argument for
+  writing the spec: three engines load a roster into an empty session and the fourth quietly does
+  not, and nothing in the suite could have said so.
+
+  The payload's roster-level <costs> is empty and no selection carries one at all, and the force
+  carries no <categories>, so 35 = 25 + 10 and the categorisation are the engine's answers rather
+  than the file's. No error assertion appears anywhere in the spec: a step's expectedState without
+  one asserts zero validation errors, which is exactly the claim a happy-path load wants to make.
+engines:
+  # battlescribe-ui alone cannot do this, and the failure is silent: the staged .ros is handed to
+  # the app, the action returns without complaint, and the roster afterwards is still the empty one
+  # Setup created — right name, no forces, no costs. Add a single addForce ahead of the load and
+  # the identical payload loads correctly, which is what the other six specs in this batch do and
+  # why they pass here; so the driver's load path needs the Roster Editor engaged once before it
+  # will take a file, and an untouched session is the case nothing had covered.
+  #
+  # `fail` rather than `skip`, so the spec still RUNS on the lane and the day the driver learns to
+  # open into an empty session is reported as an unexpected pass rather than going unnoticed. A
+  # skip here would have bought a green run that proves nothing — which, for the one spec written
+  # to prove this path empirically, would be the whole spec wasted.
+  battlescribe-ui: fail
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-captain
+          name: Captain
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 25
+          categoryLinks:
+            - id: cl-captain-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+
+steps:
+  # Step 1. No addForce, no selectEntry — the roster arrives whole, as a file.
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-simple" name="Simple Roster" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs/>
+        <forces>
+          <force id="f-1" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-captain" name="Captain" entryId="se-captain" number="1" type="unit">
+                <categories>
+                  <category id="c-captain" name="HQ" entryId="cat-hq" primary="true"/>
+                </categories>
+              </selection>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <categories>
+                  <category id="c-squad" name="Troops" entryId="cat-troops" primary="true"/>
+                </categories>
+              </selection>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+
+  - expectedState:
+      name: Simple Roster
+      gameSystemId: gs-1
+      gameSystemName: Test System
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 35
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          catalogueName: Test Catalogue
+          selections:
+            - name: Captain
+              entryId: se-captain
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 25
+              categories:
+                - name: HQ
+                  entryId: cat-hq
+                  primary: true
+              childCount: 0
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+              categories:
+                - name: Troops
+                  entryId: cat-troops
+                  primary: true
+              childCount: 0
