@@ -247,7 +247,7 @@ the one-spec lane, which has no previous spec to race with at all.
 | `LoadGameDataAsync` mock injection | Injected as the method's FIRST action, between the previous spec's cleanup navigation and its own. Moved to after the navigation, where the mock is actually read. |
 | `LoadGameDataAsync` popup close | `IsVisibleAsync` is a snapshot, not a wait, so `if (visible) click()` is check-then-act. When NR closed its own popup in between, the click burned Playwright's full 30s default and failed Setup. Bounded and tolerated — "already closed" is success for that step. |
 | `PushRouteAsync` | The evaluate **awaits the `router.push` it triggered**, so a navigation that replaces the execution context kills the very call that caused it. The push had succeeded; only the reporting channel died. Now tolerated, then the new context's router is awaited. Deliberately without re-asserting the route: `/app` legitimately redirects to `/app/MySystems`. |
-| `LoadGameDataAsync` whole install sequence | The route push to MySystems **succeeds and is then overridden**: the previous spec's navigation (its `CreateRosterAsync` navigates; §8 made that hop an awaited route push, which settles before it returns, but the retry still fires, so this window has another source) is still in flight, and when it lands it takes the page with it. The install controls exist only on MySystems, so they were visible, then gone. Retried at SEQUENCE level, re-pushing only when the page really has drifted. Fires 5 times across 363 specs. |
+| `LoadGameDataAsync` whole install sequence | The route push to MySystems **succeeds and is then overridden** by a navigation the previous spec left in flight, and when it lands it takes the page with it. The install controls exist only on MySystems, so they were visible, then gone. Retried at SEQUENCE level, re-pushing only when the page really has drifted. Source named below; left to the retry. |
 
 The fourth is worth reading for how it was found rather than what it was. It was misdiagnosed twice
 — as an animating element, then as a re-render — and "fixed" twice by guarding a single step, which
@@ -377,6 +377,25 @@ The retry count not dropping is the expected result and worth saying plainly: th
 make the race rarer, it makes the last step of the sequence survive it. What would show the fix
 working is a `wait-local-library` count above 363 — a drift caught in the newly-guarded window — and
 neither local run produced one, for the same reason the failure has never reproduced locally.
+
+### 5c. Whose navigation it is — measured, then left alone
+
+The fourth race's source was open for two rounds of fixes: §8 made the MyLists hop an awaited route
+push and the retry kept firing, so something else was navigating. **It is NR.** Creating a list
+routes the app to `/app/Lists/<key>` by itself; `CreateRosterAsync` asks for no navigation and does
+not await that one.
+
+A probe printing `location.pathname` at the end of `CreateRosterAsync` and again 1.5s later caught
+it directly. Seven of eight spec transitions had already landed:
+
+    create-roster returns at /app/MyLists
+    +1.5s          at /app/Lists/6a9831a4fb8b89c35aab1a20
+
+**Not fixed, on purpose.** Awaiting it means waiting on the editor route — a route NR is free to
+move, in a driver whose one hard rule is not to depend on those (see `AGENTS.md`). Waiting instead
+for the URL to go quiet costs every spec a sampling interval to cancel a race that fires **0–2 times
+in 378 specs** (zero in the most recent full run, 28m, green) and that the sequence-level retry
+already absorbs end to end. The race is now named where it happens rather than guarded twice.
 
 ### What to do when `thorough-conformance` goes red here
 
