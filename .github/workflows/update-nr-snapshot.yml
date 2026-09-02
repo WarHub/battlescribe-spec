@@ -234,15 +234,21 @@ jobs:
             --title "NR snapshot $TAG" \
             --notes-file .har-staging/release-notes.md
 
+      # Both halves of the pin, written together. The tag says which release to fetch; the hash says
+      # what that release has to contain, and it is the hash of the very bytes uploaded above. Only
+      # the second survives a tag re-cut, a damaged download, or a fixture edited in place — all of
+      # which otherwise replay as if they were the pin.
       - name: Update testdata.json
         if: steps.check.outputs.proceed == 'true'
         run: |
           TAG="${{ steps.tag.outputs.new_tag }}"
+          SHA="${{ steps.record.outputs.har_sha256 }}"
           python3 -c "
           import json, pathlib
           p = pathlib.Path('testdata.json')
           d = json.loads(p.read_text())
           d['newrecruit-har']['tag'] = '$TAG'
+          d['newrecruit-har']['sha256'] = {'newrecruit.har': '$SHA'}
           p.write_text(json.dumps(d, indent=2) + '\n')
           "
 

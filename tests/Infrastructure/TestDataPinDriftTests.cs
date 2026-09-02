@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace BattleScribeSpec.Tests;
@@ -12,6 +13,12 @@ namespace BattleScribeSpec.Tests;
 /// Nothing else checked, so a checkout whose pin moved after its last setup replayed the OLD
 /// snapshot and said nothing: a green run proving the wrong thing, and the whole point of a pin
 /// lost. That is not hypothetical — it is how a stale HAR survived a bump in a live worktree.
+/// </para>
+/// <para>
+/// The marker answers "which pin was asked for", which leaves the bytes unaccounted for: an entry
+/// may also declare <c>sha256</c> content pins, and those are checked here as well. A content pin
+/// covers exactly the files it names — today the HAR the frozen NR suites replay, which is the
+/// fixture with both the most reach and a history of being swapped by hand.
 /// </para>
 /// <para>
 /// A missing directory is not a failure: lanes download only the fixtures they need, and absence
@@ -67,6 +74,34 @@ public sealed class TestDataPinDriftTests
             if (!string.Equals(actual, expected, StringComparison.Ordinal))
             {
                 drifted.Add($"{entry.Name}: on disk '{actual}', testdata.json pins '{expected}'.");
+                continue;
+            }
+
+            // The marker records the pin that was ASKED for, so bytes changed in place under a
+            // correct marker still read as pinned. Where an entry declares content pins, they are
+            // the part the fixture itself has to satisfy.
+            if (!entry.Value.TryGetProperty("sha256", out var contentPins))
+            {
+                continue;
+            }
+
+            foreach (var pin in contentPins.EnumerateObject())
+            {
+                var file = Path.Combine(dir, pin.Name);
+                if (!File.Exists(file))
+                {
+                    drifted.Add($"{entry.Name}: testdata.json content-pins '{pin.Name}', which is not "
+                        + $"in '{dir}'.");
+                    continue;
+                }
+
+                using var bytes = File.OpenRead(file);
+                var digest = Convert.ToHexStringLower(SHA256.HashData(bytes));
+                if (!string.Equals(digest, pin.Value.GetString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    drifted.Add($"{entry.Name}: '{pin.Name}' is sha256 {digest}, testdata.json pins "
+                        + $"{pin.Value.GetString()}.");
+                }
             }
         }
 
