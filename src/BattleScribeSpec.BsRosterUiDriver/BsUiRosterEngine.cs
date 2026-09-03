@@ -710,6 +710,12 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// and its <c>setRoster</c> re-links and recalculates. That is what makes the roundtrip specs
     /// a statement about the desktop app rather than about this driver.
     /// </para>
+    /// <para>
+    /// <b>A load is one of the two ways a roster comes into existence here</b>, which is why it ends
+    /// by marking the engine located — see the assignment's comment for what that flag gates and for
+    /// its one interaction with <see cref="SetCostLimit"/>. Until it did, a spec whose FIRST step was
+    /// <c>loadRoster</c> read back an empty roster on this engine alone.
+    /// </para>
     /// </summary>
     private async Task LoadRosterAsync(string xml)
     {
@@ -722,6 +728,29 @@ public sealed class BsUiRosterEngine : IRosterEngine
         await File.WriteAllTextAsync(path, xml);
 
         await CallActionAsync("rosterLoadRosterAction", new JsonObject { ["path"] = path });
+
+        // The roster exists now, and on this engine that has to be said out loud. Nothing here is
+        // lazy about the APP: the agent builds the app's LoadDataParams and applies them on the FX
+        // thread SYNCHRONOUSLY, raises BattleScribe's own load errors before the apply, and any
+        // refusal reaches this line as an AgentException rather than a return. But this driver
+        // creates its roster lazily (the first addForce is rerouted to rosterCreateRosterAction),
+        // and `_engineLocated` is the flag that says whether one exists. Every state read is gated
+        // on it: ReadRosterStateOrEmptyAsync answers EmptyRosterState() while it is false, and that
+        // answer is not an error but a roster named after the spec with no forces and no cost types.
+        //
+        // So a load that did not set it read back as a load that did nothing, silently and only on
+        // this engine. It went unnoticed because every load spec written before this one adds a
+        // force first, and that addForce sets the flag on the way past. NrRosterUiEngine already
+        // did the same thing for the same reason — "a loaded roster is a roster".
+        //
+        // One consequence worth naming: `setCostLimit` before a roster exists stashes into
+        // _pendingCostLimits for rosterCreateRosterAction to apply, and that reroute only fires
+        // while the roster has no forces. A load now fills the roster, so a spec ordering
+        // setCostLimit BEFORE a first-step load would leave the limit unapplied. No spec does, and
+        // the alternative was worse — before this line, that reroute fired and rosterCreateRoster
+        // destroyed the roster the load had just brought in. A spec that needs both should assert
+        // its costLimits, which fails loudly rather than passing short.
+        _engineLocated = true;
     }
 
     public void ReloadRoster() => RunAsync(ReloadRosterAsync);

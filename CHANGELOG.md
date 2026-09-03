@@ -427,6 +427,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **`battlescribe-ui` read back an empty roster when a load was a spec's FIRST step** — the staged
+  `.ros` was handed to the app, the action returned clean, and the roster afterwards was the empty
+  one `Setup` created: right name, no forces, no cost types, no error.
+  - The app was never at fault. The agent builds and applies BattleScribe's own `LoadDataParams`
+    synchronously and raises the app's load errors before the apply, so a refused load reaches the
+    driver as an exception rather than a return. What was missing was bookkeeping: `_engineLocated`
+    is the flag saying a roster exists, every state read is gated on it
+    (`ReadRosterStateOrEmptyAsync` answers `EmptyRosterState()` while it is false), and only an
+    action returning a `ForceId` set it. `loadRoster` returns none — so the one action besides
+    `addForce` that brings a roster into being was the one that could not say so.
+  - It went unnoticed because every load spec written before this batch adds a force first, and
+    that `addForce` is rerouted to `rosterCreateRosterAction` and sets the flag on the way past.
+    `roundtrip-load-simple-roster`, written to exercise the first-step path, is what surfaced it.
+  - One consequence is named rather than fixed: `setCostLimit` before a first-step load stashes a
+    limit that `rosterCreateRosterAction` would have applied, and that reroute no longer fires once
+    the load has filled the roster. No spec orders the two that way, and the previous behaviour was
+    worse — the reroute fired and destroyed the roster the load had just brought in.
 - **`on:` schema pattern rejects the retired entry-addressed dialect (#419, #424)** — the
   `errorAssertion.on` pattern was `^(roster|group)$|^(force|category|selection)( \S.*)?$`, which
   accepted any second token, so `on: selection se-unit-a` stayed schema-valid long after #419 made it
