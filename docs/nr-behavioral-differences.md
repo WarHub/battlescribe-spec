@@ -22,7 +22,7 @@
 | [Entry group behavior](#4-entry-group-behavior) | 2 | Low | Child ordering, category link propagation |
 | [Other behavioral differences](#5-other-behavioral-differences) | 4 | Medium | Auto-select root entries, hidden selection filtering, forces-field, real-world data |
 | [Naming/spelling](#6-namingspelling) | 3 | Info | Default category name spelling, force category entryId path, selection entryGroupId unavailable |
-| [Roster load](#7-roster-load-ros-import) | 4 | Medium | NR refuses forceless rosters and unknown game systems, and drops a selection with no primary category without saying so |
+| [Roster load](#7-roster-load-ros-import) | 6 | Medium | NR refuses forceless rosters and unknown game systems, drops a selection with no primary category without saying so, and clamps a force-level `number` to 1 |
 
 ---
 
@@ -697,8 +697,10 @@ selection via `addInstance()`.
 
 ## 7. Roster Load (`.ros` Import)
 
-**6 specs** — NewRecruit reaches roster load through `listsStore.importBs(File)`, the action
-behind My Lists' "Import BattleScribe file" button. It is a different shape of loader from
+**6 specs**, though two of the rows below are corrections rather than live divergences — the
+unknown-game-system one and the quantified-parent one both ended with all four engines agreeing.
+NewRecruit reaches roster load through `listsStore.importBs(File)`, the action behind My Lists'
+"Import BattleScribe file" button. It is a different shape of loader from
 BattleScribe's, and the differences are visible from the first payload.
 
 ### It refuses files BattleScribe accepts — two of the three it first appeared to
@@ -713,25 +715,27 @@ The forceless case is worth reading twice: NR's guard for it (`"Roster contains 
 is unreachable, because its XML-to-object step drops empty containers. `<forces/>` arrives as
 *no* `forces` key, which trips the earlier "is this a roster?" check instead.
 
-### It reads `number` differently — one difference confirmed, one still open
+### It reads `number` differently — one divergence, and one that turned out to be ours
 
 | Payload | BattleScribe | NewRecruit | Spec |
 |---|---|---|---|
 | `number > 1` on a FORCE-LEVEL selection | restores it (130 pts) | **clamps every root to 1** (70 pts), silently | `roundtrip-load-root-selection-number` |
-| `number > 1` on a selection that has CHILDREN | one node at number 3 | store-direct: **three nodes at number 1**; through the UI: one node at number 3 | `roundtrip-load-number-on-parent-selection` |
+| `number > 1` on a selection that has CHILDREN | one node at number 3 | one node at number 3 — after this adapter stopped reading the wrong tree | `roundtrip-load-number-on-parent-selection` |
 
-The first is NewRecruit's, and both NR lanes agree on it, which places it inside `importBs`
-rather than in either observation point. The roster still validates and still looks like a
+The first is NewRecruit's: the clamp survives the same import-then-open path that now feeds both
+NR lanes, so it is not an artefact of where either lane looks. (Until the second row below was
+fixed, this was argued from the two lanes agreeing while reading different objects — that argument
+is gone, because they read the same object now.) The roster still validates and still looks like a
 roster; it just costs 60 points less than the file said.
 
-The second is **not yet attributed**, and the table above is deliberately worded as two lanes
-rather than as one engine. `newrecruit` reads `importBs`'s in-memory return value; `newrecruit-ui`
-reads the roster NR re-hydrated from the saved list — different objects, so the disagreement could
-be our reconstruction, NR's importer and rehydrate disagreeing with each other, or the two state
-readers. Note the identical signature (N nodes at amount 1 versus one node at amount N) in
-"setSelectionCount on Child Entries — Fixed" above, which turned out to be an `addInstance()` loop
-in our adapter — a lead, not a verdict. Both quantities survive a load intact when the quantified
-selection is childless, which is what `roundtrip-load-selection-numbers` pins.
+The second was recorded here as an open two-lane disagreement — store-direct reporting three nodes
+at number 1 where the UI lane reported one at number 3 — and is now closed. It was never a
+divergence between the engines: `importBs`'s return value and the list NR opens are two different
+trees, and this adapter was reading the one NR shows nobody. See "Importing is not opening, and
+the two trees are not the same shape" below for the mechanism and the measurement, and note the
+identical signature in "setSelectionCount on Child Entries — Fixed" above, which was the same
+class of mistake one path over. Both quantities survive a load intact when the quantified selection
+is childless, which is what `roundtrip-load-selection-numbers` pins.
 
 **The unknown-game-system row is a correction, not a divergence.** NewRecruit refusing that file was
 first recorded against a BattleScribe that accepted it — which turned out to be the in-process
@@ -780,6 +784,45 @@ disagreed with each other about the same file.
 therefore re-point `window.__bsspec` at the imported list and delete the row it replaced: a
 roster is a singleton that is replaced, and a load that only ever appends leaves one dead row
 per load for NR's own `findListByKey` to trip over later.
+
+### Importing is not opening, and the two trees are not the same shape
+
+That `false` matters more than the dead row does. `importBs` hands back the tree its BattleScribe
+converter built on the way to storing the list, and **NR never shows that tree to anyone**: the
+roster a user sees comes from the list page's `updateRoute` → `selectList(row)` →
+`book.loadList` → `loadRosterFromJson`, re-hydrated out of the stored list.
+
+The two disagree about quantity, because the converter materialises a quantity as nodes while the
+stored form keeps it as a number. Its per-selection step divides `number` by the running parent
+multiplier and then branches on the selector:
+
+```js
+const r = t.number / n || 1;          // all three branches recurse into children at n*r
+if (i.isInstanced) for (let a = 0; a < r; a++) { o = i.addInstance(…); }
+else if (i.isSubUnit) { o = i.addInstance(…); o.amount = r; }   // unreachable: isSubUnit ⇒ isInstanced
+else i.setSelections(i.getSelectionsCountSum() + r);
+```
+
+**Which branch a selection takes is the `collective_recursive` rule, not "does it have children".**
+`isInstanced` is `!collective_recursive`, and a selector is collective-recursive when every
+descendant is collective or a group — see [collective-flag.md](collective-flag.md), "Instancing vs.
+merged nodes", which is the reference rule and predates this finding.
+
+So a Veteran ×3 holding a *non-collective* Grenade is instanced, and comes out of the import as
+three Veterans of one, each with a Grenade of one (3/3). A childless Trooper ×5 is vacuously
+collective-recursive, takes the third branch and stays one node of five. **Owning children is not
+what does it**: `roundtrip-reload-roster`'s Trooper ×3 owns a Weapon marked `collective: true`, is
+collective-recursive for that reason, and comes back through this same import path as one node of
+three. That spec is the counterexample to the tempting shorthand, and it has always passed.
+
+Measured store-direct in a single session: three nodes at `amount` 1 out of `importBs`, then one
+node at `amount` 3 after `selectList` — a different object, not a mutation of the same one, with the
+Grenade at `amount` 1 and `getSelectionCount("root")` 3.
+
+Neither shape is a bug in NewRecruit; only one of them is observable. The store-direct adapter
+used to keep `importBs`'s return value, and was for that reason the only lane reporting three
+Veterans (`roundtrip-load-number-on-parent-selection`). It calls `selectList` now, so both NR
+lanes open the imported list through the same action the app uses.
 
 ---
 

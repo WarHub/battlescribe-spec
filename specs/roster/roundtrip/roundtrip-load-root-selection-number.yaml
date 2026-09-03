@@ -18,8 +18,10 @@ description: >
   This one is an application difference and not an adapter's: both BattleScribe lanes give 130 and
   both NewRecruit lanes give 70, so the store-direct engine and the app driven through its own
   import control agree with each other. Worth stating because the sibling spec
-  roundtrip-load-number-on-parent-selection looks similar and is not — there the two NR lanes
-  disagree, and they do not even read the same object, so whose divergence it is stays open.
+  roundtrip-load-number-on-parent-selection looked similar and was not — the two NR lanes
+  disagreed there, and the disagreement turned out to be the store-direct adapter reading the tree
+  NR's importer builds rather than the list NR opens. That one is fixed and all four lanes agree
+  on it; the clamp below survives the same load path, so it is NewRecruit's.
 
   Tagged `undefined-behavior` rather than `newrecruit-bug`, and the distinction is worth stating
   because the temptation runs the other way. Nothing defines this input: BattleScribe's own editor
