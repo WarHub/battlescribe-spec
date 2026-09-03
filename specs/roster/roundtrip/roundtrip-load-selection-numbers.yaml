@@ -10,10 +10,11 @@ description: >
   engine that applied one node's quantity to its siblings, or to the level, prices it at 15 and
   fails; only per-node multiplication reaches 3.
 
-  Two quantities the payload deliberately does NOT carry, because both are places where the
-  engines part company and neither is a happy path: number > 1 on a root selection, covered by
-  roundtrip-load-root-selection-number, and number > 1 on a selection that owns children, covered
-  by roundtrip-load-number-on-parent-selection. The Trooper is childless for that second reason.
+  Two quantities the payload deliberately does NOT carry, each with a spec of its own: number > 1
+  on a root selection, where the engines genuinely part company, covered by
+  roundtrip-load-root-selection-number; and number > 1 on a selection NewRecruit instances, where
+  they agree — but only since a store-direct adapter bug was fixed — covered by
+  roundtrip-load-number-on-parent-selection. The Trooper here is childless, so neither applies.
 tags: [number, nested]
 
 setup:

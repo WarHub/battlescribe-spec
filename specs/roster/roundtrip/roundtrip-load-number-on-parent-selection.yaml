@@ -1,44 +1,26 @@
 id: roundtrip-load-number-on-parent-selection
 category: roundtrip
 description: >
-  A .ros in which one quantified selection has children and another does not, so the payload
-  carries its own control. Five Troopers, childless, arrive as one node of number 5 everywhere.
-  Three Veterans, each holding a Grenade, arrive as one node of number 3 on BattleScribe and in
-  NewRecruit's own web app — and as three nodes of number 1 on the store-direct `newrecruit`
-  adapter alone.
+  A .ros in which one quantified selection is instanced by NewRecruit and another is not, so the
+  payload carries its own control — its Grenade is non-collective, which is what makes the Veteran
+  instanced (docs/collective-flag.md); merely owning a child would not. Five Troopers, childless,
+  arrive as one node of number 5; three Veterans, each holding a Grenade, arrive as one node of
+  number 3 whose Grenade is at number 3.
+  All four lanes agree on both, which is the point: carrying a quantity through a load does not
+  stop working when the quantified selection is one NewRecruit materialises as instances.
 
-  The roster costs 78 whichever shape it takes. That is what makes this worth a spec: a load that
-  only checked totals would report agreement, and the shape of the tree underneath is the thing
-  that differs. A caller walking the roster finds two children of the Squad on three lanes and
-  four on the fourth, and asking how many Veterans there are gets a different answer depending on
-  whether it counts nodes or reads numbers.
+  The roster costs 78 whichever shape the tree takes, and that is why the assertion goes node by
+  node. A load checked only on totals would report agreement while the tree underneath differed,
+  and "how many Veterans are there" has a different answer depending on whether a caller counts
+  nodes or reads numbers.
 
-  The base expectation is what a user of NewRecruit ends up with: `newrecruit-ui` imports the file
-  through the control a user would use and shows one node at number 3, the same as both
-  BattleScribe lanes. That is the answer the suite should hold every engine to, and the
-  `newrecruit-ui` block restates it only to stop that lane inheriting the store-direct block below.
-
-  WHOSE the split is, though, is deliberately not claimed here, because the two NewRecruit lanes do
-  not read the same object. `newrecruit` reads `loaded.army` — the value `importBs` returns, in
-  memory, immediately. `newrecruit-ui` navigates to the saved list and reads the roster NewRecruit
-  re-hydrated from it. So this is NR's import output measured against NR's persisted-and-reloaded
-  roster, and at least three explanations fit: our adapter reconstructs the tree wrongly, NR's
-  importer really does make three nodes and NR's own rehydrate collapses them, or the two lanes'
-  state readers disagree about how to present the same store. Only the second makes the divergence
-  NewRecruit's, and nothing measured so far separates them.
-
-  What is ruled out is a limit of the store-direct adapter's model: build the same shape through
-  the editor on that engine — select a Veteran, give it a Grenade, set its count to 3 — and it
-  reports one node at number 3. The model holds the shape; something about arriving by file does
-  not produce it.
-
-  Worth knowing while reading this: the same signature — N nodes at amount 1 where NR itself makes
-  one node at amount N — was found and fixed once before in this adapter, on the setSelectionCount
-  path, where it was an `addInstance()` loop standing in for NR's own `setAmount` (see
-  docs/nr-behavioral-differences.md, "setSelectionCount on Child Entries — Fixed"). That is a lead,
-  not the conclusion, and AGENTS.md is explicit that a divergence which turns out to be one
-  implementation's artefact should end with one fewer override in the suite. If it does, this
-  block and the `newrecruit-ui` one both go.
+  It is the only spec covering a quantified parent through a load, and it earned the slot by
+  catching a real split: the store-direct `newrecruit` adapter used to report three Veterans of
+  number 1 with a Grenade of number 1 each. That was the adapter reading the wrong tree — the one
+  NewRecruit's BattleScribe converter builds during an import, which materialises an instanced
+  selection once per unit — instead of the list NR stores and re-opens, which is the one node at
+  number 3 its own editor shows. The adapter opens the imported list the way the app does now, so
+  no lane needs an override here.
 tags: [number, nested]
 
 setup:
@@ -164,131 +146,3 @@ steps:
                           typeId: ct-pts
                           value: 6
                       childCount: 0
-      engines:
-        # The store-direct adapter alone: three Veteran nodes at number 1, one Grenade each. The
-        # Trooper above them is restated unchanged — it is the control, and it is what says the
-        # split follows owning children rather than carrying a number.
-        newrecruit:
-          forces:
-            - name: Detachment
-              entryId: fe-1
-              catalogueId: cat-1
-              selections:
-                - name: Squad
-                  entryId: se-squad
-                  type: unit
-                  number: 1
-                  costs:
-                    - name: pts
-                      typeId: ct-pts
-                      value: 10
-                  children:
-                    - name: Trooper
-                      entryId: se-trooper
-                      type: model
-                      number: 5
-                      costs:
-                        - name: pts
-                          typeId: ct-pts
-                          value: 35
-                      childCount: 0
-                    - name: Veteran
-                      entryId: se-veteran
-                      type: model
-                      number: 1
-                      costs:
-                        - name: pts
-                          typeId: ct-pts
-                          value: 9
-                      children:
-                        - name: Grenade
-                          entryId: se-grenade
-                          type: upgrade
-                          number: 1
-                          costs:
-                            - name: pts
-                              typeId: ct-pts
-                              value: 2
-                          childCount: 0
-                    - name: Veteran
-                      entryId: se-veteran
-                      type: model
-                      number: 1
-                      costs:
-                        - name: pts
-                          typeId: ct-pts
-                          value: 9
-                      children:
-                        - name: Grenade
-                          entryId: se-grenade
-                          type: upgrade
-                          number: 1
-                          costs:
-                            - name: pts
-                              typeId: ct-pts
-                              value: 2
-                          childCount: 0
-                    - name: Veteran
-                      entryId: se-veteran
-                      type: model
-                      number: 1
-                      costs:
-                        - name: pts
-                          typeId: ct-pts
-                          value: 9
-                      children:
-                        - name: Grenade
-                          entryId: se-grenade
-                          type: upgrade
-                          number: 1
-                          costs:
-                            - name: pts
-                              typeId: ct-pts
-                              value: 2
-                          childCount: 0
-        # NewRecruit's own app, through the import control: the base shape, one Veteran node at
-        # number 3. Restated in full because a UI lane with no entry of its own inherits its base
-        # engine's block, and inheriting the one above would assert the adapter's answer against
-        # the application that disagrees with it.
-        newrecruit-ui:
-          forces:
-            - name: Detachment
-              entryId: fe-1
-              catalogueId: cat-1
-              selections:
-                - name: Squad
-                  entryId: se-squad
-                  type: unit
-                  number: 1
-                  costs:
-                    - name: pts
-                      typeId: ct-pts
-                      value: 10
-                  children:
-                    - name: Trooper
-                      entryId: se-trooper
-                      type: model
-                      number: 5
-                      costs:
-                        - name: pts
-                          typeId: ct-pts
-                          value: 35
-                      childCount: 0
-                    - name: Veteran
-                      entryId: se-veteran
-                      type: model
-                      number: 3
-                      costs:
-                        - name: pts
-                          typeId: ct-pts
-                          value: 27
-                      children:
-                        - name: Grenade
-                          entryId: se-grenade
-                          type: upgrade
-                          number: 3
-                          costs:
-                            - name: pts
-                              typeId: ct-pts
-                              value: 6
-                          childCount: 0

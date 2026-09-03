@@ -444,6 +444,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     limit that `rosterCreateRosterAction` would have applied, and that reroute no longer fires once
     the load has filled the roster. No spec orders the two that way, and the previous behaviour was
     worse — the reroute fired and destroyed the roster the load had just brought in.
+
+- **`newrecruit` read the roster NewRecruit's importer builds, not the one it opens** — a `.ros`
+  whose selection carried `number > 1` and was not collective-recursive arrived on the store-direct
+  lane as N nodes of one: a Veteran ×3 holding a Grenade ×3 became three Veterans of one with a
+  Grenade of one each, where BattleScribe, `battlescribe-ui` and `newrecruit-ui` all reported one
+  node of three. The roster cost 78 either way, so only a node-by-node assertion could see it.
+  - The three nodes are NewRecruit's, and so is the collapse. Its BattleScribe converter
+    materialises a quantity as nodes when the selector is instanced — `!collective_recursive`, the
+    rule in docs/collective-flag.md, NOT merely "has children": `roundtrip-reload-roster`'s Trooper
+    x3 owns a collective Weapon and stays one node. The stored list keeps the quantity as a
+    number. Measured store-direct in one session: three nodes at `amount` 1 out of `importBs`, one
+    node at `amount` 3 after `selectList`, a different object rather than a mutated one.
+  - What was ours is which of the two the lane read. `importBs` ends in `addList(list, false)` —
+    added, deliberately *not* selected — so its return value is a pre-storage intermediate that NR
+    shows nobody; the roster a user sees comes from the list page's `updateRoute` →
+    `selectList(row)` → `book.loadList` → `loadRosterFromJson`. The adapter kept the return value
+    and reported the intermediate. It calls `selectList` now, so store-direct and app-driven open
+    the imported list by the same action, and a `selectList` that cannot open what `importBs` just
+    made is an adapter fault carrying NR's own `lastSelectFailure` rather than a silent fallback to
+    the old shape.
+  - `roundtrip-load-number-on-parent-selection` loses **both** per-engine override blocks — the
+    `newrecruit:` one that recorded the split and the `newrecruit-ui:` one that existed only to
+    stop inheriting it — and asserts one shape for all four lanes.
+
 - **`on:` schema pattern rejects the retired entry-addressed dialect (#419, #424)** — the
   `errorAssertion.on` pattern was `^(roster|group)$|^(force|category|selection)( \S.*)?$`, which
   accepted any second token, so `on: selection se-unit-a` stayed schema-valid long after #419 made it

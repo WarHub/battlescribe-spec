@@ -821,6 +821,22 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// assert; NR's store not having <c>importBs</c> at all is our problem and must never satisfy an
     /// <c>expectFailure</c>.
     /// </para>
+    /// <para>
+    /// <b>Importing is not opening, and the roster under test is the OPENED one.</b> <c>importBs</c>
+    /// ends in <c>addList(list, false)</c> — added to <c>listData</c> and deliberately not selected —
+    /// and hands back the tree its BattleScribe converter built on the way there. NR's own editor
+    /// never reads that tree: the list page's <c>updateRoute</c> calls <c>selectList(row)</c>, which
+    /// re-hydrates the army from the stored list via <c>book.loadList</c> →
+    /// <c>loadRosterFromJson</c>. The two trees are not the same shape, because the converter and
+    /// the stored form disagree about quantity: for a selection whose selector <c>isInstanced</c>,
+    /// the converter loops <c>addInstance()</c> <c>number</c> times and divides the children's
+    /// numbers back down, so a Veteran ×3 holding a Grenade ×3 arrives as three Veterans of one
+    /// with a Grenade of one each. Saving and re-opening that yields one node at <c>amount</c> 3,
+    /// which is what the app shows and what <c>newrecruit-ui</c> reads after it navigates to the
+    /// list. Reading <c>importBs</c>'s return value made this lane the only one reporting three
+    /// nodes (<c>roundtrip-load-number-on-parent-selection</c>); it calls <c>selectList</c> now, so
+    /// store-direct and app-driven open the same roster by the same action.
+    /// </para>
     /// </summary>
     private async Task LoadRosterAsync(string xml)
     {
@@ -879,21 +895,32 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                     return fail('adapter', 'loadRoster: importBs returned neither a refusal nor a list');
                 }
 
+                // OPEN the list, rather than keeping the object importBs handed back. importBs
+                // calls addList(list, false) — added, deliberately not selected — so its return
+                // value is the converter's scratch tree, and NR's own editor never reads it: the
+                // list page's updateRoute calls selectList(row), which re-hydrates the army out of
+                // the stored list. The two are not the same tree. See the C# remarks.
+                if (typeof listsStore.selectList !== 'function') {
+                    return fail('adapter', "loadRoster: NR's lists store has no selectList() action — its API changed.");
+                }
+                const opened = await listsStore.selectList(loaded.row);
+                if (!opened?.army || !opened?.row) {
+                    return fail('adapter',
+                        'loadRoster: NR imported the file and then could not open the list it made — selectList said '
+                        + (listsStore.lastSelectFailure ?? 'nothing and returned no army') + '.');
+                }
+
                 // The roster is a singleton that is REPLACED: every later read and action has to
                 // land on the imported one. `books`/`bookCatalogueIds` are carried over — they are
                 // the setup's catalogue handles, which a load does not change.
                 window.__bsspec = {
                     ...(window.__bsspec ?? {}),
-                    army: loaded.army,
-                    book: loaded.book,
-                    row: loaded.row,
+                    army: opened.army,
+                    // loadList only fills `army` when it resolved the book, and the guard above
+                    // requires `army` — so `opened.book` is set whenever we reach here.
+                    book: opened.book,
+                    row: opened.row,
                 };
-
-                // importBs calls addList(list, false) — it adds the row without selecting it, so
-                // currentList still points at the roster that was just replaced.
-                if (listsStore.currentList?.row?.list_key === previousKey) {
-                    listsStore.currentList = loaded;
-                }
 
                 {{NrListStoreJs.DeleteListsFn}}
 
