@@ -1,0 +1,165 @@
+id: roundtrip-load-nested-selections
+category: roundtrip
+description: >
+  A load whose selections are three levels deep — unit holding models holding upgrades — with two
+  siblings at the middle level so the tree has a shape and not just a depth. Every number in the
+  payload is 1 and every per-selection <costs> element is absent, which keeps the spec about one
+  thing: does the parent/child structure in the file come back as the parent/child structure in
+  the roster, with each node costed from its own catalogue entry.
+
+  Depth is where a load can go wrong without saying so. A flat roster survives an engine that
+  re-parents everything onto the force, because flat is where it would land anyway; this one does
+  not, since a Power Sword that arrives beside its Sergeant rather than beneath it fails the
+  assertion at the level it moved to. The roster total is the same either way, which is the
+  reason the tree is asserted node by node rather than trusted to the sum.
+tags: [nested]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-sergeant
+              name: Sergeant
+              type: model
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 12
+              selectionEntries:
+                - id: se-power-sword
+                  name: Power Sword
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 4
+            - id: se-trooper
+              name: Trooper
+              type: model
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 7
+              selectionEntries:
+                - id: se-rifle
+                  name: Rifle
+                  type: upgrade
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 1
+
+steps:
+  # A force before the load, so the payload replaces a roster rather than arriving into an empty
+  # one — and because battlescribe-ui reads back an empty roster when a load is a spec's first
+  # step, which roundtrip-load-simple-roster records rather than works around.
+  - action: addForce
+    forceEntryId: fe-1
+
+  - action: loadRoster
+    content: |
+      <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <roster id="ros-nested" name="Nested Roster" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemName="Test System" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/rosterSchema">
+        <costs/>
+        <forces>
+          <force id="f-1" name="Detachment" entryId="fe-1" catalogueId="cat-1" catalogueRevision="1" catalogueName="Test Catalogue">
+            <selections>
+              <selection id="s-squad" name="Squad" entryId="se-squad" number="1" type="unit">
+                <categories>
+                  <category id="c-squad" name="Uncategorized" entryId="(No Category)" primary="true"/>
+                </categories>
+                <selections>
+                  <selection id="s-sergeant" name="Sergeant" entryId="se-sergeant" number="1" type="model">
+                    <selections>
+                      <selection id="s-power-sword" name="Power Sword" entryId="se-power-sword" number="1" type="upgrade"/>
+                    </selections>
+                  </selection>
+                  <selection id="s-trooper" name="Trooper" entryId="se-trooper" number="1" type="model">
+                    <selections>
+                      <selection id="s-rifle" name="Rifle" entryId="se-rifle" number="1" type="upgrade"/>
+                    </selections>
+                  </selection>
+                </selections>
+              </selection>
+            </selections>
+          </force>
+        </forces>
+      </roster>
+
+  # 10 + 12 + 4 + 7 + 1 = 34, and each node sits where the file put it.
+  - expectedState:
+      name: Nested Roster
+      gameSystemId: gs-1
+      costs:
+        - name: pts
+          typeId: ct-pts
+          value: 34
+      forces:
+        - name: Detachment
+          entryId: fe-1
+          catalogueId: cat-1
+          selections:
+            - name: Squad
+              entryId: se-squad
+              type: unit
+              number: 1
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 10
+              children:
+                - name: Sergeant
+                  entryId: se-sergeant
+                  type: model
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 12
+                  children:
+                    - name: Power Sword
+                      entryId: se-power-sword
+                      type: upgrade
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 4
+                      childCount: 0
+                - name: Trooper
+                  entryId: se-trooper
+                  type: model
+                  number: 1
+                  costs:
+                    - name: pts
+                      typeId: ct-pts
+                      value: 7
+                  children:
+                    - name: Rifle
+                      entryId: se-rifle
+                      type: upgrade
+                      number: 1
+                      costs:
+                        - name: pts
+                          typeId: ct-pts
+                          value: 1
+                      childCount: 0
