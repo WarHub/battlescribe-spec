@@ -223,7 +223,7 @@ public sealed class RosterRunner
     /// assertion identity and the concrete engine identity (see the constructor).
     /// <para>
     /// Checked for <em>every</em> step kind, not just actions. It used to be checked inside
-    /// <see cref="ExecuteAction"/> alone, which made <c>skipEngines</c> on an assertion step silently
+    /// <see cref="PrepareAction"/> alone, which made <c>skipEngines</c> on an assertion step silently
     /// inert — harmless while assertions could never trip over a capability gap, wrong now that they
     /// can: <see cref="ExecuteFileAssertion"/> fails on an engine that cannot export, and
     /// <c>skipEngines</c> is the declaration a spec uses to opt out of that. A declaration the runner
@@ -323,11 +323,22 @@ public sealed class RosterRunner
     /// <summary>
     /// Run an action step, applying the step's <c>expectFailure</c> declaration if it carries one.
     /// <para>
-    /// Without a declaration this is <see cref="ExecuteAction"/> and nothing else: the exception
-    /// propagates to the step loop's catch, which records it and ends the run, exactly as every
-    /// action failure has always done. The declaration is the only thing that makes a refusal
-    /// survivable, and it makes exactly one kind of refusal survivable — see
-    /// <see cref="ActionFailureKind"/>.
+    /// Without a declaration this is <see cref="PrepareAction"/> followed by the engine call it
+    /// returns, and nothing else: an exception propagates to the step loop's catch, which records
+    /// it and ends the run, exactly as every action failure has always done. The declaration is the
+    /// only thing that makes a refusal survivable, and it makes exactly one kind of refusal
+    /// survivable — see <see cref="ActionFailureKind"/>.
+    /// </para>
+    /// <para>
+    /// <b>The spec's half of the step runs before the declaration is consulted, and outside it.</b>
+    /// Resolving <c>${{ … }}</c> expressions, checking required inputs and resolving the catalogue
+    /// are the runner reading the spec — the engine has not been asked anything yet, so nothing
+    /// they throw can be an engine refusal. They used to run inside the same <c>try</c> as the
+    /// engine call, and all of them threw <see cref="InvalidOperationException"/>, which
+    /// <see cref="ActionFailure.Classify"/> reads as <see cref="ActionFailureKind.Engine"/> by its
+    /// remainder rule. So <c>expectFailure: true</c> was satisfied by an index past the end of a
+    /// step's <c>selections</c> list, by a misspelled step id, and by a <c>catalogueId</c> no setup
+    /// declared — a spec could assert its own typo, on every engine at once (#25).
     /// </para>
     /// </summary>
     private void ExecuteActionStep(StepDef step, int stepIndex)
@@ -335,18 +346,23 @@ public sealed class RosterRunner
         var declared = step.ExpectFailure;
         var expected = declared?.ForEngine(OverrideKeyFor(declared.Engines));
 
+        if (PrepareAction(step, stepIndex) is not { } dispatch)
+        {
+            return;
+        }
+
         // No declaration, or this engine is the one declared to accept the input: ordinary path,
         // where any failure is fatal. `expected: false` needs no code of its own — "must succeed"
         // is what the runner already enforces by treating a throw as fatal.
         if (expected is null || !expected.IsExpected)
         {
-            ExecuteAction(step, stepIndex);
+            StoreOutputs(step, dispatch());
             return;
         }
 
         try
         {
-            ExecuteAction(step, stepIndex);
+            dispatch();
         }
         catch (Exception ex) when (ExpectFailure.IsSatisfiedBy(ex, expected))
         {
@@ -376,7 +392,19 @@ public sealed class RosterRunner
         _abortRun = true;
     }
 
-    private void ExecuteAction(StepDef step, int stepIndex)
+    /// <summary>
+    /// Everything an action step does before the engine is asked anything: apply the per-engine
+    /// input overrides, resolve the <c>${{ … }}</c> expressions, check the action's required inputs
+    /// and resolve its catalogue. Returns the engine call itself, bound to those inputs and not yet
+    /// made — or null for an action this runner does not know, which it has already recorded.
+    /// <para>
+    /// Every failure raised here is a statement about the spec, so it must never meet
+    /// <c>expectFailure</c>; see <see cref="ExecuteActionStep"/>. Keep it that way when adding an
+    /// action: anything the runner computes goes above the lambda, and the lambda does nothing but
+    /// call the engine.
+    /// </para>
+    /// </summary>
+    private Func<ActionOutputs?>? PrepareAction(StepDef step, int stepIndex)
     {
         // SkipEngines is handled by the step loop (IsSkippedForEngine / SkipStep), which applies it
         // to assertions too — this method only ever sees steps this engine is meant to run.
@@ -388,100 +416,119 @@ public sealed class RosterRunner
         var forceId = _exprResolver.Resolve(step.ForceId);
         var selectionId = _exprResolver.Resolve(step.SelectionId);
 
-        ActionOutputs? outputs = null;
+        string Require(string? value, string field) => value ?? throw MissingInput(field);
+
+        InvalidOperationException MissingInput(string field)
+            => new($"Step {stepIndex}: {step.Action} requires {field}");
+
         switch (step.Action)
         {
             case "addForce":
-                outputs = _engine.AddForce(
-                    step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addForce requires forceEntryId"),
-                    ProtocolValidator.ResolveCatalogueId(step.CatalogueId, _catalogueIds));
-                break;
+                {
+                    var forceEntryId = Require(step.ForceEntryId, "forceEntryId");
+                    var catalogueId = ProtocolValidator.ResolveCatalogueId(step.CatalogueId, _catalogueIds);
+                    return () => _engine.AddForce(forceEntryId, catalogueId);
+                }
 
             case "addChildForce":
-                outputs = _engine.AddChildForce(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceId"),
-                    step.ForceEntryId ?? throw new InvalidOperationException($"Step {stepIndex}: addChildForce requires forceEntryId"),
-                    ProtocolValidator.ResolveCatalogueId(step.CatalogueId, _catalogueIds));
-                break;
+                {
+                    var parentForceId = Require(forceId, "forceId");
+                    var forceEntryId = Require(step.ForceEntryId, "forceEntryId");
+                    var catalogueId = ProtocolValidator.ResolveCatalogueId(step.CatalogueId, _catalogueIds);
+                    return () => _engine.AddChildForce(parentForceId, forceEntryId, catalogueId);
+                }
 
             case "removeForce":
-                _engine.RemoveForce(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: removeForce requires forceId"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    return () => Void(() => _engine.RemoveForce(target));
+                }
 
             case "selectEntry":
-                outputs = _engine.SelectEntry(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: selectEntry requires forceId"),
-                    step.EntryId ?? throw new InvalidOperationException($"Step {stepIndex}: selectEntry requires entryId"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    var entryId = Require(step.EntryId, "entryId");
+                    return () => _engine.SelectEntry(target, entryId);
+                }
 
             case "selectChildEntry":
-                outputs = _engine.SelectChildEntry(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: selectChildEntry requires forceId"),
-                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: selectChildEntry requires selectionId"),
-                    step.EntryId ?? throw new InvalidOperationException($"Step {stepIndex}: selectChildEntry requires entryId"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    var parentSelectionId = Require(selectionId, "selectionId");
+                    var entryId = Require(step.EntryId, "entryId");
+                    return () => _engine.SelectChildEntry(target, parentSelectionId, entryId);
+                }
 
             case "deselectSelection":
-                _engine.DeselectSelection(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: deselectSelection requires forceId"),
-                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: deselectSelection requires selectionId"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    var selection = Require(selectionId, "selectionId");
+                    return () => Void(() => _engine.DeselectSelection(target, selection));
+                }
 
             case "setSelectionCount":
-                _engine.SetSelectionCount(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires forceId"),
-                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires selectionId"),
-                    step.Count ?? throw new InvalidOperationException($"Step {stepIndex}: setSelectionCount requires count"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    var selection = Require(selectionId, "selectionId");
+                    var count = step.Count ?? throw MissingInput("count");
+                    return () => Void(() => _engine.SetSelectionCount(target, selection, count));
+                }
 
             case "duplicateSelection":
-                outputs = _engine.DuplicateSelection(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateSelection requires forceId"),
-                    selectionId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateSelection requires selectionId"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    var selection = Require(selectionId, "selectionId");
+                    return () => _engine.DuplicateSelection(target, selection);
+                }
 
             case "duplicateForce":
-                outputs = _engine.DuplicateForce(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: duplicateForce requires forceId"));
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    return () => _engine.DuplicateForce(target);
+                }
 
             case "setCostLimit":
-                _engine.SetCostLimit(
-                    step.CostTypeId ?? throw new InvalidOperationException($"Step {stepIndex}: setCostLimit requires costTypeId"),
-                    step.Value ?? throw new InvalidOperationException($"Step {stepIndex}: setCostLimit requires value"));
-                break;
+                {
+                    var costTypeId = Require(step.CostTypeId, "costTypeId");
+                    var value = step.Value ?? throw MissingInput("value");
+                    return () => Void(() => _engine.SetCostLimit(costTypeId, value));
+                }
 
             case "setCustomization":
-                _engine.SetCustomization(
-                    forceId ?? throw new InvalidOperationException($"Step {stepIndex}: setCustomization requires forceId"),
-                    selectionId,
-                    step.CategoryEntryId,
-                    step.CustomName,
-                    step.CustomNotes);
-                break;
+                {
+                    var target = Require(forceId, "forceId");
+                    var (categoryEntryId, customName, customNotes) = (step.CategoryEntryId, step.CustomName, step.CustomNotes);
+                    return () => Void(() => _engine.SetCustomization(target, selectionId, categoryEntryId, customName, customNotes));
+                }
 
             // Persistence. Deliberately NOT wrapped in a NotSupportedException catch: an engine
             // that cannot load must make the spec FAIL, never silently pass. Opting out is the
             // spec's job, via skipEngines / engines: — never the runner's, via swallowing.
             case "loadRoster":
                 {
-                    var inline = step.Content
-                        ?? throw new InvalidOperationException($"Step {stepIndex}: loadRoster requires content");
-                    _engine.LoadRoster(_exprResolver.Resolve(inline) ?? inline);
-                    break;
+                    var inline = Require(step.Content, "content");
+                    var xml = _exprResolver.Resolve(inline) ?? inline;
+                    return () => Void(() => _engine.LoadRoster(xml));
                 }
 
             case "reload":
-                _engine.ReloadRoster();
-                break;
+                return () => Void(_engine.ReloadRoster);
 
             default:
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
-                break;
+                return null;
         }
 
-        // Store outputs for expression resolution in later steps
+        static ActionOutputs? Void(Action engineCall)
+        {
+            engineCall();
+            return null;
+        }
+    }
+
+    /// <summary>Store an action's outputs under its step id, for later <c>${{ steps.… }}</c> expressions.</summary>
+    private void StoreOutputs(StepDef step, ActionOutputs? outputs)
+    {
         if (step.Id is { Length: > 0 } stepId && outputs is not null)
         {
             _exprResolver.StoreOutputs(stepId, outputs);
@@ -508,7 +555,7 @@ public sealed class RosterRunner
     /// fifth engine, an external adapter, or a regression would have restored the silence. Opting an
     /// engine out is the spec's job — <c>skipEngines</c> on the step, or <c>engines: {…: skip}</c> on
     /// the spec — never the runner's, via swallowing. Same rule the <c>loadRoster</c>/<c>reload</c>
-    /// actions follow in <see cref="ExecuteAction"/>.
+    /// actions follow in <see cref="PrepareAction"/>.
     /// </para>
     /// </summary>
     private void ExecuteFileAssertion(StepDef step, int stepIndex)

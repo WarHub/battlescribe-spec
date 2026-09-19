@@ -277,58 +277,58 @@ public static class AdapterHandler
             {
                 case "addForce":
                     outputs = engine.AddForce(
-                        cmd.ForceEntryId ?? throw new InvalidOperationException("addForce requires forceEntryId"),
+                        cmd.ForceEntryId ?? throw MalformedCommand("addForce requires forceEntryId"),
                         ProtocolValidator.ResolveCatalogueId(cmd.CatalogueId, catalogueIds));
                     break;
                 case "addChildForce":
                     outputs = engine.AddChildForce(
-                        cmd.ForceId ?? throw new InvalidOperationException("addChildForce requires forceId"),
-                        cmd.ForceEntryId ?? throw new InvalidOperationException("addChildForce requires forceEntryId"),
+                        cmd.ForceId ?? throw MalformedCommand("addChildForce requires forceId"),
+                        cmd.ForceEntryId ?? throw MalformedCommand("addChildForce requires forceEntryId"),
                         ProtocolValidator.ResolveCatalogueId(cmd.CatalogueId, catalogueIds));
                     break;
                 case "removeForce":
                     engine.RemoveForce(
-                        cmd.ForceId ?? throw new InvalidOperationException("removeForce requires forceId"));
+                        cmd.ForceId ?? throw MalformedCommand("removeForce requires forceId"));
                     break;
                 case "selectEntry":
                     outputs = engine.SelectEntry(
-                        cmd.ForceId ?? throw new InvalidOperationException("selectEntry requires forceId"),
-                        cmd.EntryId ?? throw new InvalidOperationException("selectEntry requires entryId"));
+                        cmd.ForceId ?? throw MalformedCommand("selectEntry requires forceId"),
+                        cmd.EntryId ?? throw MalformedCommand("selectEntry requires entryId"));
                     break;
                 case "selectChildEntry":
                     outputs = engine.SelectChildEntry(
-                        cmd.ForceId ?? throw new InvalidOperationException("selectChildEntry requires forceId"),
-                        cmd.SelectionId ?? throw new InvalidOperationException("selectChildEntry requires selectionId"),
-                        cmd.EntryId ?? throw new InvalidOperationException("selectChildEntry requires entryId"));
+                        cmd.ForceId ?? throw MalformedCommand("selectChildEntry requires forceId"),
+                        cmd.SelectionId ?? throw MalformedCommand("selectChildEntry requires selectionId"),
+                        cmd.EntryId ?? throw MalformedCommand("selectChildEntry requires entryId"));
                     break;
                 case "deselectSelection":
                     engine.DeselectSelection(
-                        cmd.ForceId ?? throw new InvalidOperationException("deselectSelection requires forceId"),
-                        cmd.SelectionId ?? throw new InvalidOperationException("deselectSelection requires selectionId"));
+                        cmd.ForceId ?? throw MalformedCommand("deselectSelection requires forceId"),
+                        cmd.SelectionId ?? throw MalformedCommand("deselectSelection requires selectionId"));
                     break;
                 case "setSelectionCount":
                     engine.SetSelectionCount(
-                        cmd.ForceId ?? throw new InvalidOperationException("setSelectionCount requires forceId"),
-                        cmd.SelectionId ?? throw new InvalidOperationException("setSelectionCount requires selectionId"),
-                        cmd.Count ?? throw new InvalidOperationException("setSelectionCount requires count"));
+                        cmd.ForceId ?? throw MalformedCommand("setSelectionCount requires forceId"),
+                        cmd.SelectionId ?? throw MalformedCommand("setSelectionCount requires selectionId"),
+                        cmd.Count ?? throw MalformedCommand("setSelectionCount requires count"));
                     break;
                 case "duplicateSelection":
                     outputs = engine.DuplicateSelection(
-                        cmd.ForceId ?? throw new InvalidOperationException("duplicateSelection requires forceId"),
-                        cmd.SelectionId ?? throw new InvalidOperationException("duplicateSelection requires selectionId"));
+                        cmd.ForceId ?? throw MalformedCommand("duplicateSelection requires forceId"),
+                        cmd.SelectionId ?? throw MalformedCommand("duplicateSelection requires selectionId"));
                     break;
                 case "duplicateForce":
                     outputs = engine.DuplicateForce(
-                        cmd.ForceId ?? throw new InvalidOperationException("duplicateForce requires forceId"));
+                        cmd.ForceId ?? throw MalformedCommand("duplicateForce requires forceId"));
                     break;
                 case "setCostLimit":
                     engine.SetCostLimit(
-                        cmd.CostTypeId ?? throw new InvalidOperationException("setCostLimit requires costTypeId"),
-                        cmd.Value ?? throw new InvalidOperationException("setCostLimit requires value"));
+                        cmd.CostTypeId ?? throw MalformedCommand("setCostLimit requires costTypeId"),
+                        cmd.Value ?? throw MalformedCommand("setCostLimit requires value"));
                     break;
                 case "setCustomization":
                     engine.SetCustomization(
-                        cmd.ForceId ?? throw new InvalidOperationException("setCustomization requires forceId"),
+                        cmd.ForceId ?? throw MalformedCommand("setCustomization requires forceId"),
                         cmd.SelectionId,
                         cmd.CategoryEntryId,
                         cmd.CustomName,
@@ -336,7 +336,7 @@ public static class AdapterHandler
                     break;
                 case "loadRoster":
                     engine.LoadRoster(
-                        cmd.Xml ?? throw new InvalidOperationException("loadRoster requires xml"));
+                        cmd.Xml ?? throw MalformedCommand("loadRoster requires xml"));
                     break;
                 case "reload":
                     engine.ReloadRoster();
@@ -361,6 +361,16 @@ public static class AdapterHandler
             };
         }
     }
+
+    /// <summary>
+    /// A command missing a field its action requires. Declared a harness fault because that is what
+    /// it is: the client sent something the protocol does not allow, and no engine was consulted.
+    /// Thrown as a plain <see cref="InvalidOperationException"/>, as these checks once were, it fell
+    /// to <see cref="ActionFailure.Classify"/>'s remainder rule and went out on the wire as
+    /// <c>kind:"engine"</c> — a refusal <c>expectFailure</c> would accept.
+    /// </summary>
+    private static HarnessFaultException MalformedCommand(string message)
+        => new($"Malformed command: {message}.");
 
     private static ProtocolResponse HandleGetState(IRosterEngine? engine)
     {
@@ -499,41 +509,41 @@ public static class AdapterHandler
             switch (cmd.Action)
             {
                 case "openFile":
-                    engine.OpenFile(cmd.Id ?? throw new InvalidOperationException("openFile requires id"));
+                    engine.OpenFile(cmd.Id ?? throw MalformedCommand("openFile requires id"));
                     break;
                 case "addEntry":
                     result.EntryId = engine.AddEntry(
-                        cmd.ParentId ?? throw new InvalidOperationException("addEntry requires parentId"),
-                        cmd.EntryType ?? throw new InvalidOperationException("addEntry requires entryType"),
+                        cmd.ParentId ?? throw MalformedCommand("addEntry requires parentId"),
+                        cmd.EntryType ?? throw MalformedCommand("addEntry requires entryType"),
                         cmd.Name,
                         cmd.Id).EntryId;
                     break;
                 case "addLink":
                     result.EntryId = engine.AddLink(
-                        cmd.ParentId ?? throw new InvalidOperationException("addLink requires parentId"),
-                        cmd.LinkType ?? throw new InvalidOperationException("addLink requires linkType"),
-                        cmd.TargetId ?? throw new InvalidOperationException("addLink requires targetId"),
+                        cmd.ParentId ?? throw MalformedCommand("addLink requires parentId"),
+                        cmd.LinkType ?? throw MalformedCommand("addLink requires linkType"),
+                        cmd.TargetId ?? throw MalformedCommand("addLink requires targetId"),
                         cmd.Id).EntryId;
                     break;
                 case "removeEntry":
-                    engine.RemoveEntry(cmd.EntryId ?? throw new InvalidOperationException("removeEntry requires entryId"));
+                    engine.RemoveEntry(cmd.EntryId ?? throw MalformedCommand("removeEntry requires entryId"));
                     break;
                 case "setField":
                     engine.SetField(
-                        cmd.EntryId ?? throw new InvalidOperationException("setField requires entryId"),
-                        cmd.Field ?? throw new InvalidOperationException("setField requires field"),
+                        cmd.EntryId ?? throw MalformedCommand("setField requires entryId"),
+                        cmd.Field ?? throw MalformedCommand("setField requires field"),
                         cmd.Value);
                     break;
                 case "setCost":
                     engine.SetCost(
-                        cmd.EntryId ?? throw new InvalidOperationException("setCost requires entryId"),
-                        cmd.CostTypeId ?? throw new InvalidOperationException("setCost requires costTypeId"),
+                        cmd.EntryId ?? throw MalformedCommand("setCost requires entryId"),
+                        cmd.CostTypeId ?? throw MalformedCommand("setCost requires costTypeId"),
                         cmd.Value);
                     break;
                 case "setCharacteristic":
                     engine.SetCharacteristic(
-                        cmd.EntryId ?? throw new InvalidOperationException("setCharacteristic requires entryId"),
-                        cmd.NameOrTypeId ?? throw new InvalidOperationException("setCharacteristic requires nameOrTypeId"),
+                        cmd.EntryId ?? throw MalformedCommand("setCharacteristic requires entryId"),
+                        cmd.NameOrTypeId ?? throw MalformedCommand("setCharacteristic requires nameOrTypeId"),
                         cmd.Value);
                     break;
                 case "reload":
@@ -543,7 +553,7 @@ public static class AdapterHandler
                     result.Xml = engine.ExportActiveFile();
                     break;
                 case "loadFile":
-                    result.Id = engine.LoadFile(cmd.Xml ?? throw new InvalidOperationException("loadFile requires xml"));
+                    result.Id = engine.LoadFile(cmd.Xml ?? throw MalformedCommand("loadFile requires xml"));
                     break;
                 default:
                     return new GameDataActionResult { Ok = false, Error = $"Unknown gamedata action: {cmd.Action}" };

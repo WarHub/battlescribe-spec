@@ -224,22 +224,27 @@ public sealed class GameDataRunner
 
     /// <summary>
     /// openFile: open an already-loaded file by <paramref name="entryId"/>, or load a file from
-    /// inline <c>content</c> / a side-file keyed by the step id and open it. Returns the opened id.
+    /// inline <c>content</c> / a side-file keyed by the step id and open it. The returned call yields
+    /// the opened id. Finding and reading the side-file happen here, before the call — a missing
+    /// side-file is the spec's mistake, not the editor refusing a file.
     /// </summary>
-    private GameDataActionOutputs ExecuteOpenFile(GameDataStepDef step, int stepIndex, string? entryId)
+    private Func<GameDataActionOutputs?> PrepareOpenFile(GameDataStepDef step, int stepIndex, string? entryId)
     {
         // Open an already-loaded file by id.
         if (entryId is { Length: > 0 })
         {
-            _engine.OpenFile(entryId);
-            return new GameDataActionOutputs { EntryId = entryId };
+            return () =>
+            {
+                _engine.OpenFile(entryId);
+                return new GameDataActionOutputs { EntryId = entryId };
+            };
         }
 
         // Load from inline content and open.
         if (step.Content is { } inline)
         {
             var xml = _exprResolver.Resolve(inline) ?? inline;
-            return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
+            return () => new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
         }
 
         // Load from a side-file keyed by the step id and open.
@@ -250,9 +255,9 @@ public sealed class GameDataRunner
                 ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _engineName, "gst")
                 ?? throw new InvalidOperationException(
                     $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{_engineName}', .cat/.gst) next to the spec");
-            var xml = File.ReadAllText(path);
-            xml = _exprResolver.Resolve(xml) ?? xml;
-            return new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
+            var raw = File.ReadAllText(path);
+            var xml = _exprResolver.Resolve(raw) ?? raw;
+            return () => new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };
         }
 
         throw new InvalidOperationException(
@@ -261,23 +266,31 @@ public sealed class GameDataRunner
 
     /// <summary>
     /// Run an action step, applying the step's <c>expectFailure</c> declaration if it carries one.
-    /// Mirrors <c>RosterRunner.ExecuteActionStep</c> exactly; the judgment itself lives in
-    /// <see cref="ExpectFailure"/> so the two runners cannot drift on what a refusal is.
+    /// Mirrors <c>RosterRunner.ExecuteActionStep</c> exactly, including the split that keeps the
+    /// spec's half of the step (<see cref="PrepareAction"/>) outside the declaration: an
+    /// unresolvable <c>${{ … }}</c> or a missing input is the runner reading the spec, and must never
+    /// pass for the editor refusing a file. The judgment itself lives in <see cref="ExpectFailure"/>
+    /// so the two runners cannot drift on what a refusal is.
     /// </summary>
     private void ExecuteActionStep(GameDataStepDef step, int stepIndex)
     {
         var declared = step.ExpectFailure;
         var expected = declared?.ForEngine(_engineName);
 
+        if (PrepareAction(step, stepIndex) is not { } dispatch)
+        {
+            return;
+        }
+
         if (expected is null || !expected.IsExpected)
         {
-            ExecuteAction(step, stepIndex);
+            StoreOutputs(step, dispatch());
             return;
         }
 
         try
         {
-            ExecuteAction(step, stepIndex);
+            dispatch();
         }
         catch (Exception ex) when (ExpectFailure.IsSatisfiedBy(ex, expected))
         {
@@ -297,88 +310,109 @@ public sealed class GameDataRunner
         _abortRun = true;
     }
 
-    private void ExecuteAction(GameDataStepDef step, int stepIndex)
+    /// <summary>
+    /// Everything an action step does before the editor is asked anything — resolve the
+    /// <c>${{ … }}</c> expressions, check required inputs, read an <c>openFile</c> side-file — and
+    /// the editor call itself, bound to those inputs and not yet made. Null for an action this
+    /// runner does not know, which it has already recorded. Same contract as
+    /// <c>RosterRunner.PrepareAction</c>: anything the runner computes goes above the lambda, and
+    /// the lambda does nothing but call the engine.
+    /// </summary>
+    private Func<GameDataActionOutputs?>? PrepareAction(GameDataStepDef step, int stepIndex)
     {
         var entryId = _exprResolver.Resolve(step.EntryId);
         var parentId = _exprResolver.Resolve(step.ParentId);
 
-        GameDataActionOutputs? outputs = null;
+        string Require(string? value, string field)
+            => value ?? throw new InvalidOperationException($"Step {stepIndex}: {step.Action} requires {field}");
+
         switch (step.Action)
         {
             case "addEntry":
-                // On addEntry, entryId (if given) is the declared id for the created entry.
-                outputs = _engine.AddEntry(
-                    parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addEntry requires parentId"),
-                    step.EntryType ?? throw new InvalidOperationException($"Step {stepIndex}: addEntry requires entryType"),
-                    step.Name,
-                    entryId);
-                break;
+                {
+                    // On addEntry, entryId (if given) is the declared id for the created entry.
+                    var parent = Require(parentId, "parentId");
+                    var entryType = Require(step.EntryType, "entryType");
+                    var name = step.Name;
+                    return () => _engine.AddEntry(parent, entryType, name, entryId);
+                }
 
             case "removeEntry":
-                _engine.RemoveEntry(
-                    entryId ?? throw new InvalidOperationException($"Step {stepIndex}: removeEntry requires entryId"));
-                break;
+                {
+                    var target = Require(entryId, "entryId");
+                    return () => Void(() => _engine.RemoveEntry(target));
+                }
 
             case "openFile":
-                outputs = ExecuteOpenFile(step, stepIndex, entryId);
-                break;
+                return PrepareOpenFile(step, stepIndex, entryId);
 
             case "setFields":
                 {
-                    var target = entryId ?? throw new InvalidOperationException($"Step {stepIndex}: setFields requires entryId");
+                    var target = Require(entryId, "entryId");
                     if (step.Fields is null && step.Characteristics is null && step.Costs is null)
                     {
                         throw new InvalidOperationException(
                             $"Step {stepIndex}: setFields requires at least one of 'fields', 'characteristics' or 'costs'");
                     }
 
-                    // Apply scalar fields first (e.g. a profile's typeId before its characteristics).
-                    if (step.Fields is { } fields)
+                    // Resolved up front, in the order they are applied: scalar fields first (e.g. a
+                    // profile's typeId before its characteristics), then costs, then characteristics.
+                    var fields = ResolvePairs(step.Fields, resolveKey: false);
+                    var costs = ResolvePairs(step.Costs, resolveKey: true);
+                    var characteristics = ResolvePairs(step.Characteristics, resolveKey: true);
+
+                    return () => Void(() =>
                     {
                         foreach (var (field, value) in fields)
                         {
-                            _engine.SetField(target, field, _exprResolver.Resolve(value));
+                            _engine.SetField(target, field, value);
                         }
-                    }
 
-                    if (step.Costs is { } costs)
-                    {
                         foreach (var (costTypeId, value) in costs)
                         {
-                            _engine.SetCost(target, _exprResolver.Resolve(costTypeId)!, _exprResolver.Resolve(value));
+                            _engine.SetCost(target, costTypeId, value);
                         }
-                    }
 
-                    if (step.Characteristics is { } characteristics)
-                    {
                         foreach (var (nameOrTypeId, value) in characteristics)
                         {
-                            _engine.SetCharacteristic(target, _exprResolver.Resolve(nameOrTypeId)!, _exprResolver.Resolve(value));
+                            _engine.SetCharacteristic(target, nameOrTypeId, value);
                         }
-                    }
-
-                    break;
+                    });
                 }
 
             case "addLink":
-                // On addLink, entryId (if given) is the declared id for the created link.
-                outputs = _engine.AddLink(
-                    parentId ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires parentId"),
-                    step.LinkType ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires linkType"),
-                    _exprResolver.Resolve(step.TargetId) ?? throw new InvalidOperationException($"Step {stepIndex}: addLink requires targetId"),
-                    entryId);
-                break;
+                {
+                    // On addLink, entryId (if given) is the declared id for the created link.
+                    var parent = Require(parentId, "parentId");
+                    var linkType = Require(step.LinkType, "linkType");
+                    var targetId = Require(_exprResolver.Resolve(step.TargetId), "targetId");
+                    return () => _engine.AddLink(parent, linkType, targetId, entryId);
+                }
 
             case "reload":
-                _engine.Reload();
-                break;
+                return () => Void(_engine.Reload);
 
             default:
                 _errors.Add($"Step {stepIndex}: unknown action '{step.Action}'");
-                break;
+                return null;
         }
+    }
 
-        // Store outputs for expression resolution in later steps
+    private static GameDataActionOutputs? Void(Action engineCall)
+    {
+        engineCall();
+        return null;
+    }
+
+    /// <summary>A <c>setFields</c> map with its expressions resolved, in declaration order.</summary>
+    private List<(string Key, string? Value)> ResolvePairs(Dictionary<string, string?>? pairs, bool resolveKey)
+        => pairs is null
+            ? []
+            : [.. pairs.Select(p => (resolveKey ? _exprResolver.Resolve(p.Key)! : p.Key, _exprResolver.Resolve(p.Value)))];
+
+    /// <summary>Store an action's outputs under its step id, for later <c>${{ steps.… }}</c> expressions.</summary>
+    private void StoreOutputs(GameDataStepDef step, GameDataActionOutputs? outputs)
+    {
         if (step.Id is { Length: > 0 } stepId && outputs is not null)
         {
             _exprResolver.StoreOutputs(stepId, outputs);
