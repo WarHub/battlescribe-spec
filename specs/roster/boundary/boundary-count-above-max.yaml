@@ -1,0 +1,117 @@
+id: boundary-count-above-max
+category: boundary
+description: >
+  setSelectionCount asks for more of a child entry than its max constraint allows. Neither engine
+  refuses the count, and they disagree about what to do with it instead. BattleScribe clamps: the
+  count lands on the max and the roster stays legal, with nothing said about the difference.
+  NewRecruit takes the number as asked and reports the violation.
+
+  Both BattleScribe lanes clamp for the same reason — the in-process adapter asks the engine's
+  getNumChanges, which bounds a count by the entry's constraints, and the desktop app's count
+  spinner is built with that same bound. It is not a refusal on either: the action succeeds and
+  reports where the count ended up. (It used to read as one on battlescribe-ui, because the driver
+  waited for the number it asked for, timed out, and the timeout reached the classifier as the
+  app refusing — #25.)
+tags: [edge-case, number, max, design-difference]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntries:
+            - id: se-plasma
+              name: Plasma
+              type: upgrade
+              collective: true
+              constraints:
+                - id: con-plasma-max
+                  type: max
+                  value: 3
+                  field: selections
+                  scope: parent
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 2
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-plasma
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-plasma
+
+  # Five of a max-3 entry. Accepted everywhere — nothing refuses it — so the question is only what
+  # the roster looks like afterwards.
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-plasma.selectionId }}
+    count: 5
+
+  # BattleScribe: clamped to the max, silently. The roster is legal, and nothing records that five
+  # were asked for.
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 16
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Plasma
+                  number: 3
+      engines:
+        # NewRecruit: the count as asked, and the violation raised on the over-limit selection.
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 20
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Plasma
+                      number: 5
+          errors:
+            - on: selection ${{ steps.select-plasma.selectionId }}
+              from: se-plasma/con-plasma-max

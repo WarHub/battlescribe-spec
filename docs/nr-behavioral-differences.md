@@ -358,7 +358,9 @@ claimed protocol validation rejecting root targets and a lint rule
 the action is `SpecLintTests.CheckSetSelectionCountHasSelectionId`, which requires a
 `selectionId` and says nothing about what it points at. The one real refusal is per-engine and
 narrower than the claim: `NrUiActions.SetSelectionCountAsync` throws `NotSupportedException`
-for a root selection, because NR's UI renders no number input for one.
+for a root selection, because NR's UI renders no number input for one. The desktop driver does
+the same since #25, for the same reason. What the two engines do when a spec sets a root count
+anyway is `boundary/boundary-count-root-selection` — see §8.
 
 Corrected 2026-09-03, after the sentence was taken at face value and repeated into a spec
 description that had to be corrected too.
@@ -823,6 +825,63 @@ Neither shape is a bug in NewRecruit; only one of them is observable. The store-
 used to keep `importBs`'s return value, and was for that reason the only lane reporting three
 Veterans (`roundtrip-load-number-on-parent-selection`). It calls `selectList` now, so both NR
 lanes open the imported list through the same action the app uses.
+
+---
+
+## 8. Invalid and Edge-of-Range Input (#25)
+
+The #25 spike probed every roster mutation at and past the edge of what it takes, on all four
+lanes. The full matrix is [`invalid-input-behaviour.md`](invalid-input-behaviour.md); these are the
+rows where NewRecruit is the engine that differs, or where what it does is only visible here.
+
+### A count is taken as given, and the roster is flagged
+
+Asked for five of a max-3 entry, or one of a min-2 entry, NewRecruit sets the number and raises the
+constraint on the result. BattleScribe clamps the count into the range its constraints allow and
+raises nothing. Neither refuses. Both NR lanes agree — the options panel's number input takes the
+out-of-range value just as the store's `setAmount` does (`boundary/boundary-count-above-max`,
+`boundary/boundary-count-below-min`).
+
+### A root selection's count is applied by the store
+
+`setAmount` on a root node sets its number: one Squad at number 3, costed three times.
+BattleScribe's engine ignores the same request, and neither app offers a control for it — NR's UI
+counts a root entry by adding and removing units (`boundary/boundary-count-root-selection`, run on
+the two store-direct lanes only).
+
+### Node uids do not survive a reload
+
+Importing a `.ros` mints fresh uids for every force and selection, so any id a spec captured
+before a `reload` names nothing afterwards. BattleScribe restores the ids the file carries
+(`roundtrip/roundtrip-reload-keeps-node-ids`, an expected failure on both NR lanes). No action
+outputs the reloaded roster's ids, so a spec that keeps editing after a reload cannot address what
+it built on this engine.
+
+### A child's uid survives a count of zero
+
+A child selection is a node NR pre-creates at amount 0, so setting its count to zero hides it
+rather than deleting it: the uid still resolves, and a later count brings it back. On BattleScribe
+the selection is gone and the same id is an addressing failure. Not specced — the difference is
+only reachable by reusing an id the other engine has already retired.
+
+### The List Configuration input truncates a fractional limit
+
+Typed 12.5, the cost-limit input keeps 12. The store takes 12.5 when handed it, which makes the
+store-direct lane's 12.5 the deviation within the NR family (`boundary/boundary-cost-limit-fractional`).
+The NR UI driver used to truncate the value itself before typing it, so the app's own truncation
+was invisible behind the driver's.
+
+### An unknown child-force entry is replaced by the book's first force entry
+
+`insertForce` resolves a CHILD force entry through `getForceSelector`, which falls back to the
+catalogue's first force entry when the id is not found — `console.warn("Couldn't Find Force To
+Add", id)` and carry on — and whose `findOptionById` step also accepts a top-level force entry as
+a child. So `addChildForce` with a typo'd id adds the wrong force and reports success — measured:
+`fe-typo` under a Detachment adds a second Detachment, the book's first force entry. At the
+roster level the same lookup has no fallback and throws "Couldn't add Force", which the
+store-direct adapter now reports as an addressing failure. Not specced: the child-force case is a
+silent substitution no expectation can catch without naming the wrong force, and it is recorded
+here as a defect in NR rather than as a behaviour to conform to.
 
 ---
 

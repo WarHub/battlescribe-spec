@@ -1,7 +1,7 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 507 spec files — 387 roster specs
+Any engine, in any language, can validate its behavior against 523 spec files — 403 roster specs
 and 120 GameData specs — covering the complete BattleScribe data model and editing operations.
 
 ## Quick Start
@@ -105,7 +105,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 507 declarative spec files (387 roster + 120 GameData) covering all BattleScribe operations |
+| **YAML Specs** | 523 declarative spec files (403 roster + 120 GameData) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -119,11 +119,12 @@ drive a roster engine — add forces, select entries, assert the resulting roste
 specs (`specs/gamedata/`) drive a catalogue editor — create and edit `.cat`/`.gst` data, assert the
 resulting model or the exact serialized file.
 
-### Roster specs — 387 across 23 categories
+### Roster specs — 403 across 24 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
 | auto-select | 5 | Automatic selection with min constraints and defaults |
+| boundary | 13 | Inputs at the edge of what an action takes — counts past a max, below a min, zero, negative, on a root selection; cost limits of zero, below zero, fractional, huge; adding past a max — and what each engine does with them instead of refusing |
 | catalogue | 5 | Catalogue-level category/force entries, cost types, profile types, root rules |
 | category | 3 | Category links with modifiers, hidden category entries, uncategorised fallback |
 | condition | 37 | All condition types, groups, scopes, instanceOf, null-childId |
@@ -135,7 +136,7 @@ resulting model or the exact serialized file.
 | entry-id | 15 | How `entryId`/`entryGroupId` compose — direct entries, `linkId::targetId` for links, chained links, groups |
 | entry-link | 3 | Entry links with children, collective, groups |
 | export | 1 | Byte-compare of an exported `.ros` against a per-engine snapshot |
-| force | 21 | Add/remove, nested, categories, multi-catalogue, multi-level |
+| force | 22 | Add/remove, nested, categories, multi-catalogue, multi-level — removing a parent takes its child forces with it |
 | gamesystem | 4 | Game system root/shared entries, rules, publications |
 | modifier | 63 | All modifier types, groups, repeats, profiles, rules, characteristics |
 | ordering | 6 | Order of forces, selections and categories — alphabetical, natural sort, definition order |
@@ -143,7 +144,7 @@ resulting model or the exact serialized file.
 | protocol | 2 | Protocol smoke tests (kitchen sink, duplicate force) |
 | real-world | 2 | DataSource specs using wh40k-10e external data |
 | roster | 9 | Creation, metadata, cost types, lifecycle |
-| roundtrip | 16 | Save + load fidelity — `reload` preserves state, `loadRoster` builds a roster from a `.ros` payload (as a spec's first step, or over one the editor built), re-links it against the setup data, refuses the payloads it cannot, and records where the engines disagree about what a valid one becomes |
+| roundtrip | 18 | Save + load fidelity — `reload` preserves state, `loadRoster` builds a roster from a `.ros` payload (as a spec's first step, or over one the editor built), re-links it against the setup data, refuses the payloads it cannot, and records where the engines disagree about what a valid one becomes; whether a node's id survives a reload, and the one roster every engine refuses to load back (the one left when the last force is removed) |
 | scope | 14 | All scope types, child ID filters, include flags |
 | selection | 95 | Lifecycle, groups, links, collective, types, profiles, rules, info groups, publications |
 
@@ -179,7 +180,7 @@ resulting model or the exact serialized file.
 
 ```
 battlescribe-spec/
-├── specs/                          # 507 YAML spec files (387 roster + 120 gamedata)
+├── specs/                          # 523 YAML spec files (403 roster + 120 gamedata)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

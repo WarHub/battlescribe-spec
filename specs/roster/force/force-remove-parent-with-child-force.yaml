@@ -1,0 +1,87 @@
+id: force-remove-parent-with-child-force
+category: force
+description: >
+  Removing a force removes the child forces nested under it, selections and all. The order-of-
+  operations counterpart of force-nested-remove-child, which removes the child and keeps the
+  parent: here the parent goes first, and nothing it contained is left behind as an orphan force or
+  as cost still counted against the roster.
+
+  The child's id is dead afterwards on every engine. A later step naming it fails in the adapter's
+  own lookup, which is an addressing failure and not something a spec can assert — so this spec
+  stops at the state, which is where the answer is.
+tags: [childForce]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-army
+        name: Army
+        categoryLinks:
+          - id: cl-army-troops
+            targetId: cat-troops
+            name: Troops
+        forceEntries:
+          - id: fe-aux
+            name: Auxiliary
+            categoryLinks:
+              - id: cl-aux-troops
+                targetId: cat-troops
+                name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-army
+    forceEntryId: fe-army
+
+  - action: addChildForce
+    id: add-aux
+    forceId: ${{ steps.add-army.forceId }}
+    forceEntryId: fe-aux
+
+  - action: selectEntry
+    forceId: ${{ steps.add-aux.forceId }}
+    entryId: se-squad
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 10
+      forces:
+        - name: Army
+          childForces:
+            - name: Auxiliary
+              selectionCount: 1
+
+  - action: removeForce
+    forceId: ${{ steps.add-army.forceId }}
+
+  - expectedState:
+      forceCount: 0
+      costs:
+        - typeId: pts
+          value: 0

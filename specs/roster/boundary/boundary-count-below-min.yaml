@@ -1,0 +1,118 @@
+id: boundary-count-below-min
+category: boundary
+description: >
+  setSelectionCount asks for fewer of a child entry than its min constraint requires. The mirror
+  of boundary-count-above-max, and the engines split the same way: BattleScribe keeps the count at
+  the min and says nothing, NewRecruit takes the number and reports the unmet min. Neither refuses.
+
+  The child here was never selected by a step — the min constraint auto-selected it — so the count
+  addresses it through the step's `selections` output. That path matters on newrecruit-ui, whose
+  driver used to recognise a child only if it had watched selectChildEntry create it, and treated
+  this one as a root selection with no count control (#25).
+tags: [edge-case, number, min, design-difference]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-mob
+          name: Mob
+          type: unit
+          categoryLinks:
+            - id: cl-mob-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          selectionEntries:
+            - id: se-boy
+              name: Boy
+              type: model
+              constraints:
+                - id: con-boy-min
+                  type: min
+                  value: 2
+                  field: selections
+                  scope: parent
+                - id: con-boy-max
+                  type: max
+                  value: 5
+                  field: selections
+                  scope: parent
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 1
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # The min constraint auto-selects Boy at 2.
+  - action: selectEntry
+    id: select-mob
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-mob
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 2
+      forces:
+        - selections:
+            - name: Mob
+              children:
+                - name: Boy
+                  number: 2
+
+  # One, against a min of two.
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-mob.selections.se-boy }}
+    count: 1
+
+  # BattleScribe: still two. The count is held at the min, and the roster stays legal.
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 2
+      forces:
+        - selections:
+            - name: Mob
+              children:
+                - name: Boy
+                  number: 2
+      engines:
+        # NewRecruit: one, and the unmet min raised on the parent that owes the second.
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 1
+          forces:
+            - selections:
+                - name: Mob
+                  children:
+                    - name: Boy
+                      number: 1
+          errors:
+            - on: selection ${{ steps.select-mob.selectionId }}
+              from: se-boy/con-boy-min

@@ -406,11 +406,42 @@ is a finding, and `skipEngines` would hide it behind "we did not look".
 
 ### What it is not for
 
-An operation the engine silently ignores is not a refusal, and `expectFailure` will fail the spec
-for saying it is. `setSelectionCount` with a negative count is a no-op on BattleScribe: the
-selection keeps its previous count and no error is raised. The conformance question there is
-answered by `expectedState`, which is where a no-op's evidence lives.
+An operation the engine silently changes, clamps or ignores is not a refusal, and `expectFailure`
+will fail the spec for saying it is. `setSelectionCount` past an entry's max is the measured case:
+BattleScribe clamps the count to the max and raises nothing, NewRecruit takes the number and reports
+the violation, and neither refuses (`boundary/boundary-count-above-max`). The conformance question
+there is answered by `expectedState`, which is where that evidence lives.
+
+This section used to cite a negative count as BattleScribe's canonical no-op — "the selection keeps
+its previous count". That was the in-process adapter handing the engine a number the app's spinner
+can never hold. Driven through the app, a negative count bottoms out where the control does, which
+for an entry with no min is removal; the adapter now asks the engine for that floor, and every lane
+agrees (`boundary/boundary-count-negative`).
 
 Nor does it apply to ids that do not exist. A step naming a selection that was already removed fails
 in the adapter's lookup, identically on every engine, before any engine is consulted — that is the
-`address` row in the table above, and it measures the harness rather than the engines.
+`address` row in the table above, and it measures the harness rather than the engines. Every in-box
+adapter reports it that way, and `tests/Infrastructure/AddressingScenarios.cs` holds each lane to it.
+Until #25 only the in-process BattleScribe adapter did: the NewRecruit store-direct adapter and the
+desktop driver returned their lookup misses as ordinary exceptions, which the classifier reads as the
+engine refusing, so on those two lanes `expectFailure` accepted a spec's own stale id.
+
+And it never sees a step the spec cannot resolve. A `${{ … }}` naming a step that does not exist, an
+index past the end of a `selections` list, a missing required input, a `catalogueId` the setup never
+declared — the runner works all of these out before it calls the engine, and outside the
+declaration, so they fail the spec outright with the resolver's own message. They used to be
+resolved inside it, where the classifier read their `InvalidOperationException` as a refusal and
+`expectFailure: true` passed on the typo.
+
+### Where the engines actually refuse
+
+Rarely, among the roster mutations — which is the finding the #25 spike recorded rather than
+assumed. Probed across the mutation surface on all four lanes (counts past a max, below a min, zero,
+negative, huge; cost limits of zero, below zero, fractional, huge; adding and duplicating past a
+max; operations on an empty roster; operations in orders that leave an id stale), the engines
+decline almost nothing. They accept the input and change the roster, or change it less than asked,
+and a constraint then reports on the result. The one genuine refusal the spike found is reached by
+order of operations: remove the last force, then `reload`, and every engine refuses to load back the
+roster it just wrote (`roundtrip/roundtrip-reload-forceless-roster`). The other refusals in the suite
+are the `.ros` payloads `loadRoster` will not parse (`roundtrip/roundtrip-load-*`, #23).
+[`invalid-input-behaviour.md`](invalid-input-behaviour.md) has the probe matrix, lane by lane.

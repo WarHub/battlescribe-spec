@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **What the engines do with invalid and edge-of-range input (#25)** — the spike #25 was rescoped
+  into, and the specs and harness fixes it turned up. Every roster mutation was probed on all four
+  lanes with inputs at or past the edge of what it takes (counts past a max, below a min, zero,
+  negative, a thousand, on a root selection; cost limits of zero, below zero, fractional, a
+  billion; adding and duplicating past a max; operations on an empty roster; orders of operations
+  that leave an id stale). The matrix is `docs/invalid-input-behaviour.md`; sixteen new specs record
+  what it found — a new `boundary` category (13) plus two `roundtrip` specs and one `force` spec.
+  - **The engines refuse almost nothing.** They accept the input and change the roster — or change
+    it less than asked — and a constraint reports on what results. BattleScribe clamps a count into
+    the range its constraints allow, silently; NewRecruit takes the number and flags it
+    (`boundary-count-above-max`, `boundary-count-below-min`). The one genuine refusal is reached by
+    order of operations: remove the last force and `reload`, and every engine refuses to load back
+    the roster it just wrote — BattleScribe because its writer omits the `<forces>` its reader
+    requires, NewRecruit because it refuses a roster without forces
+    (`roundtrip-reload-forceless-roster`).
+  - **Recorded divergences**, each an `engines:` block with the reason beside it rather than a skip:
+    clamp versus flag at a count's min and max; a max-1 child selected again, which both apps leave
+    alone (it is a ticked checkbox) and both engine APIs double (`boundary-select-child-past-max`);
+    a root selection's count, which BattleScribe's engine ignores and NewRecruit's store applies and
+    neither app offers (`boundary-count-root-selection`); a 12.5 cost limit, which NewRecruit's own
+    input truncates to 12 (`boundary-cost-limit-fractional`); and node ids across a reload, which
+    BattleScribe keeps and NewRecruit re-mints (`roundtrip-reload-keeps-node-ids`, an expected
+    failure on both NewRecruit lanes).
+
 - **Roster load in all four engines (#450)** — `LoadRoster`/`ReloadRoster` shipped implemented in
   one engine of four, with the other three opted out of every spec that loads a roster. All four
   implement them now, no spec opts an engine out of the persistence actions, and
@@ -426,6 +450,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   bump path is a slow leak rather than a fix.
 
 ### Fixed
+
+- **`expectFailure` could be satisfied by the spec's own mistakes (#25).** The action classifier
+  reads any exception it does not recognise as the engine refusing, and three layers threw exactly
+  that for failures that were never the engine's:
+  - **The runner.** `${{ … }}` resolution, required-input checks and `catalogueId` resolution ran
+    inside the same `try` as the engine call, so an index past the end of a `selections` list, a
+    misspelled step id or an undeclared catalogue passed `expectFailure: true` on every engine at
+    once. Both runners now resolve a step's inputs first, outside the declaration
+    (`PrepareAction`), and hand the declaration nothing but the engine call.
+    `ProtocolValidator.ResolveCatalogueId` raises `SpecAddressingException`, and the adapter
+    handler answers a command missing a required field as `kind:"harness"`.
+  - **The NewRecruit store-direct adapter** turned every JS lookup miss — a removed selection, a
+    removed force, an unknown cost type — into a plain `InvalidOperationException`. Its snippets
+    now tag a miss `ADDRESS:` and an adapter fault `HARNESS:`, and `FailureFor` maps the tag to the
+    exception that says so. NewRecruit's own "Couldn't add Force" (its top-level force lookup coming
+    back empty) is an addressing failure too, and a bare entry-group id handed to
+    `selectChildEntry` — which minted "group" nodes no user could make — now fails as one.
+  - **The BattleScribe desktop driver** returned every agent error as an `AgentException`. The
+    agent now stamps lookup misses `[bs-ui-agent-address]` — including a panel, tree or dialog that
+    never offers what the spec named — and its own failed expectations `[bs-ui-agent-gap]`, and
+    the driver translates both. A root selection's count, which has no control to drive, is now a
+    capability gap instead of "Spinner not found" read as a refusal.
+  - `tests/Infrastructure/AddressingScenarios.cs` holds all four lanes to it: seven stale or
+    foreign ids under `expectFailure: true`, each of which must fail as an addressing failure. On
+    the two lanes above, every one of them used to pass.
+- **The desktop driver's count and cost-limit spinners (#25).** A count spinner stops at the bounds
+  the entry's constraints give it, and the driver waited for the number it asked for, timed out,
+  and reported the clamp as BattleScribe refusing the count; it now waits for the value the control
+  settled on. It also refused a negative count itself ("count must be >= 0"), classified as the
+  app's refusal; a negative count now drives the spinner down to its floor, as typing one would. A
+  cost limit is set rather than stepped one unit at a time on the JavaFX thread, which a limit of a
+  billion turned into a hang that left the app unresponsive for the rest of the lane.
+- **The in-process BattleScribe adapter's count at and below zero (#25).** Zero was asked through
+  `getNumChanges`, which bounds it by the entry's min, so a min-constrained child survived a count
+  of zero on this lane alone; the desktop app removes it through the roster's remove control and
+  reports the shortfall, and the adapter now does the same. A negative count was handed to the
+  engine as-is and answered "no change" — a value the app's spinner cannot hold — and is now asked
+  as the spinner's floor. `docs/error-assertions.md` cited that no-op as BattleScribe's canonical
+  one; it was the adapter, and the section now says what the engines actually do.
+- **The NewRecruit UI driver's addressing (#25).** A stale force or selection id surfaced as a
+  capability gap or a 20-second timeout, and a selection filed under another force was deselected
+  regardless of the force the spec named — its row lookups took a selection uid and nothing else.
+  Every action now checks the spec's ids against NR's store first (`RequireNodesAsync`). A count on
+  a child that a min constraint auto-selected — one the driver never saw created — was treated as a
+  root selection with no count control; its parent is now read from the store. An unknown cost
+  type is an addressing failure instead of a timeout. A cost limit is typed exactly as written: a
+  fractional one used to be truncated before NewRecruit saw it, and a negative one was typed as an
+  EMPTY field, which NewRecruit stores as the string `""` — not a value its own "is there a limit?"
+  test counts as none — and which then failed the shared state reader's decimal parse. The reader
+  now reads a limit as the number NewRecruit compares it as.
 
 - **`battlescribe-ui` read back an empty roster when a load was a spec's FIRST step** — the staged
   `.ros` was handed to the app, the action returned clean, and the roster afterwards was the empty

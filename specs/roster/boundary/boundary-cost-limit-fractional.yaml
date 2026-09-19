@@ -1,0 +1,86 @@
+id: boundary-cost-limit-fractional
+category: boundary
+description: >
+  A cost limit of 12.5. The format's costs are decimals, so a fractional limit is a well-formed
+  value — the question is what each engine does with the fraction.
+
+  BattleScribe's engine stores it as given. NewRecruit splits: its store takes 12.5 when handed it,
+  but the List Configuration dialog's input truncates what is typed into it, so a user who enters
+  12.5 gets a limit of 12. The app is the normative answer (AGENTS.md), which makes the store-direct
+  lane's 12.5 a deviation of that adapter's route rather than NewRecruit's behaviour — recorded,
+  not smoothed over, because the store is still what every other newrecruit spec drives. (The
+  truncation used to happen in the NewRecruit UI driver too, before the app ever saw the value; it
+  now types what it is given, and the app's 12 is the app's own.)
+
+  Not run on battlescribe-ui: its driver refuses any limit that is not a whole number
+  (BsUiCostLimits), on the premise that BattleScribe's cost-limit spinners are integer spinners.
+  That premise is in question — Spinners.java records the New Roster dialog's spinner as a double
+  one — and until the Edit Roster spinner is examined, what the app does with 12.5 is unknown.
+  A capability gap of the driver, declared rather than hidden.
+tags: [edge-case, cost]
+
+engines:
+  battlescribe-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: setCostLimit
+    costTypeId: pts
+    value: 12.5
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 10
+      costLimits:
+        - typeId: pts
+          value: 12.5
+      engines:
+        # The List Configuration input keeps the whole part of what is typed into it.
+        newrecruit-ui:
+          costLimits:
+            - typeId: pts
+              value: 12
