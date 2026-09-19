@@ -157,6 +157,17 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         // Find the parent of this selection (the container that holds it)
         var parent = FindSelectionParent(force, selectionId);
 
+        // Zero means gone — the reading the desktop driver gives it, and the app's own answer: the
+        // roster's remove control takes the selection out whatever its min, and the min then
+        // reports the shortfall. Asked through getNumChanges instead, zero on a min-constrained
+        // entry came back as "no change", so this lane alone kept two Boys a spec had set to none
+        // (boundary-count-zero-below-min).
+        if (count == 0)
+        {
+            RemoveEntirely(force, selectionId);
+            return;
+        }
+
         // Match the BattleScribe desktop UI behavior exactly:
         // The UI's count spinner calls getNumChanges to compute delta, then loops
         // individual selectEntry (for increase) or deselectEntry (for decrease) calls.
@@ -164,7 +175,13 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         // visible to self-referencing repeat modifiers.
         // This differs from the engine's atomic setNumSelections which does all changes
         // in one shot with a single t() refresh — we intentionally avoid that API here.
-        var delta = Engine.GetNumChanges(parent, dataEntry, count);
+        //
+        // A negative count is asked as zero, because zero is as low as that spinner goes: it cannot
+        // hold a negative, so the app's answer to "-3" is wherever its floor is — removal for an
+        // entry with no min, the min for one that has it. Handed the negative itself,
+        // getNumChanges answers "no change" for either, which is a value the app never produces
+        // (boundary-count-negative).
+        var delta = Engine.GetNumChanges(parent, dataEntry, Math.Max(0, count));
         if (delta > 0)
         {
             for (var i = 0; i < delta; i++)
@@ -178,6 +195,28 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
             {
                 Engine.DeselectEntry(selection);
             }
+        }
+    }
+
+    /// <summary>
+    /// Deselect until the selection is no longer in the roster. One deselect is not enough in
+    /// general: on a collective child it takes one instance per model (6 → 3), which is the
+    /// per-model semantics <c>deselectSelection</c> keeps. Bounded by the selection's own number,
+    /// since every pass removes at least one.
+    /// </summary>
+    private void RemoveEntirely(net.battlescribe.model.roster.Force force, string selectionId)
+    {
+        var budget = Math.Max(1, FindSelectionById(force, selectionId).getNumber()) + 1;
+        for (var pass = 0; TryFindSelectionById(force, selectionId) is { } live; pass++)
+        {
+            if (pass == budget)
+            {
+                throw new HarnessFaultException(
+                    $"Selection '{selectionId}' was still in the roster after {budget} deselects; " +
+                    "the engine is not removing it.");
+            }
+
+            Engine.DeselectEntry(live);
         }
     }
 
@@ -388,6 +427,12 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
     /// </summary>
     private static net.battlescribe.model.roster.Selection FindSelectionById(
         net.battlescribe.model.roster.Force force, string selectionId)
+        => TryFindSelectionById(force, selectionId)
+            ?? throw new SpecAddressingException(
+                $"Selection with ID '{selectionId}' not found in force '{force.getId()}'.");
+
+    private static net.battlescribe.model.roster.Selection? TryFindSelectionById(
+        net.battlescribe.model.roster.Force force, string selectionId)
     {
         foreach (var sel in JavaListToList<net.battlescribe.model.roster.Selection>(force.getSelections()))
         {
@@ -397,8 +442,8 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
                 return found;
             }
         }
-        throw new SpecAddressingException(
-            $"Selection with ID '{selectionId}' not found in force '{force.getId()}'.");
+
+        return null;
     }
 
     private static net.battlescribe.model.roster.Selection? FindSelectionByIdRecursive(

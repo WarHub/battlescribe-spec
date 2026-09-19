@@ -17,6 +17,88 @@ namespace BattleScribeSpec.NrRosterUiDriver;
 /// </summary>
 public static class NrUiActions
 {
+    // ===== Addressing =====
+
+    /// <summary>
+    /// Throws <see cref="SpecAddressingException"/> unless the force the spec named is in the army
+    /// and, when <paramref name="selectionUid"/> is given, the selection is inside THAT force.
+    /// <para>
+    /// The DOM cannot answer this, which is why it is asked of NR's store before any locator runs.
+    /// A missing row means hidden, nested or not rendered yet just as often as it means "no such
+    /// node", so a stale id used to surface as a capability gap ("no selectable row", "hidden
+    /// selections cannot be deselected") or as a 20-second timeout — and a selection that belonged
+    /// to a different force than the spec named was driven anyway, because the row lookups take a
+    /// selection uid and nothing else. The other three lanes answer both cases as an addressing
+    /// failure; this one now does too (#25).
+    /// </para>
+    /// </summary>
+    public static async Task RequireNodesAsync(IPage page, string forceUid, string? selectionUid = null)
+    {
+        var miss = await page.EvaluateAsync<string?>("""
+            ([forceUid, selectionUid]) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                if (!army) return null; // not ours to judge: the action itself reports a missing roster
+                const forces = army.getForces?.() || [];
+                const force = forces.find(f => f.uid === forceUid);
+                if (!force) {
+                    const present = forces.map(f => f.uid).join(', ');
+                    return `Force '${forceUid}' not found in army.getForces() (forces present: [${present}])`;
+                }
+                if (!selectionUid) return null;
+                const inside = (node) => (node.getSelections?.() || [])
+                    .some(s => s.uid === selectionUid || inside(s));
+                if (inside(force)) return null;
+                const elsewhere = forces.some(f => f !== force && inside(f));
+                return `Selection '${selectionUid}' not found in force '${forceUid}'`
+                    + (elsewhere ? ' (it is in another force)' : '');
+            }
+            """, new[] { forceUid, selectionUid });
+
+        if (miss is not null)
+        {
+            throw new SpecAddressingException($"NR UI: {miss}.");
+        }
+    }
+
+    /// <summary>
+    /// Where a selection sits: its parent's uid, whether that parent is a force, and the
+    /// selection's own display name — read from NR's store, so it answers for a selection the
+    /// driver never saw created (one a min constraint auto-selected, say).
+    /// </summary>
+    public static async Task<(string ParentUid, bool ParentIsForce, string Name)?> LocateSelectionAsync(
+        IPage page, string selectionUid)
+    {
+        var located = await page.EvaluateAsync<string[]?>("""
+            (selectionUid) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                if (!army) return null;
+                function find(node, isForce) {
+                    for (const s of (node.getSelections?.() || [])) {
+                        if (s.uid === selectionUid) {
+                            return [node.uid ?? '', isForce ? 'force' : 'selection', s.getName?.() ?? s.name ?? ''];
+                        }
+                        const found = find(s, false);
+                        if (found) return found;
+                    }
+                    return null;
+                }
+                for (const f of (army.getForces?.() || [])) {
+                    const found = find(f, true);
+                    if (found) return found;
+                }
+                return null;
+            }
+            """, selectionUid);
+
+        return located is [var parentUid, var kind, var name]
+            ? (parentUid, kind == "force", name)
+            : null;
+    }
+
     // ===== Force operations =====
 
     /// <summary>
@@ -840,6 +922,25 @@ public static class NrUiActions
     /// </summary>
     public static async Task SetCostLimitAsync(IPage page, string costTypeId, decimal value)
     {
+        // A cost type the roster does not carry has no input in the dialog, and waiting for one
+        // spent the whole interaction timeout and reported a harness fault. It is the spec naming
+        // something that is not there — the same check, against the same store list, that the
+        // store-direct engine makes.
+        var known = await page.EvaluateAsync<bool>("""
+            (costTypeId) => {
+                const pinia = document.querySelector('#__nuxt')
+                    ?.__vue_app__?.config?.globalProperties?.$pinia;
+                const army = pinia?._s?.get('lists')?.currentList?.army ?? window.__bsspec?.army;
+                const maxCosts = army?.getMaxCosts?.();
+                // No list to consult is not a verdict: let the dialog path find out.
+                return !Array.isArray(maxCosts) || maxCosts.some(c => c.typeId === costTypeId || c.name === costTypeId);
+            }
+            """, costTypeId);
+        if (!known)
+        {
+            throw new SpecAddressingException($"NR UI: Cost type '{costTypeId}' not found in roster maxCosts.");
+        }
+
         await DismissOverlaysAsync(page);
 
         // Open "List Options" dropdown
@@ -860,8 +961,14 @@ public static class NrUiActions
         var costInput = page.Locator($"input[id='{costTypeId}']");
         await costInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
 
-        // Set the value
-        var valueStr = value < 0 ? "" : ((int)value).ToString();
+        // Set the value exactly as written, and let NR decide what it means. Two translations used to
+        // happen here first. `(int)value` truncated 12.5 to 12 before NR saw it (NR's own input
+        // truncates too, as it happens — boundary-cost-limit-fractional). And a negative limit was
+        // typed as an EMPTY field, on the theory that empty is how the dialog spells "none"; NR
+        // stores that as the string "", which its own "is there a limit?" test (undefined, null, or
+        // below zero) does not recognise as none, so the lane read back a limit nobody set. A
+        // negative number typed as-is is below zero, which NR does treat as no limit.
+        var valueStr = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await costInput.FillAsync(valueStr);
         await costInput.DispatchEventAsync("change");
 

@@ -380,6 +380,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> AddChildForceAsync(string parentForceId, string forceEntryId, string catalogueId)
     {
+        await NrUiActions.RequireNodesAsync(Browser.Page, parentForceId);
         var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
         var uid = await NrUiActions.AddChildForceByNameAsync(Browser.Page, parentForceId, name, forceEntryId, catalogueId);
         return new ActionOutputs { ForceId = uid, Categories = await ReadCategoryIdsAsync(uid) };
@@ -404,6 +405,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> SelectEntryAsync(string forceId, string entryId)
     {
+        await NrUiActions.RequireNodesAsync(Browser.Page, forceId);
         var name = ResolveEntryName(entryId);
         var uid = await NrUiActions.SelectEntryByNameAsync(Browser.Page, forceId, entryId, name);
         return new ActionOutputs
@@ -418,6 +420,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> SelectChildEntryAsync(string forceId, string parentSelectionId, string entryId)
     {
+        await NrUiActions.RequireNodesAsync(Browser.Page, forceId, parentSelectionId);
         var name = ResolveEntryName(entryId);
         var uid = await NrUiActions.SelectChildEntryByNameAsync(Browser.Page, parentSelectionId, name, entryId);
         if (uid is not null)
@@ -485,25 +488,39 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     public void DeselectSelection(string forceId, string selectionId)
     {
-        _ = forceId;
+        NrUiActions.RequireNodesAsync(Browser.Page, forceId, selectionId).GetAwaiter().GetResult();
         NrUiActions.DeselectSelectionAsync(Browser.Page, selectionId).GetAwaiter().GetResult();
     }
 
     public void SetSelectionCount(string forceId, string selectionId, int count)
+        => SetSelectionCountAsync(forceId, selectionId, count).GetAwaiter().GetResult();
+
+    private async Task SetSelectionCountAsync(string forceId, string selectionId, int count)
     {
-        _ = forceId;
+        await NrUiActions.RequireNodesAsync(Browser.Page, forceId, selectionId);
+
         if (_childSelectionParent.TryGetValue(selectionId, out var info))
         {
             // Pass the child's uid: an instanced entry renders two rows under one name, and only the
             // uid distinguishes the instance's stepper from the "+" add row.
-            NrUiActions.SetChildEntryCountByNameAsync(
-                Browser.Page, info.ParentUid, info.EntryName, count, selectionId).GetAwaiter().GetResult();
+            await NrUiActions.SetChildEntryCountByNameAsync(
+                Browser.Page, info.ParentUid, info.EntryName, count, selectionId);
+            return;
         }
-        else
+
+        // Not a child THIS driver selected — which is not the same as not a child. A selection a
+        // min constraint auto-added (`${{ steps.X.selections.se-boy }}`) never passed through
+        // SelectChildEntry, and was treated as a root selection with no count control, so every
+        // count on one failed as a capability gap on this lane alone. Ask the store where it sits.
+        if (await NrUiActions.LocateSelectionAsync(Browser.Page, selectionId) is { ParentIsForce: false } child)
         {
-            // Root selection — throws (no single count control in NR UI for root-level)
-            NrUiActions.SetSelectionCountAsync(Browser.Page, selectionId, count).GetAwaiter().GetResult();
+            await NrUiActions.SetChildEntryCountByNameAsync(
+                Browser.Page, child.ParentUid, child.Name, count, selectionId);
+            return;
         }
+
+        // Root selection — throws (no single count control in NR UI for root-level)
+        await NrUiActions.SetSelectionCountAsync(Browser.Page, selectionId, count);
     }
 
     public ActionOutputs DuplicateSelection(string forceId, string selectionId)
@@ -511,7 +528,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     private async Task<ActionOutputs> DuplicateSelectionAsync(string forceId, string selectionId)
     {
-        _ = forceId;
+        await NrUiActions.RequireNodesAsync(Browser.Page, forceId, selectionId);
         var uid = await NrUiActions.DuplicateSelectionAsync(Browser.Page, selectionId);
         return new ActionOutputs { SelectionId = uid };
     }
@@ -530,7 +547,10 @@ public sealed class NrRosterUiEngine : IRosterEngine
         => NrUiActions.SetCostLimitAsync(Browser.Page, costTypeId, value).GetAwaiter().GetResult();
 
     public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes)
-        => NrUiActions.SetCustomizationAsync(Browser.Page, forceId, selectionId, categoryEntryId, customName, customNotes).GetAwaiter().GetResult();
+    {
+        NrUiActions.RequireNodesAsync(Browser.Page, forceId, selectionId).GetAwaiter().GetResult();
+        NrUiActions.SetCustomizationAsync(Browser.Page, forceId, selectionId, categoryEntryId, customName, customNotes).GetAwaiter().GetResult();
+    }
 
     // ===== IRosterEngine: State (JS reads — hybrid approach) =====
 

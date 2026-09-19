@@ -175,6 +175,26 @@ Standard error codes:
 - `-32600` — Invalid request (missing `method`)
 - `-32603` — Internal error (exception during execution)
 
+### Whose failure an error is
+
+Every error reaches the C# driver as an `AgentException`, and the action classifier reads an
+unrecognised exception as the ENGINE refusing — which is what `expectFailure` accepts. So a roster
+action that fails for any reason other than BattleScribe's own judgement has to say so, and
+`BsUiRosterEngine` turns what it says into the exception that means it:
+
+| The message carries | Raised as | Stamped by `RosterActions` on |
+|---|---|---|
+| `[bs-ui-agent-address] ` | `SpecAddressingException` | an id the spec named that the roster does not hold (`requireForce` / `requireSelection`), and a tree, panel or dialog that never offers what the spec named |
+| `[bs-ui-agent-gap] ` | `HarnessFaultException` | the agent's own expectation failing — a wait for a roster state the app never reached, an FX thread that stopped answering |
+| `UnsupportedOperationException` | `NotSupportedException` | something the app has no control for, such as a root selection's count |
+| *(none of the above)* | `AgentException` → engine | what the app itself said: an error dialog's text, a load its reader rejected |
+
+The last row is the only one `expectFailure` can match, which is the point. Before #25 every row was
+the last row: a deselect of an already-removed selection, a count spinner clamping at the entry's
+max, and the agent's own `count must be >= 0` guard all passed for BattleScribe refusing the action.
+Address and capability failures are raised straight out of the call and are not retried; the gap
+marker is translated after the retry, so what is retried is unchanged.
+
 ### Threading Model
 
 Commands are dispatched through three routing paths:

@@ -383,6 +383,24 @@ An action your adapter does not implement should answer `error` (an unsupported 
 a refusal — a capability gap is not a judgment about the input, and a spec opts out of it with
 `skipEngines` / `engines: {…: skip}`.
 
+**Classify where the knowledge is, and classify every lookup.** The in-box classifier treats any
+exception it does not recognise as `engine`, so the failures that are *not* the engine's judgment
+have to say what they are. Two measured ways this goes wrong, both fixed in #25:
+
+- A lookup that lives somewhere other than your C# — a JS snippet in a page, a Java agent across an
+  RPC boundary — returns its miss as a string or a remote error, and the C# side rethrows it as an
+  ordinary exception. It reads as the engine refusing. The in-box NewRecruit adapter tags such
+  strings (`ADDRESS:` / `HARNESS:`) and the desktop driver stamps agent errors (`[bs-ui-agent-address]`,
+  `[bs-ui-agent-gap]`), and each side turns the tag back into `SpecAddressingException` /
+  `HarnessFaultException` before the classifier sees it.
+- A UI driver's own waits. "The state I waited for never arrived" is the driver's expectation
+  failing — it may be the app clamping a value, or the driver missing — and never the app refusing,
+  which arrives as a dialog or a message. Send `harness` for it.
+
+The in-box handler also sends `harness` for a command missing a field its action requires, and
+`address` for a `catalogueId` the setup never declared: both are the client's mistakes, and no
+engine is consulted for either.
+
 The `outputs` field is present on success for mutating actions that create elements.
 It contains the IDs described in [Action outputs](#action-outputs) above. The client
 flattens each `outputs` property onto the step's expression namespace — e.g.,

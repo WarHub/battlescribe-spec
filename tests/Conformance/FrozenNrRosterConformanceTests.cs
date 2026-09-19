@@ -121,4 +121,35 @@ public sealed class FrozenNrRosterConformanceTests
             Assert.Fail(message);
         }
     }
+
+    /// <summary>
+    /// A stale or foreign id is an addressing failure on this lane — see
+    /// <see cref="AddressingScenarios"/>. Until the JS lookups tagged their misses, every one of
+    /// these passed here as NewRecruit refusing the action.
+    /// </summary>
+    [Fact]
+    public async Task AnIdTheRosterDoesNotHave_IsAnAddressingFailure()
+    {
+        Assert.SkipWhen(!_fixture.Available,
+            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+
+        var wrong = new List<string>();
+        foreach (var scenario in AddressingScenarios.All)
+        {
+            using var pooled = await _fixture.AcquireAsync(TestContext.Current.CancellationToken);
+            var result = new RosterRunner(pooled.Engine, new DataSourceResolver(), EngineName)
+                .Run(AddressingScenarios.Load(scenario));
+            foreach (var failure in result.Failures)
+            {
+                _output.WriteLine($"{LogPrefix}{scenario}: {failure}");
+            }
+
+            if (AddressingScenarios.Judge(scenario, result) is { } verdict)
+            {
+                wrong.Add(verdict);
+            }
+        }
+
+        Assert.True(wrong.Count == 0, string.Join("\n\n", wrong));
+    }
 }
