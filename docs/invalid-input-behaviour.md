@@ -172,6 +172,8 @@ resolve inputs first, outside the declaration, and hand it nothing but the engin
 - Duplicating a child selection mints nothing on either engine and cannot be driven on either app;
   whether that is a refusal the engines should report is unanswered.
 - An intermittent `NullPointerException` inside BattleScribe's own
-  `EditRosterWindowController.removeForce`, seen once during the probes. The driver retried the
-  removal, found the force already gone, and failed the step as a lookup miss — the retry is the
-  part worth a look, since `removeForce` is not idempotent.
+  `EditRosterWindowController.removeForce`, thrown after the force is already gone. Seen twice,
+  both times while a second UI lane ran on the same machine: once during the probes, and once in a
+  whole `bs-ui-roster` run on `force-remove-parent-with-child-force`, which then passed five
+  isolated reruns. The driver retried the removal, found the force already gone, and failed the step
+  as a lookup miss — the retry is the part worth a look, since `removeForce` is not idempotent.
