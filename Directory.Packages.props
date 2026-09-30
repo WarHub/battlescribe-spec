@@ -27,13 +27,19 @@
     <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.63.0" />
-    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.2.1" />
     <PackageVersion Include="OpenTelemetry" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
-    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <!--
+      mtp-off, NOT xunit.v3: every test here runs through VSTest — the TestProfile runsettings and
+      their TestCaseFilters, the GitHubActions logger, the TRX counters scripts/dotnet-test-step.ps1
+      reads. From 4.0 the plain xunit.v3 package brings Microsoft.Testing.Platform v2, whose MSBuild
+      targets refuse VSTest-mode `dotnet test` on the .NET 10 SDK outright ("Testing with VSTest
+      target is no longer supported"). Moving to MTP is a runner migration, not a package bump.
+    -->
+    <PackageVersion Include="xunit.v3.mtp-off" Version="4.0.1" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="Yaml2JsonNode" Version="3.0.1" />
