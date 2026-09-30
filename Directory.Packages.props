@@ -1,4 +1,19 @@
 <Project>
+  <!--
+    THIS FILE IS THE WHOLE RECORD OF WHAT A RESTORE RESOLVES. Every version below is exact, and
+    transitive pinning holds any package listed here to that version wherever it appears in the
+    graph; everything else resolves by NuGet's lowest-applicable rule against immutable nuget.org
+    packages, so the same file restores the same graph on every machine.
+
+    There are no packages.lock.json files, deliberately. They were on from the start and recorded
+    that same graph a second time, sixteen times over, and a second record drifts from the first:
+    Dependabot regenerates a lock only for a project that references a bumped package DIRECTLY, so
+    a bump left the locks of projects that reach it only through a ProjectReference stale, and the CI
+    check that verified them failed #500, #501 and #503 in turn — three weekly Dependabot PRs whose
+    build and tests never ran, each superseded by the next. That check was the locks' only consumer.
+    Do not bring them back to fix a restore that differs between machines; find the floating input
+    instead.
+  -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
