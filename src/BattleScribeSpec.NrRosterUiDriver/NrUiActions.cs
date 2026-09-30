@@ -130,27 +130,7 @@ public static class NrUiActions
             {
                 // Forces already exist — open via List Options dropdown
                 await page.Locator(".dotsMenuContainer").Filter(new() { HasText = "List Options" }).First.ClickAsync();
-                await page.GetByText("Add Force").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
-
-                // ...and wait for that menu to be GONE before touching the dialog it opened.
-                //
-                // Picking an item does not close NR's SubMenu with the click: `hideSubMenu` defers
-                // its close through `setTimeout(…, 0)`, and until that timer runs the menu is live in
-                // two ways that break the steps below. It is teleported into #popups AHEAD of the
-                // dialog — `[overlay, subMenu, dialog]` — so anything that finds the dialog by
-                // position is aimed at a slot about to vanish. And while open it swallows every
-                // click outside itself: a capture-phase listener calls stopPropagation() and
-                // preventDefault(), so the force row's "+" is eaten and no force is added.
-                //
-                // Measured by holding that timer open for 400ms: #popups read exactly that triple
-                // when the catalogue picker was located, and the "+" was swallowed on every spec
-                // ("expected force[1] but only 1 forces"). CI loses the same race now and then, as
-                // an anonymous 20s timeout on a spec's second addForce — scope-roster-cross-force,
-                // condition-scope-roster, force-selections-independent,
-                // force-multi-catalogue-two-forces. The menu's close is the postcondition of this
-                // click, so it is waited for here rather than tolerated downstream.
-                await page.Locator("#popups .subMenu").First.WaitForAsync(
-                    new() { State = WaitForSelectorState.Detached, Timeout = NrUiTimeouts.Interaction });
+                await ClickMenuItemAsync(page, page.GetByText("Add Force").First);
             }
 
             await forcesPanel.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
@@ -275,8 +255,8 @@ public static class NrUiActions
         // to be a WaitForFunctionAsync over an XPath of sibling indexes, captured once before the
         // wait began — so the wait was aimed at a POSITION, and a node arriving or leaving ahead of
         // the picker in between left it polling a slot the picker no longer held. That is not
-        // hypothetical: NR teleports its menus and dialogs into the same #popups container (see the
-        // menu wait in AddForceByNameAsync). It then timed out as the anonymous
+        // hypothetical: NR teleports its menus and dialogs into the same #popups container (see
+        // ClickMenuItemAsync). It then timed out as the anonymous
         // "Timeout 20000ms exceeded." a function wait produces, naming nothing; a locator wait
         // names its target.
         var selected = new System.Text.RegularExpressions.Regex(
@@ -407,7 +387,7 @@ public static class NrUiActions
         }
         var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
         await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
-        await page.GetByText("Delete Force", new() { Exact = true }).ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+        await ClickMenuItemAsync(page, page.GetByText("Delete Force", new() { Exact = true }));
         await MaybeConfirmDeletionAsync(page);
 
         // Wait for the force to be GONE from the army, which is what this method promises.
@@ -915,7 +895,7 @@ public static class NrUiActions
 
         var forceOptions = page.Locator(".forceOptions").Nth(forceIndex);
         await forceOptions.Locator(".dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
-        await page.GetByText("Duplicate Force", new() { Exact = true }).ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+        await ClickMenuItemAsync(page, page.GetByText("Duplicate Force", new() { Exact = true }));
         return await WaitForNewForceUidAsync(page, before);
     }
 
@@ -957,9 +937,9 @@ public static class NrUiActions
         // `<div class="imgBt"><span class="dropDownIcon">[icon]</span><span>List Configuration</span></div>`.
         // Label-matching is already how this driver picks every other menu item (Rename Unit,
         // Duplicate Force, and the "List Options" opener two lines up).
-        await page.Locator(".subMenu .imgBt")
+        await ClickMenuItemAsync(page, page.Locator(".subMenu .imgBt")
             .Filter(new() { HasText = "List Configuration" })
-            .First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+            .First);
 
         // Wait for the configuration dialog to appear with cost limit inputs
         // Use attribute selector since typeId often contains special chars (dots, dashes)
@@ -1036,7 +1016,7 @@ public static class NrUiActions
             await OpenUnitOptionsSubmenuAsync(page);
 
             // Click "Rename Unit" in the dropdown
-            await page.GetByText("Rename Unit").First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
+            await ClickMenuItemAsync(page, page.GetByText("Rename Unit").First, NrUiTimeouts.OptionalProbe);
 
             // Wait for the editable field, rather than sleeping and then SNAPSHOTTING for it.
             // The 300ms here existed to prop up the `CountAsync() == 0` below — a snapshot, so a
@@ -1064,7 +1044,7 @@ public static class NrUiActions
             await OpenUnitOptionsSubmenuAsync(page);
 
             // Click "Add Note" in the dropdown
-            await page.GetByText("Add Note").First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
+            await ClickMenuItemAsync(page, page.GetByText("Add Note").First, NrUiTimeouts.OptionalProbe);
 
             // Same shape as the rename above: wait for the field instead of sleeping and then
             // snapshotting for it.
@@ -1200,7 +1180,7 @@ public static class NrUiActions
             await forceOptions.Locator(".dotsMenuContainer .dots").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
 
             // Click "Rename Force"
-            await page.GetByText("Rename Force").First.ClickAsync(new() { Timeout = NrUiTimeouts.OptionalProbe });
+            await ClickMenuItemAsync(page, page.GetByText("Rename Force").First, NrUiTimeouts.OptionalProbe);
 
             // Wait for the field instead of sleeping and then snapshotting for it with CountAsync;
             // one union locator covers both shapes the fallback was reaching for.
@@ -1670,6 +1650,42 @@ public static class NrUiActions
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Clicks an item in one of NR's dropdown menus (List Options, Force Options, Unit Options), and
+    /// returns once the menu has CLOSED — that is the click's postcondition, and it does not arrive
+    /// with the click.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// All three menus are NR's SubMenu component, and picking an item does not close it: its
+    /// `hideSubMenu` defers the close through `setTimeout(…, 0)`. Until that timer runs the menu is
+    /// live in two ways that break whatever the driver does next. It is teleported into #popups
+    /// AHEAD of any dialog the item opened — `[overlay, subMenu, dialog]` — so anything that finds
+    /// the dialog by position is aimed at a slot about to vanish. And while open it swallows every
+    /// click outside itself: a capture-phase listener calls stopPropagation() and preventDefault().
+    /// </para>
+    /// <para>
+    /// Measured by holding that timer open for 400ms at every call site: after "Add Force", #popups
+    /// read exactly that triple when the catalogue picker was located, and the force row's "+" was
+    /// swallowed on every spec that adds a second force ("forceCount: expected 2 but got 1"). CI
+    /// lost the same race now and then, as an anonymous 20s timeout on a spec's second addForce.
+    /// The other sites survived the held-open menu, only because what each does next — a fill, a
+    /// key press, a store wait — is something the menu does not intercept. They go through here
+    /// anyway, so that holds by construction rather than by what each caller happens to do next.
+    /// </para>
+    /// <para>
+    /// Not for an item NR marks <c>data-no-close</c> — its play-mode and view toggles — which keeps
+    /// the menu open by design; this would wait out the timeout for a close that never comes. The
+    /// driver picks none of them.
+    /// </para>
+    /// </remarks>
+    private static async Task ClickMenuItemAsync(IPage page, ILocator item, int timeoutMs = NrUiTimeouts.Interaction)
+    {
+        await item.ClickAsync(new() { Timeout = timeoutMs });
+        await page.Locator("#popups .subMenu").First.WaitForAsync(
+            new() { State = WaitForSelectorState.Detached, Timeout = NrUiTimeouts.Interaction });
     }
 
     private static async Task MaybeConfirmDeletionAsync(IPage page)
