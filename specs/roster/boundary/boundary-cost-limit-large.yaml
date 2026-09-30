@@ -1,0 +1,68 @@
+id: boundary-cost-limit-large
+category: boundary
+description: >
+  A cost limit of a billion is recorded as given, and nothing is over it. The far end of the range
+  boundary-cost-limit-zero starts: the limit is a number the engines store, not one they bound.
+
+  Recorded because it found a driver defect rather than an engine one. battlescribe-ui set a cost
+  limit by stepping the Edit Roster spinner one unit at a time, on the JavaFX thread, so this limit
+  held the thread past every timeout the driver has and left the app unresponsive for the rest of
+  the lane (#25). The spinner is now set, not stepped.
+tags: [edge-case, cost]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: setCostLimit
+    costTypeId: pts
+    value: 1000000000
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 10
+      costLimits:
+        - typeId: pts
+          value: 1000000000

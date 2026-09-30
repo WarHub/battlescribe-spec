@@ -1,0 +1,89 @@
+id: boundary-count-zero-below-min
+category: boundary
+description: >
+  setSelectionCount to zero on a child whose min is two: the selection is removed, on every engine,
+  and the roster then reports the min it no longer meets. Zero is a removal even where a min says
+  the entry is required — the requirement is a validation error on the roster that results, not a
+  refusal of the action.
+
+  Contrast boundary-count-below-min, where a count of one against the same min splits the engines
+  (BattleScribe holds the min, NewRecruit takes the one). Zero does not split them, because zero is
+  not a count the spinner is asked to reach: it is the selection going.
+
+  The in-process BattleScribe lane used to be the exception. It asked zero through getNumChanges,
+  which bounds a count by the entry's min and answered "no change", so it kept both Boys; the
+  desktop app removes them through the roster's remove control and reports the shortfall. The app
+  is normative, so the adapter was corrected rather than the difference recorded (#25).
+tags: [edge-case, number, min]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-mob
+          name: Mob
+          type: unit
+          categoryLinks:
+            - id: cl-mob-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          selectionEntries:
+            - id: se-boy
+              name: Boy
+              type: model
+              constraints:
+                - id: con-boy-min
+                  type: min
+                  value: 2
+                  field: selections
+                  scope: parent
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 1
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  # The min constraint auto-selects Boy at 2.
+  - action: selectEntry
+    id: select-mob
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-mob
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-mob.selections.se-boy }}
+    count: 0
+
+  # No Boys, and the Mob flagged for owing two. (No roster cost is asserted: with nothing left that
+  # carries a pts cost, BattleScribe drops the roster's pts entry rather than reporting zero.)
+  - expectedState:
+      errors:
+        - on: selection ${{ steps.select-mob.selectionId }}
+          from: se-boy/con-boy-min
+      forces:
+        - selections:
+            - name: Mob
+              childCount: 0

@@ -1,0 +1,70 @@
+id: boundary-cost-limit-zero
+category: boundary
+description: >
+  A cost limit of zero is a limit, not an absence of one. Every engine records it and reports the
+  roster over it by the whole of its cost — the validation list of a roster the engine accepted,
+  which is why this is expectedState.errors and not expectFailure.
+
+  The contrast is boundary-cost-limit-negative: zero and minus one hundred sit either side of the
+  line between "nothing is allowed" and "there is no limit", and the engines agree on which side
+  each falls.
+tags: [edge-case, cost, validation-errors]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: setCostLimit
+    costTypeId: pts
+    value: 0
+
+  - expectedState:
+      errors:
+        - on: roster
+          from: costLimits/pts
+      costs:
+        - typeId: pts
+          value: 10
+      costLimits:
+        - typeId: pts
+          value: 0

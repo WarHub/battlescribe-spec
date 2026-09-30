@@ -1,0 +1,87 @@
+id: boundary-count-large
+category: boundary
+description: >
+  setSelectionCount to a thousand on a child entry with no max. Every engine takes it, and the cost
+  scales with it. The positive control for boundary-count-above-max: a large count is not refused
+  or clamped for being large, only for exceeding a max the data declares.
+tags: [edge-case, number, cost]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              collective: true
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-weapon
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+    count: 1000
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 5010
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Weapon
+                  number: 1000
+                  costs:
+                    - typeId: pts
+                      value: 5000

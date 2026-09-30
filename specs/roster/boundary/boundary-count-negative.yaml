@@ -1,0 +1,159 @@
+id: boundary-count-negative
+category: boundary
+description: >
+  setSelectionCount with a negative count. No engine refuses it. On a child with no min every engine
+  ends in the same place — the selection is gone — and on a child with a min of two the engines
+  split in a way nothing else in this category shows.
+
+  BattleScribe asks for as low as the count control goes. Its spinner cannot hold a negative, so
+  the app's answer to -3 is the spinner's floor: removal for an entry with no min, the min for one
+  that has it. NewRecruit takes the -3 itself. The selection drops out of the roster, but the store
+  keeps the negative amount, and the min constraint counts it: two Boys short of a min of two reads
+  "requires 5 selections more". Both NewRecruit lanes do this — its options panel takes -3 typed
+  into the count just as its store does.
+
+  The first half overturns a claim the suite used to make. docs/error-assertions.md cited a
+  negative count as BattleScribe's canonical no-op — "the selection keeps its previous count". That
+  was the in-process adapter handing the engine's getNumChanges a number the app's spinner can never
+  hold, and getNumChanges answering "no change". Driven through the app, the selection goes; the
+  adapter now asks the engine for the floor too (#25). battlescribe-ui was worse: its driver refused
+  a negative count itself, and the refusal reached the spec as BattleScribe's.
+tags: [edge-case, number, min, design-difference]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              collective: true
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 5
+        - id: se-mob
+          name: Mob
+          type: unit
+          categoryLinks:
+            - id: cl-mob-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          selectionEntries:
+            - id: se-boy
+              name: Boy
+              type: model
+              constraints:
+                - id: con-boy-min
+                  type: min
+                  value: 2
+                  field: selections
+                  scope: parent
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 1
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-weapon
+
+  # No min: every engine removes it.
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+    count: -3
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 10
+      forces:
+        - selections:
+            - name: Squad
+              childCount: 0
+
+  # A min of two, auto-selected at two.
+  - action: selectEntry
+    id: select-mob
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-mob
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-mob.selections.se-boy }}
+    count: -3
+
+  # BattleScribe: the spinner's floor is the min, so the Boys stay at two and the roster is legal.
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 12
+      forces:
+        - selections:
+            - name: Mob
+              children:
+                - name: Boy
+                  number: 2
+            - name: Squad
+      engines:
+        # NewRecruit: the Boys leave the roster, and the min counts the -3 they left behind.
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-mob.selectionId }}
+              from: se-boy/con-boy-min
+              messageContains: "requires 5"
+          costs:
+            - typeId: pts
+              value: 10
+          forces:
+            - selections:
+                - name: Mob
+                  childCount: 0
+                - name: Squad

@@ -1,0 +1,90 @@
+id: boundary-duplicate-past-max
+category: boundary
+description: >
+  duplicateSelection on a root selection already at its max. No engine refuses the copy: the
+  duplicate is made, and the over-limit shows up in the roster's validation list. A max constraint
+  is something a roster is checked against, not a gate on the actions that build it — the same
+  answer selectEntry gives past a max (constraint-max-violation-linked), reached here by the other
+  action that adds a node.
+
+  The two engine families raise the violation on different nodes, as they do for every collective
+  over-limit: BattleScribe on the category that counted the selections, NewRecruit on the first of
+  the selections.
+tags: [edge-case, max, validation-errors]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-hq
+        name: HQ
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-hero
+          name: Hero
+          type: unit
+          categoryLinks:
+            - id: cl-hero-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          constraints:
+            - id: con-hero-max
+              type: max
+              value: 1
+              field: selections
+              scope: parent
+          costs:
+            - name: pts
+              typeId: pts
+              value: 20
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-hero
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-hero
+
+  - expectedState:
+      errors: []
+      forces:
+        - selectionCount: 1
+
+  - action: duplicateSelection
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-hero.selectionId }}
+
+  - expectedState:
+      errors:
+        - on: category ${{ steps.add-detachment.categories.cat-hq }}
+          from: se-hero/con-hero-max
+      costs:
+        - typeId: pts
+          value: 40
+      forces:
+        - selections:
+            - name: Hero
+            - name: Hero
+      engines:
+        newrecruit:
+          errors:
+            - on: selection ${{ steps.select-hero.selectionId }}
+              from: se-hero/con-hero-max

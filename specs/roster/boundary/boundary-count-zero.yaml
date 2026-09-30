@@ -1,0 +1,89 @@
+id: boundary-count-zero
+category: boundary
+description: >
+  setSelectionCount to zero on a child entry with no min: the selection is removed, on every
+  engine. Zero is the one boundary count all four lanes answer alike, which is what makes it the
+  control for the others in this category — a count of zero is a removal, not a refusal and not a
+  selection left standing at number 0.
+tags: [edge-case, number]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntries:
+            - id: se-weapon
+              name: Weapon
+              type: upgrade
+              collective: true
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 5
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-weapon
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-weapon
+
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 15
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-weapon.selectionId }}
+    count: 0
+
+  # Gone, not standing at zero: the Squad has no children and pays for none.
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 10
+      forces:
+        - selections:
+            - name: Squad
+              childCount: 0

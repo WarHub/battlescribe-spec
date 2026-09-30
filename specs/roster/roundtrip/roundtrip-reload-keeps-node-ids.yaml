@@ -1,0 +1,101 @@
+id: roundtrip-reload-keeps-node-ids
+category: roundtrip
+description: >
+  After a reload, do the ids a spec captured before it still name the same nodes? On BattleScribe
+  they do: a .ros carries every force and selection id, the reader restores them, and a deselect
+  addressed with pre-reload ids removes the Squad it names. NewRecruit mints fresh uids when it
+  imports, so the same deselect names a force that no longer exists.
+
+  That is recorded as an expected FAILURE on both NewRecruit lanes, not as a skip, because what
+  fails is the point: the step's own force id is gone, which the adapter reports as an addressing
+  failure — correctly, and only since #25; before it the store-direct lane reported it as
+  NewRecruit refusing the deselect. A spec that keeps editing after a reload on NewRecruit has no
+  way to name what it built, since no action outputs the reloaded roster's ids. If NewRecruit ever
+  keeps them, this spec starts passing there and the lane says so.
+tags: [edge-case]
+
+engines:
+  newrecruit: fail
+  newrecruit-ui: fail
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+      - id: cat-hq
+        name: HQ
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+          - id: cl-fe-hq
+            targetId: cat-hq
+            name: HQ
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+        - id: se-hero
+          name: Hero
+          type: unit
+          categoryLinks:
+            - id: cl-hero-hq
+              targetId: cat-hq
+              name: HQ
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 20
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-hero
+
+  - action: reload
+
+  # Addressed with ids captured before the reload.
+  - action: deselectSelection
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+
+  # The Squad those ids named is the one removed; the Hero is untouched.
+  - expectedState:
+      costs:
+        - typeId: pts
+          value: 20
+      forces:
+        - selections:
+            - name: Hero

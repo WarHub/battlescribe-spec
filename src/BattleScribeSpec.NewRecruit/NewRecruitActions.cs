@@ -19,14 +19,59 @@ public static class NewRecruitActions
     private const string ErrorPrefix = "ERROR:";
 
     /// <summary>
+    /// Tag on a failure from the adapter's OWN lookup: the spec named a force, selection, entry or
+    /// cost type this roster does not have, and NewRecruit was never asked anything.
+    /// </summary>
+    private const string AddressTag = "ADDRESS:";
+
+    /// <summary>
+    /// Tag on a failure that is the adapter's, not NewRecruit's: no roster in hand, or a node that
+    /// lacks the method the adapter drives it through.
+    /// </summary>
+    private const string HarnessTag = "HARNESS:";
+
+    /// <summary>
+    /// The exception a JS snippet's failure string stands for.
+    /// <para>
+    /// <b>Untagged means NewRecruit's own judgement</b> — its code threw, or it declined to mint the
+    /// node it was asked for — and that stays an <see cref="InvalidOperationException"/>, which the
+    /// action classifier reads as an engine refusal. Everything that is not NewRecruit's judgement
+    /// has to say so, because the classifier's remainder rule is <c>Engine</c>. Until these tags
+    /// existed nothing here said so: a deselect of an already-removed selection came back as
+    /// NewRecruit "refusing" it, and <c>expectFailure: true</c> accepted it on this engine — the
+    /// spec-typo pass <see cref="SpecAddressingException"/> exists to prevent, and which the
+    /// BattleScribe adapter had been closed against since the primitive landed (#25).
+    /// </para>
+    /// </summary>
+    internal static Exception FailureFor(string failure)
+    {
+        if (failure.StartsWith(AddressTag, StringComparison.Ordinal))
+        {
+            return new SpecAddressingException(failure[AddressTag.Length..]);
+        }
+
+        if (failure.StartsWith(HarnessTag, StringComparison.Ordinal))
+        {
+            return new HarnessFaultException(failure[HarnessTag.Length..]);
+        }
+
+        return new InvalidOperationException(
+            failure.StartsWith(ErrorPrefix, StringComparison.Ordinal) ? failure[ErrorPrefix.Length..] : failure);
+    }
+
+    /// <summary>
     /// For create actions: returns uid on success, throws on error.
-    /// JS returns uid string, null (success without uid), or "ERROR:message".
+    /// JS returns uid string, null (success without uid), or a failure string opening with one of
+    /// <c>ERROR:</c> (NewRecruit's own), <c>ADDRESS:</c> or <c>HARNESS:</c> — see <see cref="FailureFor"/>.
     /// </summary>
     internal static string? HandleCreateResult(string? result)
     {
-        if (result?.StartsWith(ErrorPrefix, StringComparison.Ordinal) == true)
+        if (result is not null
+            && (result.StartsWith(ErrorPrefix, StringComparison.Ordinal)
+                || result.StartsWith(AddressTag, StringComparison.Ordinal)
+                || result.StartsWith(HarnessTag, StringComparison.Ordinal)))
         {
-            throw new InvalidOperationException(result[ErrorPrefix.Length..]);
+            throw FailureFor(result);
         }
 
         return result;
@@ -42,14 +87,14 @@ public static class NewRecruitActions
             ({forceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
-                    if (!spec) return 'ERROR:No spec state — was Setup called?';
+                    if (!spec) return 'HARNESS:No spec state — was Setup called?';
                     const army = spec.army;
                     const books = spec.books || [spec.book];
                     const catIds = spec.bookCatalogueIds || [];
                     const book = catalogueId
                         ? (books[catIds.indexOf(catalogueId)] || books[0])
                         : books[0];
-                    if (!army || !book) return 'ERROR:No army or book';
+                    if (!army || !book) return 'HARNESS:No army or book';
 
                     const beforeUids = new Set(
                         (army.getForces?.() || []).map(f => f.uid));
@@ -61,6 +106,12 @@ public static class NewRecruitActions
                     }
                     return null;
                 } catch(e) {
+                    // At the roster level NR's getForceSelector is a plain lookup —
+                    // `book.first().findSelectorById(id) || null` — and insertForce throws exactly
+                    // this when it comes back empty. That is a force entry the book does not offer
+                    // at the top, i.e. the spec's id, not a judgement about the roster.
+                    if (e?.message === "Couldn't add Force")
+                        return `ADDRESS:Force entry '${forceEntryId}' is not offered at the top level (NR: ${e.message})`;
                     return 'ERROR:AddForce error: ' + e.message;
                 }
             }
@@ -78,9 +129,10 @@ public static class NewRecruitActions
             (forceUid) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'ERROR:No current roster';
+                    if (!army) return 'HARNESS:No current roster';
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+                    // The adapter's own force, minted one call ago: missing now is our fault, not the spec's.
+                    if (!force) return `HARNESS:Force not found with uid '${forceUid}'`;
                     const sels = getSelections(force);
                     if (!sels || sels.length === 0) return null;
                     const map = {};
@@ -116,17 +168,17 @@ public static class NewRecruitActions
             ({parentForceUid, childForceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
-                    if (!spec) return 'ERROR:No spec state — was Setup called?';
+                    if (!spec) return 'HARNESS:No spec state — was Setup called?';
                     const army = spec.army;
                     const books = spec.books || [spec.book];
                     const catIds = spec.bookCatalogueIds || [];
                     const book = catalogueId
                         ? (books[catIds.indexOf(catalogueId)] || books[0])
                         : books[0];
-                    if (!army || !book) return 'ERROR:No army or book';
+                    if (!army || !book) return 'HARNESS:No army or book';
 
                     const parentForce = getForceByUid(army, parentForceUid);
-                    if (!parentForce) return `ERROR:Parent force not found with uid '${parentForceUid}'`;
+                    if (!parentForce) return `ADDRESS:Parent force not found with uid '${parentForceUid}'`;
 
                     const beforeUids = new Set(
                         (army.getForces?.() || []).map(f => f.uid));
@@ -134,7 +186,7 @@ public static class NewRecruitActions
                     if (typeof parentForce.insertForce === 'function') {
                         parentForce.insertForce(book, childForceEntryId);
                     } else {
-                        return 'ERROR:insertForce() not available on force object';
+                        return 'HARNESS:insertForce() not available on force object';
                     }
 
                     for (const f of (army.getForces?.() || [])) {
@@ -158,13 +210,13 @@ public static class NewRecruitActions
             (forceUid) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     if (typeof force.delete !== 'function')
-                        return `Force '${forceUid}' has no delete method (unexpected node type)`;
+                        return `HARNESS:Force '${forceUid}' has no delete method (unexpected node type)`;
                     force.delete();
                     return null;
                 } catch(e) {
@@ -174,7 +226,7 @@ public static class NewRecruitActions
             """, forceUid);
         if (error != null)
         {
-            throw new InvalidOperationException(error);
+            throw FailureFor(error);
         }
     }
 
@@ -188,21 +240,21 @@ public static class NewRecruitActions
             ({forceUid, entryId}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'ERROR:No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     const before = new Set(
                         getSelections(force).map(s => s.uid));
 
                     const selector = findSelectorById(force, entryId);
-                    if (!selector) return `ERROR:Entry '${entryId}' not found in force selector tree`;
+                    if (!selector) return `ADDRESS:Entry '${entryId}' not found in force selector tree`;
 
                     // Selectors have addInstance; instances have getAmount/setAmount.
                     // findSelectorById returns a selector node — it must have addInstance.
                     if (typeof selector.addInstance !== 'function')
-                        return `ERROR:Selector for '${entryId}' has no addInstance (unexpected node type)`;
+                        return `HARNESS:Selector for '${entryId}' has no addInstance (unexpected node type)`;
 
                     selector.addInstance();
 
@@ -237,13 +289,28 @@ public static class NewRecruitActions
             ({forceUid, selectionUid, childEntryId}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'ERROR:No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     const sel = getSelectionByUid(force, selectionUid);
-                    if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
+                    if (!sel) return `ADDRESS:Selection not found with uid '${selectionUid}'`;
+
+                    // An entry GROUP is a heading over entries, not an entry: BattleScribe's lookup
+                    // does not offer one and NR's own UI renders it as a title. Driving it anyway
+                    // minted "group" nodes under the selection that no user could have made, and
+                    // reported success. The spec named something that is not selectable here.
+                    // Asked of the node AND its source: an instance answers isGroup() itself, but a
+                    // group's selector has no isGroup of its own — only the catalogue object it is
+                    // built from (`source`) does. Measured: the selector matched for a bare group
+                    // id reports nothing, and its source reports true.
+                    const isGroup = n => {
+                        try { return n?.isGroup?.() === true || n?.source?.isGroup?.() === true; }
+                        catch (e) { return false; }
+                    };
+                    const namesGroup = n => isGroup(n) || isGroup(n?.selector);
+                    const groupAddress = `ADDRESS:'${childEntryId}' names an entry group under selection '${selectionUid}', not an entry that can be selected`;
 
                     // Try to find an existing pre-created instance in getSelections().
                     // For entryLinks, getId() returns the target ID, not the link ID.
@@ -256,6 +323,8 @@ public static class NewRecruitActions
                         || c.selector?.ids?.includes?.(childEntryId)
                         || (childEntryId.includes('::') && c.getBattleScribePath?.() === childEntryId));
 
+                    if (child && namesGroup(child)) return groupAddress;
+
                     if (child) {
                         // Found existing instance. Behavior depends on isInstanced:
                         // - isInstanced=true (non-collective-recursive): create new instance (separate node)
@@ -263,7 +332,7 @@ public static class NewRecruitActions
                         if (child.selector?.isInstanced) {
                             // Instanced entry: each select creates a new independent instance
                             if (typeof child.selector.addInstance !== 'function')
-                                return `ERROR:Selector for '${childEntryId}' has no addInstance`;
+                                return `HARNESS:Selector for '${childEntryId}' has no addInstance`;
                             const newInst = child.selector.addInstance();
                             if (newInst) { newInst.autocheck?.(); return newInst.uid; }
                             return `ERROR:addInstance on '${childEntryId}' returned null`;
@@ -274,7 +343,7 @@ public static class NewRecruitActions
                         // setAmount has been on the node in every snapshot we have pinned, so this
                         // is the one form that works across versions.
                         if (typeof child.setAmount !== 'function' || typeof child.getAmount !== 'function')
-                            return `ERROR:Child instance '${childEntryId}' has no setAmount/getAmount (unexpected node type)`;
+                            return `HARNESS:Child instance '${childEntryId}' has no setAmount/getAmount (unexpected node type)`;
                         child.setAmount({}, child.getAmount() + (child.getStep?.() ?? 1));
                         child.autocheck();
                         return child.uid;
@@ -305,12 +374,14 @@ public static class NewRecruitActions
                         const selectorIds = (sel.selectors || []).map(s => s.id).join(', ');
                         const childCount = children.length;
                         const childIds = children.map(c => c.getId?.()).join(', ');
-                        return `ERROR:Child entry '${childEntryId}' not found under selection (selectors: [${selectorIds}], children: ${childCount} [${childIds}])`;
+                        return `ADDRESS:Child entry '${childEntryId}' not found under selection (selectors: [${selectorIds}], children: ${childCount} [${childIds}])`;
                     }
+
+                    if (namesGroup(targetSelector)) return groupAddress;
 
                     // Selector nodes have addInstance; instance nodes do not.
                     if (typeof targetSelector.addInstance !== 'function')
-                        return `ERROR:Selector for '${childEntryId}' has no addInstance (unexpected node type)`;
+                        return `HARNESS:Selector for '${childEntryId}' has no addInstance (unexpected node type)`;
 
                     targetSelector.addInstance();
                     // Find the new child instance via getSelections diff.
@@ -347,13 +418,13 @@ public static class NewRecruitActions
             ({forceUid, selectionUid}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     const sel = getSelectionByUid(force, selectionUid);
-                    if (!sel) return `Selection not found with uid '${selectionUid}'`;
+                    if (!sel) return `ADDRESS:Selection not found with uid '${selectionUid}'`;
 
                     if (typeof sel.setAmount === 'function' && typeof sel.getAmount === 'function') {
                         sel.setAmount({}, Math.max(0, sel.getAmount() - (sel.getStep?.() ?? 1)));
@@ -365,7 +436,7 @@ public static class NewRecruitActions
                     } else if (typeof sel.delete === 'function') {
                         sel.delete();
                     } else {
-                        return `Selection '${selectionUid}' has no setAmount or delete method`;
+                        return `HARNESS:Selection '${selectionUid}' has no setAmount or delete method`;
                     }
                     return null;
                 } catch(e) {
@@ -375,7 +446,7 @@ public static class NewRecruitActions
             """, new { forceUid, selectionUid });
         if (error != null)
         {
-            throw new InvalidOperationException(error);
+            throw FailureFor(error);
         }
     }
 
@@ -389,18 +460,18 @@ public static class NewRecruitActions
             ({forceUid, selectionUid, count}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     const sel = getSelectionByUid(force, selectionUid);
-                    if (!sel) return `Selection not found with uid '${selectionUid}'`;
+                    if (!sel) return `ADDRESS:Selection not found with uid '${selectionUid}'`;
 
                     if (typeof sel.getAmount !== 'function')
-                        return `Selection '${selectionUid}' has no getAmount (unexpected node type)`;
+                        return `HARNESS:Selection '${selectionUid}' has no getAmount (unexpected node type)`;
                     if (typeof sel.setAmount !== 'function')
-                        return `Selection '${selectionUid}' has no setAmount (unexpected node type)`;
+                        return `HARNESS:Selection '${selectionUid}' has no setAmount (unexpected node type)`;
 
                     const current = sel.getAmount();
                     if (current === count) return null;
@@ -414,7 +485,7 @@ public static class NewRecruitActions
             """, new { forceUid, selectionUid, count });
         if (error != null)
         {
-            throw new InvalidOperationException(error);
+            throw FailureFor(error);
         }
     }
 
@@ -428,19 +499,19 @@ public static class NewRecruitActions
             async ({forceUid, selectionUid}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'ERROR:No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     const before = new Set(
                         getSelections(force).map(s => s.uid));
 
                     const sel = getSelectionByUid(force, selectionUid);
-                    if (!sel) return `ERROR:Selection not found with uid '${selectionUid}'`;
+                    if (!sel) return `ADDRESS:Selection not found with uid '${selectionUid}'`;
 
                     if (typeof sel.dupe !== 'function')
-                        return 'ERROR:dupe() method not available on selection';
+                        return 'HARNESS:dupe() method not available on selection';
 
                     await sel.dupe();
 
@@ -471,16 +542,16 @@ public static class NewRecruitActions
             async ({forceUid}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'ERROR:No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const before = new Set(
                         (army.getForces?.() || []).map(f => f.uid));
 
                     const force = getForceByUid(army, forceUid);
-                    if (!force) return `ERROR:Force not found with uid '${forceUid}'`;
+                    if (!force) return `ADDRESS:Force not found with uid '${forceUid}'`;
 
                     if (typeof force.dupe !== 'function')
-                        return 'ERROR:dupe() method not available on force';
+                        return 'HARNESS:dupe() method not available on force';
 
                     await force.dupe();
 
@@ -509,7 +580,7 @@ public static class NewRecruitActions
             ({costTypeId, value}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const maxCosts = army.getMaxCosts?.();
                     if (maxCosts && Array.isArray(maxCosts)) {
@@ -520,7 +591,7 @@ public static class NewRecruitActions
                             return null;
                         }
                     }
-                    return `Cost type '${costTypeId}' not found in roster maxCosts`;
+                    return `ADDRESS:Cost type '${costTypeId}' not found in roster maxCosts`;
                 } catch(e) {
                     return 'SetCostLimit error: ' + e.message;
                 }
@@ -528,7 +599,7 @@ public static class NewRecruitActions
             """, new { costTypeId, value });
         if (error != null)
         {
-            throw new InvalidOperationException(error);
+            throw FailureFor(error);
         }
     }
 
@@ -544,11 +615,11 @@ public static class NewRecruitActions
             ({forceId, selectionId, customName, customNotes}) => {
                 try {
                     const army = window.__bsspec?.army;
-                    if (!army) return 'No current roster';
+                    if (!army) return 'HARNESS:No current roster';
 
                     const forces = army.getForces?.() || [];
                     const force = forces.find(f => f.uid === forceId);
-                    if (!force) return `Force '${forceId}' not found`;
+                    if (!force) return `ADDRESS:Force '${forceId}' not found`;
 
                     if (selectionId) {
                         function findSel(parent) {
@@ -560,7 +631,7 @@ public static class NewRecruitActions
                             return null;
                         }
                         const sel = findSel(force);
-                        if (!sel) return `Selection '${selectionId}' not found in force '${forceId}'`;
+                        if (!sel) return `ADDRESS:Selection '${selectionId}' not found in force '${forceId}'`;
 
                         if (customName !== null && customName !== undefined) sel.customName = customName;
                         if (customNotes !== null && customNotes !== undefined) sel.note = customNotes;
@@ -576,7 +647,7 @@ public static class NewRecruitActions
             """, new { forceId, selectionId, customName, customNotes });
         if (error != null)
         {
-            throw new InvalidOperationException(error);
+            throw FailureFor(error);
         }
     }
 }

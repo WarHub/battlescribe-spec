@@ -78,4 +78,14 @@ public sealed class BsRosterUiConformanceTests : ConformanceTestBase
     [Theory]
     [MemberData(nameof(AllSpecs))]
     public void BsRosterUiEngine(string specPath, string specName) => RunSpec(specPath, specName);
+
+    /// <summary>
+    /// A stale or foreign id is an addressing failure on this lane — see
+    /// <see cref="AddressingScenarios"/>. Until the agent stamped its lookup misses, every one of
+    /// these passed here as BattleScribe refusing the action.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AddressingScenarios.Names), MemberType = typeof(AddressingScenarios))]
+    public void BsRosterUiEngine_AnIdTheRosterDoesNotHave_IsAnAddressingFailure(string scenario)
+        => RunAddressingScenario(scenario);
 }

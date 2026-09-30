@@ -1,3 +1,4 @@
+using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
 
@@ -138,6 +139,120 @@ public class ExpectFailureTests(ITestOutputHelper output)
         output.WriteLine(failure);
         Assert.Contains("sent no 'kind'", failure, StringComparison.Ordinal);
         Assert.Contains("docs/adapter-protocol.md", failure, StringComparison.Ordinal);
+    }
+
+    // ── What the spec got wrong before any engine was asked ──────────
+
+    /// <summary>
+    /// <c>${{ … }}</c> resolution is the runner reading the spec, and it used to happen inside the
+    /// same <c>try</c> as the engine call. Its failures are <see cref="InvalidOperationException"/>,
+    /// which the classifier's remainder rule calls an engine refusal — so an index past the end of a
+    /// step's <c>selections</c> list satisfied <c>expectFailure: true</c>, on every engine at once,
+    /// without the engine being asked anything (#25).
+    /// </summary>
+    [Fact]
+    public void AnIndexPastTheEnd_IsNotARefusal_AndNeverReachesTheEngine()
+    {
+        using var engine = new ScriptedEngine(loadThrows: null);
+        var result = RunSteps(engine, """
+            - action: addForce
+              id: add-force
+              forceEntryId: fe-1
+
+            - action: deselectSelection
+              forceId: ${{ steps.add-force.forceId }}
+              selectionId: ${{ steps.add-force.selections.se-1[3] }}
+              expectFailure: true
+            """);
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("index 3 is out of range", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("refused", failure, StringComparison.Ordinal);
+        Assert.Equal(0, engine.DeselectCalls);
+    }
+
+    /// <summary>The same hole, entered through a typo: a step id the spec never declared.</summary>
+    [Fact]
+    public void AStepIdTheSpecNeverDeclared_IsNotARefusal()
+    {
+        using var engine = new ScriptedEngine(loadThrows: null);
+        var result = RunSteps(engine, """
+            - action: addForce
+              id: add-force
+              forceEntryId: fe-1
+
+            - action: selectEntry
+              forceId: ${{ steps.add-froce.forceId }}
+              entryId: se-1
+              expectFailure: true
+            """);
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("step 'add-froce' not found", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("refused", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// …and through <c>catalogueId</c>, which the runner resolves against the setup before any
+    /// engine sees it. A catalogue the setup never declared is an addressing failure, and says so.
+    /// </summary>
+    [Fact]
+    public void ACatalogueTheSetupNeverDeclared_IsNotARefusal()
+    {
+        using var engine = new ScriptedEngine(loadThrows: null);
+        var result = RunSteps(engine, """
+            - action: addForce
+              forceEntryId: fe-1
+              catalogueId: cat-typo
+              expectFailure: true
+            """);
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("SpecAddressingException", failure, StringComparison.Ordinal);
+        Assert.Contains("'cat-typo' not found in setup catalogues", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("refused", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The gamedata runner shares the primitive and had the same hole: its expressions resolved
+    /// inside the declaration too.
+    /// </summary>
+    [Fact]
+    public void AGameDataExpressionTheSpecCannotResolve_IsNotARefusal()
+    {
+        var engine = new ScriptedGameDataEngine();
+        var spec = new GameDataSpecFile
+        {
+            Id = "gamedata-expect-failure-unresolvable",
+            Category = "runner",
+            Description = "harness",
+            Setup = new GameDataSetupDef
+            {
+                GameSystem = new ProtocolGameSystem { Id = "gs-1", Name = "GS" },
+                Catalogues = [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "gs-1" }],
+                Edit = "cat-1",
+            },
+            Steps =
+            [
+                new GameDataStepDef
+                {
+                    Action = "removeEntry",
+                    EntryId = "${{ steps.add-entyr.entryId }}",
+                    ExpectFailure = new ExpectFailureDef { Expected = true },
+                },
+            ],
+        };
+
+        var result = new GameDataRunner(engine, "battlescribe").Run(spec);
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("step 'add-entyr' not found", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("refused", failure, StringComparison.Ordinal);
+        Assert.Equal(0, engine.RemoveCalls);
     }
 
     // ── Classification ───────────────────────────────────────────────
@@ -463,6 +578,33 @@ public class ExpectFailureTests(ITestOutputHelper output)
         return new RosterRunner(engine, engineName: engineName).Run(SpecLoader.LoadFromYaml(yaml));
     }
 
+    /// <summary>Runs <paramref name="steps"/> — a YAML step list, written flat — against <paramref name="engine"/>.</summary>
+    private static SpecResult RunSteps(ScriptedEngine engine, string steps)
+    {
+        var yaml = """
+            id: expect-failure-steps
+            category: roundtrip
+            description: harness
+
+            setup:
+              gameSystem:
+                forceEntries:
+                  - id: fe-1
+                    name: Force
+              catalogues:
+                - id: cat-1
+                  selectionEntries:
+                    - id: se-1
+                      name: Unit
+                      type: unit
+
+            steps:
+            STEPS
+            """.Replace("STEPS", Indent(steps, 2), StringComparison.Ordinal);
+
+        return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
+    }
+
     private static string Indent(string yaml, int spaces)
         => string.Join(
             "\n",
@@ -480,9 +622,13 @@ public class ExpectFailureTests(ITestOutputHelper output)
     {
         public bool ReachedStateAssertion { get; private set; }
 
+        public int DeselectCalls { get; private set; }
+
         public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => [];
 
-        public ActionOutputs AddForce(string forceEntryId, string catalogueId) => new() { ForceId = "force-1" };
+        // One auto-selected node, so an index test has a list to run off the end of.
+        public ActionOutputs AddForce(string forceEntryId, string catalogueId)
+            => new() { ForceId = "force-1", Selections = new() { ["se-1"] = ["sel-auto"] } };
 
         public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId)
             => new() { ForceId = "child-force-1" };
@@ -494,7 +640,7 @@ public class ExpectFailureTests(ITestOutputHelper output)
         public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId)
             => new() { SelectionId = "sel-2" };
 
-        public void DeselectSelection(string forceId, string selectionId) { }
+        public void DeselectSelection(string forceId, string selectionId) => DeselectCalls++;
 
         public void SetSelectionCount(string forceId, string selectionId, int count) { }
 
@@ -524,6 +670,28 @@ public class ExpectFailureTests(ITestOutputHelper output)
         }
 
         public IReadOnlyList<ValidationErrorState> GetValidationErrors() => [];
+
+        public void Dispose() { }
+    }
+
+    /// <summary>A gamedata engine that only counts the calls the tests above say must not happen.</summary>
+    private sealed class ScriptedGameDataEngine : IGameDataEngine
+    {
+        public int RemoveCalls { get; private set; }
+
+        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => [];
+
+        public GameDataActionOutputs AddEntry(string parentId, string entryType, string? name = null, string? id = null)
+            => new() { EntryId = id ?? "entry-1" };
+
+        public void RemoveEntry(string entryId) => RemoveCalls++;
+
+        public void SetField(string entryId, string field, string? value) { }
+
+        public GameDataActionOutputs AddLink(string parentId, string linkType, string targetId, string? id = null)
+            => new() { EntryId = id ?? "link-1" };
+
+        public GameDataState GetState() => new();
 
         public void Dispose() { }
     }

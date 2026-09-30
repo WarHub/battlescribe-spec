@@ -222,6 +222,15 @@ public sealed class BsUiRosterEngine : IRosterEngine
 
     public void SetCostLimit(string costTypeId, decimal value)
     {
+        // A cost type the game system does not declare has no spinner to find, and the lookup miss
+        // reached the classifier as BattleScribe refusing the limit. It is the spec naming
+        // something that is not there — checked against the setup before anything is driven.
+        if (!_costNamesById.ContainsKey(costTypeId))
+        {
+            throw new SpecAddressingException(
+                $"[bs-ui] Cost type '{costTypeId}' not found (game system declares: [{string.Join(", ", _costNamesById.Keys)}]).");
+        }
+
         _pendingCostLimits[costTypeId] = value;
         if (!_engineLocated)
         {
@@ -1518,7 +1527,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             }
         }
 
-        var result = await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
+        var result = await CallAgentAsync(method, parameters);
         var json = result?.ToJsonString() ?? "{}";
         var output = JsonSerializer.Deserialize<T>(json, JsonOptions)
             ?? throw new InvalidOperationException($"{method} returned null result");
@@ -1538,7 +1547,69 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task CallActionAsync(string method, JsonObject parameters)
     {
         EnsureSetup();
-        await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
+        await CallAgentAsync(method, parameters);
+    }
+
+    /// <summary>
+    /// Mirrors <c>RosterActions.ADDRESS</c>: the agent stamps this on a failure raised because an
+    /// id the spec named is not in the roster.
+    /// </summary>
+    internal const string AgentAddressMarker = "[bs-ui-agent-address] ";
+
+    /// <summary>
+    /// Mirrors <c>RosterActions.AGENT_GAP</c> (<c>DataEditorActions.ADAPTER_GAP</c>): the agent's
+    /// own expectation failed — a wait for a state the app never reached.
+    /// </summary>
+    internal const string AgentGapMarker = "[bs-ui-agent-gap] ";
+
+    /// <summary>
+    /// One Java-side action, with the agent's failure translated into what it IS before it leaves
+    /// this driver.
+    /// <para>
+    /// <b>Every failure the agent returns is an <see cref="AgentException"/>, and the action
+    /// classifier's remainder rule reads an unrecognised exception as the ENGINE refusing.</b> So
+    /// until the agent said otherwise, every lookup miss on this lane — a deselect of a selection
+    /// already removed, a select into a force already gone — passed as BattleScribe declining the
+    /// action, and <c>expectFailure</c> accepted a spec's own typo here and nowhere else except the
+    /// other adapters that did not classify either (#25). The two translations made here are the two
+    /// the agent can vouch for: an id the spec named is not in the roster, and the app has no
+    /// control for what was asked.
+    /// </para>
+    /// <para>
+    /// Both are thrown straight out, past the retry in <see cref="RunWithRetryAsync{T}"/>: neither
+    /// is transient, and re-running a lookup miss only doubles the wait for the same answer. The
+    /// agent's own-expectation failures are translated there instead, after the retry, so the
+    /// retry budget for them is exactly what it was.
+    /// </para>
+    /// </summary>
+    private async Task<JsonNode?> CallAgentAsync(string method, JsonObject parameters)
+    {
+        try
+        {
+            return await ConnectedClient.CallAsync(method, parameters, timeout: ActionCallTimeout);
+        }
+        catch (AgentException ex) when (ex.Message.Contains(AgentAddressMarker, StringComparison.Ordinal))
+        {
+            throw new SpecAddressingException($"[bs-ui] {method}: {StripAgentTrace(ex.Message)}", ex);
+        }
+        catch (AgentException ex) when (ex.Message.Contains("UnsupportedOperationException", StringComparison.Ordinal))
+        {
+            throw new NotSupportedException($"[bs-ui] {method}: {StripAgentTrace(ex.Message)}", ex);
+        }
+    }
+
+    /// <summary>
+    /// The agent's message without the Java stack it appends after <c>||</c> and without the
+    /// markers, which have done their job once the exception type says the same thing.
+    /// </summary>
+    internal static string StripAgentTrace(string message)
+    {
+        var trace = message.IndexOf(" || ", StringComparison.Ordinal);
+        var head = trace >= 0 ? message[..trace] : message;
+        return head.Replace(AgentAddressMarker, "", StringComparison.Ordinal)
+            .Replace(AgentGapMarker, "", StringComparison.Ordinal)
+            .Replace("java.lang.RuntimeException: ", "", StringComparison.Ordinal)
+            .Replace("java.lang.UnsupportedOperationException: ", "", StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1598,6 +1669,16 @@ public sealed class BsUiRosterEngine : IRosterEngine
             {
                 MarkPoisonedIfUnsafe(ex);
                 CaptureAndRethrow(ex, actionName);
+
+                // The agent's own expectation failed — it waited for a roster state the app never
+                // reached. That is never BattleScribe refusing, and left as an AgentException the
+                // classifier would call it exactly that. Translated here, after the retry, so what
+                // is retried is unchanged. See CallAgentAsync.
+                if (ex is AgentException gap && gap.Message.Contains(AgentGapMarker, StringComparison.Ordinal))
+                {
+                    throw new HarnessFaultException($"[bs-ui] {actionName}: {StripAgentTrace(gap.Message)}", gap);
+                }
+
                 throw; // unreachable but required
             }
         }

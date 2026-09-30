@@ -80,6 +80,26 @@ public class RosterActions {
     /** No dialog is allowed to be open when a high-level action returns — the default (empty) post-condition. */
     private static final String[] NO_DIALOGS_ALLOWED = {};
 
+    /**
+     * Stamped on a failure raised because an id the SPEC named — a force, a selection — is not in
+     * the roster. The C# driver turns it into {@code SpecAddressingException}, which
+     * {@code expectFailure} never accepts.
+     *
+     * <p>Without it every lookup miss reached the action classifier as an ordinary exception, whose
+     * remainder rule is "the engine refused" — so a spec that deselected an already-removed
+     * selection passed on this lane as BattleScribe declining the deselect, which is a spec typo
+     * reading as conformance (#25). Mirrors {@link DataEditorActions#ADAPTER_GAP}, the Data
+     * Editor's marker for the agent's own failures.
+     */
+    static final String ADDRESS = "[bs-ui-agent-address] ";
+
+    /**
+     * Stamped on a failure that is this agent's rather than the app's — today, a wait for a roster
+     * state the app never reached. Shares {@link DataEditorActions#ADAPTER_GAP}'s spelling so both
+     * drivers read one marker as a harness fault.
+     */
+    static final String AGENT_GAP = DataEditorActions.ADAPTER_GAP;
+
     private final EngineAccessor engineAccessor;
 
     public RosterActions(EngineAccessor engineAccessor) {
@@ -155,11 +175,8 @@ public class RosterActions {
         String selectionId = requireString(p, "selectionId");
 
         JsonObject before = readRosterState();
-        // Validate selection exists in the specified force
-        JsonObject beforeForce = findForceById(before, forceId);
-        if (beforeForce == null) throw new RuntimeException("Force not found: " + forceId);
-        JsonObject original = findSelectionById(beforeForce, selectionId);
-        if (original == null) throw new RuntimeException("Selection '" + selectionId + "' not found in force '" + forceId + "'");
+        JsonObject beforeForce = requireForce(before, forceId);
+        JsonObject original = requireSelection(before, forceId, selectionId);
 
         runOnFx(() -> {
             selectTreeItemById("#treeRoster", selectionId);
@@ -195,6 +212,7 @@ public class RosterActions {
         String forceId = requireString(p, "forceId");
 
         JsonObject before = readRosterState();
+        requireForce(before, forceId);
 
         runOnFx(() -> {
             selectTreeItemById("#treeRoster", forceId);
@@ -227,6 +245,7 @@ public class RosterActions {
         String entryId = requireString(p, "entryId");
 
         JsonObject before = readRosterState();
+        requireForce(before, forceId);
 
         // Phase 1: Select the force in the roster tree
         runOnFx(() -> selectTreeItemById("#treeRoster", forceId));
@@ -437,6 +456,7 @@ public class RosterActions {
         String catalogueId = requireString(p, "catalogueId");
 
         JsonObject before = readRosterState();
+        requireForce(before, parentForceId);
 
         // Open Edit Roster, select parent force
         runOnFx(() -> openEditRoster());
@@ -477,14 +497,11 @@ public class RosterActions {
         String forceId = requireString(p, "forceId");
 
         // "Force not found" on its own cannot say whether the force was never added, was added
-        // somewhere else, or is gone because the roster under the app changed. Name what IS there,
-        // which is how the difference shows up: a warm instance that reloaded a roster reports a
-        // roster full of ids the spec has never seen.
+        // somewhere else, or is gone because the roster under the app changed. requireForce names
+        // what IS there, which is how the difference shows up: a warm instance that reloaded a
+        // roster reports a roster full of ids the spec has never seen.
         JsonObject before = readRosterState();
-        if (findForceById(before, forceId) == null) {
-            throw new RuntimeException(
-                    "Force not found: " + forceId + "; forces present: " + describeIds(allForces(before)));
-        }
+        requireForce(before, forceId);
 
         // Open Edit Roster
         runOnFx(() -> openEditRoster());
@@ -527,7 +544,7 @@ public class RosterActions {
         String costTypeId = requireString(p, "costTypeId");
         String costName = requireString(p, "costName");
         int value = getIntParam(p, "value", -1);
-        if (value < 0) throw new RuntimeException("value must be >= 0");
+        if (value < 0) throw new RuntimeException(AGENT_GAP + "setCostLimit value must be >= 0 (the driver refuses a negative limit before it gets here)");
 
         // Open Edit Roster
         runOnFx(() -> openEditRoster());
@@ -568,6 +585,13 @@ public class RosterActions {
                 ? p.get("customName").getAsString() : null;
         String customNotes = p.has("customNotes") && !p.get("customNotes").isJsonNull()
                 ? p.get("customNotes").getAsString() : null;
+
+        JsonObject state = readRosterState();
+        if (selectionId != null) {
+            requireSelection(state, forceId, selectionId);
+        } else {
+            requireForce(state, forceId);
+        }
 
         // Select the target in the roster tree
         if (categoryEntryId != null) {
@@ -811,6 +835,7 @@ public class RosterActions {
                 ? p.get("entryName").getAsString() : null;
 
         JsonObject before = readRosterState();
+        requireSelection(before, forceId, parentSelectionId);
 
         // Select the parent selection in the roster tree
         runOnFx(() -> selectTreeItemById("#treeRoster", parentSelectionId, MAIN_WINDOW));
@@ -915,10 +940,7 @@ public class RosterActions {
                 ? p.get("entryName").getAsString() : null;
 
         JsonObject state = readRosterState();
-        JsonObject selection = findSelectionById(state, selectionId);
-        if (selection == null) {
-            throw new RuntimeException("Selection not found: " + selectionId);
-        }
+        JsonObject selection = requireSelection(state, forceId, selectionId);
 
         String entryId = getStringField(selection, "entryId");
         String entryName = passedEntryName != null ? passedEntryName : resolveEntryName(state, entryId);
@@ -982,8 +1004,25 @@ public class RosterActions {
         JsonObject p = parseParams(params);
         String forceId = requireString(p, "forceId");
         String selectionId = requireString(p, "selectionId");
-        int count = getIntParam(p, "count", -1);
-        if (count < 0) throw new RuntimeException("count must be >= 0");
+        if (!p.has("count") || p.get("count").isJsonNull()) throw new RuntimeException(AGENT_GAP + "setSelectionCount sent no count");
+        int count = p.get("count").getAsInt();
+
+        // Checked before either branch below: the removal path used to go straight to the row's
+        // close control, so a stale id reached "control not found" rather than naming the id.
+        JsonObject state = readRosterState();
+        JsonObject selection = requireSelection(state, forceId, selectionId);
+
+        // No count control exists for a ROOT selection: the force's panel offers its entries as
+        // rows to add, not as spinners, and a unit taken twice is two selections rather than one at
+        // number 2. Zero is still expressible below — it is the row's own remove control — but any
+        // other number is not, and "Spinner not found" read as BattleScribe refusing the count.
+        String parentId = findSelectionParentId(state, selectionId);
+        if (count != 0 && (parentId == null || findForceById(state, parentId) != null)) {
+            throw new UnsupportedOperationException(
+                    "BattleScribe's force panel has no count control for root selection '" + selectionId
+                            + "' — a root entry is counted by adding and removing selections of it "
+                            + "(selectEntry / deselectSelection), not by a spinner.");
+        }
 
         if (count == 0) {
             // Zero instances means gone, and that is NOT what deselectSelection does. Its control on
@@ -1002,16 +1041,8 @@ public class RosterActions {
             return removed.toString();
         }
 
-        JsonObject state = readRosterState();
-        JsonObject selection = findSelectionById(state, selectionId);
-        if (selection == null) {
-            throw new RuntimeException("Selection not found: " + selectionId);
-        }
-
         String entryId = getStringField(selection, "entryId");
         String entryName = resolveEntryName(state, entryId);
-        String parentId = findSelectionParentId(state, selectionId);
-        if (parentId == null) parentId = forceId;
 
         // Select the parent in the roster tree
         final String parentIdFinal = parentId;
@@ -1024,10 +1055,15 @@ public class RosterActions {
         // "control not found" rather than acting on a stale panel, which is the failure mode to
         // want here.
 
-        // Set spinner value by label
+        // Set spinner value by label. What comes back is where the control SETTLED, which is not
+        // always where it was sent: BattleScribe bounds a count spinner by the entry's own
+        // constraints, so asking for 5 of a max-3 entry leaves it at 3 — the same clamp the engine's
+        // getNumChanges applies in-process. That is the app's answer to the request, and the wait
+        // below waits for it. Waiting for the requested number instead timed out and reached the
+        // spec as BattleScribe REFUSING the count, which it never did (#25).
         final String finalEntryName = entryName;
         final int currentCount = getIntField(selection, "number", 1);
-        runOnFx(() -> setSpinnerValueByLabel(finalEntryName, count, currentCount, MAIN_WINDOW));
+        final int settled = runOnFxGet(() -> setSpinnerValueByLabel(finalEntryName, count, currentCount, MAIN_WINDOW));
 
         // Wait for the count to match — as the spinner's own value, OR as the per-model total.
         //
@@ -1042,24 +1078,27 @@ public class RosterActions {
             JsonObject sel = findSelectionById(s, selectionId);
             if (sel != null) {
                 int number = getIntField(sel, "number", -1);
-                if (number == count || number == count * parentNumber) return true;
+                if (number == settled || number == settled * parentNumber) return true;
             }
             // An INSTANCED entry counts by siblings, not by number: the panel's "+" adds another
             // selection rather than raising this one's. Either shape means the count was reached.
-            return countSiblingsOfEntry(s, countScopeId, countedEntryId) == count;
+            return countSiblingsOfEntry(s, countScopeId, countedEntryId) == settled;
         }, s -> {
             JsonObject sel = findSelectionById(s, selectionId);
-            return "setting '" + finalEntryName + "' to " + count + " left selection " + selectionId
+            return "setting '" + finalEntryName + "' to " + count
+                    + (settled != count ? " (its control settled at " + settled + ")" : "")
+                    + " left selection " + selectionId
                     + (sel == null ? " gone from the roster" : " at number " + getIntField(sel, "number", -1))
                     + " and " + countSiblingsOfEntry(s, countScopeId, countedEntryId)
-                    + " sibling(s) of that entry (wanted number " + count + ", or "
-                    + (count * parentNumber) + " for a collective under a parent of " + parentNumber
-                    + ", or " + count + " siblings for an instanced entry)";
+                    + " sibling(s) of that entry (wanted number " + settled + ", or "
+                    + (settled * parentNumber) + " for a collective under a parent of " + parentNumber
+                    + ", or " + settled + " siblings for an instanced entry)";
         });
 
         JsonObject result = new JsonObject();
         result.addProperty("set", true);
-        result.addProperty("count", count);
+        result.addProperty("requested", count);
+        result.addProperty("count", settled);
         return result.toString();
     }
 
@@ -1084,8 +1123,10 @@ public class RosterActions {
         if (outcome == ControlOutcome.NOT_FOUND) {
             // Say what the panel DOES offer. "Control not found for label: Sword" cannot
             // distinguish an entry the panel never rendered from one rendered under a different
-            // name from one whose label carries no control — three different bugs.
-            throw new RuntimeException("Control not found for label: " + labelText
+            // name from one whose label carries no control — three different bugs. Stamped
+            // ADDRESS because the first is by far the likeliest and is the spec's: a child entry
+            // this parent does not offer. The panel listing is what tells the other two apart.
+            throw new RuntimeException(ADDRESS + "Control not found for label: " + labelText
                     + (occurrence > 0 ? " (occurrence " + occurrence + ")" : "")
                     + "; panel offers: " + describeControlLabels(windowTitle));
         }
@@ -1440,9 +1481,13 @@ public class RosterActions {
      * <p>{@code currentCount} is the selection's own number, read from roster state. A spinner
      * reports its own value and does not need it; an add BUTTON has no value to read, so the
      * caller's knowledge of where the count is now is the only way to know how many times to fire.
+     *
+     * @return where the control SETTLED. A spinner stops at the bounds of its value factory, so this
+     *     is {@code value} only when the app allowed it; an add button has no bound to report and
+     *     answers {@code value}.
      */
     @SuppressWarnings("unchecked")
-    private void setSpinnerValueByLabel(String text, int value, int currentCount, String windowTitle) {
+    private int setSpinnerValueByLabel(String text, int value, int currentCount, String windowTitle) {
         Scene scene = findScene(windowTitle);
         if (scene == null) throw new RuntimeException("Scene not found: " + windowTitle);
 
@@ -1475,15 +1520,27 @@ public class RosterActions {
                     Spinner<Object> spinner = (Spinner<Object>) sibling;
                     Object currentVal = spinner.getValue();
                     int currentInt = (currentVal instanceof Number) ? ((Number) currentVal).intValue() : 0;
-                    if (currentInt == value) return;
-                    int delta = value - currentInt;
+                    if (currentInt == value) return value;
                     SpinnerValueFactory<Object> factory = spinner.getValueFactory();
-                    if (delta > 0) {
-                        for (int i = 0; i < delta; i++) factory.increment(1);
+                    if (currentCount == NO_COUNT_CONTEXT) {
+                        // A plain value (a cost limit), not a count: nothing reacts per step, so it
+                        // is set, not stepped. Stepping cost one FX-thread iteration per unit, and a
+                        // limit of 10^9 held the thread past every timeout the driver has and left
+                        // the app unresponsive for the rest of the lane.
+                        Spinners.setValue(spinner, value);
                     } else {
-                        for (int i = 0; i < -delta; i++) factory.decrement(1);
+                        // A count is STEPPED, because each step is a change the app reacts to — the
+                        // same one-at-a-time sequence a user's clicks produce, which is what
+                        // self-referencing modifiers are evaluated against.
+                        int delta = value - currentInt;
+                        if (delta > 0) {
+                            for (int i = 0; i < delta; i++) factory.increment(1);
+                        } else {
+                            for (int i = 0; i < -delta; i++) factory.decrement(1);
+                        }
                     }
-                    return;
+                    Object settledVal = spinner.getValue();
+                    return (settledVal instanceof Number) ? ((Number) settledVal).intValue() : value;
                 }
 
                 // An INSTANCED entry gets a "+" button where a collective one gets a spinner:
@@ -1507,7 +1564,7 @@ public class RosterActions {
                     for (int i = 0; i < delta; i++) {
                         ((ButtonBase) sibling).fire();
                     }
-                    return;
+                    return value;
                 }
             }
         }
@@ -1802,7 +1859,7 @@ public class RosterActions {
         try {
             future.get(FX_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
-            throw new RuntimeException("FX thread did not respond within " + FX_TIMEOUT_MS + "ms");
+            throw new RuntimeException(AGENT_GAP + "FX thread did not respond within " + FX_TIMEOUT_MS + "ms");
         } catch (java.util.concurrent.ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException) throw (RuntimeException) cause;
@@ -1839,7 +1896,7 @@ public class RosterActions {
         try {
             return future.get(FX_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
-            throw new RuntimeException("FX thread did not respond within " + FX_TIMEOUT_MS + "ms");
+            throw new RuntimeException(AGENT_GAP + "FX thread did not respond within " + FX_TIMEOUT_MS + "ms");
         } catch (java.util.concurrent.ExecutionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof RuntimeException) throw (RuntimeException) cause;
@@ -1879,6 +1936,12 @@ public class RosterActions {
      * "Timed out waiting for state change" on its own says only that this loop ran out — not
      * whether the action did nothing, did something the predicate did not recognise, or did it
      * somewhere else. Those are different bugs and the bare message cannot tell them apart.
+     *
+     * <p>The timeout is stamped {@link #AGENT_GAP}: it says this agent's expectation was not met,
+     * never that BattleScribe declined anything. A refusal the app makes arrives as a dialog, which
+     * the poll above fails on at once. Unstamped, the timeout reached the action classifier as an
+     * ordinary exception and was read as an engine refusal — which is how a count spinner clamping
+     * to the entry's max passed for BattleScribe refusing the count (#25).
      */
     private JsonObject waitForStateChange(
             Predicate<JsonObject> predicate, Function<JsonObject, String> describeOnTimeout) {
@@ -1920,7 +1983,7 @@ public class RosterActions {
             }
         }
 
-        throw new RuntimeException("Timed out waiting for state change" +
+        throw new RuntimeException(AGENT_GAP + "Timed out waiting for state change" +
                 (lastError != null ? ": " + lastError.getMessage() : "") + detail);
     }
 
@@ -2013,7 +2076,9 @@ public class RosterActions {
      *
      * <p>Waiting for the item to be PRESENT removes the guess. When the item genuinely never
      * arrives this throws with what the combo was actually offering, which is a far better failure
-     * than a roster that is quietly wrong.
+     * than a roster that is quietly wrong. The throw is stamped {@link #ADDRESS}: an id the dialog
+     * never offers is the spec naming a force entry the app does not make available there (a
+     * top-level entry asked for as a child force, say), and the list printed beside it says so.
      */
     private void waitForComboBoxItem(String selector, String targetId, String windowTitle) {
         long deadline = System.currentTimeMillis() + WINDOW_TIMEOUT_MS;
@@ -2024,7 +2089,7 @@ public class RosterActions {
         }
         String offered = runOnFxGet(() -> describeComboBoxItems(selector, windowTitle));
         throw new RuntimeException(
-                "ComboBox '" + selector + "' in " + windowTitle + " never offered item id '"
+                ADDRESS + "ComboBox '" + selector + "' in " + windowTitle + " never offered item id '"
                         + targetId + "' within " + WINDOW_TIMEOUT_MS + "ms. Offered: " + offered);
     }
 
@@ -2041,6 +2106,10 @@ public class RosterActions {
      *
      * <p>No unscoped overload. There were two, both unused, and both a way to ask this question
      * without the scoping that is the only reason the answer is trustworthy.
+     *
+     * <p>Stamped {@link #ADDRESS} on timeout, like {@link #waitForComboBoxItem}: a catalogue entry
+     * the force's tree never offers is an entry the spec named where the app does not make it
+     * available — a child entry asked for at the root, an id that is not an entry at all.
      */
     private void waitForTreeItem(
             String treeSelector, String containerId, String id, Set<String> nestedContainerIds) {
@@ -2051,7 +2120,7 @@ public class RosterActions {
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException(
-                "Tree '" + treeSelector + "' never offered an item for id '" + id + "'"
+                ADDRESS + "Tree '" + treeSelector + "' never offered an item for id '" + id + "'"
                         + (containerId == null ? "" : " under '" + containerId + "'")
                         + (nestedContainerIds.isEmpty()
                                 ? ""
@@ -2655,7 +2724,7 @@ public class RosterActions {
             }
         }
         if (categoryItem == null) {
-            throw new RuntimeException("Category tree item not found for entryId: " + categoryEntryId + " under force: " + forceId);
+            throw new RuntimeException(ADDRESS + "Category tree item not found for entryId: " + categoryEntryId + " under force: " + forceId);
         }
         tree.getSelectionModel().select(categoryItem);
     }
@@ -3557,6 +3626,36 @@ public class RosterActions {
             }
         }
         return null;
+    }
+
+    /**
+     * The force the spec named, or an {@link #ADDRESS}-stamped failure naming the forces that ARE
+     * there — "not found" alone cannot tell a stale id from a roster that changed under the app.
+     */
+    private JsonObject requireForce(JsonObject rosterState, String forceId) {
+        JsonObject force = findForceById(rosterState, forceId);
+        if (force == null) {
+            throw new RuntimeException(ADDRESS + "Force not found: " + forceId
+                    + "; forces present: " + describeIds(allForces(rosterState)));
+        }
+        return force;
+    }
+
+    /**
+     * The selection the spec named, looked up INSIDE the force it named, or an {@link #ADDRESS}
+     * failure. Scoped to the force for the same reason the in-process adapter scopes it: a
+     * selection from another force was driven regardless of the force the spec wrote down, which
+     * turns a wrong {@code forceId} into a silent edit somewhere else.
+     */
+    private JsonObject requireSelection(JsonObject rosterState, String forceId, String selectionId) {
+        JsonObject force = requireForce(rosterState, forceId);
+        JsonObject selection = findSelectionById(force, selectionId);
+        if (selection == null) {
+            boolean elsewhere = findSelectionById(rosterState, selectionId) != null;
+            throw new RuntimeException(ADDRESS + "Selection '" + selectionId + "' not found in force '"
+                    + forceId + "'" + (elsewhere ? " (it is in another force)" : ""));
+        }
+        return selection;
     }
 
     private JsonObject findSelectionByIdInArray(JsonArray selections, String selectionId) {

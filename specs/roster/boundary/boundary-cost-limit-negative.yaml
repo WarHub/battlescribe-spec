@@ -1,0 +1,72 @@
+id: boundary-cost-limit-negative
+category: boundary
+description: >
+  A negative cost limit is not a limit anyone can be over: every engine takes the action and the
+  roster carries no limit afterwards. The format spells "no limit" as a negative number — the
+  desktop app's Edit Roster dialog says so beside the field, "-1 for no limit" — and minus one
+  hundred reads the same way. Nothing refuses it and nothing reports it, so the evidence is the
+  absence the state shows, which is what expectFailure's documentation means by a no-op's evidence
+  living in expectedState.
+
+  Three lanes hand the number over and the engine discards it — NewRecruit's store and its List
+  Configuration input alike count anything below zero as no limit. On battlescribe-ui the driver
+  leaves the spinner at its no-limit value instead of entering the number, which is what the
+  dialog's "-1 for no limit" asks of a user. (newrecruit-ui used to translate too, typing an EMPTY
+  field — which NewRecruit stores as the string "" and does not count as none, so the lane read back
+  a limit nobody set and then failed to parse it. It types the number now.)
+tags: [edge-case, cost]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: setCostLimit
+    costTypeId: pts
+    value: -100
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 10
+      costLimitCount: 0

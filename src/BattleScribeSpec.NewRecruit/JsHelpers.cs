@@ -422,8 +422,13 @@ internal static class JsHelpers
                     if (!maxCosts || !Array.isArray(maxCosts)) return null;
                     const limits = [];
                     for (const c of maxCosts) {
-                        const value = c.value ?? c.defaultCostLimit ?? -1;
-                        if (value < 0) continue;
+                        // NR's dialog can leave a STRING here — its input's own text, "" for a
+                        // cleared field — and a string reached the C# side as a value that is not
+                        // a decimal, which failed the whole state read. NR itself compares the
+                        // value numerically, so read it as the number it compares as, and skip what
+                        // is not one at all.
+                        const value = Number(c.value ?? c.defaultCostLimit ?? -1);
+                        if (!Number.isFinite(value) || value < 0) continue;
                         limits.push({ name: c.name || '', typeId: c.typeId || '', value: value, hidden: costTypeHiddenMap[c.typeId] || false });
                     }
                     return limits.length > 0 ? limits : null;

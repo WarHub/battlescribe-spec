@@ -102,6 +102,28 @@ public abstract class ConformanceTestBase
         return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s => (s.Path, Name: $"{s.Category}/{s.Id}"))];
     }
 
+    /// <summary>Run one <see cref="AddressingScenarios"/> scenario on this lane and require the addressing verdict.</summary>
+    protected void RunAddressingScenario(string scenario)
+    {
+        var engine = GetEngine();
+        if (engine is null)
+        {
+            return;
+        }
+
+        var result = new RosterRunner(engine, new DataSourceResolver(), BaseEngineName, EngineName)
+            .Run(AddressingScenarios.Load(scenario));
+        foreach (var failure in result.Failures)
+        {
+            _output.WriteLine($"{LogPrefix}{failure}");
+        }
+
+        if (AddressingScenarios.Judge(scenario, result) is { } wrong)
+        {
+            Assert.Fail($"{LogPrefix}{wrong}");
+        }
+    }
+
     protected void RunSpec(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);

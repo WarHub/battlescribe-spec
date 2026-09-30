@@ -1,0 +1,93 @@
+id: boundary-count-root-selection
+category: boundary
+description: >
+  setSelectionCount on a ROOT selection. The protocol lets a spec ask; neither app lets a user,
+  and the two engines answer the question differently when asked directly.
+
+  A root entry taken twice is two selections, not one at number 2, and both apps count a root
+  entry by adding and removing selections of it — the force's panel offers its entries as rows to
+  add, with no count control. So the question exists only at the engine API. BattleScribe's engine
+  declines the change without a word: getNumChanges answers "no change" for a root selection, and
+  the Squad stays one. NewRecruit's store takes the number onto the node, and the one Squad becomes
+  a Squad at number 3, costed three times.
+
+  Skipped on both UI lanes, because there is nothing to drive. Both drivers now say so as a
+  capability gap; battlescribe-ui used to report its missing spinner as BattleScribe refusing the
+  count (#25). docs/nr-behavioral-differences.md, "setSelectionCount on Child Entries", has the
+  history of the convention this spec measures.
+tags: [edge-case, number, design-difference]
+
+engines:
+  battlescribe-ui: skip
+  newrecruit-ui: skip
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    count: 3
+
+  # BattleScribe: one Squad, unchanged.
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 10
+      forces:
+        - selections:
+            - name: Squad
+              number: 1
+      engines:
+        # NewRecruit: still one selection, now at number 3 and costed for three.
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 30
+          forces:
+            - selections:
+                - name: Squad
+                  number: 3

@@ -41,6 +41,41 @@ public sealed class AdapterHandlerTests
         Assert.IsType<TeardownResult>(await connection.SendCommandAsync(new TeardownCommand(), ct));
     }
 
+    /// <summary>
+    /// A command missing a field its action requires, and a <c>catalogueId</c> the setup never
+    /// declared, are the client's mistakes — no engine is consulted for either. Both used to throw a
+    /// plain <see cref="InvalidOperationException"/>, which went out on the wire as
+    /// <c>kind:"engine"</c>: a refusal <c>expectFailure</c> would accept (#25).
+    /// </summary>
+    [Fact]
+    public async Task ClientSideFailures_AreNeverSentAsEngineRefusals()
+    {
+        await using var connection = Connect();
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.IsType<SetupResult>(await connection.SendCommandAsync(new SetupCommand
+        {
+            GameSystem = new ProtocolGameSystem
+            {
+                Id = "gs",
+                Name = "GS",
+                ForceEntries = [new ProtocolForceEntry { Id = "fe-1", Name = "Force" }],
+            },
+            Catalogues = [new ProtocolCatalogue { Id = "cat-1", Name = "Cat", GameSystemId = "gs" }],
+        }, ct));
+
+        var malformed = Assert.IsType<ActionResult>(await connection.SendCommandAsync(
+            new ActionCommand { Action = "selectEntry", ForceId = "f-1" }, ct));
+        Assert.False(malformed.Ok);
+        Assert.Equal("harness", malformed.Kind);
+        Assert.Contains("requires entryId", malformed.Error, StringComparison.Ordinal);
+
+        var unknownCatalogue = Assert.IsType<ActionResult>(await connection.SendCommandAsync(
+            new ActionCommand { Action = "addForce", ForceEntryId = "fe-1", CatalogueId = "cat-typo" }, ct));
+        Assert.False(unknownCatalogue.Ok);
+        Assert.Equal("address", unknownCatalogue.Kind);
+    }
+
     [Fact]
     public async Task Describe_ReturnsIdentityAndDomains()
     {

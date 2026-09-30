@@ -1,0 +1,94 @@
+id: roundtrip-reload-forceless-roster
+category: roundtrip
+description: >
+  Remove the last force, then reload: every engine refuses to load back the roster it just wrote,
+  each for a reason of its own, and the empty roster survives the refusal with its cost limit.
+
+  The only genuine refusal the #25 spike found among the roster mutations — everything else an
+  engine declines to do at the edges it does silently (see specs/roster/boundary). It is reached by
+  order of operations rather than by a bad argument: removeForce and setCostLimit are both accepted
+  on the way here, and reload is refused only because of what they left.
+
+  BattleScribe cannot reopen a roster it saved with no forces. Its writer omits <forces> when the
+  list is empty, and its reader requires the element, so the file it produced fails to parse. That
+  is not a verdict on empty rosters: roundtrip-load-forceless-roster shows the same reader taking
+  <forces/> written out explicitly. NewRecruit refuses any roster with no forces, as it does when
+  one is loaded directly, and says so in the same words.
+tags: [edge-case]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: removeForce
+    forceId: ${{ steps.add-detachment.forceId }}
+
+  # A roster with no forces is a roster every engine keeps editing: a cost limit set on it is taken.
+  - action: setCostLimit
+    costTypeId: pts
+    value: 100
+
+  - expectedState:
+      forceCount: 0
+      costLimits:
+        - typeId: pts
+          value: 100
+
+  - action: reload
+    expectFailure:
+      # BattleScribe's reader, on the <forces> its own writer left out. Both BattleScribe lanes
+      # reach the same parser sentence; the desktop app's arrives wrapped in its load path's
+      # exception, so the spec pins the part both share.
+      messageContains: "on field 'forces'"
+      engines:
+        # NewRecruit's importer, which declines a roster without forces before building anything
+        # (roundtrip-load-forceless-roster has the reason it words it this way).
+        newrecruit:
+          messageContains: "This file is not a roster"
+
+  # The refusal cost nothing: the empty roster and its limit are still the ones in hand.
+  - expectedState:
+      forceCount: 0
+      costLimits:
+        - typeId: pts
+          value: 100

@@ -238,4 +238,42 @@ public sealed class FrozenNrUiRosterConformanceTests
             Assert.Fail(message);
         }
     }
+
+    /// <summary>
+    /// A stale or foreign id is an addressing failure on this lane — see
+    /// <see cref="AddressingScenarios"/>. Runs in every mode, not only the full set: it is seven
+    /// short rosters, and it is the only check that this driver's lookups say what they are.
+    /// </summary>
+    /// <remarks>
+    /// This lane never passed one of these as a refusal — its misses came out as capability gaps
+    /// and 20-second timeouts instead — but it did act on a selection filed under the other force,
+    /// because its row lookups take a selection uid and nothing else.
+    /// </remarks>
+    [Fact]
+    public void AnIdTheRosterDoesNotHave_IsAnAddressingFailure()
+    {
+        Assert.SkipWhen(!_fixture.Available,
+            "Frozen HAR file not found or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
+
+        var engine = _fixture.Engine!;
+        var wrong = new List<string>();
+        foreach (var scenario in AddressingScenarios.All)
+        {
+            engine.SetTestContext($"addressing/{scenario}");
+            var result = new RosterRunner(engine, new DataSourceResolver(), EngineName, EngineIdentity)
+                .Run(AddressingScenarios.Load(scenario));
+            engine.Cleanup();
+            foreach (var failure in result.Failures)
+            {
+                _output.WriteLine($"{LogPrefix}{scenario}: {failure}");
+            }
+
+            if (AddressingScenarios.Judge(scenario, result) is { } verdict)
+            {
+                wrong.Add(verdict);
+            }
+        }
+
+        Assert.True(wrong.Count == 0, string.Join("\n\n", wrong));
+    }
 }

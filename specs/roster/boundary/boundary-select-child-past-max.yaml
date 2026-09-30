@@ -1,0 +1,134 @@
+id: boundary-select-child-past-max
+category: boundary
+description: >
+  selectChildEntry on a max-1 child that is already selected. Nothing refuses the action, and what
+  it does depends on whether it arrives through an app or through an engine's selection call.
+
+  Both apps render a max-1 child as a checkbox, and a checkbox that is already ticked is already in
+  the state the action asks for: the desktop app and NewRecruit both leave one Banner and a legal
+  roster. The engines' own selection calls have no checkbox to consult. BattleScribe's adds a second
+  Banner and flags the Squad over its limit; NewRecruit's store raises the amount to two and flags
+  the Banner. The apps are the normative answer (AGENTS.md), so the base expectation is theirs and
+  the two store-direct lanes carry the deviation as overrides — it is what the engine API permits,
+  not something a user can do.
+tags: [edge-case, max, design-difference]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    categoryEntries:
+      - id: cat-troops
+        name: Troops
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            targetId: cat-troops
+            name: Troops
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              targetId: cat-troops
+              name: Troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: pts
+              value: 10
+          selectionEntries:
+            - id: se-banner
+              name: Banner
+              type: upgrade
+              constraints:
+                - id: con-banner-max
+                  type: max
+                  value: 1
+                  field: selections
+                  scope: parent
+              costs:
+                - name: pts
+                  typeId: pts
+                  value: 3
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-squad
+
+  - action: selectChildEntry
+    id: select-banner
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-banner
+
+  # The same child again, already at its max of one.
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-banner
+
+  # Both apps: the checkbox was already ticked, so one Banner and a legal roster.
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 13
+      forces:
+        - selections:
+            - name: Squad
+              children:
+                - name: Banner
+                  number: 1
+      engines:
+        # The engine's selection call, with no checkbox in the way: a second Banner, and the Squad
+        # flagged for holding it.
+        battlescribe:
+          costs:
+            - typeId: pts
+              value: 16
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Banner
+                      number: 2
+          errors:
+            - on: selection ${{ steps.select-squad.selectionId }}
+              from: se-banner/con-banner-max
+        # NewRecruit's store: the amount raised to two on the one node, and that node flagged.
+        newrecruit:
+          costs:
+            - typeId: pts
+              value: 16
+          forces:
+            - selections:
+                - name: Squad
+                  children:
+                    - name: Banner
+                      number: 2
+          errors:
+            - on: selection ${{ steps.select-banner.selectionId }}
+              from: se-banner/con-banner-max
+        # The UI lanes declare the base explicitly: without their own entry they would inherit
+        # the store-direct override above, which is the one thing they do not do.
+        battlescribe-ui:
+          errors: []
+        newrecruit-ui:
+          errors: []
