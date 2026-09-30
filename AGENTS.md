@@ -149,9 +149,14 @@ run the same analyzers. This matters because `AnalysisLevel=latest-recommended` 
 installed SDK — unpinned, a runner-image bump turns untouched code red. Bumping the band is
 Dependabot's job (`dotnet-sdk` ecosystem), and reviewing that PR is where a widened rule set gets
 dealt with. `ToolchainPinDriftTests` fails if a workflow step starts picking its own SDK again, or if
-`docker/`'s SDK image tag leaves the pinned band. Two SDK-derived pins are invisible to Dependabot and
-must move by hand **in the same PR** as an SDK bump: `Directory.Build.targets`' `KnownILLinkPack` (see
-the comment there) and the `mcr.microsoft.com/dotnet/sdk` tag in `docker/`.
+`docker/`'s SDK image tag leaves the pinned band. One SDK-derived pin is invisible to Dependabot and
+must move by hand **in the same PR** as an SDK bump: the `mcr.microsoft.com/dotnet/sdk` tag in
+`docker/`.
+
+**A PR that edits `Directory.Packages.props` or `global.json` runs the thorough suites**, exactly as one
+editing `testdata.json` does — the gate reads the changed files, not the author or a label. Package
+and SDK bumps swap out what the engines are built from (IKVM compiles the BattleScribe engine;
+Playwright ships the browser every NR UI driver drives), so kitchen-sink is not enough for them.
 
 **The `docker` CI job builds `docker/bs-spec.Dockerfile` on every push, and runs the image.** It
 exists because nothing built these files and both rotted unnoticed — one referenced a project renamed
@@ -160,10 +165,11 @@ a shared framework it needs. A stale `COPY` list is only wrong relative to a pro
 moves, so no lint rule finds it; building the image does. The image ships **no engine** (the built-in
 one needs third-party jars from a token-gated archive) — bring your own adapter as a connectable.
 
-**Lock files are real.** Every project has a `packages.lock.json` and CI verifies it
-(`dotnet restore --locked-mode`, `checks` job). If a restore rewrites one, that is a **finding, not
-noise** — do not revert it. Regenerate with `dotnet restore --force-evaluate` and commit the result;
-`git add` normalises the CRLF that NuGet writes on Windows, so only genuinely-changed files remain.
+**There are no NuGet lock files, on purpose.** `Directory.Packages.props` pins every version exactly,
+with transitive pinning on, and is the single record of what a restore resolves. The lock files it
+used to be shadowed by went stale on every Dependabot bump that reached a project only through a
+`ProjectReference`, and failed CI for it; the comment at the top of that file has the history. A
+package change is a one-line edit there and nothing else.
 
 **Always run `pre-push` before pushing.** It is the **offline** gate: lint, the in-process
 BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor

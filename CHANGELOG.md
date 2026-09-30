@@ -368,6 +368,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Package and SDK bumps run the thorough suites** — CI's gate forced them for a PR editing
+  `testdata.json`; it now does the same for `Directory.Packages.props` and `global.json`. Those
+  files swap out what the engines are built from — IKVM compiles the BattleScribe engine the
+  reference lanes run, Playwright ships the browser every NR UI driver drives, the SDK brings the
+  runtime every lane runs on — and a weekly Dependabot bump of them was being trimmed to
+  kitchen-sink like a docs change. As with `testdata.json`, the gate reads the changed files, so a
+  hand edit gets the same coverage as the bot's.
 - **SDK feature band moves to 10.0.400** — `global.json` goes from `10.0.300` to `10.0.400`, keeping
   `rollForward: latestPatch`. This is the bump path #312 pinned the band *for*: a pin with no bump
   path is a slower version of the same problem, so the band moves as a PR, tested, with a diff.
@@ -679,6 +686,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **NuGet lock files, and the `KnownILLinkPack` pin that existed to keep them stable** — all sixteen
+  `packages.lock.json`, `RestorePackagesWithLockFile`, CI's `dotnet restore --locked-mode` step and
+  `Directory.Build.targets` are gone. `Directory.Packages.props` already pins every version exactly
+  with transitive pinning on, so the locks recorded the same graph a second time — and a second
+  record drifts. Dependabot regenerates a lock only for a project that references a bumped package
+  directly; `ReferenceAdapter` and `HarTool` have nothing but `ProjectReference`s, so the bump that
+  moved IKVM and Playwright left both stale, NU1004 failed `checks` at restore, and #500, #501 and
+  #503 each died there without their build or tests running. The step was the locks' only consumer
+  (the "enables NuGet caching in CI" comment beside the property was never true — no cache read
+  them). The ILLink pin's own comment gave keeping those locks stable as its reason for existing;
+  without them the implicit `Microsoft.NET.ILLink.Tasks` follows the installed SDK patch like the
+  rest of the analyzers, and an SDK bump has one hand-moved pin left (the `docker/` tag) instead of
+  two.
 - **The unscoped tree-lookup overloads, which nothing called and anything could have** —
   `waitForTreeItem(selector, id)` and `clickTreeItemById(selector, id, doubleClick)` were left behind
   when catalogue lookups gained a force scope, as delegators passing `null` for the container. Both

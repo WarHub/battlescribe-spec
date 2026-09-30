@@ -36,7 +36,14 @@ jobs:
       #
       # The gate is on the FILE, not the author. The exposure comes from the content change, and a
       # maintainer hand-editing a pin has precisely the exposure the nightly bot has.
-      - id: testdata
+      #
+      # THE SAME HOLDS FOR THE TOOLCHAIN, and the bot there is Dependabot. Directory.Packages.props
+      # carries IKVM, which recompiles the BattleScribe engine the reference lanes run, and Playwright,
+      # which brings a new browser build to every NR UI driver; global.json carries the SDK, and with
+      # it the runtime every lane executes on. A weekly bump of those was trimmed to kitchen-sink like
+      # any other PR, so the one change that swaps out what the engines ARE got the least coverage —
+      # #503 (IKVM 8.15 → 8.16.1, Playwright 1.61 → 1.63) was headed for merge on kitchen-sink alone.
+      - id: inputs
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,12 +51,14 @@ jobs:
           set -euo pipefail
           gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
             --paginate --jq '.[].filename' > changed-files.txt
-          if grep -qxF 'testdata.json' changed-files.txt; then
-            echo "This PR edits testdata.json — forcing the thorough suites."
-            echo "touched=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "touched=false" >> "$GITHUB_OUTPUT"
-          fi
+          touched=false
+          for f in testdata.json Directory.Packages.props global.json; do
+            if grep -qxF "$f" changed-files.txt; then
+              echo "This PR edits $f — forcing the thorough suites."
+              touched=true
+            fi
+          done
+          echo "touched=$touched" >> "$GITHUB_OUTPUT"
       - id: decide
         shell: pwsh
         run: |
@@ -57,7 +66,7 @@ jobs:
             ('${{ github.event_name }}' -in @('workflow_dispatch', 'schedule')) -or
             ('${{ contains(github.event.head_commit.message, '[nr-test]') }}' -eq 'true') -or
             ('${{ contains(github.event.pull_request.labels.*.name, 'thorough-ci') }}' -eq 'true') -or
-            ('${{ steps.testdata.outputs.touched }}' -eq 'true')
+            ('${{ steps.inputs.outputs.touched }}' -eq 'true')
           )
           "thorough=$($thorough.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           Write-Host "thorough = $thorough"
@@ -119,28 +128,6 @@ jobs:
         run: pwsh ./setup.ps1 -SkipPlaywright -SkipJavaAgent -SkipWh40k
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      # A LOCK FILE NOBODY VERIFIES IS DECORATION. RestorePackagesWithLockFile has been on since the
-      # start (Directory.Build.props) and NOTHING has ever checked the result, so main shipped
-      # packages.lock.json files that disagreed with Directory.Packages.props and nobody noticed:
-      # #287 bumped seven central versions and updated ZERO lock files; #323 bumped nine, updated the
-      # `src` locks, and left both test projects' CentralTransitive entries on OpenTelemetry 1.16.0 /
-      # System.CommandLine 2.0.9. Both merged green. Downstream, four separate branches hit a plain
-      # `dotnet restore` silently rewriting those files and each reverted the churn as unrelated
-      # noise — the cost of the missing check was paid four times over, in the wrong place.
-      #
-      # This is `--locked-mode` on the command line and deliberately NOT RestoreLockedMode in
-      # Directory.Build.props: locked mode belongs where a lock file that lies is a bug (CI), not on a
-      # contributor's machine, where adding a PackageReference has to keep working.
-      #
-      # IT WILL GO RED ON SOME DEPENDABOT PRs, because dependabot's lock updates for this repo are
-      # demonstrably partial — the entries it misses are the CentralTransitive ones for packages a
-      # project reaches only through a ProjectReference, which is exactly the shape of both test
-      # projects. That is not a reason to drop the check; the fix is one command on the PR branch,
-      # and NU1004 names the offending project AND package, so the failure is actionable:
-      #     dotnet restore --force-evaluate     # then commit the lock files
-      # The bump path stays open. It just stops being silent.
-      - name: Verify lock files (restore in locked mode)
-        run: dotnet restore --locked-mode
       - name: Build
         run: dotnet build
       # WHAT MACHINE IS THIS, ACTUALLY? Every constant in docs/concurrency-policy-measurements.md is

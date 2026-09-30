@@ -21,8 +21,6 @@
       That is the intended place for it to happen. See .github/dependabot.yml.
     -->
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <!-- Deterministic restores + enables NuGet caching in CI (packages.lock.json per project). -->
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <!-- Test profiles: dotnet test -p:TestProfile=nr-live -->

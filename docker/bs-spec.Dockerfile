@@ -12,7 +12,6 @@ WORKDIR /src
 # Copy solution + build props for restore
 COPY BattleScribeSpec.slnx .
 COPY Directory.Build.props .
-COPY Directory.Build.targets .
 COPY Directory.Packages.props .
 COPY global.json .
 COPY .editorconfig .
