@@ -61,9 +61,12 @@ design decision that only **mutations** must go through UI).
    exercising NR's real import logic.
 
 5. **Deferred roster creation** — The roster is NOT created during `Setup`. Instead, it is
-   created on the first `AddForce` call via the Lists → New → Create List UI flow. NR
-   auto-creates the first force during "Create List", so the first `AddForce` adopts that
-   existing force (reads its uid via JS) rather than adding a duplicate.
+   created on the first `AddForce` call via the Lists → New (Create List) dialog. Choosing the
+   force IS the commit there — one card per force when the book offers several, a confirm button
+   when it offers one — so the driver clicks the card of the force that step asked for, and the
+   first `AddForce` adopts the force NR built (reads its uid via JS) rather than adding a
+   duplicate. If NR built a different one (the requested force was not on offer), the requested
+   force is added through the Add Force panel and NR's is removed.
 
 6. **Engine name = "newrecruit"** — shares assertion overrides with the non-UI NR adapter
    (same behavioral quirks, same expected state adjustments).
@@ -72,7 +75,7 @@ design decision that only **mutations** must go through UI).
 
 | Action | UI Flow |
 |--------|---------|
-| AddForce | First call: Lists → "New" → select catalogue → "Create List" (adopts auto-created force). Subsequent: "List Options" → "Add Force" OR forces panel `+` button |
+| AddForce | First call: Lists → "New" → select catalogue → name → click the requested force's card, or the confirm button when one force is offered (adopts the force NR built). Subsequent: "List Options" → "Add Force" OR forces panel `+` button |
 | RemoveForce | Force Options `.dots` → "Delete Force" |
 | DuplicateForce | Force Options `.dots` → "Duplicate Force" |
 | SelectEntry | Click entry row (`.boutonSubUnit` or `.addButton`) in panel |

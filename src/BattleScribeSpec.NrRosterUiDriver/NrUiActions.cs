@@ -131,6 +131,26 @@ public static class NrUiActions
                 // Forces already exist — open via List Options dropdown
                 await page.Locator(".dotsMenuContainer").Filter(new() { HasText = "List Options" }).First.ClickAsync();
                 await page.GetByText("Add Force").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+
+                // ...and wait for that menu to be GONE before touching the dialog it opened.
+                //
+                // Picking an item does not close NR's SubMenu with the click: `hideSubMenu` defers
+                // its close through `setTimeout(…, 0)`, and until that timer runs the menu is live in
+                // two ways that break the steps below. It is teleported into #popups AHEAD of the
+                // dialog — `[overlay, subMenu, dialog]` — so anything that finds the dialog by
+                // position is aimed at a slot about to vanish. And while open it swallows every
+                // click outside itself: a capture-phase listener calls stopPropagation() and
+                // preventDefault(), so the force row's "+" is eaten and no force is added.
+                //
+                // Measured by holding that timer open for 400ms: #popups read exactly that triple
+                // when the catalogue picker was located, and the "+" was swallowed on every spec
+                // ("expected force[1] but only 1 forces"). CI loses the same race now and then, as
+                // an anonymous 20s timeout on a spec's second addForce — scope-roster-cross-force,
+                // condition-scope-roster, force-selections-independent,
+                // force-multi-catalogue-two-forces. The menu's close is the postcondition of this
+                // click, so it is waited for here rather than tolerated downstream.
+                await page.Locator("#popups .subMenu").First.WaitForAsync(
+                    new() { State = WaitForSelectorState.Detached, Timeout = NrUiTimeouts.Interaction });
             }
 
             await forcesPanel.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
@@ -250,35 +270,20 @@ public static class NrUiActions
         // snapshot — and on zero throws "not found in the forces panel"; worse, when two forces
         // share a name (force-multi-catalogue-two-forces has two "Patrol"), a stale list can match
         // the WRONG one and build a wrong roster instead of erroring.
-        await page.WaitForFunctionAsync(
-            """
-            ([sel, want]) => {
-                const el = document.evaluate(sel, document, null, 9, null).singleNodeValue;
-                if (!el) { return false; }
-                const opt = el.selectedOptions?.[0];
-                return (opt?.textContent || '').trim() === want;
-            }
-            """,
-            new object[] { await picker.EvaluateAsync<string>(XPathOfElement), catalogueName },
-            new() { Timeout = NrUiTimeouts.Interaction });
+        //
+        // Waited for through the picker's own locator, which is re-resolved on every poll. It used
+        // to be a WaitForFunctionAsync over an XPath of sibling indexes, captured once before the
+        // wait began — so the wait was aimed at a POSITION, and a node arriving or leaving ahead of
+        // the picker in between left it polling a slot the picker no longer held. That is not
+        // hypothetical: NR teleports its menus and dialogs into the same #popups container (see the
+        // menu wait in AddForceByNameAsync). It then timed out as the anonymous
+        // "Timeout 20000ms exceeded." a function wait produces, naming nothing; a locator wait
+        // names its target.
+        var selected = new System.Text.RegularExpressions.Regex(
+            $@"^\s*{System.Text.RegularExpressions.Regex.Escape(catalogueName)}\s*$");
+        await picker.Locator("option:checked", new() { HasTextRegex = selected })
+            .WaitForAsync(new() { State = WaitForSelectorState.Attached, Timeout = NrUiTimeouts.Interaction });
     }
-
-    /// <summary>
-    /// Returns a unique XPath for the element a locator resolves to, so a JS predicate can re-find
-    /// exactly that node. Playwright locators cannot be passed into <c>WaitForFunctionAsync</c>.
-    /// </summary>
-    private const string XPathOfElement = """
-        el => {
-            const seg = n => {
-                if (!n.parentElement) { return '/' + n.tagName.toLowerCase(); }
-                const sibs = [...n.parentElement.children].filter(c => c.tagName === n.tagName);
-                const i = sibs.indexOf(n) + 1;
-                return seg(n.parentElement) + '/' + n.tagName.toLowerCase() + '[' + i + ']';
-            };
-            return seg(el);
-        }
-        """;
-
 
     /// <summary>
     /// Adds a child force under <paramref name="parentForceId"/> by name.
