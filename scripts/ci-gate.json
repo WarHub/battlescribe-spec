@@ -45,6 +45,10 @@
       "why": "the CI definition: an edit can drop, narrow or mis-wire a lane that only the thorough jobs exercise"
     },
     {
+      "path": ".github/actions/",
+      "why": "the composite setup action every building job runs: an edit can drop a cache, a JDK or a provisioned input that only a thorough lane consumes"
+    },
+    {
       "path": "scripts/dotnet-test-step.ps1",
       "why": "the executed-at-least-one-test guard every CI test step runs through"
     },
@@ -61,6 +65,6 @@
       "why": "this list, and the jobs it names"
     }
   ],
-  "thoroughJobs": ["thorough-conformance", "thorough-ui-bs"],
+  "thoroughJobs": ["thorough-conformance", "thorough-nr-ui-roster", "thorough-ui-bs"],
   "liveJobs": ["nr-conformance"]
 }

@@ -392,8 +392,8 @@ this document records twice: both defects the lane has found lived in what one s
 next, and a shard boundary between two specs is a boundary the defect cannot cross. Sharding also
 made the `Shard` trait load-bearing, so a test that carried none — `BsUiGameSystemSelectionTests`,
 which had to be traited by hand — ran in neither job while looking covered. ~13 minutes in one job,
-inside an opt-in workflow whose long pole is a 33-minute `thorough-conformance`, is not a cost worth
-that.
+inside an opt-in workflow whose long pole is `thorough-nr-ui-roster` (projected at ~31 minutes: its
+lane's 1606s in run 36772377382, plus setup and build), is not a cost worth that.
 
 It is **opt-in**, like every other thorough lane: `workflow_dispatch`, the weekly Monday schedule, a
 `thorough-ci` label on a PR, a PR that edits one of the inputs listed in `scripts/ci-gate.json`

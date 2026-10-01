@@ -85,53 +85,26 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-      # THE BUILD'S STRICTNESS USED TO BE WHATEVER MICROSOFT SHIPPED THAT WEEK. `AnalysisLevel` is
-      # `latest-recommended` and `TreatWarningsAsErrors` is true (Directory.Build.props), so the set
-      # of CA rules that can fail this job is resolved from the installed SDK — and every step here
-      # used to ask setup-dotnet for a floating `dotnet-version: '10.0.x'`, which installs the newest
-      # 10.0 SDK in existence at that moment. global.json's `rollForward: latestFeature` then
-      # accepted it, whatever band it was.
-      #
-      # That is not theoretical. SDK 10.0.400 was released 2026-08-11; run 31746128450 (main,
-      # 2026-08-13) installed it and built on a feature band no commit in this repo had ever seen.
-      # It was green. That was luck, not a property of the repo: a feature band is where analyzers
-      # get stricter, the previous band change surfaced ~22 CA errors in TestKit and TraceSummary on
-      # untouched files (#312), and the commit that would have gone red was a docs-only one.
-      #
-      # `global-json-file` makes global.json the single declaration of the toolchain, for CI and for
-      # contributors alike — setup-dotnet honours `latestPatch` and installs the newest SDK inside
-      # the pinned band. The band still moves; it moves through a Dependabot PR that CI actually
-      # builds (see .github/dependabot.yml), so a stricter analyzer set arrives as a reviewable diff
-      # instead of as a red build on a commit that changed nothing.
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      # Setup is one composite action (.github/actions/setup): the SDK from global.json, the bot token,
+      # the caches, a JDK and setup.ps1. This job needs no browser, no NR snapshot and no BS UI agent —
+      # only the BattleScribe app (the build IKVM-compiles it) and a plain JDK for the engine-jar patch.
+      - name: Set up
+        uses: ./.github/actions/setup
         with:
-          global-json-file: global.json
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-      # The BattleScribe project IKVM-compiles lib/battlescribe/lib/*.jar at build time.
-      - uses: actions/cache@v6
-        with:
-          path: lib/battlescribe
-          key: bsapp-${{ hashFiles('testdata.json') }}
-      # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, issue
-      # #401), and the patch step runs `java PatchJarMain`. This lane skips the JavaFX agent build,
-      # so it has no in-repo JDK — provide a plain one for the patch tool.
-      - name: Setup Java (engine-jar patch tool)
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'liberica'
-          java-version: '11'
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipPlaywright -SkipJavaAgent -SkipWh40k
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipJavaAgent -SkipWh40k
+          java: plain
+          nr-caches: 'false'
+          playwright: 'false'
+          agent-jar: 'false'
+      # THE ANALYZER GATE IS THIS BUILD, AND ONLY THIS ONE. Analyzers, code style
+      # (EnforceCodeStyleInBuild) and XML doc generation run here; every other job in this file builds
+      # with -p:FunctionalBuild=true (Directory.Build.props), which turns the three off and produces the
+      # same binaries ~25s sooner. CiWorkflowDriftTests.Checks_BuildsWithAnalyzers fails if this step —
+      # or an env: block it inherits — ever sets the switch, a property it controls, or another that
+      # turns a gate off (TreatWarningsAsErrors, RunAnalyzersDuringBuild, AnalysisLevel, …), because
+      # then no job in CI would be checking what TreatWarningsAsErrors exists to check.
       - name: Build
         id: build
         run: dotnet build
@@ -305,55 +278,23 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      # Every engine this job drives: both NR snapshots, the browsers, and the BS desktop app with its
+      # Java agent (which needs the JavaFX JDK).
+      - name: Set up
+        uses: ./.github/actions/setup
         with:
-          global-json-file: global.json
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-      - uses: actions/cache@v6
-        with:
-          path: lib/battlescribe
-          key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: .testdata/newrecruit-har
-          key: nrhar-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: .testdata/nr-editor
-          key: nreditor-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
-      - uses: actions/cache@v6
-        with:
-          path: src/bs-ui-java-agent/bs-ui-java-agent.jar
-          key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipWh40k
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      - name: Setup Liberica JDK (with JavaFX)
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'liberica'
-          java-version: '11'
-          java-package: 'jdk+fx'
-      - name: Build bs-ui-java-agent
-        run: pwsh -File src/bs-ui-java-agent/build.ps1
-      # Functional build only — the checks job is the analyzer/style gate, so skip the
-      # (expensive) analyzers/doc generation here; the test binaries are identical.
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipWh40k
+          java: jdk-fx
+          nr-caches: 'true'
+          playwright: 'true'
+          agent-jar: 'true'
+      # A functional build (Directory.Build.props): `checks` is the analyzer gate, so this job skips the
+      # analyzers, code style and doc generation; the test binaries are identical.
       - name: Build
         id: build
-        run: dotnet build -p:RunAnalyzers=false -p:EnforceCodeStyleInBuild=false -p:GenerateDocumentationFile=false
+        run: dotnet build -p:FunctionalBuild=true
       # A [Fact] AGGREGATE CANNOT BE NARROWED BY DisplayName, AND THIS STEP USED TO PROVE IT THE HARD
       # WAY. `Engine=FrozenNrRoster&DisplayName~kitchen-sink` selected exactly ONE test — and it was
       # SequentialFrozenNrRosterConformanceTests' theory row, which is gated behind NR_SEQUENTIAL and
@@ -444,65 +385,38 @@ jobs:
           if-no-files-found: ignore
 
   # ── THOROUGH conformance (opt-in): the full offline + frozen-NR suites that the
-  #    every-push lanes trim to kitchen-sink. ──
+  #    every-push lanes trim to kitchen-sink — all of them except the NR UI roster lane, which is
+  #    thorough-nr-ui-roster's below. ──
   thorough-conformance:
     needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
     runs-on: ubuntu-latest
-    # The NR UI roster step alone is ~25 minutes (378 specs, sequential, one shared browser) and the
-    # job lands around 35. Bounded explicitly rather than left on GitHub's 360-minute default: every
-    # step here drives a browser against a replayed HAR, and a hung SPA is a realistic failure mode
-    # that would otherwise burn six hours of runner time before anyone saw it. The margin to 150 is
-    # for a slower runner and for a snapshot that costs more than the last one — a bump has doubled
-    # this job before — not for a hang.
-    timeout-minutes: 150
+    # Four lanes, ~6 minutes of tests (run 36772377382: core 154s, frozen NR roster 35s, NR Editor
+    # GameData 113s, its UI 57s) plus setup and build. Bounded explicitly rather than left on GitHub's
+    # 360-minute default: three of the four lanes drive a browser against a replayed snapshot, and a
+    # hung SPA is a realistic failure mode that would otherwise burn six hours of runner time before
+    # anyone saw it. The margin to 45 is for a slower runner and for a snapshot that costs more than
+    # the last one, not for a hang — and it must hold the steps' own bounds plus setup
+    # (CiWorkflowDriftTests.EveryJob_OutlastsItsStepBounds).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - name: Set up
+        uses: ./.github/actions/setup
         with:
-          global-json-file: global.json
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-      - uses: actions/cache@v6
-        with:
-          path: lib/battlescribe
-          key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: .testdata/newrecruit-har
-          key: nrhar-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: .testdata/nr-editor
-          key: nreditor-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
-      # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, #401);
-      # its patch step runs `java PatchJarMain`. This lane skips the agent build, so provide a JDK.
-      - name: Setup Java (engine-jar patch tool)
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'liberica'
-          java-version: '11'
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipJavaAgent -SkipWh40k
+          java: plain
+          nr-caches: 'true'
+          playwright: 'true'
+          agent-jar: 'false'
       - name: Build
         id: build
-        run: dotnet build
+        run: dotnet build -p:FunctionalBuild=true
       # EVERY LANE HERE RUNS REGARDLESS OF THE LANES BEFORE IT — `!cancelled()` plus a successful
       # build, the condition every test step outside nr-conformance carries (see the `checks` job). It
       # was the default `success()` here, which made each lane hostage to every lane above it. This
@@ -521,22 +435,6 @@ jobs:
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
         env:
           NR_HEADLESS: true
-      # NR_UI_ROSTER_FULL is what makes this step deserve the word "Full". Without it the class runs
-      # kitchen-sink only — which is what it did for its whole life, and is why
-      # docs/warm-reuse.md records "CI never caught the original bug because the NR-UI roster lane
-      # runs a single spec". The knob is opt-in so the every-push lane and pre-push stay fast;
-      # ConcurrencyConfigurationDriftTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this
-      # env entry is ever dropped, because a lane silently shrinking from 363 specs to 1 still
-      # exits 0. This step is the long one: ~27 minutes (1606s in run 36772377382), so its own ceiling
-      # is 60 rather than 2.5x — enough for a snapshot that costs more than the last, and a hang ends
-      # here with the diagnostics upload still to run, not at the job's 150.
-      - name: Full frozen NR UI roster
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 60
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
-        env:
-          NR_HEADLESS: true
-          NR_UI_ROSTER_FULL: 1
       - name: Full frozen NR Editor GameData
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
@@ -553,18 +451,96 @@ jobs:
           NR_HEADLESS: true
           NR_GAMEDATA_UI_DIAGNOSTICS: 1
       # The NR UI drivers write a screenshot, DOM snapshot, Pinia dump and console log for every
-      # failed action — and this job, the only one that runs either of them over the full spec set,
-      # was throwing all of it away. A `Timeout 20000ms exceeded.` in the log was the whole record
-      # of the failure. `nr-ui-diagnostics*` matches the per-worker suffixes the drivers append.
+      # failed action — and the thorough lanes, the only ones that run them over the full spec set,
+      # were throwing all of it away. A `Timeout 20000ms exceeded.` in the log was the whole record
+      # of the failure. This job runs the NR Editor GameData UI driver; the NR UI roster driver's
+      # directory is uploaded by thorough-nr-ui-roster. `*` matches the per-worker suffixes.
+      - name: Upload NR Editor GameData UI diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: thorough-conformance-nr-gamedata-ui-diagnostics
+          path: |
+            artifacts/nr-gamedata-ui-diagnostics*/
+          # A lane can fail without any driver reaching its capture path (a lint or fixture failure),
+          # so an empty upload here is a fact about the failure, not a broken step.
+          if-no-files-found: ignore
+      - name: Upload telemetry
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
+          path: artifacts/telemetry/
+          if-no-files-found: ignore
+
+  # ── THOROUGH: the full frozen NR UI roster lane (opt-in), in a job of its own. ──
+  #
+  #    It is the longest lane in CI, over three times the next (the BS roster UI half, 489s): ~27
+  #    minutes (1606s in run 36772377382) of one browser driving every applicable spec in sequence
+  #    against the replayed HAR. It used to be one step of thorough-conformance, which made that job
+  #    the critical path of every thorough run (36 minutes) and held the other four lanes' verdicts
+  #    until it finished. Split out, it runs beside them: the critical path drops to this job (setup,
+  #    a functional build and the lane, ~31 minutes), and a red NR UI roster lane is a red job of its
+  #    own name rather than one step of a job that also holds four lanes that passed.
+  #
+  #    NOT SHARDED. The lane reuses one warm browser session across specs, so what one spec leaves
+  #    behind is what the next starts from — splitting it splits the chain it exists to exercise
+  #    (docs/warm-reuse.md). The same reasoning keeps thorough-ui-bs whole.
+  thorough-nr-ui-roster:
+    needs: [gate]
+    if: needs.gate.outputs.thorough == 'true'
+    runs-on: ubuntu-latest
+    # The step's own 60 plus room for setup and build (~3 minutes measured, more on cold caches):
+    # the job must outlive its step's bound, or a hang ends here and takes the diagnostics with it.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      # The HAR, the browsers, and a plain JDK for the engine-jar patch. The NR Editor snapshot is not
+      # this lane's, but setup.ps1 fetches every pinned archive, so its cache is restored too rather
+      # than re-downloaded on every run.
+      - name: Set up
+        uses: ./.github/actions/setup
+        with:
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipJavaAgent -SkipWh40k
+          java: plain
+          nr-caches: 'true'
+          playwright: 'true'
+          agent-jar: 'false'
+      - name: Build
+        id: build
+        run: dotnet build -p:FunctionalBuild=true
+      # NR_UI_ROSTER_FULL is what makes this step deserve the word "Full". Without it the class runs
+      # kitchen-sink only — which is what it did for its whole life, and is why
+      # docs/warm-reuse.md records "CI never caught the original bug because the NR-UI roster lane
+      # runs a single spec". The knob is opt-in so the every-push lane and pre-push stay fast;
+      # ConcurrencyConfigurationDriftTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this
+      # env entry is ever dropped, because a lane silently shrinking from 363 specs to 1 still
+      # exits 0. This step is the long one: ~27 minutes (1606s in run 36772377382), so its own ceiling
+      # is 60 rather than 2.5x — enough for a snapshot that costs more than the last, and a hang ends
+      # here with the diagnostics upload still to run, not at the job's 75.
+      - name: Full frozen NR UI roster
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 60
+        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        env:
+          NR_HEADLESS: true
+          NR_UI_ROSTER_FULL: 1
+      # The NR UI roster driver writes a screenshot, DOM snapshot, Pinia dump and console log for every
+      # failed action; without this upload the log's `Timeout 20000ms exceeded.` is the whole record.
+      # `nr-ui-diagnostics*` matches the per-worker suffixes the driver appends.
       - name: Upload NR UI diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: thorough-conformance-nr-ui-diagnostics
+          name: thorough-nr-ui-roster-diagnostics
           path: |
             artifacts/nr-ui-diagnostics*/
-            artifacts/nr-gamedata-ui-diagnostics*/
-          # A lane can fail without any driver reaching its capture path (a lint or fixture failure),
+          # The lane can fail before the driver reaches its capture path (a fixture or HAR failure),
           # so an empty upload here is a fact about the failure, not a broken step.
           if-no-files-found: ignore
       - name: Upload telemetry
@@ -595,7 +571,8 @@ jobs:
   #    row, and a test that carried none ran in neither job while looking covered.
   #
   #    It is bought with wall-clock nobody waits on: ~13m for the roster half against a
-  #    thorough-conformance that takes ~33m in the same run.
+  #    thorough-nr-ui-roster projected at ~31m in the same run (its lane's 1606s in run 36772377382,
+  #    plus setup and a functional build).
   thorough-ui-bs:
     needs: [gate]
     if: needs.gate.outputs.thorough == 'true'
@@ -615,41 +592,19 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - name: Set up
+        uses: ./.github/actions/setup
         with:
-          global-json-file: global.json
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-      - uses: actions/cache@v6
-        with:
-          path: lib/battlescribe
-          key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: src/bs-ui-java-agent/bs-ui-java-agent.jar
-          key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipPlaywright -SkipWh40k
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      - name: Setup Liberica JDK (with JavaFX)
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'liberica'
-          java-version: '11'
-          java-package: 'jdk+fx'
-      - name: Build bs-ui-java-agent
-        run: pwsh -File src/bs-ui-java-agent/build.ps1
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipWh40k
+          java: jdk-fx
+          nr-caches: 'false'
+          playwright: 'false'
+          agent-jar: 'true'
       - name: Build
         id: build
-        run: dotnet build
+        run: dotnet build -p:FunctionalBuild=true
       # "warm start" is ConcurrencyPolicy.For(machine, battlescribe-ui).ReuseGameData — the fixture
       # asks the policy. It used to be BS_UI_KEEP_ALIVE, set here and nowhere else, so this suite ran
       # warm in CI and cold on every developer's machine. Both now run warm, from one decision.
@@ -691,42 +646,19 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - name: Set up
+        uses: ./.github/actions/setup
         with:
-          global-json-file: global.json
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
-          owner: WarHub
-          repositories: newrecruit-har,battlescribe-archive
-      # nr-conformance still needs the BS app: the BattleScribe project IKVM-compiles
-      # lib/battlescribe/lib/*.jar at build time.
-      - uses: actions/cache@v6
-        with:
-          path: lib/battlescribe
-          key: bsapp-${{ hashFiles('testdata.json') }}
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
-      # The .NET build IKVM-compiles a PATCHED copy of the engine jar (src/bs-engine-patch, #401);
-      # its patch step runs `java PatchJarMain`. This lane skips the agent build, so provide a JDK.
-      - name: Setup Java (engine-jar patch tool)
-        uses: actions/setup-java@v6
-        with:
-          distribution: 'liberica'
-          java-version: '11'
-      - name: Setup dependencies
-        run: pwsh ./setup.ps1 -SkipJavaAgent -SkipWh40k
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipJavaAgent -SkipWh40k
+          java: plain
+          nr-caches: 'false'
+          playwright: 'true'
+          agent-jar: 'false'
       - name: Build
         id: build
-        run: dotnet build
+        run: dotnet build -p:FunctionalBuild=true
       - name: Run NR smoke tests
         timeout-minutes: 5
         run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-live-smoke tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
@@ -777,7 +709,7 @@ jobs:
   #    to read as a pass. CiWorkflowDriftTests.CiGate_NeedsEveryOtherJob keeps `needs` complete. ──
   ci-gate:
     if: always()
-    needs: [gate, checks, docker, smoke, thorough-conformance, thorough-ui-bs, nr-conformance]
+    needs: [gate, checks, docker, smoke, thorough-conformance, thorough-nr-ui-roster, thorough-ui-bs, nr-conformance]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

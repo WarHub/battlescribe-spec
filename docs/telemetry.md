@@ -267,8 +267,9 @@ verdicts identical, 2.20–2.21× faster).
 
 ## In CI
 
-`.github/workflows/ci.yml`'s `checks`, `thorough-conformance`, and `thorough-ui-bs` jobs upload
-`artifacts/telemetry/` as a build artifact — `if: always()`, so a **failed** run's trace (the one
+Every job in `.github/workflows/ci.yml` that runs tests — `checks`, `smoke`, `thorough-conformance`,
+`thorough-nr-ui-roster`, `thorough-ui-bs` and `nr-conformance` — uploads `artifacts/telemetry/` as a
+build artifact — `if: always()`, so a **failed** run's trace (the one
 you most want) is captured too, not just a green one. `if-no-files-found: ignore` matters:
 `artifacts/` is gitignored and a lane where telemetry never started (an unrelated early failure)
 should not fail the upload step. There are **no performance gates** — a slow lane does not fail

@@ -574,8 +574,9 @@ public sealed class ConcurrencyConfigurationDriftTests
         ("smoke", "artifacts/nr-gamedata-ui-diagnostics", "NR_GAMEDATA_UI_DIAGNOSTICS"),
         ("smoke", "artifacts/bs-ui-diagnostics", null),
         ("smoke", "artifacts/bs-gamedata-ui-diagnostics", null),
-        ("thorough-conformance", "artifacts/nr-ui-diagnostics", null),
+        // The full NR Editor GameData UI lane; the full NR UI roster lane has a job of its own.
         ("thorough-conformance", "artifacts/nr-gamedata-ui-diagnostics", "NR_GAMEDATA_UI_DIAGNOSTICS"),
+        ("thorough-nr-ui-roster", "artifacts/nr-ui-diagnostics", null),
         ("thorough-ui-bs", "artifacts/bs-ui-diagnostics", null),
         ("thorough-ui-bs", "artifacts/bs-gamedata-ui-diagnostics", null),
     ];
@@ -587,19 +588,21 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// <remarks>
     /// <para>
     /// The NR UI drivers capture a screenshot, DOM snapshot, Pinia dump and console log for every
-    /// failed action, and <c>thorough-conformance</c> — the only job that runs either of them over
-    /// the full spec set — uploaded none of it. What reached a reader was the exception text, and
-    /// for a Playwright timeout that is <c>Timeout 20000ms exceeded.</c> and nothing else. The
-    /// artifacts existed, on a machine that was about to be deleted.
+    /// failed action, and <c>thorough-conformance</c> — then the only job that ran either of them over
+    /// the full spec set; the NR UI roster lane is <c>thorough-nr-ui-roster</c>'s now — uploaded none
+    /// of it. What reached a reader was the exception text, and for a Playwright timeout that is
+    /// <c>Timeout 20000ms exceeded.</c> and nothing else. The artifacts existed, on a machine that was
+    /// about to be deleted.
     /// </para>
     /// <para>
     /// <c>thorough-ui-bs</c> is in the table because it already does this correctly and is the
     /// reason the gap was visible at all: two jobs writing dumps, one uploading them.
     /// </para>
     /// <para>
-    /// <b>Falsifiable:</b> delete either path from the "Upload NR UI diagnostics" step and this goes
-    /// red naming it. It matches within the job block, so an upload wired to the wrong job does not
-    /// satisfy it. Drop <c>NR_GAMEDATA_UI_DIAGNOSTICS</c> from <c>smoke</c>'s NR Editor GameData UI step
+    /// <b>Falsifiable:</b> delete <c>artifacts/nr-ui-diagnostics</c> from
+    /// <c>thorough-nr-ui-roster</c>'s upload, or <c>artifacts/nr-gamedata-ui-diagnostics</c> from
+    /// <c>thorough-conformance</c>'s, and this goes red naming it. It matches within the job block, so
+    /// an upload wired to the wrong job does not satisfy it. Drop <c>NR_GAMEDATA_UI_DIAGNOSTICS</c> from <c>smoke</c>'s NR Editor GameData UI step
     /// and it goes red too: the switch is read from the parsed job, so a comment naming it does not count.
     /// </para>
     /// </remarks>
@@ -850,7 +853,7 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// <summary>
     /// The branch's headline claim — "one policy, no environment-variable knobs" — asserted
     /// mechanically instead of in prose. No production code, and no test fixture, may READ any
-    /// retired knob; no CI workflow may set one.
+    /// retired knob; no CI workflow, and no composite action a workflow calls, may set one.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -866,6 +869,12 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// and they necessarily name the variables to set and restore them. Scanning <c>src/</c> and
     /// <c>tests/Infrastructure/</c> covers every place a knob could actually govern behaviour: the
     /// product, and the fixtures that are the harness's own production code.
+    /// </para>
+    /// <para>
+    /// The CI side reads every file <see cref="CiDefinitionFiles"/> lists — the workflows and
+    /// <c>.github/actions</c> — and fails if that included no action: the jobs set up through
+    /// <c>.github/actions/setup</c>, and an <c>env:</c> there reaches every step after it. Mutation-checked:
+    /// a <c>BS_UI_KEEP_ALIVE: 1</c> in that action's env goes red naming the file.
     /// </para>
     /// </remarks>
     [Fact]
@@ -903,18 +912,15 @@ public sealed class ConcurrencyConfigurationDriftTests
             }
         }
 
-        var workflows = Path.Combine(RepoRoot, ".github", "workflows");
-        if (Directory.Exists(workflows))
+        var ciFiles = CiDefinitionFiles.All;
+        CiDefinitionFiles.AssertReadAnAction(ciFiles.Select(static f => f.Path), nameof(RetiredEnvironmentKnobs_AreReadByNoProductionCodeOrFixture_AndSetByNoWorkflow));
+        foreach (var file in ciFiles)
         {
-            foreach (var file in Directory.EnumerateFiles(workflows, "*.yml", SearchOption.AllDirectories))
+            foreach (var knob in RetiredKnobs)
             {
-                var text = File.ReadAllText(file);
-                foreach (var knob in RetiredKnobs)
+                if (file.Text.Contains($"{knob}:", StringComparison.Ordinal))
                 {
-                    if (text.Contains($"{knob}:", StringComparison.Ordinal))
-                    {
-                        offenders.Add($"  {Path.GetRelativePath(RepoRoot, file)} sets {knob}");
-                    }
+                    offenders.Add($"  {file.Path} sets {knob}");
                 }
             }
         }

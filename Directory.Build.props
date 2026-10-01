@@ -23,6 +23,35 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
   </PropertyGroup>
 
+  <!--
+    dotnet build -p:FunctionalBuild=true — the same binaries without the build-time gates: no
+    analyzers, no code-style enforcement, no XML documentation files. Nothing reads the XML docs and
+    the gates emit diagnostics, not code, so the test binaries are identical; the build is ~25s faster
+    on a 2-vCPU runner.
+
+    IT COVERS THIS REPOSITORY'S PROJECTS, NOT THE VENDORED .deps/wham. Those projects evaluate the
+    submodule's own Directory.Build.props, which does not import this one, so its analyzers
+    (AnalysisMode=All) and XML docs still run under the switch: ~2s of wham's build on the dev box at
+    -m:2. The three raw flags this replaces were global properties and did reach wham, which is why
+    the build they measured (81s against 108-113s for full builds, run 36772377382) is a few seconds
+    better than this switch should be expected to match. Reaching wham would take a mechanism that
+    rides on the submodule's layout (a root Directory.Build.targets applies only while wham has none
+    of its own) for those few seconds, so it stays out.
+
+    CI uses it for every build except the `checks` job, which IS the analyzer gate; a lint
+    (CiWorkflowDriftTests.Checks_BuildsWithAnalyzers) fails if `checks` ever sets it, and another
+    (OtherCiBuilds_UseFunctionalBuild) if any other ci.yml build does not. It replaces three raw
+    `-p:` flags that one job spelled out and the others did not, and the properties below are the
+    one record of what it turns off: the lint that bans the raw flags in CI reads them from here, and
+    fails if any of these three is missing from it. Locally it is a faster inner loop; run a plain
+    `dotnet build` before pushing, because the analyzers are part of what `checks` will hold you to.
+  -->
+  <PropertyGroup Condition="'$(FunctionalBuild)' == 'true'">
+    <RunAnalyzers>false</RunAnalyzers>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
   <!-- Test profiles: dotnet test -p:TestProfile=nr-live -->
   <PropertyGroup Condition="'$(TestProfile)' != ''">
     <RunSettingsFilePath>$(MSBuildThisFileDirectory)tests\test-profiles\$(TestProfile).runsettings</RunSettingsFilePath>

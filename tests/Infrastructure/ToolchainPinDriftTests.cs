@@ -42,21 +42,33 @@ public sealed class ToolchainPinDriftTests
     /// hole this closes, and the one a copy-pasted new job would reopen without noticing.
     /// </summary>
     /// <remarks>
-    /// Falsifiable: change any <c>global-json-file: global.json</c> in <c>.github/workflows</c> back
-    /// to <c>dotnet-version: '10.0.x'</c> and this test names the file and the line.
+    /// <para>
+    /// It reads every CI definition file — the workflows and the composite actions they call
+    /// (<see cref="CiDefinitionFiles"/>) — because the jobs in <c>ci.yml</c> install the SDK through
+    /// <c>.github/actions/setup</c>: a scan of the workflows alone would see only the snapshot
+    /// workflow's step, and a floating version in the action would pass. It fails if it read no action.
+    /// </para>
+    /// <para>
+    /// Falsifiable: change any <c>global-json-file: global.json</c> — in a workflow, or in
+    /// <c>.github/actions/setup/action.yml</c> — back to <c>dotnet-version: '10.0.x'</c> and this test
+    /// names the file and the line (mutation-checked on the action).
+    /// </para>
     /// </remarks>
     [Fact]
     public void EverySetupDotnetStep_InstallsTheSdkDeclaredInGlobalJson()
     {
-        var offenders = WorkflowLines()
+        var lines = CiDefinitionFiles.Lines().ToList();
+        CiDefinitionFiles.AssertReadAnAction(lines.Select(static l => l.File.Path), nameof(EverySetupDotnetStep_InstallsTheSdkDeclaredInGlobalJson));
+
+        var offenders = lines
             .Where(l => l.Text.Contains("dotnet-version:", StringComparison.Ordinal)
                 && !l.Text.TrimStart().StartsWith('#'))
-            .Select(l => $"  {l.File}:{l.Number}: {l.Text.Trim()}")
+            .Select(l => $"  {l.File.Path}:{l.Number}: {l.Text.Trim()}")
             .ToArray();
 
         Assert.True(
             offenders.Length == 0,
-            "These workflow steps pin a .NET SDK version outside global.json:\n"
+            "These CI steps (workflows and composite actions) pin a .NET SDK version outside global.json:\n"
             + string.Join("\n", offenders)
             + "\n\nUse `global-json-file: global.json` instead. setup-dotnet honours the `latest*` "
             + "rollForward variants, so it installs the newest SDK inside the pinned band — one "
@@ -65,7 +77,7 @@ public sealed class ToolchainPinDriftTests
 
         // ...and the replacement is actually present, so deleting every setup-dotnet step does not
         // pass this gate by vacuous truth.
-        var declared = WorkflowLines()
+        var declared = lines
             .Count(l => l.Text.Contains("global-json-file: global.json", StringComparison.Ordinal));
 
         Assert.True(
@@ -188,21 +200,5 @@ public sealed class ToolchainPinDriftTests
         var config = File.ReadAllText(Path.Combine(RepoRoot, ".github", "dependabot.yml"));
 
         Assert.Contains("package-ecosystem: \"dotnet-sdk\"", config, StringComparison.Ordinal);
-    }
-
-    private static IEnumerable<(string File, int Number, string Text)> WorkflowLines()
-    {
-        var workflows = Path.Combine(RepoRoot, ".github", "workflows");
-        foreach (var file in Directory
-            .EnumerateFiles(workflows, "*.yml", SearchOption.AllDirectories)
-            .Order(StringComparer.Ordinal))
-        {
-            var relative = Path.GetRelativePath(RepoRoot, file).Replace(Path.DirectorySeparatorChar, '/');
-            var number = 0;
-            foreach (var line in File.ReadAllLines(file))
-            {
-                yield return (relative, ++number, line);
-            }
-        }
     }
 }

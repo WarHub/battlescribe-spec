@@ -15,7 +15,7 @@ const config = loadConfig();
 // A fixed config, so these cases test the rules rather than whatever ci-gate.json lists today.
 const fixture = { thoroughJobs: ["thorough-conformance", "thorough-ui-bs"], liveJobs: ["nr-conformance"] };
 
-/** A complete, all-green `needs` with the gate saying thorough/live as given. */
+/** A complete, all-green `needs` — every job ci.yml has — with the gate saying thorough/live as given. */
 function needs({ thorough = "true", live = "true", ...overrides } = {}) {
   const base = {
     gate: { result: "success", outputs: { thorough, live } },
@@ -23,6 +23,7 @@ function needs({ thorough = "true", live = "true", ...overrides } = {}) {
     docker: { result: "success", outputs: {} },
     smoke: { result: "success", outputs: {} },
     "thorough-conformance": { result: "success", outputs: {} },
+    "thorough-nr-ui-roster": { result: "success", outputs: {} },
     "thorough-ui-bs": { result: "success", outputs: {} },
     "nr-conformance": { result: "success", outputs: {} },
   };
