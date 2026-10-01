@@ -396,9 +396,11 @@ inside an opt-in workflow whose long pole is a 33-minute `thorough-conformance`,
 that.
 
 It is **opt-in**, like every other thorough lane: `workflow_dispatch`, the weekly Monday schedule, a
-`thorough-ci` label on a PR, a `[nr-test]` commit message, or a PR touching `testdata.json`. So a
-BattleScribe change still merges without it unless someone asks — the difference is that asking is
-now possible, and the weekly run reports drift that previously nothing looked for.
+`thorough-ci` label on a PR, a PR that edits one of the inputs listed in `scripts/ci-gate.json`
+(`testdata.json`, the package and SDK pins, the CI definition, the test profiles among them), or a PR
+whose base is not `main` — a layer of a stack. So a BattleScribe change still merges without it unless
+someone asks — the difference is that asking is now possible, and the weekly run reports drift that
+previously nothing looked for.
 
 **The confirming run has happened.** The 367/367 was first measured before the nested-force scoping,
 the label ranking, the checkbox direction and the count-of-zero fix landed, each of which changes

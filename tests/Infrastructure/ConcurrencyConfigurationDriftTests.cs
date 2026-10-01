@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -379,49 +378,43 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// </para>
     /// <para>
     /// <b>Falsifiable:</b> delete the CLI step from <c>ci.yml</c> (or add a third test project without a
-    /// step for it) and this goes red, naming the project. It scans the test-step COMMAND LINES
-    /// only — not the file text — so it does not care which job runs the project, with what filter, or in
-    /// what order, and (verified by mutation) a passing <em>mention</em> of the project in a comment
-    /// cannot satisfy it. The first draft of this test scanned the whole file and was defeated by the
-    /// comment three lines above the step it was guarding.
+    /// step for it) and this goes red, naming the project. It reads the test steps
+    /// <see cref="CiTestInvocations"/> finds in the parsed workflows — by the project each one runs, in
+    /// whatever spelling — so it does not care which job runs the project, with what filter, or in what
+    /// order, and a <em>mention</em> of the project in a YAML comment is not a step at all. The first
+    /// draft of this test scanned the whole file and was defeated by the comment three lines above the
+    /// step it was guarding; the line scan that followed was blind to every test run not spelled with
+    /// the wrapper script.
     /// </para>
     /// </remarks>
     [Fact]
     public void EveryTestProject_IsRunBySomeCiStep()
     {
-        // Test steps run through the guard wrapper, not `dotnet test` directly — see
-        // EveryCiTestStep_ExecutesAtLeastOneTest, which is what enforces that.
-        var invocations = WorkflowCommandLines()
-            .Where(line => line.Contains(TestStepScript, StringComparison.Ordinal)
-                && !line.TrimStart().StartsWith('#'))
+        var invocations = CiTestInvocations.ClassifiedSteps()
+            .Where(static c => c.Invocation.Kind == CiStepKind.TestRun)
+            .Select(static c => c.Invocation)
             .ToArray();
 
         Assert.NotEmpty(invocations);
 
-        var testProjects = Directory
-            .EnumerateFiles(Path.Combine(RepoRoot, "tests"), "*.csproj", SearchOption.AllDirectories)
-            .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        // Every xunit project in BattleScribeSpec.slnx — the same list the classifier recognises.
+        var testProjects = CiTestInvocations.TestProjects.Select(static p => p.RelativePath).Order(StringComparer.Ordinal).ToArray();
 
         Assert.NotEmpty(testProjects);
 
-        // A solution-wide sweep (`… BattleScribeSpec.slnx`) would cover every project at once; today
-        // every step names one project explicitly, which is what makes an unnamed project invisible.
-        var sweepsTheSolution = invocations.Any(line => line.Contains(".slnx", StringComparison.Ordinal));
+        // A solution-wide sweep (a bare `dotnet test`, or `… BattleScribeSpec.slnx`) would cover every
+        // project at once; today every step names one project explicitly, which is what makes an unnamed
+        // project invisible.
+        var sweepsTheSolution = invocations.Any(static i => i.TargetsSolution);
 
-        // Workflows are authored with forward slashes whatever the developer's OS.
         var unrun = testProjects
-            .Select(p => Path.GetRelativePath(RepoRoot, p).Replace(Path.DirectorySeparatorChar, '/'))
-            .Where(rel => !sweepsTheSolution
-                && !invocations.Any(line => line.Contains(rel, StringComparison.Ordinal)))
+            .Where(rel => !sweepsTheSolution && !invocations.Any(i => i.Projects.Contains(rel)))
             .ToArray();
 
         Assert.True(
             unrun.Length == 0,
             $"These test projects are never run by any CI step:\n{string.Join("\n", unrun.Select(p => "  " + p))}\n\n" +
-            "Every test-step invocation in .github/workflows names a project explicitly — there is no " +
+            "Every test step in .github/workflows names a project explicitly — there is no " +
             "solution-wide sweep — so a project with no step of its own is a suite that passes on the " +
             "author's machine and has never once been executed by CI. That is how tests/BattleScribeSpec.Cli.Tests " +
             "came to hold every gate on the CLI's third-party load limit while CI ran none of them. Add a " +
@@ -433,7 +426,7 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// tests — see its own header for the two ways that happens and why neither is detectable from
     /// a `dotnet test` exit code.
     /// </summary>
-    private const string TestStepScript = "scripts/dotnet-test-step.ps1";
+    private const string TestStepScript = CiTestInvocations.TestStepScript;
 
     /// <summary>
     /// <b>A CI test step that EXECUTED NO TESTS must fail, not pass.</b> Every test step in
@@ -475,24 +468,32 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// </para>
     /// <para>
     /// <b>Falsifiable:</b> change any step back to a bare <c>dotnet test</c> (or add a new one) and
-    /// this goes red naming the line. Like <see cref="EveryTestProject_IsRunBySomeCiStep"/> it scans
-    /// COMMAND LINES only, so the prose above those steps — which necessarily says "dotnet test" —
-    /// cannot satisfy or trip it.
+    /// this goes red naming the step — and so does any other way of running a test project: the test
+    /// exe or dll by path, <c>dotnet run --project tests/…</c>, reordered flags, or a repo script that
+    /// does any of those. Steps are found by <see cref="CiTestInvocations"/>, which identifies a test
+    /// run by the project it runs (verified by mutation: a reordered bare <c>dotnet test</c> line and a
+    /// <c>dotnet artifacts/bin/BattleScribeSpec.Tests/…/BattleScribeSpec.Tests.dll</c> line each went
+    /// red). The YAML comments above those steps — which necessarily say "dotnet test" — are not steps.
     /// </para>
     /// </remarks>
     [Fact]
     public void EveryCiTestStep_ExecutesAtLeastOneTest()
     {
-        var unguarded = WorkflowCommandLines()
-            .Where(line => line.Contains("dotnet test", StringComparison.Ordinal)
-                && !line.TrimStart().StartsWith('#')
-                && !line.Contains(TestStepScript, StringComparison.Ordinal))
+        var testSteps = CiTestInvocations.ClassifiedSteps()
+            .Where(static c => c.Invocation.Kind == CiStepKind.TestRun)
+            .ToArray();
+
+        Assert.NotEmpty(testSteps);
+
+        var unguarded = testSteps
+            .Where(static c => !c.Invocation.ThroughTestStepScript)
+            .Select(static c => c.Step)
             .ToArray();
 
         Assert.True(
             unguarded.Length == 0,
-            $"These CI steps invoke `dotnet test` directly instead of through {TestStepScript}:\n" +
-            string.Join("\n", unguarded.Select(l => "  " + l.Trim())) + "\n\n" +
+            $"These CI steps run a test project without going through {TestStepScript}:\n" +
+            string.Join("\n", unguarded.Select(static s => $"  {s.Where}: {s.Run!.Trim()}")) + "\n\n" +
             "A bare `dotnet test` step exits 0 when its filter selected NOTHING, and exits 0 when the " +
             "only test it selected SKIPPED — both indistinguishable from a step whose tests ran and " +
             "passed. That is how `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` (0 matched) and " +
@@ -546,16 +547,37 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// therefore upload it.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Paths as the drivers resolve them (repo-root <c>artifacts/</c>, anchored there for the test
     /// host by <see cref="TestPaths.AnchorDiagnosticsAtRepoRoot"/>); the workflow may match them with
     /// a trailing wildcard for the drivers' per-worker suffixes.
+    /// </para>
+    /// <para>
+    /// <c>CaptureSwitch</c> is the environment variable a driver needs before it writes anything at all.
+    /// The NR Editor GameData UI driver captures only when <c>NR_GAMEDATA_UI_DIAGNOSTICS</c> is set (its
+    /// capture runs on every failed action, expected failures included), so an upload of its directory
+    /// from a job that never sets it is an upload of nothing — <c>if-no-files-found: ignore</c> keeps
+    /// that quiet, which is why the switch is checked here and not left to a reader.
+    /// </para>
+    /// <para>
+    /// The BS GameData UI rows record where that driver's dumps go and who must collect them, but it
+    /// writes none today: <c>BsGameDataUiDiagnostics.CaptureAsync</c> has no caller, and nothing anchors
+    /// its directory at the repo root for the test host the way <see cref="BsRosterUiFixture"/> does for
+    /// the roster driver. Wiring both is driver work, not CI work; the uploads are ready for it.
+    /// </para>
     /// </remarks>
-    private static readonly (string Job, string Directory)[] UiDiagnosticsUploads =
+    private static readonly (string Job, string Directory, string? CaptureSwitch)[] UiDiagnosticsUploads =
     [
-        ("thorough-conformance", "artifacts/nr-ui-diagnostics"),
-        ("thorough-conformance", "artifacts/nr-gamedata-ui-diagnostics"),
-        ("thorough-ui-bs", "artifacts/bs-ui-diagnostics"),
-        ("thorough-ui-bs", "artifacts/bs-gamedata-ui-diagnostics"),
+        // smoke drives all four drivers over kitchen-sink on every push (the BS roster driver through
+        // `bs-spec run --ui`, which writes to the same repo-root artifacts/ directory).
+        ("smoke", "artifacts/nr-ui-diagnostics", null),
+        ("smoke", "artifacts/nr-gamedata-ui-diagnostics", "NR_GAMEDATA_UI_DIAGNOSTICS"),
+        ("smoke", "artifacts/bs-ui-diagnostics", null),
+        ("smoke", "artifacts/bs-gamedata-ui-diagnostics", null),
+        ("thorough-conformance", "artifacts/nr-ui-diagnostics", null),
+        ("thorough-conformance", "artifacts/nr-gamedata-ui-diagnostics", "NR_GAMEDATA_UI_DIAGNOSTICS"),
+        ("thorough-ui-bs", "artifacts/bs-ui-diagnostics", null),
+        ("thorough-ui-bs", "artifacts/bs-gamedata-ui-diagnostics", null),
     ];
 
     /// <summary>
@@ -577,7 +599,8 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// <para>
     /// <b>Falsifiable:</b> delete either path from the "Upload NR UI diagnostics" step and this goes
     /// red naming it. It matches within the job block, so an upload wired to the wrong job does not
-    /// satisfy it.
+    /// satisfy it. Drop <c>NR_GAMEDATA_UI_DIAGNOSTICS</c> from <c>smoke</c>'s NR Editor GameData UI step
+    /// and it goes red too: the switch is read from the parsed job, so a comment naming it does not count.
     /// </para>
     /// </remarks>
     [Fact]
@@ -589,17 +612,28 @@ public sealed class ConcurrencyConfigurationDriftTests
         var missing = UiDiagnosticsUploads
             .Where(u => !JobBlock(ci, u.Job).Contains(u.Directory, StringComparison.Ordinal))
             .Select(u => $"  {u.Job} does not upload {u.Directory}")
-            .ToArray();
+            .ToList();
+
+        // The switch must be set where the driver runs: on a step of the job, or on the job itself.
+        missing.AddRange(UiDiagnosticsUploads
+            .Where(static u => u.CaptureSwitch is { } name && !SetsVariable(CiWorkflows.Ci.Job(u.Job), name))
+            .Select(static u => $"  {u.Job} uploads {u.Directory} but never sets {u.CaptureSwitch}, so the driver writes nothing to it"));
 
         Assert.True(
-            missing.Length == 0,
+            missing.Count == 0,
             "These CI jobs run a UI driver whose diagnostics they never upload:\n"
             + string.Join("\n", missing) + "\n\n"
             + "A driver that dumps a screenshot, DOM and store state into a runner nobody collects "
             + "from has diagnosed nothing: the reader gets the exception text, which for a Playwright "
-            + "timeout is seven words. Add an `actions/upload-artifact` step for the directory, or — "
-            + "if the job genuinely no longer runs that driver — delete its row from "
-            + nameof(UiDiagnosticsUploads) + ".");
+            + "timeout is seven words. Add an `actions/upload-artifact` step for the directory (and set "
+            + "the driver's capture switch where it runs), or — if the job genuinely no longer runs that "
+            + "driver — delete its row from " + nameof(UiDiagnosticsUploads) + ".");
+
+        static bool SetsVariable(CiJob job, string name) =>
+            job.Steps.Any(s => s.Env(name) is { Length: > 0 })
+            || (job.Node.Children.TryGetValue(new YamlDotNet.RepresentationModel.YamlScalarNode("env"), out var env)
+                && env is YamlDotNet.RepresentationModel.YamlMappingNode map
+                && CiWorkflows.Scalar(map, name) is { Length: > 0 });
     }
 
     /// <summary>
@@ -800,43 +834,6 @@ public sealed class ConcurrencyConfigurationDriftTests
             string.Join("\n", runsButShouldNot.Concat(excludedButShould)) + "\n\n" +
             "The filter is the thing that actually runs; this table is the thing that explains it. When " +
             "they differ, the profile is doing something nobody wrote down — which is the whole of #405.");
-    }
-
-    /// <summary>
-    /// Every line of every workflow file, with backslash-continued shell lines joined into the single
-    /// command line they actually form — so a multi-line <c>run:</c> block is scanned as one
-    /// invocation rather than as fragments that individually look flagless.
-    /// </summary>
-    private static List<string> WorkflowCommandLines()
-    {
-        var workflows = Path.Combine(RepoRoot, ".github", "workflows");
-        var lines = new List<string>();
-
-        foreach (var file in Directory
-            .EnumerateFiles(workflows, "*.yml", SearchOption.AllDirectories)
-            .Order(StringComparer.Ordinal))
-        {
-            var pending = new StringBuilder();
-            foreach (var raw in File.ReadAllLines(file))
-            {
-                var line = raw.TrimEnd();
-                if (line.EndsWith('\\'))
-                {
-                    pending.Append(line, 0, line.Length - 1).Append(' ');
-                    continue;
-                }
-
-                lines.Add(pending.Append(line).ToString());
-                pending.Clear();
-            }
-
-            if (pending.Length > 0)
-            {
-                lines.Add(pending.ToString());
-            }
-        }
-
-        return lines;
     }
 
     /// <summary>

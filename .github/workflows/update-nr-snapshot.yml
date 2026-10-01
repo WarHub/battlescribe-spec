@@ -12,6 +12,11 @@ permissions:
 jobs:
   update-snapshot:
     runs-on: ubuntu-latest
+    # Three to four minutes on a normal night (a full setup.ps1, one HAR recording, one diff). The
+    # recording drives a browser against a live site, and without a bound a wedged page would hold the
+    # runner for GitHub's six-hour default. CiWorkflowDriftTests.EveryJob_HasATimeout covers every
+    # workflow, this one included.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v7

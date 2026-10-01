@@ -1,0 +1,66 @@
+{
+  "$comment": [
+    "The one record of what makes CI run its thorough and live lanes, and which jobs those are.",
+    "Read by scripts/thorough-inputs.mjs (the `gate` job), scripts/ci-gate.mjs (the `ci-gate` job) and",
+    "tests/Infrastructure/CiWorkflowDriftTests.cs. thoroughInputs: an entry ending in `/` is a prefix,",
+    "one containing `*` is a glob (`**` spans directories), anything else is an exact path; every entry",
+    "must match a tracked file, which scripts/thorough-inputs.test.mjs asserts, so a renamed input cannot",
+    "leave a dead entry behind. A layer that creates a new input adds it here in the same change."
+  ],
+  "thoroughInputs": [
+    {
+      "path": "testdata.json",
+      "why": "pins what the frozen suites replay: the NR client HAR, the NR Editor snapshot and the BattleScribe app build (#301 merged green on kitchen-sink and broke two of them)"
+    },
+    {
+      "path": "Directory.Packages.props",
+      "why": "IKVM recompiles the BattleScribe engine and Playwright ships the browser every NR UI driver drives (#503)"
+    },
+    {
+      "path": "global.json",
+      "why": "pins the SDK, and with it the runtime and the analyzer set every lane runs on"
+    },
+    {
+      "path": "setup.ps1",
+      "why": "provisions every input the thorough lanes consume: the app, the HAR, the NR Editor snapshot, the browsers, the JDK"
+    },
+    {
+      "path": "Directory.Build.props",
+      "why": "maps -p:TestProfile to a profile, and sets the build every test project inherits"
+    },
+    {
+      "path": "tests/**/*.csproj",
+      "why": "the test projects themselves: runner packages, entry point, what is compiled in"
+    },
+    {
+      "path": "tests/**/xunit.runner.json",
+      "why": "the runner's parallelism and ordering, which reorders the warm chains the UI lanes exercise"
+    },
+    {
+      "path": "tests/test-profiles/",
+      "why": "the profiles the thorough lanes select their tests with"
+    },
+    {
+      "path": ".github/workflows/",
+      "why": "the CI definition: an edit can drop, narrow or mis-wire a lane that only the thorough jobs exercise"
+    },
+    {
+      "path": "scripts/dotnet-test-step.ps1",
+      "why": "the executed-at-least-one-test guard every CI test step runs through"
+    },
+    {
+      "path": "scripts/thorough-inputs.mjs",
+      "why": "decides whether the thorough and live lanes run at all"
+    },
+    {
+      "path": "scripts/ci-gate.mjs",
+      "why": "decides whether a skipped lane is acceptable"
+    },
+    {
+      "path": "scripts/ci-gate.json",
+      "why": "this list, and the jobs it names"
+    }
+  ],
+  "thoroughJobs": ["thorough-conformance", "thorough-ui-bs"],
+  "liveJobs": ["nr-conformance"]
+}

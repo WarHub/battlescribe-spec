@@ -323,8 +323,10 @@ dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all --engine b
 The project includes a [New Recruit](https://newrecruit.eu) adapter that tests NR's conformance
 via Playwright browser automation. Two testing modes are available:
 
-- **Live** (`nr-conformance` CI job) — Tests against the live NR website. Triggered manually
-  or with `[nr-test]` in commit message. Set `NR_ENGINE_URL=https://www.newrecruit.eu` to run locally.
+- **Live** (`nr-conformance` CI job) — Tests against the live NR website. Runs on a manual
+  `workflow_dispatch`, the weekly schedule, a `thorough-ci` label, or a PR to `main` that edits one of
+  the inputs in [`scripts/ci-gate.json`](scripts/ci-gate.json). Set `NR_ENGINE_URL=https://www.newrecruit.eu`
+  to run locally.
 - **Frozen** (`nr-frozen` CI job) — Tests against a pre-recorded HAR snapshot, fully offline.
   Runs automatically on every push. Run `./setup.ps1` to download the snapshot. Snapshots stored in
   [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har).
