@@ -190,6 +190,86 @@ public static class SpecLoader
     }
 
     /// <summary>
+    /// The name a spec is known by in test rows and reports: <c>category/id</c>, its folder and its
+    /// file name, as <see cref="DiscoverSpecs"/> and <see cref="DiscoverGameDataSpecs"/> derive them.
+    /// </summary>
+    public static string SpecName(string category, string id) => $"{category}/{id}";
+
+    /// <summary>
+    /// The path of the roster spec named <paramref name="specName"/> (see <see cref="SpecName"/>)
+    /// under <see cref="FindRosterSpecsDirectory"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why test rows carry a name and not a path.</b> A theory row's arguments are part of the
+    /// test's display name and its uid. When the conformance and lint rows carried the spec's path,
+    /// every one of those names began with wherever the repo happened to be checked out, and xunit
+    /// cuts each argument at 50 characters, so a spec name longer than that was cut too and
+    /// <c>--filter "DisplayName~&lt;its id&gt;"</c> could not select it. The rows now carry the name,
+    /// and the test asks here for the file.
+    /// </para>
+    /// <para>
+    /// The index is built once per process from one walk of the directory. An unknown name throws,
+    /// naming the directory searched; two files with the same name throw rather than one shadowing
+    /// the other.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">No roster spec has that name.</exception>
+    public static string ResolveRosterSpec(string specName) => Resolve(RosterSpecIndex.Value, specName, "roster");
+
+    /// <summary>
+    /// The path of the GameData spec named <paramref name="specName"/> (see <see cref="SpecName"/>)
+    /// under <see cref="FindGameDataSpecsDirectory"/>. The same index as <see cref="ResolveRosterSpec"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">No GameData spec has that name.</exception>
+    public static string ResolveGameDataSpec(string specName) => Resolve(GameDataSpecIndex.Value, specName, "gamedata");
+
+    private static readonly Lazy<SpecIndex> RosterSpecIndex =
+        new(() => SpecIndex.Build(FindRosterSpecsDirectory(), DiscoverSpecs));
+
+    private static readonly Lazy<SpecIndex> GameDataSpecIndex =
+        new(() => SpecIndex.Build(FindGameDataSpecsDirectory(), DiscoverGameDataSpecs));
+
+    private static string Resolve(SpecIndex index, string specName, string domain)
+    {
+        if (index.Paths.TryGetValue(specName, out var path))
+        {
+            return path;
+        }
+
+        throw new ArgumentException(
+            index.Root is null
+                ? $"No {domain} spec named '{specName}': no specs/{domain} directory was found above '{AppContext.BaseDirectory}'."
+                : $"No {domain} spec named '{specName}' under '{index.Root}'. A spec's name is 'category/id' — its folder and its file name without '.yaml'.",
+            nameof(specName));
+    }
+
+    private sealed record SpecIndex(string? Root, IReadOnlyDictionary<string, string> Paths)
+    {
+        public static SpecIndex Build(string? root, Func<string, IEnumerable<(string Path, string Id, string Category)>> discover)
+        {
+            var paths = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (root is null)
+            {
+                return new SpecIndex(null, paths);
+            }
+
+            foreach (var (path, id, category) in discover(root))
+            {
+                var name = SpecName(category, id);
+                if (!paths.TryAdd(name, path))
+                {
+                    throw new InvalidOperationException(
+                        $"Two spec files are both named '{name}': '{paths[name]}' and '{path}'. " +
+                        "Test rows identify a spec by its name, so it must be unique.");
+                }
+            }
+
+            return new SpecIndex(root, paths);
+        }
+    }
+
+    /// <summary>
     /// Discover all spec YAML files embedded in the TestKit assembly.
     /// </summary>
     public static IEnumerable<(string ResourceName, string Id, string Category)> DiscoverEmbeddedSpecs()

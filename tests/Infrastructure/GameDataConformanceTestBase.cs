@@ -26,7 +26,24 @@ public abstract class GameDataConformanceTestBase
     /// </summary>
     protected abstract IGameDataEngine? GetEngine();
 
-    public static TheoryDataRow<string, string>[] AllGameDataSpecs()
+    /// <summary>
+    /// One row per GameData spec, carrying and labelled with its name (<c>category/id</c>) — see
+    /// <see cref="ConformanceTestBase.AllSpecs"/> for why a row never carries the path.
+    /// </summary>
+    public static TheoryDataRow<string>[] AllGameDataSpecs()
+        => [.. GameDataSpecTags.Value.Select(s =>
+        {
+            var row = new TheoryDataRow<string>(s.Name) { Label = s.Name };
+            if (s.Tags.Length > 0)
+            {
+                row.Traits.Add("Tag", [.. s.Tags]);
+            }
+
+            return row;
+        })];
+
+    /// <summary>Each GameData spec's name and tags, read once per process — see <c>ConformanceTestBase.RosterSpecTags</c>.</summary>
+    private static readonly Lazy<IReadOnlyList<(string Name, string[] Tags)>> GameDataSpecTags = new(() =>
     {
         var specsDir = SpecLoader.FindGameDataSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
@@ -36,27 +53,25 @@ public abstract class GameDataConformanceTestBase
 
         return [.. SpecLoader.DiscoverGameDataSpecs(specsDir).Select(s =>
         {
-            var specName = $"{s.Category}/{s.Id}";
-            var row = new TheoryDataRow<string, string>(s.Path, specName);
+            string[] tags;
             try
             {
-                var spec = SpecLoader.LoadGameData(s.Path);
-                if (spec.Tags is { Count: > 0 })
-                {
-                    row.Traits.Add("Tag", [.. spec.Tags]);
-                }
+                tags = SpecLoader.LoadGameData(s.Path).Tags?.ToArray() ?? [];
             }
             catch
             {
                 // Spec load failure during discovery — emit untagged row
+                tags = [];
             }
-            return row;
-        })];
-    }
 
-    protected void RunSpec(string specPath, string specName)
+            return (SpecLoader.SpecName(s.Category, s.Id), tags);
+        })];
+    });
+
+    /// <summary>Run the GameData spec named <paramref name="specName"/> (<c>category/id</c>) on this lane.</summary>
+    protected void RunSpec(string specName)
     {
-        var spec = SpecLoader.LoadGameData(specPath);
+        var spec = SpecLoader.LoadGameData(SpecLoader.ResolveGameDataSpec(specName));
 
         if (!spec.IsApplicableTo(EngineName))
         {

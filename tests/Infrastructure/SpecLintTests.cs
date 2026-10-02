@@ -20,52 +20,59 @@ public sealed class SpecLintTests
 {
     private static readonly string? SpecsDir = SpecLoader.FindRosterSpecsDirectory();
 
-    private sealed record SpecEntry(string Path, string RelPath, SpecFile? Spec, string? LoadError);
+    private sealed record SpecEntry(string Path, string Name, string RelPath, SpecFile? Spec, string? LoadError);
 
-    // File discovery only — no YAML parsing
-    private static IEnumerable<(string path, string relPath)> DiscoverSpecFiles()
+    // File discovery only — no YAML parsing. Name is the spec's 'category/id', what its row carries.
+    private static IEnumerable<(string path, string name, string relPath)> DiscoverSpecFiles()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
         {
             yield break;
         }
 
-        foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(SpecsDir))
+        foreach (var (path, id, category) in SpecLoader.DiscoverSpecs(SpecsDir))
         {
-            yield return (path, Path.GetRelativePath(SpecsDir, path).Replace('\\', '/'));
+            yield return (path, SpecLoader.SpecName(category, id), Path.GetRelativePath(SpecsDir, path).Replace('\\', '/'));
         }
     }
 
     // Load helper: parse YAML and capture any error without throwing
-    private static SpecEntry TryLoadSpec(string path, string relPath)
+    private static SpecEntry TryLoadSpec(string path, string name, string relPath)
     {
         try
         {
-            return new SpecEntry(path, relPath, SpecLoader.Load(path), null);
+            return new SpecEntry(path, name, relPath, SpecLoader.Load(path), null);
         }
         catch (Exception ex)
         {
-            return new SpecEntry(path, relPath, null, ex.Message);
+            return new SpecEntry(path, name, relPath, null, ex.Message);
         }
     }
 
     // All specs loaded exactly once per test session
     private static readonly Lazy<IReadOnlyList<SpecEntry>> AllSpecsLazy =
-        new(() => [.. DiscoverSpecFiles().Select(x => TryLoadSpec(x.path, x.relPath))]);
+        new(() => [.. DiscoverSpecFiles().Select(x => TryLoadSpec(x.path, x.name, x.relPath))]);
 
-    // O(1) per-path lookup for AllLintChecks
-    private static readonly Lazy<Dictionary<string, SpecEntry>> SpecsByPath =
-        new(() => AllSpecsLazy.Value.ToDictionary(x => x.Path));
+    // O(1) per-name lookup for AllLintChecks
+    private static readonly Lazy<Dictionary<string, SpecEntry>> SpecsByName =
+        new(() => AllSpecsLazy.Value.ToDictionary(x => x.Name, StringComparer.Ordinal));
 
-    public static IEnumerable<object[]> AllSpecs() =>
-        DiscoverSpecFiles().Select(x => new object[] { x.path, x.relPath });
+    /// <summary>
+    /// One row per spec, carrying and labelled with its name (<c>category/id</c>), never its path —
+    /// see <see cref="TheoryRowIdentityTests"/>.
+    /// </summary>
+    public static IEnumerable<TheoryDataRow<string>> AllSpecs() =>
+        DiscoverSpecFiles().Select(x => new TheoryDataRow<string>(x.name) { Label = x.name });
 
     // ── Single aggregated lint check per spec ────────────────────────
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void AllLintChecks(string specPath, string specName)
+    public void AllLintChecks(string specName)
     {
+        // Look up the cached spec (loaded once per test session)
+        var entry = SpecsByName.Value[specName];
+        var specPath = entry.Path;
         var text = File.ReadAllText(specPath);
         var lines = File.ReadAllLines(specPath);
 
@@ -82,9 +89,6 @@ public sealed class SpecLintTests
         violations.AddRange(CheckNoLegacyAssertSteps(text));
         violations.AddRange(CheckNoLegacyErrorFields(text));
         violations.AddRange(CheckNoEmptyTagFields(lines));
-
-        // Look up the cached spec (loaded once per test session)
-        var entry = SpecsByPath.Value[specPath];
 
         if (entry.LoadError is not null)
         {
@@ -113,7 +117,7 @@ public sealed class SpecLintTests
         }
 
         Assert.True(violations.Count == 0,
-            $"{specName}:\n  {string.Join("\n  ", violations)}");
+            $"{entry.RelPath}:\n  {string.Join("\n  ", violations)}");
     }
 
     // ── No duplicate IDs (cross-spec check) ─────────────────────────

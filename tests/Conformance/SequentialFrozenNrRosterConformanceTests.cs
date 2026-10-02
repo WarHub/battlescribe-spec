@@ -35,5 +35,5 @@ public sealed class SequentialFrozenNrRosterConformanceTests : ConformanceTestBa
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void FrozenNrRosterEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void FrozenNrRosterEngine(string specName) => RunSpec(specName);
 }

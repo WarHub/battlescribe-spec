@@ -368,6 +368,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Theory rows are named by spec id, not by checkout path** — the conformance, lint and schema theories
+  took the spec's absolute path as their first argument and its name second. xunit renders a row's
+  arguments into the test name, derives its uid from them and cuts each at 50 characters, so every one
+  of ~4,000 names began with wherever the repo was checked out (two checkouts of one commit listed
+  different tests), 76 names were cut short, and the four specs whose `category/id` runs past 50
+  characters could not be selected at all: `--filter "DisplayName~<id>"`, AGENTS.md's recipe for one
+  spec, matched none of their eight rows each. Rows now carry the spec's `category/id` alone and set
+  xunit 4's `TheoryDataRow.Label` to it, which xunit renders in full instead of the argument list:
+  `BattleScribeSpec.Tests.BsRosterConformanceTests.BsRosterEngine [roundtrip/roundtrip-load-selection-no-primary-category]`.
+  The test resolves the file through `SpecLoader.ResolveRosterSpec`/`ResolveGameDataSpec`, a
+  name → path index built once per process (an unknown or duplicated name throws, naming the directory).
+  The same goes for `SpecLintTests`, `GameDataSpecLintTests`, `SpecSchemaTests`, `GeneratedXmlSchemaTests`
+  and `JsonSchemaLintTests` (a repo-relative path). Class, method, traits and `FullyQualifiedName` are
+  unchanged, so `DisplayName~SpecLint`, `DisplayName~kitchen-sink`, `Engine=…` and every CI filter select
+  the same rows per class as before; the old and new lists pair 1:1 by class and id, and a listing taken
+  from a second root (the same build, reached through a different path) is byte-identical. A new lint,
+  `TheoryRowIdentityTests`, asks xunit's own data attributes for every computed row — as discovery
+  does — and fails on a rooted or checkout path in an argument or label, a spec row (recognised by the
+  `category/id` at the end of any path) that carries anything but that name or is not labelled with it,
+  a row with a display name of its own, a source that yields no rows, or a spec on disk that no row
+  carries; that structural check, not the second-root listing, is what covers names derived from
+  `[CallerFilePath]`. It also keeps the class in every name: `methodDisplay` stays `ClassAndMethod` in
+  the JSON, the runsettings and any inline `xUnit.MethodDisplay=`, and no fact attribute's
+  `DisplayName` or data attribute's `TestDisplayName` replaces it. The roster and GameData conformance
+  factories read each spec's tags once per process instead of once per lane. **For contributors:** test
+  names change shape in Test Explorer and `--list-tests` — `--filter "DisplayName~<id>"` now selects
+  every spec, whatever its length — and because xunit orders tests by uid, which includes the arguments,
+  the order inside every lane changes once, the BS UI warm chains included. It still differs between
+  checkouts: the uid also includes the assembly path.
+- **xunit's parallelism is configured on its current key, in one place** — both `xunit.runner.json` files
+  say `"parallelMode": "collections"` instead of `"parallelizeTestCollections": true`, which xunit 4
+  marks obsolete and will stop reading in its next major version. Nothing changes: xunit's diagnostic
+  messages report `parallel mode = collections [4 threads]` before and after on an 8-core box, and
+  `"none"` is honoured where `"off"` is silently replaced by the default — which is why the new
+  `ConcurrencyConfigurationDriftTests.XunitParallelism_IsDeclaredOnce_OnItsCurrentKeys` pins the value
+  exactly. It also refuses a second record of the same setting: the obsolete key next to the new one,
+  an `xUnit`-section parallelism element or `DisableParallelization` in a runsettings file (which
+  overrides the JSON for that profile alone) or passed inline (`dotnet test -- xUnit.MaxParallelThreads=…`)
+  by a workflow, script or MSBuild file, or an assembly-level `CollectionBehavior`/`Parallelization`
+  attribute — found in source with or without its namespace, `global::` or `Attribute` suffix and
+  wherever it sits in its list, and in the test assembly also by reflection, which an alias cannot escape.
 - **A batch run that executes nothing exits 8** — `bs-spec run --all` used to exit 0 when its selection
   ran nothing: `SpecSuiteResult.ExitCode` was `Failed > 0 ? 1 : 0`, and the only emptiness check
   ("no spec files found") runs before any filter, so a `--filter` typo, the wrong `--specs` or a domain

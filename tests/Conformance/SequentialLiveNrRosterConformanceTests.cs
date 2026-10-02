@@ -35,5 +35,5 @@ public sealed class SequentialLiveNrRosterConformanceTests : ConformanceTestBase
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void LiveNrRosterEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void LiveNrRosterEngine(string specName) => RunSpec(specName);
 }

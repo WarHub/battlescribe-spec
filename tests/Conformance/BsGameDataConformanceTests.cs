@@ -20,5 +20,5 @@ public sealed class BsGameDataConformanceTests : GameDataConformanceTestBase
 
     [Theory]
     [MemberData(nameof(AllGameDataSpecs))]
-    public void BsGameDataEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void BsGameDataEngine(string specName) => RunSpec(specName);
 }

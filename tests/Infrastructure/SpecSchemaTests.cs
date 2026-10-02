@@ -22,25 +22,29 @@ public sealed class SpecSchemaTests
         return JsonSchema.FromText(schemaText);
     });
 
-    public static IEnumerable<object[]> AllSpecs()
+    /// <summary>
+    /// One row per roster spec, carrying and labelled with its name (<c>category/id</c>), never its
+    /// path — see <see cref="TheoryRowIdentityTests"/>.
+    /// </summary>
+    public static IEnumerable<TheoryDataRow<string>> AllSpecs()
     {
         if (SpecsDir is null || !Directory.Exists(SpecsDir))
         {
             yield break;
         }
 
-        foreach (var (path, _, _) in SpecLoader.DiscoverSpecs(SpecsDir))
+        foreach (var (_, id, category) in SpecLoader.DiscoverSpecs(SpecsDir))
         {
-            var relPath = Path.GetRelativePath(SpecsDir, path).Replace('\\', '/');
-            yield return [path, relPath];
+            var specName = SpecLoader.SpecName(category, id);
+            yield return new TheoryDataRow<string>(specName) { Label = specName };
         }
     }
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void SpecValidatesAgainstSchema(string specPath, string specName)
+    public void SpecValidatesAgainstSchema(string specName)
     {
-        var yamlText = File.ReadAllText(specPath);
+        var yamlText = File.ReadAllText(SpecLoader.ResolveRosterSpec(specName));
         var stream = new YamlStream();
         stream.Load(new StringReader(yamlText));
         if (stream.Documents.Count == 0)

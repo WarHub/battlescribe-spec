@@ -18,7 +18,7 @@ public sealed class BsRosterConformanceTests : ConformanceTestBase
 
     [Theory]
     [MemberData(nameof(AllSpecs))]
-    public void BsRosterEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void BsRosterEngine(string specName) => RunSpec(specName);
 
     /// <summary>A stale or foreign id is an addressing failure on this lane — see <see cref="AddressingScenarios"/>.</summary>
     [Theory]

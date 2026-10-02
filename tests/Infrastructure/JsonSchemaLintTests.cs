@@ -51,9 +51,13 @@ public sealed class JsonSchemaLintTests
         return docsDirectory;
     }
 
-    public static TheoryData<string, string> AllJsonSchemaFiles()
+    /// <summary>
+    /// One row per schema file, carrying and labelled with its repo-relative path, never the
+    /// absolute one — see <see cref="TheoryRowIdentityTests"/>.
+    /// </summary>
+    public static List<TheoryDataRow<string>> AllJsonSchemaFiles()
     {
-        var files = new TheoryData<string, string>();
+        var files = new List<TheoryDataRow<string>>();
 
         foreach (var file in Directory.EnumerateFiles(DocsDirectory, "*.json", SearchOption.AllDirectories))
         {
@@ -69,7 +73,8 @@ public sealed class JsonSchemaLintTests
                 continue;
             }
 
-            files.Add(file.Replace('\\', '/'), Path.GetRelativePath(RepoRoot, file).Replace('\\', '/'));
+            var relPath = Path.GetRelativePath(RepoRoot, file).Replace('\\', '/');
+            files.Add(new TheoryDataRow<string>(relPath) { Label = relPath });
         }
 
         if (files.Count == 0)
@@ -83,9 +88,9 @@ public sealed class JsonSchemaLintTests
 
     [Theory]
     [MemberData(nameof(AllJsonSchemaFiles))]
-    public void JsonSchemaIsValidAgainstMetaschema(string filePath, string relPath)
+    public void JsonSchemaIsValidAgainstMetaschema(string relPath)
     {
-        using var jsonDoc = LoadJsonDocument(filePath);
+        using var jsonDoc = LoadJsonDocument(Path.Combine(RepoRoot, relPath));
 
         var result = SupportedMetaschema.Evaluate(jsonDoc.RootElement, new EvaluationOptions
         {

@@ -8,7 +8,9 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Pins <c>maxParallelThreads</c> in both <c>xunit.runner.json</c> files to one declared value, so
-/// the two cannot drift apart or be changed without meeting the reasoning below.
+/// the two cannot drift apart or be changed without meeting the reasoning below — and, with
+/// <see cref="XunitParallelism_IsDeclaredOnce_OnItsCurrentKeys"/>, keeps xUnit's parallelism
+/// declared in those two files alone, on the keys xunit.v3 reads.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -140,6 +142,173 @@ public sealed class ConcurrencyConfigurationDriftTests
                 $"big dev box and RAISES the 4-vCPU CI runner above its default. Read " +
                 $"{nameof(ConcurrencyConfigurationDriftTests)}'s remarks before changing it.");
         }
+    }
+
+    /// <summary>
+    /// The declared xUnit scheduling mode: test collections run in parallel with each other, the tests
+    /// inside one collection one at a time — the mode every collection fixture here is written for.
+    /// </summary>
+    internal const string XunitParallelMode = "collections";
+
+    /// <summary>
+    /// xUnit's parallelism is declared in exactly one place per test assembly — its
+    /// <c>xunit.runner.json</c> — on the keys xunit.v3 4 reads, with values it accepts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why the value is pinned, not just present.</b> xunit discards a <c>parallelMode</c> it does
+    /// not recognise — <c>"off"</c>, <c>"true"</c>, a bare boolean — without a word, and runs the
+    /// default instead. The accepted values are <c>none</c>, <c>collections</c> and <c>all</c>; a typo
+    /// is therefore a silent change of scheduling, and only an exact pin can see it.
+    /// </para>
+    /// <para>
+    /// <b>Why one place.</b> Each further record of the same setting is a second answer, and which one
+    /// wins is a precedence rule nobody here wrote:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><c>parallelizeTestCollections</c> is the obsolete spelling of <c>parallelMode</c>. xunit 4
+    ///   still reads it and will stop in its next major version, at which point a file that relies on
+    ///   it changes behaviour on a package bump.</item>
+    ///   <item>Under VSTest a runsettings file's <c>xUnit</c> section (and
+    ///   <c>RunConfiguration/DisableParallelization</c>) overrides the JSON for whoever passes that
+    ///   profile — one lane would schedule differently from the others, and nothing would show it. The
+    ///   same elements passed inline (<c>dotnet test -- xUnit.MaxParallelThreads=…</c>, which
+    ///   <c>ConcurrencyPolicy</c>'s remarks record as honoured here) do it for one invocation.</item>
+    ///   <item>An assembly-level <c>CollectionBehavior</c> or <c>Parallelization</c> attribute is a
+    ///   third source, in code.</item>
+    /// </list>
+    /// <para>
+    /// Mutation-checked when written: <c>"parallelMode": "off"</c>, the obsolete key added back next
+    /// to the new one, a <c>&lt;MaxParallelThreads&gt;</c> in a runsettings file,
+    /// <c>xUnit.MaxParallelThreads=2</c> passed inline by the test step script, and an assembly
+    /// attribute in a test file — <c>[assembly: Xunit.v3.Parallelization(...)]</c>,
+    /// <c>[assembly: CollectionBehavior(...)]</c>, <c>global::…ParallelizationAttribute</c>, one placed
+    /// second in its attribute list, and one applied through a <c>using</c> alias (which only the
+    /// reflection check sees) — each turn this red.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void XunitParallelism_IsDeclaredOnce_OnItsCurrentKeys()
+    {
+        var violations = new List<string>();
+
+        foreach (var filePath in new[]
+        {
+            Path.Combine(RepoRoot, "tests", "xunit.runner.json"),
+            Path.Combine(RepoRoot, "tests", "BattleScribeSpec.Cli.Tests", "xunit.runner.json"),
+        })
+        {
+            var relPath = Path.GetRelativePath(RepoRoot, filePath);
+            using var doc = JsonDocument.Parse(File.ReadAllText(filePath));
+            if (!doc.RootElement.TryGetProperty("parallelMode", out var mode))
+            {
+                violations.Add($"  {relPath}: no parallelMode — expected \"{XunitParallelMode}\"");
+            }
+            else if (mode.ValueKind != JsonValueKind.String || mode.GetString() != XunitParallelMode)
+            {
+                violations.Add(
+                    $"  {relPath}: parallelMode is {mode.ValueKind} {mode} — expected the string \"{XunitParallelMode}\" " +
+                    "(xunit silently ignores a value it does not know; accepted: none, collections, all)");
+            }
+
+            if (doc.RootElement.TryGetProperty("parallelizeTestCollections", out var obsolete))
+            {
+                violations.Add(
+                    $"  {relPath}: parallelizeTestCollections = {obsolete} — the obsolete spelling of parallelMode; " +
+                    "say it once, on the current key");
+            }
+        }
+
+        string[] runsettingsParallelism =
+            ["MaxParallelThreads", "ParallelizeTestCollections", "ParallelMode", "ParallelAlgorithm", "DisableParallelization"];
+        var runsettings = Directory.GetFiles(Path.Combine(RepoRoot, "tests", "test-profiles"), "*.runsettings");
+        Assert.NotEmpty(runsettings);
+        foreach (var file in runsettings)
+        {
+            foreach (var element in XDocument.Load(file).Descendants().Where(e => runsettingsParallelism.Contains(e.Name.LocalName)))
+            {
+                violations.Add(
+                    $"  {Path.GetRelativePath(RepoRoot, file)}: <{element.Name.LocalName}> — overrides xunit.runner.json " +
+                    "for this profile only");
+            }
+        }
+
+        // The same elements passed inline — `dotnet test -- xUnit.MaxParallelThreads=2`, or
+        // RunConfiguration.DisableParallelization=true — override the JSON for that one invocation.
+        var inline = new Regex(
+            $@"\b(?:xUnit|RunConfiguration)\.(?:{string.Join("|", runsettingsParallelism)})\s*=", RegexOptions.IgnoreCase);
+        foreach (var file in TestInvocationFiles(RepoRoot))
+        {
+            if (inline.Match(File.ReadAllText(file)) is { Success: true } match)
+            {
+                violations.Add(
+                    $"  {Path.GetRelativePath(RepoRoot, file)}: passes {match.Value.TrimEnd('=', ' ')} inline — overrides " +
+                    "xunit.runner.json for that invocation only");
+            }
+        }
+
+        // In code: an assembly attribute in any position of its list, with or without the namespace,
+        // `global::` or the `Attribute` suffix. The source scan is what sees Cli.Tests; this assembly's
+        // own attributes are also read back by reflection, which no alias or custom attribute escapes.
+        var assemblyAttribute = new Regex(
+            @"(?m)^\s*\[\s*assembly\s*:(?:[^\]]*,)?\s*(?:global::)?(?:Xunit\.)?(?:v3\.)?(?:CollectionBehavior|Parallelization)(?:Attribute)?\b");
+        var sources = Directory.EnumerateFiles(Path.Combine(RepoRoot, "tests"), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(s => s is "obj" or "bin"))
+            .ToList();
+        Assert.NotEmpty(sources);
+        foreach (var file in sources)
+        {
+            if (assemblyAttribute.IsMatch(File.ReadAllText(file)))
+            {
+                violations.Add($"  {Path.GetRelativePath(RepoRoot, file)}: an assembly-level parallelism attribute");
+            }
+        }
+
+        foreach (var attribute in typeof(ConcurrencyConfigurationDriftTests).Assembly.GetCustomAttributes(inherit: false)
+            .Where(a => a is Xunit.v3.ICollectionBehaviorAttribute or Xunit.v3.IParallelizationAttribute))
+        {
+            violations.Add(
+                $"  {typeof(ConcurrencyConfigurationDriftTests).Assembly.GetName().Name}: carries [assembly: {attribute.GetType().FullName}]");
+        }
+
+        Assert.True(violations.Count == 0,
+            "xUnit's parallelism must be declared once per test assembly, in its xunit.runner.json, as " +
+            $"\"parallelMode\": \"{XunitParallelMode}\" and \"maxParallelThreads\": \"{XunitMaxParallelThreads}\":\n" +
+            string.Join("\n", violations));
+    }
+
+    /// <summary>
+    /// The files that invoke the test runner or feed it settings — CI workflows and actions, scripts,
+    /// tools, the docker files, and the repo's and test projects' MSBuild and root files — scanned for
+    /// xunit settings passed inline, which override the JSON for one invocation.
+    /// </summary>
+    /// <remarks>
+    /// Refuses to come back without a file that runs <c>dotnet test</c>, so a scan that stopped
+    /// reaching the invocations fails here instead of passing on nothing.
+    /// </remarks>
+    internal static IReadOnlyList<string> TestInvocationFiles(string repoRoot)
+    {
+        static bool Generated(string path) =>
+            path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(s => s is "bin" or "obj" or "node_modules");
+
+        string[] rootExtensions = [".ps1", ".sh", ".props", ".targets", ".json"];
+        string[] msbuildExtensions = [".csproj", ".props", ".targets"];
+        string[] directories = [".github", "scripts", "tools", "docker"];
+
+        var files = directories
+            .Select(d => Path.Combine(repoRoot, d))
+            .Where(Directory.Exists)
+            .SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories))
+            .Concat(Directory.EnumerateFiles(repoRoot).Where(f => rootExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)))
+            .Concat(Directory.EnumerateFiles(Path.Combine(repoRoot, "tests"), "*", SearchOption.AllDirectories)
+                .Where(f => msbuildExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)))
+            .Where(f => !Generated(Path.GetRelativePath(repoRoot, f)))
+            .ToList();
+
+        Assert.True(files.Any(f => File.ReadAllText(f).Contains("dotnet test", StringComparison.Ordinal)),
+            $"None of the {files.Count} files scanned for inline xunit settings under '{repoRoot}' runs `dotnet test`, so " +
+            "the scan no longer reaches the places tests are invoked from and would pass on nothing.");
+        return files;
     }
 
     /// <summary>
