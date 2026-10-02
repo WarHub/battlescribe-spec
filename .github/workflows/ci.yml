@@ -867,3 +867,17 @@ jobs:
           $ghArgs = @('issue', 'create', '--title', $title, '--body', $body, '--label', 'scheduled-ci-failure', '--repo', $env:GH_REPO)
           if ($assignee) { $ghArgs += '--assignee'; $ghArgs += $assignee }
           & gh @ghArgs
+
+  # THROWAWAY PROBE (P22) — never merged. Runs even on a draft (no draft condition) so one draft PR
+  # answers both questions: ci-gate is red on a draft, and a step that hits timeout-minutes still lets
+  # an `if: failure()` step run.
+  p22-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Step that exceeds its timeout
+        timeout-minutes: 1
+        run: sleep 120
+      - name: Failure-only step after the timeout
+        if: failure()
+        run: echo "P22 OK — failure() step ran after a step timeout"
