@@ -1,4 +1,5 @@
 using System.CommandLine;
+using BattleScribeSpec.Engines;
 
 namespace BattleScribeSpec.Cli;
 
@@ -16,7 +17,7 @@ internal static class ProbeForwardCommand
         {
             Description = "Spec file path or ID to load into the inspected app.",
         };
-        var engineOptions = new EngineOptions();
+        var engineOptions = new EngineOptions(EngineRegistry.LoadDefault);
 
         var command = new Command("probe", "Open a UI engine with a spec loaded for interactive inspection.");
         command.Arguments.Add(spec);

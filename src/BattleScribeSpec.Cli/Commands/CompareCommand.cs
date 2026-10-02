@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Diagnostics;
 using System.Globalization;
 using BattleScribeSpec.Batch;
+using BattleScribeSpec.Engines;
 using BattleScribeSpec.Telemetry.Collector;
 
 namespace BattleScribeSpec.Cli;
@@ -73,7 +74,7 @@ internal static class CompareCommand
 
     public static Command Create()
     {
-        var engineOptions = new EngineOptions();
+        var engineOptions = new EngineOptions(EngineRegistry.LoadDefault);
         var filter = new Option<string?>("--filter")
         {
             Description = "Only run specs whose category/id matches (comma-separated, OR logic).",

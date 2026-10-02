@@ -20,7 +20,7 @@ public sealed class FrozenNrRosterFixture : IAsyncLifetime
             return;
         }
 
-        var harFile = HarRecorder.FindFrozenHarFile();
+        var harFile = HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries);
         if (harFile is null)
         {
             return;

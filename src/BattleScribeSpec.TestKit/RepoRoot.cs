@@ -33,7 +33,8 @@ public static class RepoRoot
     /// <summary>
     /// The repository root containing the running assembly, or null when the binaries live outside
     /// a checkout (published/installed layout). Computed once — <see cref="AppContext.BaseDirectory"/>
-    /// cannot change for the lifetime of the process.
+    /// cannot change for the lifetime of the process. The tests' one root: they act on the tree they were
+    /// built from, wherever they were started.
     /// </summary>
     public static string? FromBinaries { get; } = FindFrom(AppContext.BaseDirectory);
 
@@ -41,7 +42,8 @@ public static class RepoRoot
     /// The repository root containing the current working directory, falling back to
     /// <see cref="FromBinaries"/>. Prefers the tree the user is standing in — a hand-run CLI should
     /// act on the checkout the user is in — and only then the tree the binaries came from. Not
-    /// cached: the working directory can change.
+    /// cached: the working directory can change. Banned in test code (<c>tests/BannedSymbols.txt</c>):
+    /// a test's working directory is whatever xunit chose, not a statement about which tree it tests.
     /// </summary>
     public static string? FromWorkingDirectory => FindFrom(Directory.GetCurrentDirectory()) ?? FromBinaries;
 

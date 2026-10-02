@@ -45,7 +45,7 @@ public sealed class NewRecruitGameDataEngineResourceMetricsTests
     [Trait("Engine", "FrozenNrGameData")]
     public async Task CreateFrozenAsync_TracksBrowserAndContextLifecycle_ReturnsToZeroAfterDispose()
     {
-        var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir();
+        var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         Assert.SkipWhen(staticDir is null,
             "NR Editor static files not found (run setup.ps1) — skipping NewRecruitGameDataEngine resource-metrics test");
 
@@ -147,7 +147,7 @@ public sealed class NrGameDataUiEngineResourceMetricsTests
     [Trait("Engine", "FrozenNrGameDataUi")]
     public async Task CreateFrozenAsync_TracksBrowserAndContextLifecycle_ReturnsToZeroAfterDispose()
     {
-        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir();
+        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         Assert.SkipWhen(staticDir is null,
             "NR Editor static files not found (run setup.ps1) — skipping NrGameDataUiEngine resource-metrics test");
 

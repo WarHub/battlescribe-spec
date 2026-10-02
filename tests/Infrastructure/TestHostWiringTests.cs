@@ -19,7 +19,7 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Lint")]
 public sealed class TestHostWiringTests
 {
-    private static string Root => ConcurrencyConfigurationDriftTests.RepoRoot;
+    private static string Root => TestPaths.Root;
 
     private const string TestsProps = "tests/Directory.Build.props";
 

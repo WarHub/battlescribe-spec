@@ -40,7 +40,7 @@ internal static class FixtureConcurrency
     /// <param name="loadTarget">Whether this fixture's engine is served by this machine or by a third party's live site.</param>
     public static ConcurrencyPlan Resolve(string engineName, LoadTarget loadTarget)
     {
-        var profile = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName)).Profile;
+        var profile = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(engineName)).Profile;
         return ConcurrencyPolicy.For(MachineProfile.Current(), profile, loadTarget);
     }
 

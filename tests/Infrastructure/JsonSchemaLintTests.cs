@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Json.Schema;
 
@@ -13,32 +12,8 @@ public sealed class JsonSchemaLintTests
     private static readonly JsonSchema SupportedMetaschema = MetaSchemas.Draft202012;
     private static readonly Uri SupportedMetaschemaUri = MetaSchemas.Draft202012.BaseUri
         ?? throw new InvalidOperationException("MetaSchemas.Draft202012 has no BaseUri.");
-    private static readonly string RepoRoot = FindRepoRoot();
+    private static readonly string RepoRoot = TestPaths.Root.Replace('\\', '/');
     private static readonly string DocsDirectory = FindDocsDirectory();
-
-    private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
-    {
-        if (!Path.IsPathRooted(callerFilePath))
-        {
-            throw new InvalidOperationException(
-                $"[CallerFilePath] returned a non-rooted path '{callerFilePath}'. " +
-                "Ensure the project is not built with a PathMap that strips the absolute path.");
-        }
-
-        var dir = Path.GetDirectoryName(callerFilePath);
-        while (dir is not null)
-        {
-            if (Directory.EnumerateFiles(dir, "*.slnx").Any())
-            {
-                return dir.Replace('\\', '/');
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not find repository root (no *.slnx marker found) while traversing parents of '{callerFilePath}'.");
-    }
 
     private static string FindDocsDirectory()
     {

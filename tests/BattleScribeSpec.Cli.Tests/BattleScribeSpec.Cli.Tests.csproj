@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="GitHubActionsTestLogger" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
 
@@ -19,8 +20,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared with BattleScribeSpec.Tests: what the analyzer bans in test code (BannedSymbolsTests). -->
+    <AdditionalFiles Include="..\BannedSymbols.txt" Link="BannedSymbols.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Shared with BattleScribeSpec.Tests: start a child on a console set to a legacy code page. -->
     <Compile Include="..\Infrastructure\LegacyCodePageConsole.cs" Link="Shared\LegacyCodePageConsole.cs" />
+    <!-- Shared with BattleScribeSpec.Tests: where a sibling project's built binary is (CliProcess, AdapterTestHost). -->
+    <Compile Include="..\Infrastructure\BuiltBinaries.cs" Link="Shared\BuiltBinaries.cs" />
     <!--
       The test-profile registry and the entry point that resolves it (TestHost), shared with
       BattleScribeSpec.Tests: this app's Program.cs is the same one call, so a profile means here what

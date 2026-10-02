@@ -59,7 +59,7 @@ public sealed class BsUiGameSystemSelectionTests
         BsUiOptions options;
         try
         {
-            options = HostEngineFactory.ResolveBsUiOptions();
+            options = HostEngineFactory.ResolveBsUiOptions(RepoRoot.FromBinaries);
         }
         catch (Exception ex)
         {

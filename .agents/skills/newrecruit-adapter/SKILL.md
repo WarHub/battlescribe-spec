@@ -284,7 +284,7 @@ The recorder filters entries to minimize file size:
 
 | Class | Purpose |
 |-------|---------|
-| `FrozenNewRecruitFixture` | Shared browser for frozen tests, finds HAR via `HarRecorder.FindFrozenHarFile()` |
+| `FrozenNewRecruitFixture` | Shared browser for frozen tests, finds HAR via `HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries)`: this checkout's own `.testdata`, no walk (the argument-less overload is the CLI's, banned in test code) |
 | `NewRecruitFixture` | Shared browser for live tests, uses `NR_ENGINE_URL` |
 | `FrozenNewRecruitConformanceTests` | Runs all specs against HAR replay |
 | `NewRecruitConformanceTests` | Runs all specs against live NR |

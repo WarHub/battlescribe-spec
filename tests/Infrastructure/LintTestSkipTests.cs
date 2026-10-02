@@ -57,7 +57,7 @@ public sealed class LintTestSkipTests
     [Fact]
     public async Task NoLintTestSkips()
     {
-        var repoRoot = ConcurrencyConfigurationDriftTests.RepoRoot;
+        var repoRoot = TestPaths.Root;
         var lintMethods = SuiteTraits.LintTests.ToList();
         var lintClasses = lintMethods.Select(static m => m.TestClass).Distinct().OrderBy(static t => t.FullName, StringComparer.Ordinal).ToList();
         Assert.True(lintClasses.Count > 0, "Found no Category=Lint test in this assembly, so this check checked nothing.");

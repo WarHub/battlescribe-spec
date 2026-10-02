@@ -34,7 +34,7 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Lint")]
 public sealed class ToolchainPinDriftTests
 {
-    private static string RepoRoot => ConcurrencyConfigurationDriftTests.RepoRoot;
+    private static string RepoRoot => TestPaths.Root;
 
     /// <summary>
     /// <b>No CI job may choose its own SDK.</b> A <c>setup-dotnet</c> step that names a version

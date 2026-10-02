@@ -119,7 +119,7 @@ public sealed class EngineSpecTests
     [Fact]
     public void Resolve_RejectsConflictingDomainFlags()
     {
-        var options = new EngineOptions();
+        var options = BuiltInOptions();
         var result = ParseWith(options, "spec", "--gamedata", "--roster");
 
         Assert.Throws<CliInputException>(() => options.Resolve(result, "spec"));
@@ -566,7 +566,7 @@ public sealed class EngineSpecTests
             File.WriteAllText(
                 Path.Combine(dir.FullName, "engines.json"),
                 """{"engines":{"wham":{"exec":"node w.js"}}}""");
-            var options = new EngineOptions { RegistryStartDirectory = dir.FullName };
+            var options = new EngineOptions(() => EngineRegistry.LoadDefault(dir.FullName));
 
             // Undeclared: a plain-name registry engine with no endpoint in engines.json still gets the
             // fail-safe answer — the same as any other foreign adapter nobody has measured.
@@ -749,10 +749,17 @@ public sealed class EngineSpecTests
     }
 
     private static EngineSelection Resolve(string specInput, params string[] extraArgs) =>
-        Resolve(new EngineOptions(), specInput, extraArgs);
+        Resolve(BuiltInOptions(), specInput, extraArgs);
+
+    /// <summary>
+    /// Options resolving against the built-in engines only — never an <c>engines.json</c> above the working
+    /// directory, which is what the CLI reads and what an operator may have put at the repo root, registering
+    /// an adapter of their own under a built-in's name.
+    /// </summary>
+    private static EngineOptions BuiltInOptions() => new(() => EngineRegistry.BuiltInOnly);
 
     /// <summary>Overload taking a caller-built <see cref="EngineOptions"/> — the seam for tests that
-    /// need <see cref="EngineOptions.RegistryStartDirectory"/> pointed at a temp-dir engines.json.</summary>
+    /// resolve against a temp-dir engines.json.</summary>
     private static EngineSelection Resolve(EngineOptions options, string specInput, params string[] extraArgs)
     {
         string[] args = [specInput, .. extraArgs];

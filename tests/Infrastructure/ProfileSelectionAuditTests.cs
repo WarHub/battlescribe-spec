@@ -81,7 +81,7 @@ public sealed class ProfileSelectionAuditTests(ProfileSelectionAuditTests.Listin
     /// <summary>The directories of this machine a test identity must never contain, in both separator spellings.</summary>
     private static readonly string[] MachinePaths =
     [
-        .. new[] { ConcurrencyConfigurationDriftTests.RepoRoot, AppContext.BaseDirectory, Path.GetTempPath(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) }
+        .. new[] { TestPaths.Root, AppContext.BaseDirectory, Path.GetTempPath(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) }
             .Where(static p => !string.IsNullOrEmpty(p))
             .Select(static p => p.TrimEnd('/', '\\'))
             .Where(static p => p.Length > 3)

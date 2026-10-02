@@ -197,18 +197,18 @@ internal sealed record EngineSelection(
 /// <see cref="Resolve"/> turns the parsed values plus the spec input into an
 /// <see cref="EngineSelection"/>.
 /// </summary>
-internal sealed class EngineOptions
+/// <param name="registry">
+/// Where <c>--engine</c> names resolve, called when an engine is resolved rather than when the command is
+/// built, so a broken <c>engines.json</c> fails the command that needs an engine, not <c>--help</c>. Every
+/// command passes <see cref="EngineRegistry.LoadDefault()"/>: the built-ins plus the nearest
+/// <c>engines.json</c> at or above where <c>bs-spec</c> was run. Tests pass <see cref="EngineRegistry.BuiltInOnly"/>,
+/// or <see cref="EngineRegistry.LoadDefault(string)"/> on a temp directory holding an <c>engines.json</c>.
+/// There is no default on purpose: a default would be the working directory, reached from a test by leaving
+/// an argument out, where naming it is a compile error (<c>tests/BannedSymbols.txt</c> bans the argument-less
+/// <c>LoadDefault</c>, method group included).
+/// </param>
+internal sealed class EngineOptions(Func<EngineRegistry> registry)
 {
-    /// <summary>
-    /// Test seam for <see cref="EngineRegistry.LoadDefault"/>'s walk-up start point. Null (the
-    /// production default — every production caller constructs <see cref="EngineOptions"/> with no
-    /// initializer) means "start from <see cref="Directory.GetCurrentDirectory"/>", exactly the
-    /// behaviour before this property existed. Tests set it to reach a temp-directory
-    /// <c>engines.json</c> without mutating the process-wide working directory, which would leak into
-    /// every other test in the run.
-    /// </summary>
-    internal string? RegistryStartDirectory { get; init; }
-
     public Option<string> Engine { get; } = new("--engine")
     {
         Description = "Engine to use: a built-in name (battlescribe, battlescribe-ui, newrecruit, " +
@@ -384,7 +384,7 @@ internal sealed class EngineOptions
         EngineEntry entry;
         try
         {
-            entry = EngineRegistry.LoadDefault(RegistryStartDirectory).Resolve(connectable);
+            entry = registry().Resolve(connectable);
         }
         catch (KeyNotFoundException ex)
         {

@@ -143,7 +143,7 @@ public sealed class FixtureConcurrencyTests
     public void PoolSizeFor_DeliversTheMeasuredOptimum_OnEveryMachineWithMemoryForIt(
         string engineName, int measuredOptimum)
     {
-        var profile = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName)).Profile;
+        var profile = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(engineName)).Profile;
 
         foreach (var machine in Machines)
         {

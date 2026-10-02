@@ -26,7 +26,7 @@ public sealed class SequentialFrozenNrRosterFixture : IAsyncLifetime
             return;
         }
 
-        HarFilePath = HarRecorder.FindFrozenHarFile();
+        HarFilePath = HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries);
         if (HarFilePath is null)
         {
             return;

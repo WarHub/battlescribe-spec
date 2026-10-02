@@ -488,7 +488,7 @@ public sealed class TestProfileRegistryTests
     public void EveryAggregateLane_ReportsItsSelectionAndProgress()
     {
         var assembly = typeof(TestProfileRegistryTests).Assembly;
-        var repoRoot = ConcurrencyConfigurationDriftTests.RepoRoot;
+        var repoRoot = TestPaths.Root;
         var sources = SourceFiles(repoRoot, "tests").Select(static f => (Path: f, Lines: File.ReadAllLines(f))).ToList();
         var start = new Regex(@"AggregateLaneRun\.Start\([^;]*?""(\w+)""", RegexOptions.Singleline);
         var started = new Regex(@"var\s+(\w+)\s*=\s*AggregateLaneRun\.Start\(");
@@ -777,7 +777,7 @@ public sealed class TestProfileRegistryTests
     [Fact]
     public void EveryKnobLiteral_IsClassified()
     {
-        var repoRoot = ConcurrencyConfigurationDriftTests.RepoRoot;
+        var repoRoot = TestPaths.Root;
         var knobsFile = Path.Combine(repoRoot, "tests", "TestProfiles", "Knobs.cs");
         Assert.True(File.Exists(knobsFile), $"Expected the knob table at {knobsFile}.");
         var registry = Path.Combine(repoRoot, "tests", "TestProfiles") + Path.DirectorySeparatorChar;

@@ -131,24 +131,19 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     }
 
     /// <summary>
-    /// Locates the NR Editor static files directory by walking up from startDir
-    /// looking for .testdata/nr-editor/index.html.
+    /// The NR Editor snapshot of the checkout at <paramref name="repoRoot"/>: the same static deployment the
+    /// non-UI engine serves, found the same way (<see cref="NewRecruitGameDataEngine.FindFrozenStaticDir(string)"/>).
     /// </summary>
-    public static string? FindFrozenStaticDir(string? startDir = null)
-    {
-        var dir = startDir ?? Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(dir, ".testdata", "nr-editor");
-            if (File.Exists(Path.Combine(candidate, "index.html")))
-            {
-                return candidate;
-            }
+    /// <param name="repoRoot">The checkout's root directory, or null (binaries outside a checkout).</param>
+    public static string? FindFrozenStaticDir(string? repoRoot) =>
+        NewRecruitGameDataEngine.FindFrozenStaticDir(repoRoot);
 
-            dir = Path.GetDirectoryName(dir);
-        }
-        return null;
-    }
+    /// <summary>
+    /// The CLI's lookup, from the working directory (<see cref="NewRecruitGameDataEngine.FindFrozenStaticDir()"/>).
+    /// Test code passes its checkout to <see cref="FindFrozenStaticDir(string)"/> instead;
+    /// <c>tests/BannedSymbols.txt</c> makes this overload a compile error there.
+    /// </summary>
+    public static string? FindFrozenStaticDir() => NewRecruitGameDataEngine.FindFrozenStaticDir();
 
     /// <summary>Exposes the Playwright page for probe and diagnostics access.</summary>
     public IPage Page => _page ?? throw new InvalidOperationException("Engine not initialized.");

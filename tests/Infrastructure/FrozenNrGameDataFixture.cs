@@ -8,7 +8,7 @@ namespace BattleScribeSpec.Tests;
 /// Fully offline and deterministic — no network access needed.
 ///
 /// Skipped when:
-///   - .testdata/nr-editor/ directory doesn't exist (run setup.ps1)
+///   - .testdata/nr-editor/ doesn't exist in the checkout these binaries were built in (run setup.ps1)
 ///   - NR_FROZEN_SKIP=true
 ///
 /// Environment variables:
@@ -28,7 +28,7 @@ public sealed class FrozenNrGameDataFixture : IAsyncLifetime
             return;
         }
 
-        var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir();
+        var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         if (staticDir is null)
         {
             return;

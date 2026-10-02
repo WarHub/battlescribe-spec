@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BattleScribeSpec.Engines;
@@ -67,25 +66,8 @@ public sealed class ConcurrencyConfigurationDriftTests
     /// </summary>
     internal const string XunitMaxParallelThreads = "0.5x";
 
-    /// <summary>The repo root, for the source-scanning gates (this class's, and LiveLoadBudgetTests').</summary>
-    internal static readonly string RepoRoot = FindRepoRoot();
-
-    private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
-    {
-        var dir = Path.GetDirectoryName(callerFilePath);
-        while (dir is not null)
-        {
-            if (Directory.EnumerateFiles(dir, "*.slnx").Any())
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not find repository root (no *.slnx marker found) while traversing parents of '{callerFilePath}'.");
-    }
+    /// <summary>The repo root, for this class's source-scanning gates.</summary>
+    private static string RepoRoot => TestPaths.Root;
 
     [Fact]
     public void XunitRunnerJsonMaxParallelThreadsMatchesTheDeclaredValue()

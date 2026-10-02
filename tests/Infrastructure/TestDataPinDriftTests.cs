@@ -33,7 +33,7 @@ public sealed class TestDataPinDriftTests
     [Fact]
     public void EveryDownloadedFixtureIsAtThePinTestDataJsonDeclares()
     {
-        var repoRoot = ConcurrencyConfigurationDriftTests.RepoRoot;
+        var repoRoot = TestPaths.Root;
         using var pins = JsonDocument.Parse(File.ReadAllText(Path.Combine(repoRoot, "testdata.json")));
 
         var drifted = new List<string>();

@@ -411,7 +411,8 @@ pwsh -File tools/format-specs.ps1                                               
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (403 total, 24 categories) |
 | `specs/gamedata/{category}/{id}.yaml` | GameData spec files (120 total, 23 categories) |
 | `docs/error-assertions.md` | The two ways a spec is about something going wrong, and they are not the same: `expectedState.errors` asserts the validation list of a roster the engine **accepted**; `expectFailure` asserts an action the engine **refused** |
-| `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk |
+| `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk. Tests use `RepoRoot.FromBinaries` (`TestPaths.Root` when they need a checkout), never the working directory |
+| `tests/BannedSymbols.txt` | What test code may not call — the working directory and the CLI lookups that read it — enforced at compile time (RS0030) by BannedApiAnalyzers in both test projects |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |
 | `src/BattleScribeSpec.TestKit/Roster/RosterTypes.cs` | Roster state records |
 | `src/BattleScribeSpec.TestKit/Roster/RosterSpecModels.cs` | Roster YAML spec model classes |

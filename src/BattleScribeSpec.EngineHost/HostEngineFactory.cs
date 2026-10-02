@@ -131,7 +131,7 @@ internal static class HostEngineFactory
     /// <para>
     /// <b>Why this is a separate seam from <see cref="CreateRosterEngineAsync"/>:</b> so the rule
     /// above can be tested in <em>every</em> CI job. The engine name is the only thing that decides
-    /// whether a <c>BsUiRosterEngine</c> is built, and <see cref="ResolveBsUiOptions"/> throws
+    /// whether a <c>BsUiRosterEngine</c> is built, and <see cref="ResolveBsUiOptions()"/> throws
     /// ("Agent JAR not found") on any machine without the Java agent jar — which is every CI job
     /// except <c>smoke</c> and <c>thorough-ui-bs</c> (<c>setup.ps1</c> skips the jar when
     /// <c>CI=true</c>). Testing the reuse rule through the discovery path would therefore mean a
@@ -158,15 +158,30 @@ internal static class HostEngineFactory
         new BsGameDataUiEngine(options) { KeepAlive = reuseGameData };
 
     /// <summary>
-    /// Resolve the BattleScribe Roster Editor UI options (Java runtime, app jar, agent jar)
-    /// from environment variables or conventional repo-local locations.
+    /// Resolve the BattleScribe Roster Editor UI options (Java runtime, app jar, agent jar) the way the
+    /// CLI does: environment variables, then the checkout the working directory is in
+    /// (<see cref="RepoRoot.FromWorkingDirectory"/>), where a hand-run <c>bs-spec</c> stands. Test code
+    /// passes its checkout to <see cref="ResolveBsUiOptions(string)"/> instead;
+    /// <c>tests/BannedSymbols.txt</c> makes this overload a compile error there.
     /// </summary>
-    public static BsUiOptions ResolveBsUiOptions()
+    public static BsUiOptions ResolveBsUiOptions() => ResolveBsUiOptions(RepoRoot.FromWorkingDirectory);
+
+    /// <summary>
+    /// Resolve the BattleScribe Roster Editor UI options (Java runtime, app jar, agent jar) from
+    /// environment variables, then from the repo-local locations under <paramref name="repoRoot"/>.
+    /// </summary>
+    /// <remarks>
+    /// The tests pass <see cref="RepoRoot.FromBinaries"/>: the app and the agent jar of the tree they were
+    /// built from. Resolved from the working directory, they would follow whatever directory the process
+    /// happens to run in — for a test, the one xunit chose — and a different tree means that tree's
+    /// <c>lib/battlescribe</c> and <c>bs-ui-java-agent.jar</c>: the agent jar is gitignored and never rebuilt
+    /// by <c>dotnet build</c>, so another tree's copy is the stale-agent trap by another route.
+    /// </remarks>
+    /// <param name="repoRoot">The checkout's root directory, or null (binaries outside a checkout: environment variables only).</param>
+    public static BsUiOptions ResolveBsUiOptions(string? repoRoot)
     {
         var appDir = Environment.GetEnvironmentVariable("BS_UI_APP_DIR");
         var agentJar = Environment.GetEnvironmentVariable("BS_UI_AGENT_JAR");
-
-        var repoRoot = RepoRoot.FromWorkingDirectory;
 
         // BS_UI_JAVA_PATH → repo-local Liberica JDK → bundled platform JRE. See BsUiPaths.
         var javaPath = repoRoot is not null
