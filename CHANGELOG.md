@@ -368,6 +368,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Every CI lane runs through a profile, and a profile is the whole lane** — CI used to finish defining
+  its lanes itself: eight test steps spelled their filters inline, and step `env:` blocks supplied
+  `NR_FROZEN_SMOKE`, `NR_UI_SMOKE` and `NR_UI_ROSTER_FULL`, so `-p:TestProfile=nr-ui-frozen` ran one spec
+  on a laptop and every applicable spec in the thorough job, under one name. Every CI step that runs
+  `BattleScribeSpec.Tests` now runs a registry profile (`-TestProfile <name>` through the step script,
+  the `thorough-ui-bs` matrix keyed by `suite.profile`) with no filter of its own, and the switches moved
+  into the profiles. The redundant `NR_HEADLESS: true` entries went with them (headless is every
+  fixture's default). `NR_GAMEDATA_UI_DIAGNOSTICS` stays on CI's two NR Editor UI steps: it changes what
+  is recorded, not what runs. **Declared changes, each on purpose:** `nr-ui-frozen` sets
+  `NR_UI_ROSTER_FULL=1` and is now the full NR UI roster lane locally too — **about 25–27 minutes where it
+  used to be one spec**; `smoke-nr-ui` is the one-spec lane. `nr-editor-ui-live` sets `NR_EDITOR_URL`; it
+  left the URL to the caller, and every test skipped without it. `nr-live-visible` and
+  `nr-ui-live-visible` are deleted: set `NR_HEADLESS=false` (and `NR_VISUAL=true`) in your own
+  environment with `nr-live`/`nr-ui-live`, which set neither, so your value reaches the run. `core` is
+  unchanged. CI's selections are unchanged: every step lists the same tests through its profile as
+  through the filter it replaces. Engine lanes gain `RequiredEnv` (the live lanes' endpoint URLs),
+  `DiagnosticsDir`/`DiagnosticsSwitch` (where a UI driver writes, and what makes it write) and `CiExempt`
+  (why no CI job runs a lane). New lints, each mutation-checked:
+  `TestProfileRegistryTests.EveryProfile_SuppliesItsEnginesRequiredEnv` fails a profile that claims a
+  live lane without its URL; `CiProfileLaneTests` requires every Tests-project CI step to name one
+  registry profile that covers the project and add no filter or settings file (on VSTest those replace
+  the profile's selection), bans every lane-defining and profile-owned switch anywhere under `.github/`
+  (any `env:`, a `$GITHUB_ENV` write, a command line, the setup action), requires `xvfb-run` on every
+  step that runs a desktop-app lane, derives which diagnostics each job must upload (and which capture
+  switch it must set) from the lanes its steps run — replacing the hand-kept table in
+  `ConcurrencyConfigurationDriftTests` — and bans a driver's diagnostics-directory switch under
+  `.github/`, pins the full NR UI roster lane to its thorough step, and fails on a profile reference in
+  the CI definition, AGENTS.md, README, `docs/` or the skills that names no profile. CI steps are read
+  per matrix leg, and a `bs-spec` step's UI lane is resolved the way the CLI resolves its engine (an
+  unmappable UI engine is refused, not ignored). AGENTS.md's table of lanes outside `pre-push` and its
+  list of profiles are now generated from the registry and the workflow, and every engine lane is either
+  run by a CI step's profile or says why not (`LiveNrUiRoster`, `LiveNrGameData`, `LiveNrGameDataUi`). **For
+  contributors:** a lane is a profile; to change what CI runs, change the profile. If you ran
+  `-p:TestProfile=nr-ui-frozen` for a quick check, run `smoke-nr-ui` instead.
 - **Test profiles are a typed registry; the runsettings are generated from it** — four records described
   the same lanes (18 runsettings files, the CI step script, eight inline CI filters and the pre-push
   decision table in `ConcurrencyConfigurationDriftTests`), free to disagree. `tests/TestProfiles/` is now

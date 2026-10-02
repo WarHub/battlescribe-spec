@@ -4,6 +4,9 @@
      fails on any difference and prints the file the registry renders. -->
 <RunSettings>
   <RunConfiguration>
+    <EnvironmentVariables>
+      <NR_EDITOR_URL>https://giloushaker.github.io/nr-editor/</NR_EDITOR_URL>
+    </EnvironmentVariables>
     <TestCaseFilter>Engine=LiveNrGameDataUi</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

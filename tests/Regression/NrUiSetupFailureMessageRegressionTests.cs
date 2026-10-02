@@ -43,7 +43,7 @@ namespace BattleScribeSpec.Tests.Regression;
 /// In the <c>FrozenNrUiRoster</c> collection despite needing none of its fixture.
 /// <see cref="NrBrowserHost"/> keeps ONE Chromium per process and relaunches it whenever a caller
 /// asks for different launch options — so a headless request arriving while the lane is running
-/// headed (<c>NR_HEADLESS=false</c>, the visible profiles, local debugging) would close the browser
+/// headed (<c>NR_HEADLESS=false</c> for local debugging) would close the browser
 /// out from under 363 in-flight specs. Sharing the collection serialises this against the lane, and
 /// <see cref="LaunchOptions"/> asks for what the fixtures asked for; either alone would do, and a
 /// test that can wreck the suite it guards deserves both.

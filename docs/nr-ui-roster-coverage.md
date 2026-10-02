@@ -145,8 +145,9 @@ original bug because the NR-UI roster lane runs a single spec."* The same blind 
 
 **Widened, in two steps.** First to six measured categories (188 specs), then — once the last
 unclassified failure had a name — to the whole applicable suite: **363 specs, 47 minutes**, behind
-`NR_UI_ROSTER_FULL`, which the `Full frozen NR UI roster` CI step sets. Every-push and `pre-push`
-still run kitchen-sink alone, unchanged.
+`NR_UI_ROSTER_FULL`, which the `nr-ui-frozen` profile sets — the one CI's `Full frozen NR UI roster` step
+runs, so `-p:TestProfile=nr-ui-frozen` is the same full lane locally. Every-push (`smoke-nr-ui`) and
+`pre-push` still run kitchen-sink alone, unchanged.
 
 **The intermediate step was not caution for its own sake.** Running everything selected 28 failures
 in categories nobody had classified. Declaring those to get a green lane would have been inventing

@@ -4,6 +4,9 @@
      fails on any difference and prints the file the registry renders. -->
 <RunSettings>
   <RunConfiguration>
+    <EnvironmentVariables>
+      <NR_UI_ROSTER_FULL>1</NR_UI_ROSTER_FULL>
+    </EnvironmentVariables>
     <TestCaseFilter>Engine=FrozenNrUiRoster</TestCaseFilter>
   </RunConfiguration>
 </RunSettings>

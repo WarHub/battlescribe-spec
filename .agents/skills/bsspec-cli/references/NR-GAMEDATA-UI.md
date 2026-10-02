@@ -38,7 +38,8 @@ Both use `NrGameDataUiEngine`; the difference is `CreateFrozenAsync` vs `CreateA
 `testdata.json`, shared with `NewRecruitGameDataEngine`) and the Playwright browsers.
 
 Test profiles: `dotnet test -p:TestProfile=nr-editor-ui-frozen` (in `pre-push`, static route
-interception, no network) and `…=nr-editor-ui-live`.
+interception, no network) and `…=nr-editor-ui-live` (sets `NR_EDITOR_URL`; it used to leave it to you,
+and every test skipped without it).
 
 ## Probe — discover selectors
 

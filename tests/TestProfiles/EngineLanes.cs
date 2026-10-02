@@ -39,7 +39,48 @@ internal enum Needs
 /// the assembly that carries an <c>Engine</c> trait is either listed here under its own engine or in
 /// <see cref="EngineLanes.NotLaneTests"/> with a reason.
 /// </param>
-internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, string Why, IReadOnlyList<string> LaneTests);
+internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, string Why, IReadOnlyList<string> LaneTests)
+{
+    /// <summary>
+    /// The environment switches without which every test of this lane skips: a live lane's endpoint
+    /// URL. Every profile that claims the lane must set each one
+    /// (<c>TestProfileRegistryTests.EveryProfile_SuppliesItsEnginesRequiredEnv</c>), so a profile
+    /// that names a live lane and cannot reach it — green, having run nothing — is a red lint run.
+    /// </summary>
+    public IReadOnlyList<string> RequiredEnv { get; init; } = [];
+
+    /// <summary>
+    /// Where this lane's driver writes its failure diagnostics (a screenshot, the DOM, the store),
+    /// repo-relative; the driver may append a per-worker suffix. A CI job that runs the lane must
+    /// upload it (<c>CiProfileLaneTests.EveryUiLane_UploadsTheDiagnosticsItWrites</c>), or the record
+    /// of a failure dies with the runner.
+    /// </summary>
+    public string? DiagnosticsDir { get; init; }
+
+    /// <summary>
+    /// The switch the driver needs before it writes anything to <see cref="DiagnosticsDir"/>, when it
+    /// has one. It is a CI decision, not part of the lane: the capture runs on every failed action,
+    /// expected failures included, so the job that uploads the directory sets it where the lane runs.
+    /// </summary>
+    public string? DiagnosticsSwitch { get; init; }
+
+    /// <summary>
+    /// The switch that moves <see cref="DiagnosticsDir"/> somewhere else; the driver honours a value
+    /// the caller sets over its default. CI may not set it — not on a step, a job, the workflow or in
+    /// any other YAML under <c>.github/</c> — because the upload rule is derived from the default
+    /// directory, and a redirected driver writes where no upload looks
+    /// (<c>CiProfileLaneTests.EveryUiLane_UploadsTheDiagnosticsItWrites</c>). Required with
+    /// <see cref="DiagnosticsDir"/>.
+    /// </summary>
+    public string? DiagnosticsDirSwitch { get; init; }
+
+    /// <summary>
+    /// Why no CI job runs this lane, when none does. A lane is either run by a CI step's profile or
+    /// carries this — never both, and never neither — which the generated table in AGENTS.md shows
+    /// and <c>CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry</c> enforces.
+    /// </summary>
+    public string? CiExempt { get; init; }
+}
 
 /// <summary>
 /// <b>Every engine lane in the suite, and the decision each one carries.</b> The one record of which
@@ -94,37 +135,92 @@ internal static class EngineLanes
             ["BattleScribeSpec.Tests.FrozenNrGameDataConformanceTests"]),
         new("FrozenNrUiRoster", Needs.LocalBrowser, InPrePush: true,
             "Playwright over the frozen HAR, kitchen-sink only unless NR_UI_ROSTER_FULL is set; 22.6s",
-            ["BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests"]),
+            ["BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests"])
+        {
+            DiagnosticsDir = NrUiDiagnostics,
+            DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
+        },
         new("FrozenNrGameDataUi", Needs.LocalBrowser, InPrePush: true,
             "Playwright over the frozen NR Editor snapshot; 51.8s, and the NR Editor UI driver's only local signal",
-            ["BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests"]),
+            ["BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests"])
+        {
+            DiagnosticsDir = NrGameDataUiDiagnostics,
+            DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
+            DiagnosticsDirSwitch = NrGameDataUiDiagnosticsDirSwitch,
+        },
 
         // ── Excluded: needs the BattleScribe desktop app (setup.ps1 artifacts, the Java agent and a
         //    display). CI's `thorough-ui-bs` job runs both halves, whole.
         new("BsRosterUi", Needs.DesktopApp, InPrePush: false,
             "launches the BattleScribe desktop app; 687.8s across 367 specs, sequential — it WAS the 689.2s run it joined by default (#405)",
-            ["BattleScribeSpec.Tests.BsRosterUiConformanceTests"]),
+            ["BattleScribeSpec.Tests.BsRosterUiConformanceTests"])
+        {
+            DiagnosticsDir = "artifacts/bs-ui-diagnostics",
+            DiagnosticsDirSwitch = "BS_UI_DIAGNOSTICS_DIR",
+        },
+        // Its driver writes nothing yet: BsGameDataUiDiagnostics.CaptureAsync has no caller, and nothing
+        // anchors its directory at the repo root for the test host the way BsRosterUiFixture does for
+        // the roster driver. Wiring both is driver work; the directory is recorded so the uploads are
+        // ready for it.
         new("BsGameDataUi", Needs.DesktopApp, InPrePush: false,
             "launches the BattleScribe desktop app (the Data Editor half)",
-            ["BattleScribeSpec.Tests.BsGameDataUiConformanceTests"]),
+            ["BattleScribeSpec.Tests.BsGameDataUiConformanceTests"])
+        {
+            DiagnosticsDir = "artifacts/bs-gamedata-ui-diagnostics",
+            DiagnosticsDirSwitch = "BS_GAMEDATA_UI_DIAGNOSTICS_DIR",
+        },
 
         // ── Excluded: opens sessions on somebody else's production website. A pre-push gate runs on
         //    every push by every contributor, the last traffic profile these sites should see
         //    (ConcurrencyConfigurationDriftTests.EveryLiveFixture_DrawsItsSessionsFromTheThirdPartyLoadBudget).
+        //    Each skips whole without its endpoint URL, hence RequiredEnv.
         new("LiveNrRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
             "opens sessions on newrecruit.eu",
             ["BattleScribeSpec.Tests.LiveNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrRosterConformanceTests",
-             "BattleScribeSpec.Tests.LiveNrRosterSmokeTests"]),
+             "BattleScribeSpec.Tests.LiveNrRosterSmokeTests"])
+        {
+            RequiredEnv = ["NR_ENGINE_URL"],
+        },
         new("LiveNrUiRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
             "opens sessions on newrecruit.eu",
-            ["BattleScribeSpec.Tests.LiveNrUiRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrUiRosterConformanceTests"]),
+            ["BattleScribeSpec.Tests.LiveNrUiRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrUiRosterConformanceTests"])
+        {
+            RequiredEnv = ["NR_ENGINE_URL"],
+            DiagnosticsDir = NrUiDiagnostics,
+            DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
+            CiExempt = "nr-conformance, the one job that drives newrecruit.eu, runs the store-direct live lane only; the UI "
+                + "driver over every spec would add a browser clicking through the whole suite to a volunteer-run site's "
+                + "load on every scheduled run. Run nr-ui-live by hand when the UI driver changes.",
+        },
         new("LiveNrGameData", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
             "opens sessions on the NR Editor deployment",
-            ["BattleScribeSpec.Tests.LiveNrGameDataConformanceTests"]),
+            ["BattleScribeSpec.Tests.LiveNrGameDataConformanceTests"])
+        {
+            RequiredEnv = ["NR_EDITOR_URL"],
+            CiExempt = NrEditorLiveNotInCi,
+        },
         new("LiveNrGameDataUi", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
             "opens sessions on the NR Editor deployment",
-            ["BattleScribeSpec.Tests.LiveNrGameDataUiConformanceTests"]),
+            ["BattleScribeSpec.Tests.LiveNrGameDataUiConformanceTests"])
+        {
+            RequiredEnv = ["NR_EDITOR_URL"],
+            DiagnosticsDir = NrGameDataUiDiagnostics,
+            DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
+            DiagnosticsDirSwitch = NrGameDataUiDiagnosticsDirSwitch,
+            CiExempt = NrEditorLiveNotInCi,
+        },
     ];
+
+    private const string NrUiDiagnostics = "artifacts/nr-ui-diagnostics";
+    private const string NrGameDataUiDiagnostics = "artifacts/nr-gamedata-ui-diagnostics";
+    private const string NrGameDataUiDiagnosticsSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS";
+    private const string NrUiDiagnosticsDirSwitch = "NR_UI_DIAGNOSTICS_DIR";
+    private const string NrGameDataUiDiagnosticsDirSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS_DIR";
+
+    private const string NrEditorLiveNotInCi =
+        "the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether "
+        + "nr-conformance should also drive the live one is an open decision, not an oversight. Run it by hand to check "
+        + "a new deployment against the snapshot.";
 
     /// <summary>
     /// Classes that carry an <c>Engine</c> trait — so a lane's filter selects them — but are not the
