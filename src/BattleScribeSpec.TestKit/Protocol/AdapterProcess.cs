@@ -290,6 +290,16 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
     /// <see cref="Start"/> so the environment-wiring logic is directly testable without spawning
     /// a real process.
     /// </summary>
+    /// <remarks>
+    /// All three pipes are <see cref="Utf8Stdio.Encoding"/> — UTF-8, no byte-order mark — which is
+    /// what the protocol says the wire is (docs/adapter-protocol.md). Unset, each would follow this
+    /// process's console code page, while a <see cref="ProcessStartInfo.CreateNoWindow"/> child
+    /// gets a console of its own on the system's OEM code page: two ends of one pipe, two encodings.
+    /// The protocol JSON this side writes is ASCII (System.Text.Json escapes the rest), so the
+    /// mismatch lands on what is not: an adapter that writes raw UTF-8 JSON, and every line of
+    /// stderr, which <see cref="Start"/> forwards to the user. See <see cref="Utf8Stdio"/> for the
+    /// child's half.
+    /// </remarks>
     internal static ProcessStartInfo BuildStartInfo(
         string executable,
         string? arguments,
@@ -303,6 +313,9 @@ public sealed class AdapterProcess : IAdapterConnection, IDisposable
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardInputEncoding = Utf8Stdio.Encoding,
+            StandardOutputEncoding = Utf8Stdio.Encoding,
+            StandardErrorEncoding = Utf8Stdio.Encoding,
             CreateNoWindow = true,
         };
 

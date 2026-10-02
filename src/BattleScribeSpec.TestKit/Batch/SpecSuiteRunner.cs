@@ -139,6 +139,11 @@ public static class SpecSuiteRunner
         var filteredSpecs = PreFilterSpecs(specSources, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
         var filteredGameDataSpecs = PreFilterSpecs(gameDataSpecSources, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
 
+        // Counted before the gamedata describe gate below can still skip some of them: "selected" is
+        // what the filters asked to run, so the nothing-executed message can tell "matched nothing"
+        // from "matched, then skipped" (SpecSuiteResult.NothingExecutedMessage).
+        var selected = filteredSpecs.Count + filteredGameDataSpecs.Count;
+
         if (workers > 1)
         {
             // Parallel execution with N adapter processes
@@ -296,7 +301,7 @@ public static class SpecSuiteRunner
 
         sw.Stop();
 
-        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, durationsByResult, totalSpecs, sw.Elapsed, expectedFailuresEngine);
+        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, durationsByResult, totalSpecs, selected, sw.Elapsed, expectedFailuresEngine);
     }
 
     /// <summary>

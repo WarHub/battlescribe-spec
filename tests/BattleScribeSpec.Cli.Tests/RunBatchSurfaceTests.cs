@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using BattleScribeSpec.Engines;
 
@@ -20,7 +19,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task SpecAndAll_AreMutuallyExclusive()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "some-spec", "--all");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "some-spec", "--all");
         Assert.Equal(1, exitCode);
         Assert.Contains("mutually exclusive", stdErr);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -30,7 +29,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task AllAndMatrix_AreMutuallyExclusive()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "--all", "--matrix", "some-dir");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "--all", "--matrix", "some-dir");
         Assert.Equal(1, exitCode);
         Assert.Contains("mutually exclusive", stdErr);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -40,7 +39,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task NoModeSelector_IsRejected()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run");
         Assert.Equal(1, exitCode);
         Assert.Contains("exactly one", stdErr);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -52,7 +51,7 @@ public sealed class RunBatchSurfaceTests
     {
         // "summary" is a valid --output token overall (passes the parse-time union check) but is
         // batch-only, so a single-spec run must reject it at runtime.
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "some-spec", "--output", "summary");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "some-spec", "--output", "summary");
         Assert.Equal(1, exitCode);
         Assert.Contains("single-spec", stdErr);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -62,7 +61,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task All_RejectsSingleSpecOutputFormat()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "--all", "--output", "tree");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "--all", "--output", "tree");
         Assert.Equal(1, exitCode);
         Assert.Contains("not valid for --all", stdErr);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -72,7 +71,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task Json_IsRejectedUnderAll()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "--all", "--json");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "--all", "--json");
         Assert.Equal(1, exitCode);
         Assert.Contains("--json is only valid for a single-spec run", stdErr);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -87,7 +86,7 @@ public sealed class RunBatchSurfaceTests
         // ever runs — the exact wording is locale-dependent (System.CommandLine localizes parse
         // errors), so only the failure itself (a non-zero, non-success exit) is asserted here, not
         // the message text.
-        var (exitCode, _, _) = await RunCliAsync("run", "--all", "--workers", "2");
+        var (exitCode, _, _) = await CliProcess.RunAsync("run", "--all", "--workers", "2");
         Assert.NotEqual(0, exitCode);
     }
 
@@ -100,7 +99,7 @@ public sealed class RunBatchSurfaceTests
         // falls through to the positional <spec> slot, which then collides with --all
         // ("mutually exclusive") — a different-looking error than an outright parse failure, but
         // still a non-zero exit for what used to be a valid flag.
-        var (exitCode, _, _) = await RunCliAsync("run", "--all", "--keep-alive");
+        var (exitCode, _, _) = await CliProcess.RunAsync("run", "--all", "--keep-alive");
         Assert.NotEqual(0, exitCode);
     }
 
@@ -108,7 +107,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task Policy_WorkersMustBeAtLeastOne()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "--all", "--policy", "workers=0");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "--all", "--policy", "workers=0");
         Assert.Equal(1, exitCode);
         Assert.Contains("must be a positive integer", stdErr, StringComparison.Ordinal);
         Assert.DoesNotContain("Unhandled exception", stdErr);
@@ -127,7 +126,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task Policy_Workers_IsRejectedForASingleSpecRun_NotSilentlyDropped()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync(
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "run", "protocol-kitchen-sink", "--engine", "battlescribe", "--policy", "workers=8");
 
         Assert.Equal(1, exitCode);
@@ -279,7 +278,7 @@ public sealed class RunBatchSurfaceTests
     [Trait("Category", "Unit")]
     public async Task Policy_ReuseOn_IsRejectedForARun_NotSilentlyHonoured()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync(
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "run", "protocol-kitchen-sink", "--engine", "battlescribe", "--policy", "reuse=on");
 
         Assert.Equal(1, exitCode);
@@ -319,10 +318,9 @@ public sealed class RunBatchSurfaceTests
             return;
         }
 
-        var repoRoot = FindRepoRoot();
-        var adapterDll = FindReferenceAdapterDll(repoRoot);
+        var adapterDll = CliProcess.ReferenceAdapterDll;
 
-        var (exitCode, _, stdErr) = await RunCliAsync(
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "run", "--all",
             "--engine", $"battlescribe=dotnet:{adapterDll}",
             "--filter", "protocol/protocol-kitchen-sink",
@@ -342,7 +340,7 @@ public sealed class RunBatchSurfaceTests
         // exec:/dotnet: adapter has no --policy channel at all, and throws rather than silently
         // drop one — see EngineHostLocator.Resolve), so this uses the "battlescribe" built-in
         // (in-process, cheap) rather than the reference adapter.
-        var (exitCode, _, stdErr) = await RunCliAsync(
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "run", "--all",
             "--engine", "battlescribe",
             "--filter", "protocol/protocol-kitchen-sink",
@@ -353,23 +351,39 @@ public sealed class RunBatchSurfaceTests
         Assert.Contains("Workers: 1", stdErr, StringComparison.Ordinal);
     }
 
-    private static string FindReferenceAdapterDll(string repoRoot)
-    {
-        var pivot = ExtractPivot(AppContext.BaseDirectory);
-        foreach (var candidatePivot in new[] { pivot, "debug" }.Where(p => p is not null).Distinct())
-        {
-            var dll = Path.Combine(repoRoot, "artifacts", "bin",
-                "BattleScribeSpec.ReferenceAdapter", candidatePivot!, "bs-reference-adapter.dll");
-            if (File.Exists(dll))
-            {
-                return dll;
-            }
-        }
+    // ===== An empty batch run fails =====
 
-        var expected = Path.Combine(repoRoot, "artifacts", "bin",
-            "BattleScribeSpec.ReferenceAdapter", pivot ?? "debug", "bs-reference-adapter.dll");
-        Assert.Fail($"Reference adapter not built: {expected}");
-        return expected;
+    /// <summary>
+    /// <b><c>run --all</c> exits 8 when nothing executed</b> — a <c>--filter</c> typo, the wrong
+    /// <c>--specs</c>, a domain the engine does not serve — and its last stderr line says so. It used to
+    /// print <c>Results: 0 passed, 0 failed, 0 total</c> and exit 0, which a CI step reads exactly as it
+    /// reads a green suite. 8 is Microsoft.Testing.Platform's own "zero tests ran" code.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: put <c>SpecSuiteResult.ExitCode</c> back to <c>Failed &gt; 0 ? 1 : 0</c> and this exits
+    /// 0; print the message through <c>Ui.Error</c> and the last stderr line is only the tail Spectre
+    /// wrapped it into at 80 columns, which is all a CI log tail shows.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task RunAll_FilterMatchingNothing_ExitsEight_NotZero()
+    {
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
+            "run", "--all",
+            "--engine", $"battlescribe=dotnet:{CliProcess.ReferenceAdapterDll}",
+            "--specs", CliProcess.SpecPath("roster"),
+            "--roster",
+            "--filter", "no-such-spec");
+
+        Assert.True(exitCode == 8, $"exit code {exitCode}; stderr:\n{stdErr}");
+        Assert.Contains("Results: 0 passed, 0 failed, 0 total", stdOut, StringComparison.Ordinal);
+        var lastLine = CliProcess.LastLine(stdErr);
+        Assert.True(
+            lastLine.StartsWith("error: selected 0 of ", StringComparison.Ordinal)
+                && lastLine.Contains("executed 0", StringComparison.Ordinal)
+                && lastLine.EndsWith("(exit 8).", StringComparison.Ordinal),
+            $"the last stderr line is not the whole nothing-executed message: \"{lastLine}\"; stderr:\n{stdErr}");
+        Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
     }
 
     // ===== ClampWorkers (pure function) =====
@@ -450,7 +464,7 @@ public sealed class RunBatchSurfaceTests
                 """;
             File.WriteAllText(Path.Combine(dir, "battlescribe-conformance.json"), json);
 
-            var (exitCode, stdOut, _) = await RunCliAsync("run", "--matrix", dir);
+            var (exitCode, stdOut, _) = await CliProcess.RunAsync("run", "--matrix", dir);
 
             Assert.Equal(0, exitCode);
             Assert.Contains("Engine Compatibility Matrix", stdOut);
@@ -468,71 +482,8 @@ public sealed class RunBatchSurfaceTests
     public async Task Matrix_MissingDirectory_IsRejected()
     {
         var missing = Path.Combine(Path.GetTempPath(), "bs-spec-missing-" + Guid.NewGuid().ToString("N"));
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "--matrix", missing);
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "--matrix", missing);
         Assert.Equal(1, exitCode);
         Assert.Contains("matrix directory not found", stdErr);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-
-        Assert.NotNull(dir);
-        return dir.FullName;
-    }
-
-    private static string FindCliDll()
-    {
-        // Try this test assembly's own debug/release pivot first, then fall back to debug.
-        var repoRoot = FindRepoRoot();
-        var pivot = ExtractPivot(AppContext.BaseDirectory);
-        foreach (var candidatePivot in new[] { pivot, "debug" }.Where(p => p is not null).Distinct())
-        {
-            var dll = Path.Combine(repoRoot, "artifacts", "bin", "BattleScribeSpec.Cli", candidatePivot!, "bs-spec.dll");
-            if (File.Exists(dll))
-            {
-                return dll;
-            }
-        }
-
-        var expected = Path.Combine(repoRoot, "artifacts", "bin", "BattleScribeSpec.Cli", pivot ?? "debug", "bs-spec.dll");
-        Assert.Fail($"CLI not built: {expected}");
-        return expected;
-    }
-
-    private static string? ExtractPivot(string baseDirectory)
-    {
-        var segments = Path.GetFullPath(baseDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        var binIndex = Array.FindLastIndex(segments, s => s.Equals("bin", StringComparison.OrdinalIgnoreCase));
-        return binIndex >= 0 && binIndex + 2 < segments.Length ? segments[binIndex + 2] : null;
-    }
-
-    /// <summary>Spawn the real <c>bs-spec</c> CLI out-of-process and capture its output/exit code.</summary>
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(params string[] args)
-    {
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        psi.ArgumentList.Add(FindCliDll());
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start bs-spec.dll.");
-        var stdOutTask = process.StandardOutput.ReadToEndAsync();
-        var stdErrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return (process.ExitCode, await stdOutTask, await stdErrTask);
     }
 }

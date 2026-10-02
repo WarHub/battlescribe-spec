@@ -1,9 +1,16 @@
 using System.CommandLine;
+using BattleScribeSpec;
 using BattleScribeSpec.EngineHost;
 using BattleScribeSpec.Telemetry;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+
+// Before anything else touches Console: whichever standard streams are redirected speak UTF-8 with
+// no byte-order mark, whatever this process's console code page is — the `serve` protocol on
+// stdin/stdout, and the stderr the parent forwards line by line. The parent decodes all three as
+// UTF-8 (AdapterProcess.BuildStartInfo); see Utf8Stdio for why both ends must say so.
+Utf8Stdio.UseForRedirectedStreams();
 
 // The parent injects OTEL_EXPORTER_OTLP_ENDPOINT when it is collecting. Absent -> no exporter, no
 // cost. Everything else (protocol, service name, resource attributes, batch delay, sampler) is read

@@ -18,8 +18,9 @@ bs-spec  ──stdin──▸  your-adapter  ──▸  your engine
 ```
 
 The CLI manages the adapter as a child process. Each line on stdin is a
-JSON command; each line on stdout is a JSON response. Stderr is ignored
-(use it for logging/debugging).
+JSON command; each line on stdout is a JSON response. Stderr is not part of
+the protocol: the CLI forwards it to the user's terminal line by line (use it
+for logging/debugging). All three are UTF-8 without a byte-order mark.
 
 ## Step-by-Step
 
@@ -305,6 +306,11 @@ than Internal (it's what lets Jaeger/Tempo draw the `bs-spec → adapter` edge a
 ## Tips
 
 - **Flush stdout** after every response line — the client waits for a complete line
+- **UTF-8, no byte-order mark**, on stdin, stdout and stderr — regardless of the console code page.
+  The client sends UTF-8 and decodes UTF-8. On Windows a runtime usually follows the console code page
+  for pipes instead: in Python use `sys.stdin.reconfigure(encoding="utf-8")` (and the same for
+  `stdout`/`stderr`) or run with `PYTHONUTF8=1`; a .NET adapter calls
+  `Utf8Stdio.UseForRedirectedStreams()` from the TestKit before its first read.
 - **One JSON object per line** — no pretty-printing in the protocol
 - **Stderr is yours** — use it for debug logging without interfering with the protocol
 - **State is per-session** — a new adapter process is started for each spec

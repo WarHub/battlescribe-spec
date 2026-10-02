@@ -148,7 +148,8 @@ internal static class RunBatch
                 return 1;
             }
 
-            runSpan?.SetTag("test.suite.run.status", result.Failed > 0 ? "failure" : "success");
+            // ExitCode, not Failed: a run that executed nothing exits 8 and must not be traced as a success.
+            runSpan?.SetTag("test.suite.run.status", result.ExitCode != 0 ? "failure" : "success");
 
             switch (options.Output)
             {
@@ -166,6 +167,15 @@ internal static class RunBatch
             if (options.ReportPath is not null)
             {
                 SpecSuiteOutput.WriteConformanceReport(result, options.ReportPath, selection.EngineName, assertionEngine, Console.Out);
+            }
+
+            // After the summary, so the last line on stderr says why an empty run is red: the summary
+            // itself reads "0 passed, 0 failed", which on its own looks like nothing went wrong. One
+            // line, unwrapped (Ui.ErrorLine), or a redirected stderr would end on its last 80 columns.
+            // (Nothing follows it: the trace table below needs an executed spec.)
+            if (result.NothingExecutedMessage is { } nothingExecuted)
+            {
+                Ui.ErrorLine(nothingExecuted);
             }
 
             exitCode = result.ExitCode;

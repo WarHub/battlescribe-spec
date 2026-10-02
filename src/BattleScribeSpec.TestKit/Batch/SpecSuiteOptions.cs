@@ -68,12 +68,61 @@ public sealed class SpecSuiteResult
     public required IReadOnlyDictionary<SpecResult, double> DurationsByResult { get; init; }
 
     public required int TotalSpecs { get; init; }
+
+    /// <summary>
+    /// Specs that survived every selection filter (<c>--filter</c>, <c>--tags</c>, engine
+    /// applicability) and were therefore meant to run. It can exceed what executed: a gamedata spec
+    /// on an adapter that does not serve that domain is selected and then skipped.
+    /// </summary>
+    public int Selected { get; private init; }
+
     public required TimeSpan Elapsed { get; init; }
     public int Passed { get; private init; }
     public int Failed { get; private init; }
     public int ExpectedFailures { get; private init; }
     public int UnexpectedPasses { get; private init; }
-    public int ExitCode => Failed > 0 ? 1 : 0;
+
+    /// <summary>
+    /// The exit code a batch run reports when nothing executed — the same 8 Microsoft.Testing.Platform
+    /// uses for "zero tests ran", so an empty lane reads the same whichever harness ran it.
+    /// </summary>
+    public const int NothingExecutedExitCode = 8;
+
+    /// <summary>
+    /// 1 if any spec failed (load errors and unexpected passes included); otherwise
+    /// <see cref="NothingExecutedExitCode"/> if no spec executed; otherwise 0.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A run that checks nothing does not pass.</b> This used to be <c>Failed &gt; 0 ? 1 : 0</c>,
+    /// and the only emptiness check — "no spec files found" — runs before any filter. So a
+    /// <c>--filter</c> with a typo, a <c>--specs</c> pointing at the wrong tree or a domain the adapter
+    /// does not serve printed <c>Results: 0 passed, 0 failed, 0 total</c> and exited 0, which a CI step
+    /// reads exactly as it reads a green suite.
+    /// </para>
+    /// <para>
+    /// <b>"Executed" is <see cref="Results"/>, not <c>Passed + Failed</c>.</b> Under
+    /// <c>--expected-failures</c> an expected failure is counted in neither, so a run whose every
+    /// spec failed as annotated has <c>Passed + Failed == 0</c> and still executed every one of them.
+    /// <see cref="Results"/> holds one entry per spec that ran (and per load error, which is a failure
+    /// and decided above); skips never enter it.
+    /// </para>
+    /// </remarks>
+    public int ExitCode => Failed > 0 ? 1 : Results.Count == 0 ? NothingExecutedExitCode : 0;
+
+    /// <summary>
+    /// The one-line explanation of <see cref="NothingExecutedExitCode"/>, or null when specs executed.
+    /// It starts from the number every reader needs first — selected versus executed — and then says
+    /// which knob to look at.
+    /// </summary>
+    public string? NothingExecutedMessage => Failed > 0 || Results.Count > 0
+        ? null
+        : Selected == 0
+            ? $"selected 0 of {TotalSpecs} specs, executed 0: nothing matched the selection " +
+              "(--filter, --tags, --specs, the domain flags, and which specs apply to this engine). " +
+              $"A batch run that checks nothing fails (exit {NothingExecutedExitCode})."
+            : $"selected {Selected} of {TotalSpecs} specs, executed 0: every selected spec was skipped " +
+              $"(the skip reasons are in the report). A batch run that checks nothing fails (exit {NothingExecutedExitCode}).";
 
     /// <summary>Engine name used for spec-level expected-failure classification (null when unused).</summary>
     internal string? ExpectedFailuresEngine { get; private init; }
@@ -89,6 +138,7 @@ public sealed class SpecSuiteResult
         IReadOnlyDictionary<SpecResult, GameDataSpecFile> gameDataSpecsByResult,
         IReadOnlyDictionary<SpecResult, double> durationsByResult,
         int totalSpecs,
+        int selected,
         TimeSpan elapsed,
         string? expectedFailuresEngine)
     {
@@ -136,6 +186,7 @@ public sealed class SpecSuiteResult
             GameDataSpecsByResult = gameDataSpecsByResult,
             DurationsByResult = durationsByResult,
             TotalSpecs = totalSpecs,
+            Selected = selected,
             Elapsed = elapsed,
             Passed = passed,
             Failed = failed,

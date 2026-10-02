@@ -22,6 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared with BattleScribeSpec.Tests: start a child on a console set to a legacy code page. -->
+    <Compile Include="..\Infrastructure\LegacyCodePageConsole.cs" Link="Shared\LegacyCodePageConsole.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

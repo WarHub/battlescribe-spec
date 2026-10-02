@@ -68,6 +68,11 @@ cat spec.yaml | dotnet run --project src/BattleScribeSpec.Cli -- run -          
 is dumped after the **last** step; assertions run and a pass/fail summary prints to stderr
 (the state dump goes to stdout, so `--json` output pipes cleanly).
 
+Piped or redirected, `bs-spec` reads and writes **UTF-8** on every platform, stdin included (`-`).
+On a Windows console still on an OEM code page (437, 850), PowerShell decodes what it captures from
+a native command with `[Console]::OutputEncoding`, so a dump piped into a cmdlet or a variable shows
+`ΓÇö` for `—`: run `[Console]::OutputEncoding = [Text.UTF8Encoding]::new()` (or `chcp 65001`) first.
+
 | Flag | Effect |
 |------|--------|
 | `--all-steps` | Dump state after every step, not just the last. |
@@ -79,6 +84,12 @@ is dumped after the **last** step; assertions run and a pass/fail summary prints
 | `--record <file>` | Record UI actions to JSON (battlescribe-ui). |
 | `--save-roster <dir>` | Save the final roster as `.ros` XML (battlescribe-ui). |
 | `--policy <k=v,...>` | Override the concurrency/reuse policy: `workers=N` (`--all` only), `reuse=on\|off`, `reuse-roster=`, `reuse-gamedata=`. For diagnosis/ablation — the policy picks these itself. Turning reuse **on** for a domain the engine does not declare reuse-safe is an error here; use `compare`. |
+
+**`run --all` that executes nothing exits 8**, not 0 — a `--filter` typo, the wrong `--specs`, or a domain
+the engine does not serve. The last line on stderr (one unwrapped line) says `selected N of M specs,
+executed 0`, and whether nothing matched or everything matched was skipped. `compare` does the same
+when neither arm executed anything: identical verdicts over specs that never ran are not
+"verdict-neutral".
 
 There is no `--keep-alive` and no `--workers`: "keep the app alive between specs" *is* engine reuse,
 and both were one policy key wearing their own flag. `ConcurrencyPolicy.For(machine, engine)` decides

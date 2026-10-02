@@ -368,6 +368,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **A batch run that executes nothing exits 8** — `bs-spec run --all` used to exit 0 when its selection
+  ran nothing: `SpecSuiteResult.ExitCode` was `Failed > 0 ? 1 : 0`, and the only emptiness check
+  ("no spec files found") runs before any filter, so a `--filter` typo, the wrong `--specs` or a domain
+  the engine does not serve printed `Results: 0 passed, 0 failed, 0 total` and passed, exactly as a green
+  suite does. It now exits 8 — Microsoft.Testing.Platform's "zero tests ran" code — and the last line
+  on stderr says `selected N of M specs, executed 0` and whether nothing matched or everything matched
+  was skipped (`SpecSuiteResult.Selected`, `NothingExecutedMessage`). That line is printed unwrapped
+  (`Ui.ErrorLine`): Spectre wraps markup at 80 columns on a redirected stderr, which would leave a CI
+  log tail showing only the message's last fragment. "Executed" is the result list, not
+  `Passed + Failed`: under `--expected-failures` an expected failure is counted in neither, and a run
+  whose every spec failed as annotated still executed. `bs-spec compare` exits 8 too when neither arm
+  executed a spec, instead of reporting identical verdicts across nothing — the claim it exists to make
+  is "verdict-neutral", and an empty comparison is evidence of nothing. The reference adapter gains a
+  test-only `BSSPEC_TEST_ROSTER_ONLY=1` hook, beside `BSSPEC_TEST_FORCE_FAIL`/`_KILL`, that makes it
+  roster-only, so "selected, then skipped at the describe gate" is tested end to end rather than by a
+  hand-built result. **A CI or script step whose filter matches nothing now goes red; that is
+  intended.** `docs/ci-guide.md`'s exit-code table gains the row, and loses a code 2 the CLI never
+  returned.
+- **Cli.Tests starts `bs-spec` through one helper, `CliProcess`** — it replaced five copies of
+  `RunCliAsync` and five walks up to the repository root, and states what they left implicit: the
+  working directory is the test output folder (where `run --all`/`compare` write
+  `artifacts/telemetry/`), `GITHUB_STEP_SUMMARY` and `GITHUB_ACTIONS` are withheld from the child (it
+  is a fixture, not a CI step; inherited, every spawned batch appended its own "Trace summary" section
+  to the summary of whichever CI step ran the tests), all three pipes are UTF-8, the child gets a
+  console of its own, stdin is always redirected (and closed, so nothing can block reading the test
+  runner's), and paths resolve through `RepoRoot.FromBinaries`. `CliProcessTests` holds it to that.
 - **CI sets every job up through one composite action** — `.github/actions/setup` holds what five jobs
   each carried a copy of: setup-dotnet from `global.json`, the bot token, the caches, a JDK, `setup.ps1`
   and the BS UI agent build. Each job states what it needs (`java: none|plain|jdk-fx`, `nr-caches`,
@@ -560,6 +586,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Redirected stdio is UTF-8 at both ends, whatever the console code page** — on Windows .NET encodes a
+  pipe with the console's code page, and the two ends of one pipe need not share a console: an adapter
+  started with `CreateNoWindow` gets a hidden console on the OEM code page, while its parent follows
+  whatever `chcp` left in the terminal. From a code-page-437 console the parent best-fit U+2014 to
+  `-` on the way in, silently; 210 specs carry non-ASCII text, and `bs-spec run -` hands spec text
+  over raw. VSTest hid it — the test process runs on a hidden console of its own, so parent and child
+  agreed by accident — and Microsoft.Testing.Platform will not, because it keeps the terminal's input
+  code page (both measured). One helper, `Utf8Stdio`, now decides: `AdapterProcess.BuildStartInfo`
+  pins the parent's stdin, stdout and stderr to UTF-8 without a byte-order mark, and `bs-spec`,
+  `bs-engine-host` and `bs-reference-adapter` re-open each redirected standard stream the same way
+  as their first statement (`Utf8Stdio.UseForRedirectedStreams`), which covers the protocol, the
+  stdin-YAML loaders and the stderr the parent forwards. A stream that is a console is left alone (the
+  REPLs keep the console's `Console.In`), and `Console.InputEncoding` is never set — it would change
+  the user's terminal. The protocol doc now says the wire is UTF-8 (rule 7), and the adapter guide how
+  a Python or .NET adapter keeps to it. **`bs-spec`'s own piped or redirected output is UTF-8 too**, on
+  every platform: on Windows it used to follow the console code page, where non-ASCII text such as
+  `—`, `✓` and `✗` was best-fit to `-` or replaced with `?`. PowerShell decodes a native command's
+  output with `[Console]::OutputEncoding`, so on a console still on an OEM code page (437, 850),
+  piping `bs-spec` into a cmdlet or capturing it in a variable now shows `ΓÇö` instead; run
+  `[Console]::OutputEncoding = [Text.UTF8Encoding]::new()` (or `chcp 65001`) first. Output to the
+  console itself is unaffected. Tests: `RedirectedStdioEncodingTests` (the encodings, no BOM,
+  every line flushed, only redirected streams re-opened, and both adapters fed raw UTF-8 from a
+  code-page-437 console) and Cli.Tests' `StdinSpecEncodingTests` (an em-dash spec name through
+  `run -`, read back from the JSON dump and the tree dump). Both start the child on a console of its
+  own set to 437 (`tests/Infrastructure/LegacyCodePageConsole.cs`), because this repository's
+  Windows box runs with the system-wide UTF-8 code page and a round trip there passes with or without
+  the fix.
 - **`expectFailure` could be satisfied by the spec's own mistakes (#25).** The action classifier
   reads any exception it does not recognise as the engine refusing, and three layers threw exactly
   that for failures that were never the engine's:
