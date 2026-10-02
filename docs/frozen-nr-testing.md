@@ -156,7 +156,7 @@ gh release create v<version> \
 pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install chromium
 
 # Run frozen tests
-dotnet test tests/BattleScribeSpec.Tests.csproj --filter "FrozenNewRecruitConformanceTests"
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen
 ```
 
 ### In CI

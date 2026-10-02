@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- GENERATED from the test-profile registry: profile 'pre-push' in tests/TestProfiles/TestProfiles.cs,
-     whose Purpose says what it is for. Do not edit: RunsettingsGenerationTests.Runsettings_MatchTheRegistry
-     fails on any difference and prints the file the registry renders. -->
-<RunSettings>
-  <RunConfiguration>
-    <TestCaseFilter>Engine!=BsRosterUi&amp;Engine!=BsGameDataUi&amp;Engine!=LiveNrRoster&amp;Engine!=LiveNrUiRoster&amp;Engine!=LiveNrGameData&amp;Engine!=LiveNrGameDataUi&amp;Mode!=Sequential</TestCaseFilter>
-  </RunConfiguration>
-</RunSettings>

@@ -1,5 +1,6 @@
 using System.Globalization;
 using BattleScribeSpec.Telemetry.Collector;
+using BattleScribeSpec.Tests.Profiles;
 
 [assembly: AssemblyFixture(typeof(BattleScribeSpec.Tests.TelemetryAssemblyFixture))]
 
@@ -78,7 +79,10 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
             var artifactRoot = TestPaths.RepoRootDirectory is { } repoRoot
                 ? Path.Combine(repoRoot, "artifacts", "telemetry")
                 : Path.Combine("artifacts", "telemetry");
-            var artifactPath = Path.Combine(artifactRoot, $"xunit-{runId}");
+            // Named for the lane: TestHost resolved the profile before the platform started, so a CI job
+            // that runs four lanes leaves four artifacts a reader can tell apart (xunit-core-…,
+            // xunit-nr-frozen-…), and the step summary's headings say the same.
+            var artifactPath = Path.Combine(artifactRoot, $"xunit-{TestProfileContext.Current}-{runId}");
 
             // Bound artifacts/telemetry/'s growth before adding to it — this run's own artifact set
             // doesn't exist yet, so it is never a sweep candidate. See TelemetryRetention for why
@@ -122,7 +126,7 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
                 // too, mirroring RunBatch/CompareCommand's own CLI-path printing.
                 Console.Error.WriteLine();
                 summary.WriteTable(Console.Error);
-                summary.AppendToGitHubStepSummary("Trace summary — dotnet test");
+                summary.AppendToGitHubStepSummary($"Trace summary — {TestProfileContext.Current}");
             }
         }
     }

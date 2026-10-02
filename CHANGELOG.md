@@ -368,6 +368,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The test suites run on Microsoft.Testing.Platform, and the test app resolves its own profiles
+  (breaking for local workflows)** — both test projects move from VSTest to the platform: xUnit.net v3
+  4.0.1 (the plain `xunit.v3` package, the platform-v2 flavour), `global.json` selecting the platform for
+  `dotnet test`, and `Microsoft.NET.Test.Sdk`, `xunit.runner.visualstudio` and the unused
+  `coverlet.collector` gone. It completes the move that started with xunit 4 on VSTest as
+  `xunit.v3.mtp-off` — needed because Dependabot never offered xunit 4 (out since 2026-08-15): it
+  requires the platform at 2.4.0 or later, a central pin held it at 2.2.1, restore failed NU1109, and
+  Dependabot drops an update it cannot restore without a word, nor could it move a pin no project
+  references. That pin went then, and there is still none: `Directory.Packages.props` pins no platform
+  package. On the platform there are no runsettings, so a profile can no longer be a file VSTest reads:
+  **each test project's `Main` is now one call to `tests/TestProfiles/TestHost.cs`**, which reads the
+  registry. `-p:TestProfile=<name>` (mapped by the new `tests/Directory.Build.props`) and
+  `--test-profile <name>` on the test app resolve the same profile under `dotnet test`, `dotnet run`
+  and the executable; the host sets the profile's environment in its own process, ANDs a caller's
+  `--filter` onto the profile's (it narrows; on VSTest it replaced), and runs under the **strict
+  zero-tests policy: a run that executes no test exits 8**, every selected test skipping included —
+  both historical silent greens were that shape (one gap remains, as it was under VSTest: a spec a
+  per-spec lane opts out of reports as passed, not skipped, so a lane whose other rows all skip still
+  counts as having executed). It **refuses with exit 5, saying why**: an unknown
+  profile, a profile that does not cover the assembly (so a solution-wide `dotnet test` needs
+  `--project` for a profile that covers one test project), a VSTest option (`--settings` — which
+  `-p:RunSettingsFilePath` now becomes — `--logger`, `--collect`, `--blame*`),
+  `TESTINGPLATFORM_EXITCODE_IGNORE`, an option given twice, `--ignore-exit-code`/`--config-file`/a
+  response file/xunit's simple filters with a profile, a profiled `--filter` that is not one expression,
+  and a `dotnet test` run whose MSBuild-carried arguments did not arrive. `--list-test-profiles [--json]`
+  prints the registry (ask the app, through `dotnet run`: `dotnet test` refuses it). **Declared change to
+  environment precedence:** under VSTest a profile's runsettings value won and every other variable
+  passed through; now a lane-defining switch the profile does not allow — `NR_UI_ROSTER_FILTER`,
+  `NR_FROZEN_SKIP`, `BSSPEC_UPDATE_SNAPSHOTS`, … — refuses a profiled run instead of silently narrowing,
+  skipping or disarming it (`BS_UI_SKIP=true` with `core` stays allowed), and a default one such as a
+  URL is the caller's where set, printed as `(caller)`. **CI:** every lane is `dotnet run --project
+  tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile <name>`, so the log streams each
+  result (the host adds `--output Detailed`, live output on the aggregate lanes, and the GitHub reporter
+  with a failures-only summary in Actions); the CLI's tests are the one `dotnet test … -p:TestProfile=cli`
+  step, which keeps the MSBuild channel exercised. The exit-code key is in `ci.yml`. CI opts out of the
+  platform's usage telemetry (`TESTINGPLATFORM_TELEMETRY_OPTOUT`). The 25 generated runsettings files,
+  `scripts/dotnet-test-step.ps1` (its executed-at-least-one guard is the strict policy now),
+  `RunsettingsGenerationTests`, `TestProfileWellFormedTests` and the `_ValidateTestProfile` target are
+  deleted; the trace-summary heading and telemetry artifact name the profile
+  (`xunit-<profile>-<timestamp>`). New lints, each mutation-checked: `TestHostTests` (every host rule,
+  with the input that trips it), `TestHostWiringTests` (every test project under `tests/` and wired
+  through the host, `-p:TestProfile` mapped to `--test-profile`, one setter of the strict policy, no launch
+  profile, `testconfig.json` or runsettings in this checkout),
+  `CiProfileLaneTests.EveryCiTestRun_NamesAProfile` (one profile per step, one spelling per verb, no
+  filter, policy, settings, logger, `--test-modules` or option the host refuses with a profile, a project
+  named with `--project`, no run hidden in a shell's quoted string, at least one `dotnet test` step),
+  `EveryTestAssembly_IsRunByACiProfile`, `DocumentedTestCommands_RunAsWritten` (the same rules for every
+  command the docs give), `ToolchainPinDriftTests` (the runner in `global.json`, no VSTest package), and
+  `TestProfileRegistryTests.EveryAggregateLane_IsDeclared`. **For contributors:** `dotnet test
+  -p:TestProfile=pre-push` still works; for a lane in one project, name it —
+  `dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=<name>`, or
+  `dotnet run --project tests/BattleScribeSpec.Tests.csproj -- --test-profile <name>` to see results as they
+  finish; narrow with `--filter`; and to use a lane-defining variable, drop the profile.
 - **Every CI lane runs through a profile, and a profile is the whole lane** — CI used to finish defining
   its lanes itself: eight test steps spelled their filters inline, and step `env:` blocks supplied
   `NR_FROZEN_SMOKE`, `NR_UI_SMOKE` and `NR_UI_ROSTER_FULL`, so `-p:TestProfile=nr-ui-frozen` ran one spec
@@ -610,15 +663,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   every project look covered); `EveryCiTestStep_ExecutesAtLeastOneTest` and
   `EveryTestProject_IsRunBySomeCiStep` moved onto it from a line scan that only ever saw the wrapper
   script's spelling. Every rule was mutation-checked. "Run script tests" runs `scripts/*.test.mjs`.
-- **xUnit.net v3 moves to 4.0.1, as `xunit.v3.mtp-off`** — and the `Microsoft.Testing.Platform` 2.2.1
-  pin goes. Dependabot never offered xunit 4 (out since 2026-08-15): it needs the platform at 2.4.0 or
-  later, the central pin held it at 2.2.1, restore failed NU1109, and Dependabot drops an update it
-  cannot restore without a word. It could not bump the pin either, because no project references the
-  platform directly, so the pin was invisible to it. The pin had also left the graph mixed: platform
-  2.2.1 under 1.9.1 extensions. The `mtp-off` flavour, because the plain 4.x package brings platform
-  v2, whose MSBuild targets refuse VSTest-mode `dotnet test` on the .NET 10 SDK, and every test step
-  and `TestProfile` here runs through VSTest. Same 2883 tests discovered as on 3.2.2; `pre-push`
-  green on both.
 - **Package and SDK bumps run the thorough suites** — CI's gate forced them for a PR editing
   `testdata.json`; it now does the same for `Directory.Packages.props` and `global.json`. Those
   files swap out what the engines are built from — IKVM compiles the BattleScribe engine the

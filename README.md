@@ -258,27 +258,33 @@ finding, not a regression.
 Use test profiles for one-command test runs:
 
 ```bash
-dotnet test -p:TestProfile=nr-live          # live NR conformance + integration (sets NR_ENGINE_URL automatically)
-dotnet test -p:TestProfile=nr-frozen         # frozen NR conformance (offline, needs ./setup.ps1)
-dotnet test -p:TestProfile=bs            # BattleScribe engine conformance
-dotnet test -p:TestProfile=lint              # spec lint and structure checks
+dotnet test -p:TestProfile=pre-push                                              # the offline gate, both test projects
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live   # live NR conformance + integration (sets NR_ENGINE_URL)
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen # frozen NR conformance (offline, needs ./setup.ps1)
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs        # BattleScribe engine conformance
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=lint      # spec lint and structure checks
+dotnet run --project tests/BattleScribeSpec.Tests.csproj -- --test-profile bs      # the same, with every test's result as it finishes
+dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles   # what each profile runs
 ```
 
-Profiles are defined in `tests/TestProfiles/TestProfiles.cs` — each sets its test filter and the
-environment variables it needs automatically, and each is a whole lane: CI runs the same profiles, so
-`-p:TestProfile=nr-ui-frozen` is the full ~27-minute NR UI roster lane here as it is there (`smoke-nr-ui` is
-its one-spec smoke). Two exceptions: a lane a profile lets CI skip whole runs here and skips there
-(`core`'s desktop-app lane, which CI's offline runners do not provision), and a switch exported in your
-own shell reaches every profile that does not set it. The `.runsettings` files in `tests/test-profiles/` are
-generated from it; edit the registry, not those. You can also run suites manually with `--filter`:
+Profiles are defined in `tests/TestProfiles/TestProfiles.cs` — each sets its test filter, the environment
+variables it needs and the test projects it covers, and each is a whole lane: CI runs the same profiles,
+so `-p:TestProfile=nr-ui-frozen` is the full ~27-minute NR UI roster lane here as it is there
+(`smoke-nr-ui` is its one-spec smoke). The test projects' own entry point resolves the profile, so a
+profile means the same under `dotnet test`, `dotnet run` and the test executable. Name the project for
+a profile that covers one test project — a solution-wide run starts both, and the one outside the lane
+refuses it (exit 5, saying so). A `--filter` you add narrows the profile (the two are ANDed), and a run
+that executes no test fails (exit 8) — every selected test skipping counts. One exception to "the same
+lane": a lane a profile lets CI skip whole runs here and skips there (`core`'s desktop-app lane, which
+CI's offline runners do not provision). You can also run suites without a profile, with `--filter`:
 
 | Suite | Command | Notes |
 |-------|---------|-------|
-| BattleScribe conformance | `dotnet test --filter "SpecConformanceTests"` | Always available |
-| Frozen NR conformance | `dotnet test --filter "FrozenNewRecruitConformanceTests"` | Requires `./setup.ps1` (downloads HAR snapshot) |
-| Live NR conformance | `dotnet test --filter "LiveNewRecruitConformanceTests"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
-| Lint/formatting | `dotnet test --filter "SpecLintTests"` | Always available |
-| Real-world data | `dotnet test --filter "RealWorldData"` | Requires `./setup.ps1` (downloads wh40k-9e) |
+| BattleScribe conformance | `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=BsRoster"` | Always available |
+| Frozen NR conformance | `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrRoster&Mode!=Sequential"` | Requires `./setup.ps1` (downloads HAR snapshot) |
+| Live NR conformance | `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrRoster&Mode!=Sequential"` | Requires `NR_ENGINE_URL` env var + `./setup.ps1` (installs Playwright) |
+| Lint/formatting | `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Category=Lint"` | Always available |
+| Real-world data | `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~RealWorld"` | Requires `./setup.ps1` (downloads wh40k-9e) |
 
 ### Environment Variables
 
@@ -288,8 +294,8 @@ generated from it; edit the registry, not those. You can also run suites manuall
 | `NR_HEADLESS` | Set to `false` to show the browser window | `false` |
 | `NR_VISUAL` | Set to `true` to navigate to the roster editor UI after setup | `true` |
 | `NR_SLOW_MO` | Playwright SlowMo in ms — pauses between browser actions | `500` |
-| `NR_FROZEN_SKIP` | Set to `true` to skip frozen NR tests | `true` |
-| `NR_SEQUENTIAL` | Set to `true` to run sequential (per-spec) NR tests | `true` |
+| `NR_FROZEN_SKIP` | Set to `true` to skip frozen NR tests (a profile that runs them refuses it: run without one) | `true` |
+| `NR_SEQUENTIAL` | Set to `true` to run sequential (per-spec) NR tests (the `*-sequential` profiles set it) | `true` |
 
 Example — run live NR conformance tests with visible browser and roster editor UI:
 
@@ -297,7 +303,7 @@ Example — run live NR conformance tests with visible browser and roster editor
 $env:NR_ENGINE_URL = "https://www.newrecruit.eu"
 $env:NR_HEADLESS = "false"
 $env:NR_VISUAL = "true"
-dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests"
+dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrRoster&Mode!=Sequential"
 ```
 
 Or let the `nr-live` profile supply the URL and keep the two display switches in your shell — no profile sets
@@ -306,7 +312,7 @@ them, so your values reach the run:
 ```powershell
 $env:NR_HEADLESS = "false"
 $env:NR_VISUAL = "true"
-dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live
 ```
 
 ### End-to-End Test

@@ -37,7 +37,7 @@ Both use `NrGameDataUiEngine`; the difference is `CreateFrozenAsync` vs `CreateA
 `setup.ps1` downloads `.testdata/nr-editor/` (the NR Editor gh-pages snapshot pinned in
 `testdata.json`, shared with `NewRecruitGameDataEngine`) and the Playwright browsers.
 
-Test profiles: `dotnet test -p:TestProfile=nr-editor-ui-frozen` (in `pre-push`, static route
+Test profiles: `dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen` (in `pre-push`, static route
 interception, no network) and `…=nr-editor-ui-live` (sets `NR_EDITOR_URL`; it used to leave it to you,
 and every test skipped without it).
 
@@ -105,7 +105,7 @@ screenshot, check `editor-state.json` for the state the driver thought was loade
 **New mutation action**: add the method to `IGameDataEngine` (see the `changing-protocol-types`
 skill); in `NrGameDataUiActions.cs` probe the DOM for selectors (use `probe`); implement
 following existing patterns (`FindTreeNodeByIdAsync`, context-menu clicks); add a YAML spec
-under `specs/gamedata/`; run `tools/format-specs.ps1` then `dotnet test -p:TestProfile=nr-editor-ui-frozen`.
+under `specs/gamedata/`; run `tools/format-specs.ps1` then `dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-editor-ui-frozen`.
 
 **New entry type**: in `AddEntry`, map the `entryType` string to the NR Editor context-menu
 label (may differ from the BattleScribe type name) and add a case in the menu navigation.
@@ -125,4 +125,4 @@ they can drift between snapshots.
 | `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | Non-UI reference implementation |
 | `tests/Infrastructure/FrozenNrGameDataUiFixture.cs` | Frozen mode test fixture |
 | `tests/Conformance/FrozenNrGameDataUiConformanceTests.cs` | Frozen mode conformance tests |
-| `tests/TestProfiles/TestProfiles.cs` | Frozen test profile `nr-editor-ui-frozen` (its `tests/test-profiles/` runsettings is generated) |
+| `tests/TestProfiles/TestProfiles.cs` | Frozen test profile `nr-editor-ui-frozen`, which the test app resolves itself (`tests/TestProfiles/TestHost.cs`) |

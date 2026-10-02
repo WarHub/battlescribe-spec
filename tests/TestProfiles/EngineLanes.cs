@@ -75,6 +75,16 @@ internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, str
     public string? DiagnosticsDirSwitch { get; init; }
 
     /// <summary>
+    /// Whether the lane runs its whole spec suite as one test — a single <c>[Fact] AllSpecs()</c> that
+    /// drives every spec in turn through one engine, rather than one theory row per spec. Such a lane
+    /// prints nothing for minutes while it works, so in GitHub Actions <c>TestHost</c> turns on
+    /// <c>--show-live-output</c> for a profile that claims one; and no <c>DisplayName</c> clause can
+    /// narrow it, so its profiles narrow it from the engine side.
+    /// <c>TestProfileRegistryTests.EveryAggregateLane_IsDeclared</c> holds this to the lane classes.
+    /// </summary>
+    public bool Aggregate { get; init; }
+
+    /// <summary>
     /// Why no CI job runs this lane, when none does. A lane is either run by a CI step's profile or
     /// carries this — never both, and never neither — which the generated table in AGENTS.md shows
     /// and <c>CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry</c> enforces.
@@ -129,7 +139,10 @@ internal static class EngineLanes
             ["BattleScribeSpec.Tests.BsGameDataConformanceTests"]),
         new("FrozenNrRoster", Needs.LocalBrowser, InPrePush: true,
             "offline HAR replay, no network; 70.3s",
-            ["BattleScribeSpec.Tests.FrozenNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialFrozenNrRosterConformanceTests"]),
+            ["BattleScribeSpec.Tests.FrozenNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialFrozenNrRosterConformanceTests"])
+        {
+            Aggregate = true,
+        },
         new("FrozenNrGameData", Needs.LocalBrowser, InPrePush: true,
             "offline static-file serving of the pinned NR Editor snapshot, no network; 133.9s",
             ["BattleScribeSpec.Tests.FrozenNrGameDataConformanceTests"]),
@@ -137,6 +150,7 @@ internal static class EngineLanes
             "Playwright over the frozen HAR, kitchen-sink only unless NR_UI_ROSTER_FULL is set; 22.6s",
             ["BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests"])
         {
+            Aggregate = true,
             DiagnosticsDir = NrUiDiagnostics,
             DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
         },
@@ -144,6 +158,7 @@ internal static class EngineLanes
             "Playwright over the frozen NR Editor snapshot; 51.8s, and the NR Editor UI driver's only local signal",
             ["BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests"])
         {
+            Aggregate = true,
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
             DiagnosticsDirSwitch = NrGameDataUiDiagnosticsDirSwitch,
@@ -179,12 +194,14 @@ internal static class EngineLanes
             ["BattleScribeSpec.Tests.LiveNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrRosterConformanceTests",
              "BattleScribeSpec.Tests.LiveNrRosterSmokeTests"])
         {
+            Aggregate = true,
             RequiredEnv = ["NR_ENGINE_URL"],
         },
         new("LiveNrUiRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
             "opens sessions on newrecruit.eu",
             ["BattleScribeSpec.Tests.LiveNrUiRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrUiRosterConformanceTests"])
         {
+            Aggregate = true,
             RequiredEnv = ["NR_ENGINE_URL"],
             DiagnosticsDir = NrUiDiagnostics,
             DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,

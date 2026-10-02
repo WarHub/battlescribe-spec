@@ -6,11 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
     <PackageReference Include="GitHubActionsTestLogger" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit.v3.mtp-off" />
-    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="xunit.v3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +21,12 @@
   <ItemGroup>
     <!-- Shared with BattleScribeSpec.Tests: start a child on a console set to a legacy code page. -->
     <Compile Include="..\Infrastructure\LegacyCodePageConsole.cs" Link="Shared\LegacyCodePageConsole.cs" />
+    <!--
+      The test-profile registry and the entry point that resolves it (TestHost), shared with
+      BattleScribeSpec.Tests: this app's Program.cs is the same one call, so a profile means here what
+      it means there (TestHostWiringTests.EveryTestProject_InheritsTheTestHostProps).
+    -->
+    <Compile Include="..\TestProfiles\**\*.cs" Link="TestProfiles\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -20,7 +20,7 @@ namespace BattleScribeSpec.Tests;
 /// keeps finding at the bottom of its bugs.
 /// </para>
 /// <para>
-/// <b>The composed breach, concretely.</b> <c>dotnet test -p:TestProfile=nr-live</c> selects
+/// <b>The composed breach, concretely.</b> The <c>nr-live</c> profile selects
 /// <c>Engine=LiveNrRoster</c>, which is BOTH the pooled collection (2 contexts) and the sequential one
 /// (1 engine) — and xUnit runs collections in parallel. That is <b>3 concurrent sessions on
 /// newrecruit.eu</b>, 50% over a limit whose own docstring forbids raising it by 1 for a measured
@@ -181,8 +181,8 @@ internal sealed class LiveLoadLease(string host, string fixtureName, int session
         (denialContext.Length > 0 ? $", and in this test process {denialContext}. " : ". ") +
         "Run the lanes in separate SEQUENTIAL processes rather than raising the limit — the budget is " +
         "per process, so two lanes running at the same time in two processes would DOUBLE the load on " +
-        "the site, not halve it; what makes CI safe is that -p:TestProfile=nr-live-smoke and " +
-        "-p:TestProfile=nr-live-conformance are two `dotnet test` invocations that run one after the " +
+        "the site, not halve it; what makes CI safe is that the nr-live-smoke and nr-live-conformance " +
+        "profiles are two test-app processes (`dotnet run … -- --test-profile …`) that run one after the " +
         "other. The limit bounds traffic to someone else's website, and no measurement of ours is " +
         "entitled to fit it.";
 

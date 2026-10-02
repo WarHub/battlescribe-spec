@@ -881,14 +881,17 @@ why one integer could never have served both:
   runs its specs strictly serially (`SpecSuiteRunner.cs`, `AdapterHandler.RunAsync`). `PoolSize` is
   **not even on the wire** — `EngineHostLocator` sends only `workers=`, `reuse-roster=`,
   `reuse-gamedata=`. §1–§6 swept *this*.
-- **xUnit path** (`dotnet test`): there are **no worker processes at all**. Concurrency is the
+- **xUnit path** (the test app — `dotnet test` then, `dotnet test` or `dotnet run` of the test project
+  now): there are **no worker processes at all**. Concurrency is the
   fixture's eagerly-created pool of browser **contexts**, sized by `FixtureConcurrency.PoolSizeFor()`
   and used as `MaxDegreeOfParallelism` inside a single `[Fact]`. `Workers` is read **nowhere** in
   `tests/Infrastructure/`. §7 sweeps *this*.
 
 **Every NewRecruit CI conformance lane runs the xUnit path.** `nr-frozen`, `nr-ui-frozen`,
-`nr-editor-frozen`, `nr-editor-ui-frozen` are all `dotnet test -p:TestProfile=...` (see `ci.yml`). The
-axis that governs CI's wall-clock is the one that had never been measured.
+`nr-editor-frozen`, `nr-editor-ui-frozen` are all test-profile runs of the test project (see `ci.yml`;
+`dotnet test -p:TestProfile=...` when this was measured, under VSTest, and the test app started with
+`--test-profile` since the suites moved to Microsoft.Testing.Platform — the same process and the same
+fixture pools either way). The axis that governs CI's wall-clock is the one that had never been measured.
 
 The retired `NR_PARALLEL` env var sized **contexts on this axis** (`ci.yml` used 6/6/2). When the
 policy replaced it, the mirror `PoolSize: workers` handed the *process-axis* `k` to the *context*
@@ -900,7 +903,7 @@ that this — and not anything else — is the measured cause of the observed CI
 Deliberately **not** the §-Method recipe: `bs-spec compare` cannot help here, because it drives the
 CLI path, **which has no pool at all**. There is no way to reach this axis from the CLI.
 
-1. **Sweep the real lanes.** `dotnet test -p:TestProfile=nr-frozen` (engine `newrecruit`, fixture
+1. **Sweep the real lanes.** `dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen` (engine `newrecruit`, fixture
    `FrozenNrRosterFixture`, **365 specs / 363 executed**) and `-p:TestProfile=nr-editor-ui-frozen`
    (engine `newrecruit-ui`, `FrozenNrGameDataUiFixture`, **113 specs / 112 executed**). Exactly what
    CI runs, with `NR_HEADLESS=true`.

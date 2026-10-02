@@ -139,8 +139,23 @@ that restates a field is a second record that drifts from the first.
 ```bash
 dotnet restore && dotnet build                                                     # first time
 dotnet test -p:TestProfile=pre-push                                                # offline gate (~4.5 min, no app)
-dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
+dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
+dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs   # a lane, results streamed
+dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles # what each profile runs
 ```
+
+**The suites run on Microsoft.Testing.Platform, and the test app resolves its own profiles.**
+`global.json` puts `dotnet test` on the platform; each test project is an executable whose entry point
+(`tests/TestProfiles/TestHost.cs`, wired by `tests/Directory.Build.props`) reads the registry. So
+`dotnet test -p:TestProfile=<name>`, `dotnet run --project <csproj> -- --test-profile <name>` and
+the executable run the same lane. A run that **executes no test fails with exit 8** — strict policy,
+every selected test skipping counts (one known gap: a spec a per-spec lane opts out of, `engines: <engine>:
+skip`, reports as passed rather than skipped, so it counts as executed) — and the app **refuses a command line with exit 5, saying why**: an unknown profile, a
+profile that does not cover the project (a solution-wide `dotnet test` starts both test projects, so name
+the project for a profile that covers one), a VSTest option (`--settings`, `--logger`, …), or a
+lane-defining variable exported in your shell that the profile does not allow. A `--filter` you add
+**narrows** a profile (the two are ANDed). `dotnet test` shows a test's output only when it fails;
+`dotnet run` streams every result, which is why CI runs lanes that way.
 
 **The SDK band is pinned, and CI installs from `global.json`.** `rollForward: latestPatch` holds the
 feature band; every `setup-dotnet` step uses `global-json-file: global.json`, so your machine and CI
@@ -195,7 +210,9 @@ package change is a one-line edit there and nothing else.
 
 **Always run `pre-push` before pushing.** It is the **offline** gate: lint, the in-process
 BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor
-snapshot, and the two frozen Playwright UI drivers. No network, no desktop app.
+snapshot, and the two frozen Playwright UI drivers. No desktop app, and no test traffic to any site;
+the one network call is the test platform's own usage telemetry, on by default — opt out with
+`TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (or `DOTNET_CLI_TELEMETRY_OPTOUT=1`), as CI does.
 **Measured 2026-08-12 on a 32-core dev box: `Failed: 0, Passed: 2571, Skipped: 0, Total: 2571,
 Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
 `BattleScribeSpec.Cli.Tests` — 5m47s end to end including the build. The critical path is `BsRoster`
@@ -240,15 +257,15 @@ sets `NR_UI_ROSTER_FULL`; `smoke-nr-ui` is the one-spec smoke). `CiProfileLaneTe
 and fails if a lane-defining or profile-owned switch appears anywhere under `.github/`. Two things can
 still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
 skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
-runners, which do not provision it. And a switch exported in your own shell reaches every profile that
-does not set it, because VSTest passes it through — an exported `NR_UI_ROSTER_FILTER` or
-`NR_FROZEN_SKIP` still narrows or skips a lane. The `.runsettings` files in `tests/test-profiles/` are
-generated from the registry for VSTest, one per profile that covers `BattleScribeSpec.Tests`, and a hand
-edit there fails the lint (`RunsettingsGenerationTests`). Every `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*`
-variable the code names is classified in `tests/TestProfiles/Knobs.cs`
-(`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`). To watch a live lane, set
-`NR_HEADLESS=false` (and `NR_VISUAL=true`) in your own environment: no profile sets them, so your value
-reaches the run. The list below is generated from the registry
+runners, which do not provision it. A switch exported in your own shell is held to its kind. Every
+`NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names is classified in `tests/TestProfiles/Knobs.cs`
+(`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`): a **lane-defining** one — `NR_UI_ROSTER_FILTER`,
+`NR_FROZEN_SKIP`, `BSSPEC_UPDATE_SNAPSHOTS`, … — takes the profile's value or must be unset, and a profiled
+run with a different value exported is refused (exit 5) rather than silently narrowed, skipped or turned
+into a snapshot rewrite; to use one, run without a profile and narrow with `--filter`. The one exception
+is `BS_UI_SKIP=true` with `core`, which lets its desktop-app lane skip. A **default** one — a URL,
+headless mode, slow-mo — is yours where you set it: to watch a live lane, set `NR_HEADLESS=false` (and
+`NR_VISUAL=true`), and the run prints `(caller)` beside each value you supplied. The list below is generated from the registry
 (`CiProfileLaneTests.AgentsMd_ProfileList_IsGeneratedFromTheRegistry`), so it can neither name a deleted
 profile nor leave out a new one:
 
@@ -308,8 +325,8 @@ and the Roster Editor. Mutations go through the real UI; state is read via the J
 `setup.ps1` (which downloads the BattleScribe app + Liberica full JDK and builds the agent), run:
 
 ```bash
-dotnet test -p:TestProfile=bs-ui-gamedata   # Data Editor  (Engine=BsGameDataUi)
-dotnet test -p:TestProfile=bs-ui-roster     # Roster Editor (Engine=BsRosterUi) — every roster spec, ~13 min
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs-ui-gamedata   # Data Editor  (Engine=BsGameDataUi)
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs-ui-roster     # Roster Editor (Engine=BsRosterUi) — every roster spec, ~13 min
 ```
 
 **Neither is in `pre-push`**, and that is deliberate: they need the app, a display, and minutes.
@@ -324,7 +341,7 @@ so neither local runs nor CI need to set anything. Tests self-skip when BS artif
 
 `bs-spec run --all`/`compare` and `dotnet test` all emit OpenTelemetry traces + metrics — a
 `.traces.pb`/`.metrics.pb` artifact under `artifacts/telemetry/run-<id>.*` (or `compare-a/b-<id>.*`,
-`xunit-<timestamp>.*`), plus a trace-summary table (wall time, cold-starts vs warm-reuses, peak
+`xunit-<profile>-<timestamp>.*`), plus a trace-summary table (wall time, cold-starts vs warm-reuses, peak
 live resources) printed after the run and appended to `$GITHUB_STEP_SUMMARY` in CI. Use
 `bs-spec compare --config-a "" --config-b "SOME_ENV=1"` to prove a config change is
 **verdict-neutral** before shipping it as an optimization — it asserts identical per-spec
@@ -397,7 +414,8 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
-| `tests/TestProfiles/` | The test-profile registry: every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`); `tests/test-profiles/*.runsettings` is generated from it |
-| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every Tests-project step runs a profile, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, the generated AGENTS.md table and profile list, no dangling profile reference |
+| `tests/TestProfiles/` | The test-profile registry — every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`) — and the test app's entry point that resolves it (`TestHost.cs`) |
+| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, the generated AGENTS.md table and profile list, no dangling profile reference, every documented test command runs as written |
+| `tests/Infrastructure/TestHostTests.cs`, `TestHostWiringTests.cs` | The entry point's rules, each with the input that trips it; every test project wired through it, one setter of the strict zero-tests policy, no launch profile, testconfig or runsettings feeding the app |
 | `tools/format-specs.ps1` | Spec formatter |
 

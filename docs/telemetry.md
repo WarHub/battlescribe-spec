@@ -105,10 +105,12 @@ artifacts/telemetry/run-<id>.metrics.pb
 artifacts/telemetry/run-<id>.logs.pb
 ```
 
-(`compare` writes `compare-a-<id>`/`compare-b-<id>`; the `dotnet test` assembly fixture writes
-`xunit-<timestamp>`, anchored at the repo root explicitly — VSTest runs the test host with its
-working directory set to the test assembly's own output folder, not the repo root, so a bare
-relative path would silently land somewhere under `artifacts/bin/.../`.)
+(`compare` writes `compare-a-<id>`/`compare-b-<id>`; the test app's assembly fixture writes
+`xunit-<profile>-<timestamp>` — named for the test profile the run resolved, `unprofiled` for none, so a
+CI job that runs several lanes leaves one artifact per lane that a reader can tell apart — anchored at
+the repo root explicitly: the test app runs with its working directory set to the test assembly's own
+output folder, not the repo root, so a bare relative path would silently land somewhere under
+`artifacts/bin/.../`.)
 
 Each file is a **length-delimited stream of protobuf messages** — the same
 `ExportTraceServiceRequest`/`ExportMetricsServiceRequest`/`ExportLogsServiceRequest` messages the
@@ -259,9 +261,9 @@ verdicts identical, 2.20–2.21× faster).
   cannot reach the receiver and simply will not export. Point such a setup at an external collector
   via `OTEL_EXPORTER_OTLP_ENDPOINT` instead (see "Viewing a run in Jaeger" above) — that path works
   regardless of network topology.
-- **A `dotnet test` run's artifact has no spec spans.** Individual xUnit `[Fact]`/`[Theory]` tests
+- **A test-app run's artifact has no spec spans.** Individual xUnit `[Fact]`/`[Theory]` tests
   call `GameDataRunner`/`RosterRunner` directly, not through `SpecSuiteRunner` (the only emitter of
-  spec spans) — so `TraceSummary.FromArtifact` on a `xunit-<timestamp>` artifact always reports
+  spec spans) — so `TraceSummary.FromArtifact` on a `xunit-<profile>-<timestamp>` artifact always reports
   `SpecCount == 0`, and its "slowest specs" list is always empty. The engine pools still emit
   `harness.resource.count`/`harness.engine.start.duration` directly, so cold-start/reuse counts and
   peak live resources are still real and meaningful for that artifact — only per-spec duration data

@@ -47,55 +47,57 @@ public sealed class CiProfileLaneTests
     internal const string AgentsProfilesEnd = "<!-- END GENERATED: profiles -->";
 
     /// <summary>
-    /// <b>Every CI step that runs <c>BattleScribeSpec.Tests</c> names exactly one registry profile that
-    /// covers it, and adds nothing to its selection.</b> A step that runs a profile names one that exists
-    /// and covers the project it runs.
+    /// <b>Every CI test run names exactly one registry profile that covers what it runs, in the one
+    /// spelling its verb takes, and adds nothing to it.</b>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// An inline <c>--filter</c> was a lane only CI knew: eight of them, two of which once selected
-    /// nothing or only a self-skipping row and stayed green on every PR. On VSTest a command-line filter or
-    /// settings file does not narrow a profile, it <b>replaces</b> it, so a profile plus a filter is the
-    /// same unrecorded lane under a recorded name. The matrix is expanded, so
-    /// <c>-TestProfile ${{ matrix.suite.profile }}</c> is two checked runs, and a typo in the key stays an
-    /// expression that is not a profile.
+    /// A profile is the whole lane, so a step that runs a test project runs one — both projects, now that
+    /// the test app resolves profiles itself (<c>cli</c> is the CLI tests' lane). The rules:
     /// </para>
+    /// <list type="bullet">
+    /// <item><description>exactly one profile, which exists and covers every assembly the step runs (the
+    /// host would refuse the rest with exit 5; this says so before CI runs);</description></item>
+    /// <item><description>on a <c>dotnet test</c> line it is <c>-p:TestProfile=</c>, which MSBuild carries to the
+    /// app with the strict policy; anywhere else it is <c>--test-profile</c> after <c>--</c>, which
+    /// <c>dotnet run</c> hands the app — one spelling per verb, so a reader sees one shape of step;</description></item>
+    /// <item><description>at least one step is <c>dotnet test … -p:TestProfile=</c>, so CI keeps exercising the
+    /// MSBuild channel and the host's check that it arrived;</description></item>
+    /// <item><description>no <c>--filter</c> (or <c>--filter-*</c>), <c>--settings</c>, <c>--zero-tests-policy</c>,
+    /// <c>--logger</c>, <c>--test-modules</c>, nor an option the host refuses alongside a profile
+    /// (<see cref="CiProfileRuns.OverridesIn"/>). A filter narrows the profile, so the step would run less
+    /// than the lane it names, under that name; the others replace the verdict or drop the channel the
+    /// profile travels on.</description></item>
+    /// <item><description>a <c>dotnet test</c> step names its project with <c>--project</c>, never as a bare word
+    /// (<see cref="CiTestInvocations.PositionalTargets"/>): the SDK takes a bare project only in first
+    /// place, and runs a bare <c>.dll</c> as test modules, which drops the MSBuild channel.</description></item>
+    /// </list>
     /// <para>
-    /// Mutation-checked when written: the checks job's offline step back on
-    /// <c>--filter "Category!=Conformance"</c>; <c>--filter "DisplayName~kitchen-sink"</c> appended to a
-    /// profiled step; and the matrix key misspelt (<c>${{ matrix.suite.profil }}</c>) each go red naming
-    /// the step.
+    /// The matrix is expanded, so <c>--test-profile ${{ matrix.suite.profile }}</c> is two checked runs,
+    /// and a typo in the key stays an expression that is not a profile. Mutation-checked when written:
+    /// the checks job's offline step back on <c>--filter "Category!=Conformance"</c>;
+    /// <c>--filter "DisplayName~kitchen-sink"</c> appended to a profiled step; the matrix key misspelt
+    /// (<c>${{ matrix.suite.profil }}</c>); <c>-p:TestProfile=core</c> on a <c>dotnet run</c> step;
+    /// <c>--test-profile</c> before the <c>--</c>; the CLI step's profile dropped; the CLI step
+    /// turned into a <c>dotnet run</c> (no <c>dotnet test</c> step left); the CLI step's <c>--project</c>
+    /// dropped, leaving its csproj a bare word after <c>--no-build</c>; and <c>--ignore-exit-code 8</c> on a
+    /// lane — each goes red naming the step.
     /// </para>
     /// </remarks>
     [Fact]
-    public void EveryCiTestStep_OnTheTestsProject_RunsAProfile()
+    public void EveryCiTestRun_NamesAProfile()
     {
-        var testsProject = CiTestInvocations.TestProjects.Single(static p => p.AssemblyName == EngineLanes.Assembly).RelativePath;
         var runs = CiProfileRuns.All;
-        var onTests = runs.Where(r => r.Invocation.TargetsSolution || r.Invocation.Projects.Contains(testsProject)).ToList();
-
-        // No separate canary that some run came from a matrix leg: a matrix step the expansion failed to
-        // resolve still names `${{ matrix.… }}`, which is reported below as an unresolved profile, and
-        // CiJob_ExpandsItsMatrixIntoLegs holds the expansion itself.
-        Assert.True(onTests.Count >= 10, $"Found {onTests.Count} CI runs of {testsProject}; the scan has stopped finding the test steps.");
+        Assert.True(runs.Count >= 10, $"Found {runs.Count} CI test runs; the scan has stopped finding the test steps.");
 
         var problems = new List<string>();
         foreach (var run in runs)
         {
-            var runsTests = onTests.Contains(run);
-            if (run.ProfileNames.Count == 0)
+            if (run.ProfileNames.Count != 1)
             {
-                if (runsTests)
-                {
-                    problems.Add($"  {run.Where}: runs {EngineLanes.Assembly} with no profile — `{run.Command}`");
-                }
-
-                continue;
-            }
-
-            if (run.ProfileNames.Count > 1)
-            {
-                problems.Add($"  {run.Where}: names {run.ProfileNames.Count} profiles ({string.Join(", ", run.ProfileNames)})");
+                problems.Add(run.ProfileNames.Count == 0
+                    ? $"  {run.Where}: runs a test project with no profile — `{run.Command}`"
+                    : $"  {run.Where}: names {run.ProfileNames.Count} profiles ({string.Join(", ", run.ProfileNames)})");
                 continue;
             }
 
@@ -113,18 +115,66 @@ public sealed class CiProfileLaneTests
             problems.AddRange(assemblies.Where(a => !profile.Assemblies.Contains(a, StringComparer.Ordinal))
                 .Select(a => $"  {run.Where}: runs {a} under profile {profile.Name}, which does not cover it"));
 
-            if (run.SelectionOverrides.Count > 0)
+            var dotnetTest = CiTestInvocations.RunsDotnet(run.Command, "test");
+            var how = run.Spellings[0].How;
+            if (dotnetTest && how != ProfileSpelling.MsBuildProperty)
             {
-                problems.Add($"  {run.Where}: adds {string.Join(" ", run.SelectionOverrides)} to profile {profile.Name}");
+                problems.Add($"  {run.Where}: a `dotnet test` step names its profile with --test-profile; write -p:TestProfile={profile.Name}");
+            }
+            else if (!dotnetTest && how != ProfileSpelling.OptionAfterSeparator)
+            {
+                problems.Add($"  {run.Where}: names its profile {(how == ProfileSpelling.MsBuildProperty ? "with -p:TestProfile" : "with --test-profile before --")}; "
+                    + $"write `dotnet run --project <csproj> --no-build -- --test-profile {profile.Name}`");
+            }
+
+            if (run.Overrides.Count > 0)
+            {
+                problems.Add($"  {run.Where}: adds {string.Join(" ", run.Overrides)} to profile {profile.Name}");
+            }
+
+            if (CiTestInvocations.PositionalTargets(run.Command) is { Count: > 0 } positional)
+            {
+                problems.Add($"  {run.Where}: {PositionalTargetProblem(positional)}");
             }
         }
 
+        if (!runs.Any(static r => CiTestInvocations.RunsDotnet(r.Command, "test") && r.Spellings.Any(static s => s.How == ProfileSpelling.MsBuildProperty)))
+        {
+            problems.Add("  no CI step is `dotnet test … -p:TestProfile=<name>`, so nothing in CI exercises the MSBuild channel the "
+                + "profile and the strict policy travel on, or the host's refusal when it is missing");
+        }
+
         Assert.True(problems.Count == 0,
-            "CI steps that run the test suite must run a registry profile, and only that:\n" + string.Join("\n", problems) + "\n\n"
-            + $"A lane is defined in tests/TestProfiles/TestProfiles.cs, so that CI and `dotnet test -p:TestProfile=<name>` run the "
-            + "same thing. On VSTest a command-line --filter or --settings REPLACES the profile's selection rather than narrowing "
-            + "it, so a step that adds one runs a lane no profile records. Add a profile for what the step means, and run it with "
-            + $"`pwsh {CiTestInvocations.TestStepScript} -TestProfile <name> {testsProject} --no-build …`.");
+            "CI test steps must each run one registry profile, and only that:\n" + string.Join("\n", problems) + "\n\n"
+            + "A lane is defined in tests/TestProfiles/TestProfiles.cs, so that CI and a developer run the same thing under one "
+            + "name. Run it as `dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile <name>` "
+            + "(the CLI tests' step is the `dotnet test --project … -p:TestProfile=cli` one), and put anything the step needs "
+            + "into the profile.");
+    }
+
+    /// <summary>
+    /// <b>Every test assembly is run in CI by a step whose profile covers it.</b> The project-level
+    /// coverage lint (<c>ConcurrencyConfigurationDriftTests.EveryTestProject_IsRunBySomeCiStep</c>) asks
+    /// whether some step names the project; this asks whether that step runs a lane of it, which is the
+    /// only kind of test run CI has now.
+    /// </summary>
+    /// <remarks>Mutation-checked when written: the CLI step's profile pointed at <c>lint</c> (which covers only <c>BattleScribeSpec.Tests</c>) goes red naming <c>BattleScribeSpec.Cli.Tests</c>.</remarks>
+    [Fact]
+    public void EveryTestAssembly_IsRunByACiProfile()
+    {
+        var assemblies = CiTestInvocations.TestProjects.Select(static p => (p.AssemblyName, p.RelativePath)).ToList();
+        Assert.NotEmpty(assemblies);
+
+        var unrun = assemblies
+            .Where(a => !CiProfileRuns.All.Any(r => r.Profile is { } p && p.Assemblies.Contains(a.AssemblyName, StringComparer.Ordinal)
+                && (r.Invocation.TargetsSolution || r.Invocation.Projects.Contains(a.RelativePath))))
+            .Select(static a => $"  {a.AssemblyName} ({a.RelativePath})")
+            .ToList();
+
+        Assert.True(unrun.Count == 0,
+            "These test assemblies are run by no CI step under a profile that covers them:\n" + string.Join("\n", unrun) + "\n\n"
+            + "A test project nobody runs is a gate nobody has. Give it a step that runs a profile covering it "
+            + "(tests/TestProfiles/TestProfiles.cs lists each profile's assemblies).");
     }
 
     /// <summary>
@@ -137,8 +187,9 @@ public sealed class CiProfileLaneTests
     /// A lane-defining switch (<see cref="KnobKind.LaneDefining"/>) changes which tests run or whether a
     /// lane runs at all; set from a workflow, it defines the lane there instead of in the profile, which
     /// is how <c>nr-ui-frozen</c> meant 378 specs in CI and one everywhere else. A switch a profile sets is
-    /// the profile's: a second value in CI is at best inert (on VSTest the profile's runsettings value
-    /// wins) and at worst the one that counts once precedence changes. Every YAML scalar is read, keys
+    /// the profile's: a second value in CI is either refused by the test app (a lane-defining one that
+    /// differs) or wins over the profile's (a default one, such as a URL), and neither belongs in a
+    /// workflow. Every YAML scalar is read, keys
     /// included — an <c>env:</c> entry is a key, a <c>$GITHUB_ENV</c> write or an inline assignment is in a
     /// <c>run:</c> value — and comments are not scalars, so the workflows can still explain the rule.
     /// Default switches the registry leaves to CI (the NR Editor UI driver's diagnostics capture) are not
@@ -535,16 +586,7 @@ public sealed class CiProfileLaneTests
     [Fact]
     public void NoDanglingProfileReferences()
     {
-        var root = CiWorkflows.Root;
-        var superpowers = Path.Combine(root, "docs", "superpowers") + Path.DirectorySeparatorChar;
-        var documents = new[] { Path.Combine(root, "AGENTS.md"), Path.Combine(root, "README.md") }
-            .Concat(Directory.EnumerateFiles(Path.Combine(root, "docs"), "*.md", SearchOption.AllDirectories)
-                .Where(f => !f.StartsWith(superpowers, StringComparison.OrdinalIgnoreCase)))
-            .Concat(Directory.EnumerateFiles(Path.Combine(root, ".agents", "skills"), "*.md", SearchOption.AllDirectories))
-            .Order(StringComparer.Ordinal)
-            .Select(f => (Path: CiWorkflows.Relative(f), Text: File.ReadAllText(f)))
-            .Concat(CiDefinitionFiles.All.Select(static f => (f.Path, f.Text)))
-            .ToList();
+        var documents = Documents().Concat(CiDefinitionFiles.All.Select(static f => (f.Path, f.Text))).ToList();
         string[] expectedRoots = ["docs/", ".agents/skills/", ".github/"];
         var unread = expectedRoots.Where(r => !documents.Any(d => d.Path.StartsWith(r, StringComparison.Ordinal))).ToList();
         Assert.True(unread.Count == 0,
@@ -584,6 +626,187 @@ public sealed class CiProfileLaneTests
             + "exists (tests/TestProfiles/TestProfiles.cs; AGENTS.md lists them all).");
     }
 
+    /// <summary>
+    /// <b>Every test command a document gives runs as written</b>: one spelling of the profile per verb,
+    /// no VSTest option, no second zero-tests policy, no option the host refuses with a profile, no
+    /// runsettings file, a project named with <c>--project</c>, and no solution-wide
+    /// <c>dotnet test</c> that a test project would refuse or fail. Read: AGENTS.md, README.md,
+    /// <c>docs/**</c> (minus <c>docs/superpowers/</c>) and the skills — the same documents as
+    /// <see cref="NoDanglingProfileReferences"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The CI rules (<see cref="EveryCiTestRun_NamesAProfile"/>) applied where a reader copies a command
+    /// from, except that a document may narrow a profile with <c>--filter</c> — that is what the option
+    /// is for on a laptop. A command is a <c>dotnet test</c>, or a <c>dotnet run</c> of a test project,
+    /// in a code span or a code-block line. Each rule stands for a recipe that would fail:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><c>-p:TestProfile=</c> on <c>dotnet test</c>, <c>-- --test-profile</c> on
+    /// <c>dotnet run</c>: the spellings CI uses, so a recipe and a CI step read alike;</description></item>
+    /// <item><description><c>--settings</c>, <c>--logger</c>, <c>--collect</c>, <c>--blame*</c>,
+    /// <c>RunSettingsFilePath</c>, <c>--test-modules</c>, <c>--zero-tests-policy</c>, an inline
+    /// <c>TestCaseFilter</c>: refused by the test app (exit 5), or a run that drops the profile;</description></item>
+    /// <item><description>with a profile, an option the host refuses alongside one
+    /// (<see cref="TestHost.RefusedWithAProfile"/>: <c>--ignore-exit-code</c>, <c>--config-file</c>,
+    /// <c>--xunit-config-filename</c>, a response file, <c>--filter-*</c>), read by the host's own parser;</description></item>
+    /// <item><description>a <c>dotnet test</c> target given as a bare word rather than <c>--project</c>
+    /// (<see cref="CiTestInvocations.PositionalTargets"/>): the SDK takes one only in first place, and a bare
+    /// <c>.dll</c> runs as test modules, which the test app refuses;</description></item>
+    /// <item><description>a <c>dotnet test</c> naming no project, with a profile that does not cover every
+    /// test project or with a <c>--filter</c>: the solution-wide run starts every test project, and the one
+    /// outside the profile refuses it — or, under a filter that matches none of its tests, executes nothing
+    /// and fails with exit 8;</description></item>
+    /// <item><description>any mention of <c>tests/test-profiles/</c> or a <c>.runsettings</c> file: nothing
+    /// reads those any more.</description></item>
+    /// </list>
+    /// <para>
+    /// Mutation-checked when written: <c>dotnet test -p:TestProfile=bs-ui-roster</c> back in AGENTS.md;
+    /// <c>dotnet test --filter "Tag=cost"</c> in a doc; <c>--logger trx</c> on a documented command;
+    /// <c>dotnet run --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs</c>; and
+    /// <c>tests/test-profiles/</c> named in a skill — each goes red naming the file and line. Added later
+    /// and checked the same way: AGENTS.md's one-spec line with its project moved after the
+    /// <c>--filter</c> (<c>dotnet test --filter "DisplayName~my-spec-id" tests/BattleScribeSpec.Tests.csproj</c>,
+    /// which the SDK stops on), and <c>--ignore-exit-code 8</c> on a documented profiled command.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void DocumentedTestCommands_RunAsWritten()
+    {
+        var everyAssembly = CiTestInvocations.TestProjects.Select(static p => p.AssemblyName).ToList();
+        string[] refused = ["--settings", "--logger", "--collect", "--test-modules", "--zero-tests-policy"];
+        var problems = new List<string>();
+        var commands = 0;
+        foreach (var (path, text) in Documents())
+        {
+            var lines = text.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var where = $"{path}:{i + 1}";
+                if (lines[i].Contains("test-profiles/", StringComparison.Ordinal) || lines[i].Contains(".runsettings", StringComparison.OrdinalIgnoreCase))
+                {
+                    problems.Add($"  {where}: names tests/test-profiles/ or a .runsettings file, which nothing reads any more — a lane is a test profile");
+                }
+
+                foreach (var command in TestCommandsIn(lines[i]))
+                {
+                    commands++;
+                    var tokens = CiTestInvocations.Tokenize(command).Tokens;
+                    var dotnetTest = CiTestInvocations.RunsDotnet(command, "test");
+                    var spellings = CiProfileRuns.ProfileSpellings(command);
+                    if (dotnetTest && spellings.Any(static s => s.How != ProfileSpelling.MsBuildProperty))
+                    {
+                        problems.Add($"  {where}: `{command}` names a profile with --test-profile on dotnet test; write -p:TestProfile=<name>");
+                    }
+                    else if (!dotnetTest && spellings.Any(static s => s.How != ProfileSpelling.OptionAfterSeparator))
+                    {
+                        problems.Add($"  {where}: `{command}` names a profile without `-- --test-profile <name>`, the dotnet run spelling");
+                    }
+
+                    var vstest = tokens.Where(tok => refused.Any(o => tok == o || tok.StartsWith($"{o}=", StringComparison.Ordinal) || tok.StartsWith($"{o}:", StringComparison.Ordinal))
+                            || tok.StartsWith("--blame", StringComparison.Ordinal)
+                            || tok.Contains("RunSettingsFilePath", StringComparison.OrdinalIgnoreCase)
+                            || tok.Contains("TestCaseFilter", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (vstest.Count > 0)
+                    {
+                        problems.Add($"  {where}: `{command}` passes {string.Join(" ", vstest)}, which the test app refuses or which drops the profile");
+                    }
+
+                    if (spellings.Count > 0 && TestHost.OptionsRefusedWithAProfile(tokens) is { Count: > 0 } withProfile)
+                    {
+                        problems.Add($"  {where}: `{command}` passes {string.Join(" ", withProfile)} with a profile, which the test app refuses (exit 5)");
+                    }
+
+                    if (CiTestInvocations.PositionalTargets(command) is { Count: > 0 } positional)
+                    {
+                        problems.Add($"  {where}: `{command}` {PositionalTargetProblem(positional)}");
+                    }
+
+                    var invocation = CiTestInvocations.ClassifyCommand(command);
+                    if (dotnetTest && invocation.Projects.Count == 0)
+                    {
+                        var narrow = spellings
+                            .Select(static s => TestProfiles.Find(s.Name))
+                            .OfType<TestProfile>()
+                            .Where(p => everyAssembly.Any(a => !p.Assemblies.Contains(a, StringComparer.Ordinal)))
+                            .Select(static p => p.Name)
+                            .ToList();
+                        if (narrow.Count > 0)
+                        {
+                            problems.Add($"  {where}: `{command}` runs the whole solution under {string.Join(", ", narrow)}, which does not cover every "
+                                + $"test project; name it: dotnet test --project {TestProfiles.Projects[TestProfiles.Tests]} …");
+                        }
+                        else if (tokens.Any(static tok => tok == "--filter" || tok.StartsWith("--filter=", StringComparison.Ordinal) || tok.StartsWith("--filter:", StringComparison.Ordinal)))
+                        {
+                            problems.Add($"  {where}: `{command}` filters the whole solution: a test project the filter matches nothing in executes "
+                                + $"nothing and fails (exit 8); name the project: dotnet test --project {TestProfiles.Projects[TestProfiles.Tests]} …");
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(commands > 0, "Found no dotnet test or dotnet run command in the docs; the scan is reading nothing.");
+        Assert.True(problems.Count == 0,
+            "These documented test commands would not run as written:\n" + string.Join("\n", problems) + "\n\n"
+            + "The suites run on Microsoft.Testing.Platform, and their entry point resolves test profiles itself: "
+            + "`dotnet test --project <csproj> -p:TestProfile=<name>`, or `dotnet run --project <csproj> -- --test-profile <name>`, "
+            + "narrowed with --filter if need be; `--list-test-profiles` lists the profiles.");
+    }
+
+    /// <summary>What is wrong with naming a <c>dotnet test</c> target as a bare word (<see cref="CiTestInvocations.PositionalTargets"/>).</summary>
+    private static string PositionalTargetProblem(IReadOnlyList<string> positional) =>
+        $"names {string.Join(", ", positional)} as a bare word on `dotnet test`. The SDK takes a bare project, solution or directory "
+        + "only before any word it does not know (after one it stops: \"Specifying a project for 'dotnet test' should be via "
+        + "'--project'.\"), and runs a bare .dll or .exe as test modules, which drops the arguments MSBuild carries — the profile "
+        + "and the strict policy — so the test app refuses it. Write --project <csproj> (or --solution)";
+
+    /// <summary>
+    /// The test commands on one line of a document: each code span — or, outside one, the rest of the line,
+    /// up to a <c>#</c> comment — holding a <c>dotnet test</c>, or a <c>dotnet run</c> of a test project,
+    /// from the word <c>dotnet</c> on.
+    /// </summary>
+    internal static IEnumerable<string> TestCommandsIn(string line)
+    {
+        var spans = line.Contains('`', StringComparison.Ordinal)
+            ? line.Split('`').Where(static (_, i) => i % 2 == 1)
+            : [line];
+        foreach (var span in spans)
+        {
+            var start = Regex.Match(span, @"\bdotnet\s+(?:test|run)\b");
+            if (!start.Success)
+            {
+                continue;
+            }
+
+            // A code-block line may end in a shell comment; it is not part of the command.
+            var command = Regex.Replace(span[start.Index..], @"\s+#.*$", "").TrimEnd();
+            if (Regex.IsMatch(command, @"^dotnet\s+run\b") && CiTestInvocations.ClassifyCommand(command).Kind != CiStepKind.TestRun)
+            {
+                continue;
+            }
+
+            yield return command;
+        }
+    }
+
+    /// <summary>
+    /// The documents the reference and command lints read: AGENTS.md, README.md, <c>docs/**</c> (minus
+    /// <c>docs/superpowers/</c>, which keeps old plans as they were) and the skills under <c>.agents/skills/</c>.
+    /// </summary>
+    private static List<(string Path, string Text)> Documents()
+    {
+        var root = CiWorkflows.Root;
+        var superpowers = Path.Combine(root, "docs", "superpowers") + Path.DirectorySeparatorChar;
+        return [.. new[] { Path.Combine(root, "AGENTS.md"), Path.Combine(root, "README.md") }
+            .Concat(Directory.EnumerateFiles(Path.Combine(root, "docs"), "*.md", SearchOption.AllDirectories)
+                .Where(f => !f.StartsWith(superpowers, StringComparison.OrdinalIgnoreCase)))
+            .Concat(Directory.EnumerateFiles(Path.Combine(root, ".agents", "skills"), "*.md", SearchOption.AllDirectories))
+            .Order(StringComparer.Ordinal)
+            .Select(static f => (Path: CiWorkflows.Relative(f), Text: File.ReadAllText(f)))];
+    }
+
     // ── the helpers' own rules ──
 
     /// <summary>
@@ -603,7 +826,7 @@ public sealed class CiProfileLaneTests
                       - { name: roster, profile: bs-ui-roster }
                     os: [linux, windows]
                 steps:
-                  - run: pwsh scripts/dotnet-test-step.ps1 -TestProfile ${{ matrix.suite.profile }} tests/BattleScribeSpec.Tests.csproj
+                  - run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile ${{ matrix.suite.profile }}
               none:
                 steps:
                   - run: echo
@@ -621,7 +844,7 @@ public sealed class CiProfileLaneTests
         Assert.Equal("linux windows linux windows", string.Join(" ", legs.Select(static l => l["matrix.os"])));
 
         var step = workflow.Job("two-axes").Steps[0].Run!;
-        Assert.Contains("-TestProfile bs-ui-roster tests/", CiWorkflows.ExpandMatrix(step, legs[2]), StringComparison.Ordinal);
+        Assert.Contains("-- --test-profile bs-ui-roster", CiWorkflows.ExpandMatrix(step, legs[2]), StringComparison.Ordinal);
         Assert.Contains("${{ matrix.suite.profil }}", CiWorkflows.ExpandMatrix("${{ matrix.suite.profil }}", legs[2]), StringComparison.Ordinal);
 
         Assert.Empty(Assert.Single(workflow.Job("none").MatrixCombinations()));
@@ -629,27 +852,57 @@ public sealed class CiProfileLaneTests
     }
 
     /// <summary>
-    /// <b>A command line's profile, display wrapper and selection overrides are read in every spelling</b>
-    /// the step script, <c>dotnet test</c> and the test app accept; <c>xvfb-run</c>'s own options are not
-    /// the runner's.
+    /// <b>A command line's profile, display wrapper and overrides are read in every spelling</b>
+    /// <c>dotnet test</c> and the test app accept, with how the profile was spelled; <c>xvfb-run</c>'s own
+    /// options are not the runner's.
     /// </summary>
     [Theory]
-    [InlineData("pwsh scripts/dotnet-test-step.ps1 -TestProfile core tests/BattleScribeSpec.Tests.csproj --no-build", "core", false, "")]
-    [InlineData("pwsh scripts/dotnet-test-step.ps1 -testprofile:core tests/BattleScribeSpec.Tests.csproj", "core", false, "")]
-    [InlineData("xvfb-run -a -s \"-screen 0 1x1x24\" pwsh scripts/dotnet-test-step.ps1 -TestProfile bs-ui-roster x.csproj", "bs-ui-roster", true, "")]
-    [InlineData("dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=lint --filter \"Engine=X\"", "lint", false, "--filter")]
-    [InlineData("dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile=bs --filter-class X", "bs", false, "--filter-class")]
-    [InlineData("dotnet test x.csproj -s my.runsettings -- RunConfiguration.TestCaseFilter=A", "", false, "-s RunConfiguration.TestCaseFilter=A")]
-    [InlineData("dotnet test x.csproj /p:VSTestTestCaseFilter=A -p:TestProfile=core", "core", false, "-p:VSTestTestCaseFilter=A")]
-    [InlineData("pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-nr-ui x.csproj --filter:DisplayName~kitchen-sink --settings:a.runsettings -s:b -s=c --filter-class:X",
-        "smoke-nr-ui", false, "--filter:DisplayName~kitchen-sink --settings:a.runsettings -s:b -s=c --filter-class:X")]
-    [InlineData("dotnet test x.csproj -p:TestProfile=core --filter=A --settings=b -screenshots", "core", false, "--filter=A --settings=b")]
-    public void CiProfileRuns_ReadTheProfileAndOverridesOffTheLine(string command, string profiles, bool xvfb, string overrides)
+    [InlineData("dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile core", "core", "OptionAfterSeparator", false, "")]
+    [InlineData("dotnet run --project x.csproj -- --Test-Profile:core", "core", "OptionAfterSeparator", false, "")]
+    [InlineData("artifacts/bin/BattleScribeSpec.Tests/debug/BattleScribeSpec.Tests --test-profile=core", "core", "Option", false, "")]
+    [InlineData("dotnet run --project x.csproj --test-profile core --", "core", "Option", false, "")]
+    [InlineData("xvfb-run -a -s \"-screen 0 1x1x24\" dotnet run --project x.csproj --no-build -- --test-profile bs-ui-roster", "bs-ui-roster", "OptionAfterSeparator", true, "")]
+    [InlineData("dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=lint --filter \"Engine=X\"", "lint", "MsBuildProperty", false, "--filter")]
+    [InlineData("dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile=bs --filter-class X", "bs", "OptionAfterSeparator", false, "--filter-class")]
+    [InlineData("dotnet test x.csproj -s my.runsettings -- RunConfiguration.TestCaseFilter=A", "", "", false, "-s RunConfiguration.TestCaseFilter=A")]
+    [InlineData("dotnet test x.csproj /p:VSTestTestCaseFilter=A -p:TestProfile=core", "core", "MsBuildProperty", false, "-p:VSTestTestCaseFilter=A")]
+    [InlineData("dotnet run --project x.csproj -- --test-profile smoke-nr-ui --filter:DisplayName~kitchen-sink --settings:a.runsettings -s:b -s=c --filter-class:X",
+        "smoke-nr-ui", "OptionAfterSeparator", false, "--filter:DisplayName~kitchen-sink --settings:a.runsettings -s:b -s=c --filter-class:X")]
+    [InlineData("dotnet test x.csproj -p:TestProfile=core --filter=A --settings=b -screenshots", "core", "MsBuildProperty", false, "--filter=A --settings=b")]
+    [InlineData("dotnet test --project x.csproj -p:TestProfile=cli --zero-tests-policy none --logger trx --test-modules a.dll", "cli", "MsBuildProperty", false,
+        "--zero-tests-policy --logger --test-modules")]
+    [InlineData("dotnet run --project x.csproj -- --test-profile bs --ignore-exit-code 8 @more.rsp --xunit-config-filename x.json --Config-File:c.json", "bs", "OptionAfterSeparator", false,
+        "--ignore-exit-code @more.rsp --xunit-config-filename --Config-File:c.json")]
+    public void CiProfileRuns_ReadTheProfileAndOverridesOffTheLine(string command, string profiles, string spellings, bool xvfb, string overrides)
     {
         Assert.Equal(profiles, string.Join(",", CiProfileRuns.ProfilesNamedBy(command)));
+        Assert.Equal(spellings, string.Join(",", CiProfileRuns.ProfileSpellings(command).Select(static s => s.How)));
         Assert.Equal(xvfb, CiProfileRuns.RunsUnderXvfb(command));
-        Assert.Equal(overrides, string.Join(" ", CiProfileRuns.SelectionOverridesIn(command)));
+        Assert.Equal(overrides, string.Join(" ", CiProfileRuns.OverridesIn(command)));
     }
+
+    /// <summary>
+    /// <b>A <c>dotnet test</c> target given as a bare word is found wherever it sits</b> — first or after an
+    /// option, a project, solution, directory or built assembly — and the value of <c>--project</c>,
+    /// <c>--solution</c> or <c>--test-modules</c>, anything after <c>--</c>, and any other verb are not.
+    /// </summary>
+    [Theory]
+    [InlineData("dotnet test tests/BattleScribeSpec.Tests.csproj --filter \"DisplayName~x\"", "tests/BattleScribeSpec.Tests.csproj")]
+    [InlineData("dotnet test --filter \"DisplayName~x\" tests/BattleScribeSpec.Tests.csproj", "tests/BattleScribeSpec.Tests.csproj")]
+    [InlineData("dotnet test --no-build .\\tests\\BattleScribeSpec.Cli.Tests\\BattleScribeSpec.Cli.Tests.csproj", "tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj")]
+    [InlineData("dotnet test artifacts/bin/BattleScribeSpec.Tests/debug/BattleScribeSpec.Tests.dll", "artifacts/bin/BattleScribeSpec.Tests/debug/BattleScribeSpec.Tests.dll")]
+    [InlineData("dotnet test BattleScribeSpec.slnx -p:TestProfile=pre-push", "BattleScribeSpec.slnx")]
+    [InlineData("dotnet test tests -p:TestProfile=lint", "tests")]
+    [InlineData("dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter \"DisplayName~x\"", "")]
+    [InlineData("dotnet test --project=tests/BattleScribeSpec.Tests.csproj", "")]
+    [InlineData("dotnet test --solution BattleScribeSpec.slnx", "")]
+    [InlineData("dotnet test --test-modules artifacts/bin/BattleScribeSpec.Tests/debug/BattleScribeSpec.Tests.dll", "")]
+    [InlineData("dotnet test -p:TestProfile=pre-push", "")]
+    [InlineData("dotnet test --project tests/BattleScribeSpec.Tests.csproj -- tests/BattleScribeSpec.Tests.csproj", "")]
+    [InlineData("dotnet run --project tests/BattleScribeSpec.Tests.csproj -- --test-profile bs", "")]
+    [InlineData("dotnet build tests/BattleScribeSpec.Tests.csproj", "")]
+    public void PositionalTargets_AreFoundWhereverTheySit(string command, string expected) =>
+        Assert.Equal(expected, string.Join(",", CiTestInvocations.PositionalTargets(command)));
 
     /// <summary>
     /// <b>A <c>bs-spec</c> command's UI lanes are resolved the way the CLI resolves its engine</b>: the

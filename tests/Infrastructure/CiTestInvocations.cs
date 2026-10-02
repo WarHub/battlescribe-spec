@@ -21,12 +21,11 @@ public enum CiStepKind
 /// <param name="Kind">What it runs.</param>
 /// <param name="Projects">Repo-relative csproj paths of the test projects it names.</param>
 /// <param name="TargetsSolution">
-/// A test run of the whole solution — a solution file named on the line, or a <c>dotnet test</c> (or the
-/// wrapper) that names no target at all and starts at the checkout root, where the one thing for it to
-/// find is <c>BattleScribeSpec.slnx</c>. It covers every test project. Never set for a run whose target
-/// is merely unknown: an expression is not the solution.
+/// A test run of the whole solution — a solution file named on the line, or a <c>dotnet test</c> that
+/// names no target at all and starts at the checkout root, where the one thing for it to find is
+/// <c>BattleScribeSpec.slnx</c>. It covers every test project. Never set for a run whose target is
+/// merely unknown: an expression is not the solution.
 /// </param>
-/// <param name="ThroughTestStepScript">It runs through <see cref="CiTestInvocations.TestStepScript"/>.</param>
 /// <param name="FollowedScript">The repo script it calls that turned out to run tests, if that is how it was identified.</param>
 /// <param name="Unresolved">
 /// Why the classifier cannot tell which project this run executes — an expression where the project
@@ -38,11 +37,10 @@ internal sealed record CiInvocation(
     CiStepKind Kind,
     IReadOnlyList<string> Projects,
     bool TargetsSolution,
-    bool ThroughTestStepScript,
     string? FollowedScript,
     string? Unresolved = null)
 {
-    public static readonly CiInvocation None = new(CiStepKind.Other, [], false, false, null);
+    public static readonly CiInvocation None = new(CiStepKind.Other, [], false, null);
 }
 
 /// <summary>A project the classifier recognises by identity: csproj path, directory, assembly name.</summary>
@@ -79,22 +77,22 @@ internal sealed record CiProject(string RelativePath, string Directory, bool Dir
 /// A step is a <see cref="CiStepKind.TestRun"/> when its command line names one of this repo's test
 /// projects — the <c>.slnx</c> projects that reference xunit — by csproj path, by project directory, or
 /// by assembly (<c>BattleScribeSpec.Tests</c>, <c>.dll</c>, <c>.exe</c>), whatever the verb and whatever
-/// the flag order; when it runs <see cref="TestStepScript"/>, <c>dotnet test</c> or <c>--test-profile</c>;
-/// or when it calls a <c>scripts/</c> file whose own code does any of those. A step that runs
+/// the flag order; when it runs <c>dotnet test</c> or <c>--test-profile</c>; or when it calls a
+/// <c>scripts/</c> file whose own code does any of those. A step that runs
 /// <c>bs-spec</c> (the <c>src/BattleScribeSpec.Cli</c> project, or its <c>bs-spec</c> assembly) is a
 /// <see cref="CiStepKind.CliRun"/>: a verdict step, but not a test project.
 /// </para>
 /// <para>
 /// <b>Paths are read where the step runs.</b> A relative token resolves against the step's
 /// <c>working-directory</c> (else the job's, else the workflow's <c>defaults.run</c>), and a
-/// <c>dotnet test</c>/<c>dotnet run</c>/wrapper that names no target runs whatever project that
+/// <c>dotnet test</c> or <c>dotnet run</c> that names no target runs whatever project that
 /// directory holds — the checkout root holds only the solution. <c>working-directory: tests</c> with
 /// <c>dotnet run --no-build -- --test-profile bs</c> is a run of <c>tests/BattleScribeSpec.Tests.csproj</c>,
 /// not an unclassified step that every lint here skips.
 /// </para>
 /// <para>
 /// <b>An expression is not a project.</b> <c>${{ … }}</c> is opaque, so a run whose project is one
-/// (<c>--project ${{ matrix.project }}</c>, the wrapper given <c>${{ env.X }}</c>, <c>dotnet ${{ … }}</c>),
+/// (<c>--project ${{ matrix.project }}</c>, <c>dotnet test ${{ env.X }}</c>, <c>dotnet ${{ … }}</c>),
 /// or which names no target literally while an expression sits on its line, is
 /// <see cref="CiInvocation.Unresolved"/>: still a test run for every lint that bounds a step, never the
 /// whole solution for the coverage lint, and a failure of its own. The alternative — counting it as a
@@ -118,6 +116,12 @@ internal sealed record CiProject(string RelativePath, string Directory, bool Dir
 /// than a quiet one.
 /// </para>
 /// <para>
+/// <b>A shell's quoted command string is read, and refused.</b> <c>pwsh -c "dotnet run … --filter x"</c>
+/// tokenises as one word, so the run inside it used to be no test step at all — invisible to every rule
+/// about profiles, filters and swallowed exit codes. The string is now classified as a command of its
+/// own, and a verdict run inside it is <see cref="CiInvocation.Unresolved"/>: run the command directly.
+/// </para>
+/// <para>
 /// Tokenising is quote-aware (<c>--filter "(A|B)&amp;C"</c> holds no shell operator) and treats
 /// <c>${{ … }}</c> as one opaque token. A step's <c>run</c> is split into commands on newlines after
 /// joining backslash continuations (and backtick continuations under <c>pwsh</c>); comment lines are
@@ -126,9 +130,6 @@ internal sealed record CiProject(string RelativePath, string Directory, bool Dir
 /// </remarks>
 internal static class CiTestInvocations
 {
-    /// <summary>The wrapper every CI test step runs through; it fails a step that executed no test.</summary>
-    internal const string TestStepScript = "scripts/dotnet-test-step.ps1";
-
     /// <summary>The CLI's assembly name; its project is found in the <c>.slnx</c> by it.</summary>
     internal const string CliAssemblyName = "bs-spec";
 
@@ -213,15 +214,28 @@ internal static class CiTestInvocations
         // `raw` keeps word order for verbs; `paths` is every way a token can name a file, resolved
         // against the working directory.
         var raw = Tokenize(command).Tokens.Select(Normalise).ToList();
+
+        // A shell handed the command as one string (`pwsh -c "dotnet run …"`): read as a command line of
+        // its own, and a verdict run inside it is unresolved — to every rule that reads a step's profile,
+        // arguments and exit-code handling, the whole run is one opaque token.
+        if (depth < 3 && ShellCommandString(Tokenize(command).Tokens) is { } wrapped)
+        {
+            var inner = ClassifyCommand(wrapped.Command, scriptRoot, wd, depth + 1, visited);
+            if (inner.Kind != CiStepKind.Other)
+            {
+                return new CiInvocation(inner.Kind, [], false, inner.FollowedScript,
+                    $"it runs `{wrapped.Command}` inside `{wrapped.Shell}`, as one quoted string: the workflow lints cannot read the "
+                    + "project, profile, arguments or exit-code handling of a run in there. Run the command directly");
+            }
+        }
         var paths = raw.SelectMany(Spellings).Select(t => Locate(t, wd)).Distinct(StringComparer.Ordinal).ToList();
         var pairs = raw.Zip(raw.Skip(1)).ToList();
 
         var dotnetTest = pairs.Any(static p => IsDotnet(p.First) && p.Second == "test");
         var dotnetRun = pairs.Any(static p => IsDotnet(p.First) && p.Second == "run");
-        var throughScript = paths.Any(static t => t == TestStepScript || t.EndsWith($"/{TestStepScript}", StringComparison.Ordinal));
         var profile = raw.Any(static t => t == "--test-profile" || t.StartsWith("--test-profile=", StringComparison.Ordinal));
-        var runsAProject = dotnetTest || dotnetRun || throughScript;
-        var testish = dotnetTest || throughScript || profile;
+        var runsAProject = dotnetTest || dotnetRun;
+        var testish = dotnetTest || profile;
 
         var hasExpression = raw.Any(static t => t.Contains(Expression, StringComparison.Ordinal));
         var expressionTarget =
@@ -242,7 +256,7 @@ internal static class CiTestInvocations
         var projects = TestProjects.Where(p => paths.Any(p.IsNamedBy)).Select(static p => p.RelativePath).ToList();
         if (projects.Count > 0)
         {
-            return new CiInvocation(CiStepKind.TestRun, projects, TargetsSolution: false, throughScript, FollowedScript: null);
+            return new CiInvocation(CiStepKind.TestRun, projects, TargetsSolution: false, FollowedScript: null);
         }
 
         var unresolved =
@@ -257,8 +271,8 @@ internal static class CiTestInvocations
         {
             var solution = unresolved is null
                 && (paths.Any(static t => t.EndsWith(".slnx", StringComparison.Ordinal) || t.EndsWith(".sln", StringComparison.Ordinal))
-                    || ((dotnetTest || throughScript) && !namesTarget && wd.Length == 0));
-            return new CiInvocation(CiStepKind.TestRun, [], solution, throughScript, FollowedScript: null, unresolved);
+                    || (dotnetTest && !namesTarget && wd.Length == 0));
+            return new CiInvocation(CiStepKind.TestRun, [], solution, FollowedScript: null, unresolved);
         }
 
         // A repo script this command calls (not a glob: the shell expands those into the files themselves).
@@ -296,12 +310,92 @@ internal static class CiTestInvocations
                 CiStepKind.TestRun,
                 [.. tests.SelectMany(static t => t.Projects).Distinct(StringComparer.Ordinal)],
                 tests.Any(static t => t.TargetsSolution),
-                tests.All(static t => t.ThroughTestStepScript),
                 tests.Select(static t => t.FollowedScript).FirstOrDefault(static s => s is not null),
                 tests.Select(static t => t.Unresolved).FirstOrDefault(static u => u is not null));
         }
 
-        return list.Any(static p => p.Kind == CiStepKind.CliRun) ? CiInvocation.None with { Kind = CiStepKind.CliRun } : CiInvocation.None;
+        var cli = list.Where(static p => p.Kind == CiStepKind.CliRun).ToList();
+        return cli.Count > 0
+            ? CiInvocation.None with { Kind = CiStepKind.CliRun, Unresolved = cli.Select(static c => c.Unresolved).FirstOrDefault(static u => u is not null) }
+            : CiInvocation.None;
+    }
+
+    /// <summary>
+    /// The command a shell is handed as one string — <c>pwsh -c "…"</c> (or <c>-Command</c>,
+    /// <c>-CommandWithArgs</c>), <c>bash -c '…'</c> (or <c>-lc</c>, <c>-ec</c>: any flag cluster holding
+    /// <c>c</c>), <c>cmd /c …</c> — with the shell's spelling; null when the line hands no shell a string.
+    /// </summary>
+    internal static (string Shell, string Command)? ShellCommandString(IReadOnlyList<string> tokens)
+    {
+        for (var i = 0; i < tokens.Count - 1; i++)
+        {
+            var leaf = Normalise(tokens[i]);
+            leaf = leaf[(leaf.LastIndexOf('/') + 1)..].ToLowerInvariant();
+            leaf = leaf.EndsWith(".exe", StringComparison.Ordinal) ? leaf[..^4] : leaf;
+            Func<string, bool>? isCommandFlag = leaf switch
+            {
+                "pwsh" or "powershell" => static f => f.ToLowerInvariant() is "-c" or "-command" or "-cwa" or "-commandwithargs"
+                    || (f.Length >= 4 && "-command".StartsWith(f, StringComparison.OrdinalIgnoreCase)),
+                "bash" or "sh" or "zsh" or "dash" or "ksh" => static f => Regex.IsMatch(f, "^-[a-zA-Z]*c[a-zA-Z]*$"),
+                "cmd" => static f => f.ToLowerInvariant() is "/c" or "/k",
+                _ => null,
+            };
+            if (isCommandFlag is null)
+            {
+                continue;
+            }
+
+            for (var j = i + 1; j < tokens.Count - 1; j++)
+            {
+                if (isCommandFlag(tokens[j]))
+                {
+                    return (tokens[i], leaf == "cmd" ? string.Join(' ', tokens.Skip(j + 1)) : tokens[j + 1]);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The targets a <c>dotnet test</c> command names without an option — a project, solution, directory,
+    /// <c>.dll</c> or <c>.exe</c> in a word of its own rather than as the value of <c>--project</c>,
+    /// <c>--solution</c>, <c>--directory</c> or <c>--test-modules</c>. Empty for any other command.
+    /// </summary>
+    /// <remarks>
+    /// The SDK's platform mode takes a positional project, solution or directory only as the first word
+    /// it does not recognise as one of its own options (anywhere else: <c>Specifying a project for
+    /// 'dotnet test' should be via '--project'.</c>), and a positional <c>.dll</c> or <c>.exe</c> as test
+    /// modules — which evaluates no project, so the arguments MSBuild carries never arrive and the host
+    /// refuses the run (<c>MSBuildUtility.GetPositionalArguments</c>, SDK 10.0.4xx). Which of the words
+    /// before it the SDK recognises is its business, so the lints ask for the option every time.
+    /// </remarks>
+    internal static IReadOnlyList<string> PositionalTargets(string command, string? root = null)
+    {
+        var tokens = Tokenize(command).Tokens.Select(Normalise).ToList();
+        var start = Enumerable.Range(0, Math.Max(tokens.Count - 1, 0)).FirstOrDefault(i => IsDotnet(tokens[i]) && tokens[i + 1] == "test", -1);
+        if (start < 0)
+        {
+            return [];
+        }
+
+        string[] targetOptions = ["--project", "--solution", "--directory", "--test-modules"];
+        var found = new List<string>();
+        for (var i = start + 2; i < tokens.Count && tokens[i] != "--"; i++)
+        {
+            var token = tokens[i];
+            if (token.StartsWith('-') || targetOptions.Contains(tokens[i - 1], StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (IsProjectOrSolutionFile(token) || IsProjectDirectory(root ?? CiWorkflows.Root, token))
+            {
+                found.Add(token);
+            }
+        }
+
+        return found;
     }
 
     /// <summary>Whether <paramref name="command"/> runs <c>dotnet &lt;verb&gt;</c>, by any spelling of <c>dotnet</c>.</summary>

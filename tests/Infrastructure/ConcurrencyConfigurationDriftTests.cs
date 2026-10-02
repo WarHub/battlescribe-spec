@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using BattleScribeSpec.Engines;
 using BattleScribeSpec.Tests.Profiles;
 
@@ -170,19 +169,19 @@ public sealed class ConcurrencyConfigurationDriftTests
     ///   <item><c>parallelizeTestCollections</c> is the obsolete spelling of <c>parallelMode</c>. xunit 4
     ///   still reads it and will stop in its next major version, at which point a file that relies on
     ///   it changes behaviour on a package bump.</item>
-    ///   <item>Under VSTest a runsettings file's <c>xUnit</c> section (and
-    ///   <c>RunConfiguration/DisableParallelization</c>) overrides the JSON for whoever passes that
-    ///   profile — one lane would schedule differently from the others, and nothing would show it. The
-    ///   same elements passed inline (<c>dotnet test -- xUnit.MaxParallelThreads=…</c>, which
-    ///   <c>ConcurrencyPolicy</c>'s remarks record as honoured here) do it for one invocation.</item>
+    ///   <item>xunit's own command-line options — <c>--max-threads</c>, <c>--parallel</c>,
+    ///   <c>--parallel-algorithm</c> — override the JSON for one invocation: written into a CI step,
+    ///   a script, or the profile registry and host (which build the command line a lane runs with),
+    ///   one lane would schedule differently from the others, and nothing would show it. (Under
+    ///   VSTest the same hole was a runsettings file's <c>xUnit</c> section; there are no runsettings
+    ///   files now, and <c>TestHostWiringTests.NoImplicitTestInputs</c> keeps it that way.)</item>
     ///   <item>An assembly-level <c>CollectionBehavior</c> or <c>Parallelization</c> attribute is a
     ///   third source, in code.</item>
     /// </list>
     /// <para>
     /// Mutation-checked when written: <c>"parallelMode": "off"</c>, the obsolete key added back next
-    /// to the new one, a <c>&lt;MaxParallelThreads&gt;</c> in a runsettings file,
-    /// <c>xUnit.MaxParallelThreads=2</c> passed inline by the test step script, and an assembly
-    /// attribute in a test file — <c>[assembly: Xunit.v3.Parallelization(...)]</c>,
+    /// to the new one, <c>--max-threads 2</c> on a CI test step, <c>--parallel none</c> in the profile
+    /// host, and an assembly attribute in a test file — <c>[assembly: Xunit.v3.Parallelization(...)]</c>,
     /// <c>[assembly: CollectionBehavior(...)]</c>, <c>global::…ParallelizationAttribute</c>, one placed
     /// second in its attribute list, and one applied through a <c>using</c> alias (which only the
     /// reflection check sees) — each turn this red.
@@ -220,31 +219,18 @@ public sealed class ConcurrencyConfigurationDriftTests
             }
         }
 
-        string[] runsettingsParallelism =
-            ["MaxParallelThreads", "ParallelizeTestCollections", "ParallelMode", "ParallelAlgorithm", "DisableParallelization"];
-        var runsettings = Directory.GetFiles(Path.Combine(RepoRoot, "tests", "test-profiles"), "*.runsettings");
-        Assert.NotEmpty(runsettings);
-        foreach (var file in runsettings)
+        // xunit's command-line parallelism options override the JSON for the invocation that passes them:
+        // in anything that invokes the tests, and in the registry and host, which build a lane's command line.
+        var option = new Regex(@"(?<![\w-])--(?:max-threads|parallel-algorithm|parallel)\b", RegexOptions.IgnoreCase);
+        var registry = Directory.EnumerateFiles(Path.Combine(RepoRoot, "tests", "TestProfiles"), "*.cs").ToList();
+        Assert.NotEmpty(registry);
+        foreach (var file in TestInvocationFiles(RepoRoot).Concat(registry))
         {
-            foreach (var element in XDocument.Load(file).Descendants().Where(e => runsettingsParallelism.Contains(e.Name.LocalName)))
+            if (option.Match(File.ReadAllText(file)) is { Success: true } match)
             {
                 violations.Add(
-                    $"  {Path.GetRelativePath(RepoRoot, file)}: <{element.Name.LocalName}> — overrides xunit.runner.json " +
-                    "for this profile only");
-            }
-        }
-
-        // The same elements passed inline — `dotnet test -- xUnit.MaxParallelThreads=2`, or
-        // RunConfiguration.DisableParallelization=true — override the JSON for that one invocation.
-        var inline = new Regex(
-            $@"\b(?:xUnit|RunConfiguration)\.(?:{string.Join("|", runsettingsParallelism)})\s*=", RegexOptions.IgnoreCase);
-        foreach (var file in TestInvocationFiles(RepoRoot))
-        {
-            if (inline.Match(File.ReadAllText(file)) is { Success: true } match)
-            {
-                violations.Add(
-                    $"  {Path.GetRelativePath(RepoRoot, file)}: passes {match.Value.TrimEnd('=', ' ')} inline — overrides " +
-                    "xunit.runner.json for that invocation only");
+                    $"  {Path.GetRelativePath(RepoRoot, file)}: passes {match.Value} — overrides xunit.runner.json for that " +
+                    "invocation only");
             }
         }
 
@@ -589,87 +575,6 @@ public sealed class ConcurrencyConfigurationDriftTests
             "author's machine and has never once been executed by CI. That is how tests/BattleScribeSpec.Cli.Tests " +
             "came to hold every gate on the CLI's third-party load limit while CI ran none of them. Add a " +
             "step, or delete the project.");
-    }
-
-    /// <summary>
-    /// The wrapper every CI test step must go through. It fails the step when the step EXECUTED no
-    /// tests — see its own header for the two ways that happens and why neither is detectable from
-    /// a `dotnet test` exit code.
-    /// </summary>
-    private const string TestStepScript = CiTestInvocations.TestStepScript;
-
-    /// <summary>
-    /// <b>A CI test step that EXECUTED NO TESTS must fail, not pass.</b> Every test step in
-    /// <c>.github/workflows</c> must run through <see cref="TestStepScript"/>; bare <c>dotnet test</c>
-    /// is forbidden there.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The invariant is <b>passed + failed ≥ 1</b>, not "the filter matched something" — because the
-    /// two real defects this replaces failed in different ways and only one of them was empty:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>
-    /// <c>Engine=FrozenNrUiRoster&amp;DisplayName~kitchen-sink</c> matched <b>zero</b> tests. That
-    /// class is a single <c>[Fact] AllSpecs()</c>, so no test's display name carries a spec id and a
-    /// DisplayName clause can never match. VSTest printed "No test matches the given testcase
-    /// filter", exited 0, green.
-    /// </description></item>
-    /// <item><description>
-    /// <c>Engine=FrozenNrRoster&amp;DisplayName~kitchen-sink</c> matched <b>exactly one</b> — the
-    /// <c>Mode=Sequential</c> variant of the class, gated behind <c>NR_SEQUENTIAL</c>, which
-    /// self-skips in CI. Measured: <c>Skipped! - Failed: 0, Passed: 0, Skipped: 1, Total: 1</c>,
-    /// exit 0, green. <b>A non-empty-selection check does not catch this one</b>, which is why the
-    /// guard counts executions rather than matches; it is also the more insidious of the two,
-    /// because a non-zero test count looks like a real run.
-    /// </description></item>
-    /// </list>
-    /// <para>
-    /// Between them, both frozen NR roster suites had zero per-PR coverage — which is how a HAR bump
-    /// merged green and then broke two suites the smoke job claimed to guard.
-    /// </para>
-    /// <para>
-    /// The guard is a per-invocation wrapper rather than a runsettings setting <b>on purpose</b>: a
-    /// runsettings would also bind <c>dotnet test -p:TestProfile=&lt;x&gt;</c> run against the
-    /// <em>solution</em> — the form AGENTS.md documents — where the profile's engine filter genuinely
-    /// matches nothing in <c>BattleScribeSpec.Cli.Tests</c> (measured: <c>-p:TestProfile=lint</c> at
-    /// solution level would start failing). The gate belongs where a silent zero is a lie (CI), not
-    /// where it is expected (a developer's solution-wide profile run).
-    /// </para>
-    /// <para>
-    /// <b>Falsifiable:</b> change any step back to a bare <c>dotnet test</c> (or add a new one) and
-    /// this goes red naming the step — and so does any other way of running a test project: the test
-    /// exe or dll by path, <c>dotnet run --project tests/…</c>, reordered flags, or a repo script that
-    /// does any of those. Steps are found by <see cref="CiTestInvocations"/>, which identifies a test
-    /// run by the project it runs (verified by mutation: a reordered bare <c>dotnet test</c> line and a
-    /// <c>dotnet artifacts/bin/BattleScribeSpec.Tests/…/BattleScribeSpec.Tests.dll</c> line each went
-    /// red). The YAML comments above those steps — which necessarily say "dotnet test" — are not steps.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public void EveryCiTestStep_ExecutesAtLeastOneTest()
-    {
-        var testSteps = CiTestInvocations.ClassifiedSteps()
-            .Where(static c => c.Invocation.Kind == CiStepKind.TestRun)
-            .ToArray();
-
-        Assert.NotEmpty(testSteps);
-
-        var unguarded = testSteps
-            .Where(static c => !c.Invocation.ThroughTestStepScript)
-            .Select(static c => c.Step)
-            .ToArray();
-
-        Assert.True(
-            unguarded.Length == 0,
-            $"These CI steps run a test project without going through {TestStepScript}:\n" +
-            string.Join("\n", unguarded.Select(static s => $"  {s.Where}: {s.Run!.Trim()}")) + "\n\n" +
-            "A bare `dotnet test` step exits 0 when its filter selected NOTHING, and exits 0 when the " +
-            "only test it selected SKIPPED — both indistinguishable from a step whose tests ran and " +
-            "passed. That is how `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` (0 matched) and " +
-            "`Engine=FrozenNrRoster&DisplayName~kitchen-sink` (1 matched, self-skipping) gated every " +
-            $"PR while executing zero tests between them. Route the step through {TestStepScript}, " +
-            "which reads the TRX counters and fails when passed + failed == 0.");
     }
 
     /// <summary>

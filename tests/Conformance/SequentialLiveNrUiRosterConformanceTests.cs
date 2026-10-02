@@ -6,7 +6,7 @@ namespace BattleScribeSpec.Tests;
 /// Per-spec Theory version of live NR UI conformance tests.
 /// Each spec is an individual test case, enabling filtering via DisplayName~.
 /// Gated by NR_ENGINE_URL env var.
-/// Usage: dotnet test --filter "Engine=LiveNrUiRoster&amp;DisplayName~kitchen-sink"
+/// Usage: dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrUiRoster&amp;DisplayName~kitchen-sink"
 /// </summary>
 [Collection("LiveNrUiRoster")]
 [Trait("Category", "Conformance")]

@@ -14,6 +14,11 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Microsoft.Testing.Platform, which runs the test suites, sends usage telemetry by default. Every job
+# here opts out; a developer opts out the same way (or with DOTNET_CLI_TELEMETRY_OPTOUT=1).
+env:
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
+
 jobs:
   # ── Decide whether this run owes the thorough suites and the live NR lane. ──
   # (env context is not available in job-level `if:`, so we expose boolean outputs.)
@@ -130,33 +135,38 @@ jobs:
       # shows each file's suites (har-diff, thorough-inputs, ci-gate).
       - name: Run script tests
         run: node --test scripts/*.test.mjs
-      # EVERY TEST STEP IN THIS FILE GOES THROUGH scripts/dotnet-test-step.ps1, WHICH FAILS THE STEP
-      # WHEN IT EXECUTED NO TESTS (passed + failed == 0, read from the TRX counters — not scraped from
-      # console text). Bare `dotnet test` is forbidden here, and
-      # ConcurrencyConfigurationDriftTests.EveryCiTestStep_ExecutesAtLeastOneTest (a Lint test, run by
-      # the very step below) keeps it that way — reintroduce one and the build goes red.
-      #
-      # The invariant is "this step RAN a test", not "the filter matched something", because both
-      # frozen NR roster lanes failed in different ways and only one of them was empty:
+      # EVERY TEST STEP IN THIS FILE RUNS ONE TEST PROFILE, THROUGH THE TEST APP ITSELF:
+      #   dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile <name>
+      # The app's entry point (tests/TestProfiles/TestHost.cs) resolves the profile from the registry
+      # (tests/TestProfiles/TestProfiles.cs) — its filter, every environment switch the lane depends on,
+      # the assemblies it covers — and runs it under the strict zero-tests policy: a step that EXECUTED NO
+      # TEST fails with exit 8, and a step whose every selected test skipped is one that executed none.
+      # Both silent greens this file has had were exactly that:
       #   * `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` matched 0 tests — that class is a single
       #     [Fact] AllSpecs(), so no display name carries a spec id and the clause can never match.
       #   * `Engine=FrozenNrRoster&DisplayName~kitchen-sink` matched exactly 1 — the Mode=Sequential
       #     variant, gated behind NR_SEQUENTIAL, which self-skips. Total: 1, Passed: 0, exit 0.
-      # Both were green on every PR. The second is the more insidious one and a non-empty-selection
-      # check (RunConfiguration.TreatNoTestsAsError, which the script also passes) does not catch it.
+      # `dotnet run` rather than `dotnet test` because `dotnet test` withholds the app's output on success:
+      # this way the log shows every test as it finishes (the host adds --output Detailed in Actions, and
+      # live output for the single-[Fact] aggregate lanes), and the GitHub reporter annotates failures and
+      # writes a failures-only step summary. The CLI's own tests are the one `dotnet test` step, so CI
+      # still exercises that path too: server mode, -p:TestProfile and --zero-tests-policy strict carried
+      # by MSBuild (tests/Directory.Build.props), and the host's refusal when they do not arrive.
       #
-      # The guard is per invocation rather than a runsettings setting because a runsettings would also
-      # bind `dotnet test -p:TestProfile=<x>` run against the SOLUTION — the form AGENTS.md documents —
-      # where an engine filter legitimately matches nothing in BattleScribeSpec.Cli.Tests.
+      # WHAT A RED STEP'S EXIT CODE SAYS (https://aka.ms/testingplatform/exitcodes): 2 a test failed;
+      # 5 the command line was refused — the host prints why (an unknown profile, a lane-defining switch
+      # the profile does not allow, a VSTest option, …); 8 nothing executed — the profile's lane skipped
+      # whole, or selected nothing; 3 the session was aborted; 7 the test host process died. Any other
+      # value is the process itself failing (an unhandled exception, a signal) before the platform could
+      # report one.
       #
-      # AND EVERY STEP THAT RUNS tests/BattleScribeSpec.Tests.csproj RUNS A PROFILE, AND ONLY THAT:
-      # `-TestProfile <name>`, no --filter, and no env: entry that changes what the lane runs. The lane
-      # is defined once, in tests/TestProfiles/TestProfiles.cs — its filter and every switch it depends
-      # on (NR_FROZEN_SMOKE, NR_UI_SMOKE, NR_UI_ROSTER_FULL used to be set here, so a profile of the same
-      # name ran something else on a laptop) — and `dotnet test -p:TestProfile=<name>` runs exactly what
-      # this file runs. CiProfileLaneTests holds that: a Tests-project step names one registry profile
-      # and adds no filter (on VSTest a command-line filter REPLACES the profile's), and no lane-defining
-      # or profile-owned switch appears anywhere under .github/.
+      # CiProfileLaneTests.EveryCiTestRun_NamesAProfile holds every test step to that: one registry
+      # profile that covers the project the step runs; `--test-profile` after `--` on a `dotnet run`
+      # line, `-p:TestProfile=` on the `dotnet test` one; and no --filter, --zero-tests-policy,
+      # --settings, --logger or --test-modules, because each would make the step run something other
+      # than the lane its profile names, under that name. No env: entry that changes what a lane runs
+      # either (CiProfileLaneTests.LaneDefiningKnobs_AppearNowhereInGithub): a profile is the whole lane,
+      # so the same command on a laptop runs what this file runs.
       #
       # AND EVERY TEST STEP CARRIES THE SAME TWO KEYS — CiWorkflowDriftTests checks both, in every job:
       #   * `if: !cancelled() && steps.build.outcome == 'success'` — test steps are independent of each
@@ -176,7 +186,7 @@ jobs:
       - name: Unit / protocol / lint (offline)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile non-conformance tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile non-conformance
       # THE CLI'S OWN TESTS. There are two test projects in this repo and, until now, CI ran ONE of
       # them: every `dotnet test` step here targeted tests/BattleScribeSpec.Tests.csproj, and nothing
       # ran tests/BattleScribeSpec.Cli.Tests — not even a solution-wide sweep. So every gate on the
@@ -191,11 +201,11 @@ jobs:
       - name: CLI (engine selection / load target / protocol surface)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet test --project tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build -p:TestProfile=cli --output Detailed
       - name: BattleScribe reference engine — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-bs tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-bs
       # No --policy here, deliberately: this engine is a LAUNCHABLE (dotnet:) adapter, and a plan
       # cannot be conveyed to one — there is no channel for it, so the CLI errors rather than
       # silently dropping the flag (#305). This step used to pass `--workers 2`; the flag's
@@ -232,8 +242,9 @@ jobs:
             --expected-failures battlescribe \
             --output github-actions
       # The trace summary (wall time, cold-starts vs reuses, peak live resources) for the steps
-      # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI/dotnet-test telemetry
-      # code itself (TraceSummary.AppendToGitHubStepSummary) — no extra script needed here.
+      # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI's and the test app's own
+      # telemetry code (TraceSummary.AppendToGitHubStepSummary), one section per lane, headed by the
+      # profile's name — no extra script needed here.
       - name: Upload telemetry
         if: always()
         uses: actions/upload-artifact@v7
@@ -318,15 +329,15 @@ jobs:
       - name: NR frozen roster — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-nr-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-nr-frozen
       - name: NR UI roster — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-nr-ui tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-nr-ui
       - name: NR Editor GameData — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-nr-editor tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-nr-editor
       # NR_GAMEDATA_UI_DIAGNOSTICS: this driver writes its screenshot, DOM and editor state only when
       # it is set — without it the upload below collects nothing for this lane. It costs nothing on a
       # passing run: the capture runs in the driver's catch block. It stays a CI setting rather than the
@@ -335,7 +346,7 @@ jobs:
       - name: NR Editor GameData UI — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-nr-editor-ui tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-nr-editor-ui
         env:
           NR_GAMEDATA_UI_DIAGNOSTICS: 1
       # Warm start (the JVM survives between specs) is ConcurrencyPolicy's decision now, taken from
@@ -344,7 +355,7 @@ jobs:
       - name: BS GameData UI — kitchen-sink (engine + Java agent + app)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 -TestProfile smoke-bs-gamedata-ui tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal"
+        run: xvfb-run -a dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-bs-gamedata-ui
       - name: BS UI roster driver — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
@@ -431,21 +442,21 @@ jobs:
       - name: Full offline suite (core)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 7
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile core tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile core
       - name: Full frozen NR roster
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-frozen
       - name: Full frozen NR Editor GameData
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-frozen
       # NR_GAMEDATA_UI_DIAGNOSTICS: without it this driver writes no diagnostics, and the upload below
       # had been collecting nothing for this lane (same switch, and same reason it is CI's, as smoke's step).
       - name: Full frozen NR Editor GameData UI (parallelized)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-editor-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-ui-frozen
         env:
           NR_GAMEDATA_UI_DIAGNOSTICS: 1
       # The NR UI drivers write a screenshot, DOM snapshot, Pinia dump and console log for every
@@ -525,7 +536,7 @@ jobs:
       - name: Full frozen NR UI roster
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 60
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-ui-frozen tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-ui-frozen
       # The NR UI roster driver writes a screenshot, DOM snapshot, Pinia dump and console log for every
       # failed action; without this upload the log's `Timeout 20000ms exceeded.` is the whole record.
       # `nr-ui-diagnostics*` matches the per-worker suffixes the driver appends.
@@ -609,7 +620,7 @@ jobs:
       - name: BS ${{ matrix.suite.name }} UI (warm start)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 21
-        run: xvfb-run -a pwsh scripts/dotnet-test-step.ps1 -TestProfile ${{ matrix.suite.profile }} tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: xvfb-run -a dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile ${{ matrix.suite.profile }}
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -658,10 +669,10 @@ jobs:
         run: dotnet build -p:FunctionalBuild=true
       - name: Run NR smoke tests
         timeout-minutes: 5
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-live-smoke tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-live-smoke
       - name: Run NR conformance tests
         timeout-minutes: 12
-        run: pwsh scripts/dotnet-test-step.ps1 -TestProfile nr-live-conformance tests/BattleScribeSpec.Tests.csproj --no-build --logger "console;verbosity=minimal" --logger "GitHubActions;summary-include-passed=false"
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-live-conformance
       # --engine-endpoint local: same declaration as the `checks` job's reference-adapter step — this
       # adapter's service is this machine. Without it the endpoint is undeclared and the fail-safe holds
       # the run to the third-party live load limit. See that step for why it is declared and not inferred.
