@@ -87,9 +87,13 @@ internal static class TestProfiles
             + "test assemblies. Its exclusions are not written here: the filter is derived from EngineLane.InPrePush, "
             + "so every engine lane carries a recorded decision and its measured cost, and a lane that needs the "
             + "desktop app or a third party's site cannot be put in (TestProfileRegistryTests.PrePushHonoursItsPromise). "
-            + "Mode=Sequential classes are out too: manual-only, gated behind NR_SEQUENTIAL. A lane with no decision "
-            + "used to RUN here by silence, which is how BsRosterUi came to spend 688.8s of a 689.2s run driving a "
-            + "desktop app in a profile documented as offline and fast (#405).",
+            + "Mode=Sequential classes are out too: manual-only, gated behind NR_SEQUENTIAL. So is Category=SelectionAudit, "
+            + "which starts the test app once per profile to list what each selects (about 30s; CI's checks job runs it). "
+            + "A lane with no decision used to RUN here by silence, which is how BsRosterUi came to spend 688.8s of a "
+            + "689.2s run driving a desktop app in a profile documented as offline and fast (#405). Every lane it claims "
+            + "must execute: on a machine where setup.ps1 has not fetched a lane's snapshot (the HAR, the NR Editor "
+            + "snapshot), the run fails with exit 8, naming the lane and the fix; without the Playwright browsers the "
+            + "browser tests fail outright (exit 2), and the lanes that went empty are named all the same.",
             Selection.PrePush(), assemblies: [Tests, Cli]),
         Profile("core",
             "The full offline suite CI's thorough-conformance job runs: everything except the NR and NR UI engines "
@@ -101,9 +105,11 @@ internal static class TestProfiles
             + "tests skips. Kept that way on purpose: the local half is what has caught this suite's cross-spec reuse "
             + "defects, each invisible to CI at the time. To sit out the app for one run, set BS_UI_SKIP=true — the "
             + "one lane-defining switch this profile lets a caller set, because BsRosterUi may skip here — or narrow "
-            + "the run with --filter \"Engine!=BsRosterUi\", which the test app ANDs onto this profile's filter.",
+            + "the run with --filter \"Engine!=BsRosterUi\", which the test app ANDs onto this profile's filter. "
+            + "Category=SelectionAudit is left out as well: it starts the test app once per profile (most of a minute "
+            + "on a four-core runner), and CI's checks job, which runs on every push thorough-conformance runs on, already runs it.",
             Selection.AllExcept("FrozenNrRoster", "FrozenNrGameData", "LiveNrRoster", "LiveNrGameData", "FrozenNrUiRoster",
-                "LiveNrUiRoster", "FrozenNrGameDataUi", "LiveNrGameDataUi", "BsGameDataUi"),
+                "LiveNrUiRoster", "FrozenNrGameDataUi", "LiveNrGameDataUi", "BsGameDataUi").Where("Category!=SelectionAudit"),
             maySkip: [("BsRosterUi", "CI does not provision the app: thorough-conformance runs setup.ps1 -SkipJavaAgent, so the agent jar is absent and every BsRosterUi test skips there")]),
         Profile("non-conformance",
             "Everything that is not a conformance test: unit, integration, lint, protocol. The checks job's first test "

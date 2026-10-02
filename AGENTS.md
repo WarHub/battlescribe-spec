@@ -149,13 +149,22 @@ dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-te
 (`tests/TestProfiles/TestHost.cs`, wired by `tests/Directory.Build.props`) reads the registry. So
 `dotnet test -p:TestProfile=<name>`, `dotnet run --project <csproj> -- --test-profile <name>` and
 the executable run the same lane. A run that **executes no test fails with exit 8** — strict policy,
-every selected test skipping counts (one known gap: a spec a per-spec lane opts out of, `engines: <engine>:
-skip`, reports as passed rather than skipped, so it counts as executed) — and the app **refuses a command line with exit 5, saying why**: an unknown profile, a
+every selected test skipping counts, and a spec a lane's engine opts out of (`engines: <engine>: skip`)
+is a skipped row, never a passed one — and so does a profiled run in which **any engine lane the profile
+claims executed none of its own tests**: on a machine without the HAR or the NR Editor snapshot that
+`setup.ps1` fetches, `pre-push` exits 8 naming each empty lane and the fix, even though thousands of
+other tests passed (`tests/TestProfiles/LaneComposition.cs`; a run you narrow with `--filter` is not held
+to it). Without the Playwright browsers it fails harder — the tests that launch Chromium themselves fail
+(exit 2) — and still names each lane that went empty and the fix. The app **refuses a command line with exit 5, saying why**: an unknown profile, a
 profile that does not cover the project (a solution-wide `dotnet test` starts both test projects, so name
 the project for a profile that covers one), a VSTest option (`--settings`, `--logger`, …), or a
 lane-defining variable exported in your shell that the profile does not allow. A `--filter` you add
 **narrows** a profile (the two are ANDed). `dotnet test` shows a test's output only when it fails;
-`dotnet run` streams every result, which is why CI runs lanes that way.
+`dotnet run` streams every result, which is why CI runs lanes that way — with `--show-live-output on`, the
+single-test aggregate lanes stream `[i/N] <spec> <verdict> <secs>` as they go and open with a
+`[lane] <Engine> mode=… selected=N applicable=M` line (a full lane that selects fewer than apply fails).
+After a profiled run the app appends a lane-composition table to `$GITHUB_STEP_SUMMARY` and writes
+`artifacts/telemetry/xunit-<profile>-<ts>.composition.json` beside the run's telemetry.
 
 **The SDK band is pinned, and CI installs from `global.json`.** `rollForward: latestPatch` holds the
 feature band; every `setup-dotnet` step uses `global-json-file: global.json`, so your machine and CI
@@ -212,7 +221,11 @@ package change is a one-line edit there and nothing else.
 BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor
 snapshot, and the two frozen Playwright UI drivers. No desktop app, and no test traffic to any site;
 the one network call is the test platform's own usage telemetry, on by default — opt out with
-`TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (or `DOTNET_CLI_TELEMETRY_OPTOUT=1`), as CI does.
+`TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (or `DOTNET_CLI_TELEMETRY_OPTOUT=1`), as CI does. It needs what
+`setup.ps1` provisions, and says so rather than leaving a green run that never ran a lane: a frozen lane
+that skips whole for want of its snapshot fails the run with exit 8, naming the lane and the fix; with
+no Playwright browsers the browser tests fail outright (exit 2), and the lanes that went empty are named
+with the fix all the same.
 **Measured 2026-08-12 on a 32-core dev box: `Failed: 0, Passed: 2571, Skipped: 0, Total: 2571,
 Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
 `BattleScribeSpec.Cli.Tests` — 5m47s end to end including the build. The critical path is `BsRoster`
@@ -233,7 +246,12 @@ Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
 <!-- END GENERATED: lanes outside pre-push -->
 
 `Mode=Sequential` classes are out too: manual-only, they skip unless `NR_SEQUENTIAL=true`, which
-`-p:TestProfile=nr-frozen-sequential` / `-p:TestProfile=nr-live-sequential` set.
+`-p:TestProfile=nr-frozen-sequential` / `-p:TestProfile=nr-live-sequential` set. So is
+`Category=SelectionAudit` (`ProfileSelectionAuditTests`): it starts the test app once per profile and holds
+what each really selects to what the registry claims — about 30s of child processes, so CI runs it
+instead, once per push, in the `checks` job's `non-conformance` step (`core` leaves it out too, rather than
+run it a second time). Run it yourself with
+`dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Category=SelectionAudit"`.
 
 That table is generated, not written. Every engine lane is a row in
 `tests/TestProfiles/EngineLanes.cs` saying what it needs and whether `pre-push` runs it, with the
@@ -414,8 +432,10 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
-| `tests/TestProfiles/` | The test-profile registry — every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`) — and the test app's entry point that resolves it (`TestHost.cs`) |
+| `tests/TestProfiles/` | The test-profile registry — every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`) — the test app's entry point that resolves it (`TestHost.cs`), and the engine-composition check every profiled run is held to (`LaneComposition.cs`) |
 | `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, the generated AGENTS.md table and profile list, no dangling profile reference, every documented test command runs as written |
-| `tests/Infrastructure/TestHostTests.cs`, `TestHostWiringTests.cs` | The entry point's rules, each with the input that trips it; every test project wired through it, one setter of the strict zero-tests policy, no launch profile, testconfig or runsettings feeding the app |
+| `tests/Infrastructure/TestHostTests.cs`, `TestHostWiringTests.cs`, `LaneCompositionTests.cs` | The entry point's rules, each with the input that trips it; every test project wired through it, one setter of the strict zero-tests policy, no launch profile, testconfig or runsettings feeding the app; the composition check's verdicts |
+| `tests/Infrastructure/ProfileSelectionAuditTests.cs` | What each profile really selects, listed by the test app itself and held to the registry's claims (`Category=SelectionAudit`, run by CI's `checks` job and left out of `pre-push` and `core`) |
+| `tests/Infrastructure/AggregateLaneRun.cs` | The `[lane]` selection line, `[i/N]` progress and stop check every single-test aggregate lane reports through |
 | `tools/format-specs.ps1` | Spec formatter |
 

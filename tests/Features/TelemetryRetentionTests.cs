@@ -185,6 +185,58 @@ public sealed class TelemetryRetentionTests
         }
     }
 
+    /// <summary>
+    /// <b>A profiled test run's <c>.composition.json</c> is part of its artifact set</b>: swept with the set's
+    /// <c>.pb</c> files, kept with them, and — for a run whose telemetry failed open and left only the record —
+    /// counted and swept as a set of its own, so the host's per-run records cannot accumulate where the
+    /// telemetry files no longer do.
+    /// </summary>
+    /// <remarks>
+    /// Mutation-checked when written: <c>.composition.json</c> removed from <c>TelemetryRetention</c>'s suffixes
+    /// leaves both stale records behind and turns this red.
+    /// </remarks>
+    [Fact]
+    public void Sweep_TreatsTheCompositionRecordAsPartOfItsSet()
+    {
+        var dir = MakeTestDirectory();
+        try
+        {
+            var now = DateTime.UtcNow;
+            var withTelemetry = Path.Combine(dir, "xunit-pre-push-old");
+            var recordOnly = Path.Combine(dir, "xunit-bs-older");
+            var kept = Path.Combine(dir, "xunit-pre-push-new");
+            CreateSet(withTelemetry, now.AddDays(-2));
+            CreateRecord(withTelemetry, now.AddDays(-2));
+            CreateRecord(recordOnly, now.AddDays(-3));
+            CreateSet(kept, now.AddDays(-1));
+            CreateRecord(kept, now.AddDays(-1));
+
+            TelemetryRetention.Sweep(dir, keepRuns: 1, minAge: TimeSpan.Zero, nowUtc: now);
+
+            AssertSetGone(withTelemetry);
+            Assert.False(File.Exists(withTelemetry + CompositionSuffix), "the old set's composition record outlived its telemetry files");
+            Assert.False(File.Exists(recordOnly + CompositionSuffix), "a set that is only a composition record was never swept");
+            AssertSetExists(kept);
+            Assert.True(File.Exists(kept + CompositionSuffix), "the kept set lost its composition record");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        static void CreateRecord(string basePath, DateTime writeUtc)
+        {
+            File.WriteAllText(basePath + CompositionSuffix, "{}");
+            File.SetLastWriteTimeUtc(basePath + CompositionSuffix, writeUtc);
+        }
+    }
+
+    /// <summary>
+    /// The suffix the test app writes its engine-composition record under — read from the host, so renaming it
+    /// there without teaching <c>TelemetryRetention</c> the new name turns this red.
+    /// </summary>
+    private const string CompositionSuffix = BattleScribeSpec.Tests.Profiles.LaneComposition.JsonSuffix;
+
     private static readonly string[] SuffixesForTest = [".traces.pb", ".metrics.pb", ".logs.pb"];
 
     private static string MakeTestDirectory()

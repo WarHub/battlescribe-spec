@@ -22,7 +22,9 @@ public abstract class GameDataConformanceTestBase
     protected virtual string LogPrefix => "";
 
     /// <summary>
-    /// Return the engine to run the spec against, or null to skip the test.
+    /// Return the engine to run the spec against. An environment-gated engine calls <c>Assert.Skip</c> with
+    /// the reason; a <see langword="null"/> returned without one is reported as a skip too, never as a pass
+    /// (see <c>ConformanceTestBase.EngineOrSkip</c> for why a row that drove no engine must not return).
     /// </summary>
     protected abstract IGameDataEngine? GetEngine();
 
@@ -73,10 +75,10 @@ public abstract class GameDataConformanceTestBase
     {
         var spec = SpecLoader.LoadGameData(SpecLoader.ResolveGameDataSpec(specName));
 
+        // A skip, not a return: a returned row is Passed (ConformanceTestBase.EngineOrSkip's remarks).
         if (!spec.IsApplicableTo(EngineName))
         {
-            _output.WriteLine($"{LogPrefix}Skipping spec: {specName} — not applicable to {EngineName} engine");
-            return;
+            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{EngineName}: skip}})");
         }
 
         var expectedToFail = spec.IsExpectedToFail(EngineName);
@@ -85,7 +87,7 @@ public abstract class GameDataConformanceTestBase
         var engine = GetEngine();
         if (engine is null)
         {
-            return;
+            Assert.Skip($"{LogPrefix}no {EngineName} engine on this machine ({GetType().Name}.GetEngine returned none)");
         }
 
         var runner = new GameDataRunner(engine, EngineName);

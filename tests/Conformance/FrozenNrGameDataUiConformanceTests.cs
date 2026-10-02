@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using BattleScribeSpec.GameData;
 
 namespace BattleScribeSpec.Tests;
@@ -38,7 +39,7 @@ public sealed class FrozenNrGameDataUiConformanceTests
     public async Task AllSpecs()
     {
         Assert.SkipWhen(!_fixture.Available,
-            "NR Editor static files not found (run setup.ps1) or NR_EDITOR_UI_FROZEN_SKIP=true " +
+            "NR Editor static files not found or Playwright browsers not installed (run setup.ps1), or NR_EDITOR_UI_FROZEN_SKIP=true " +
             "— skipping frozen NR Editor GameData UI tests");
 
         var specsDir = SpecLoader.FindGameDataSpecsDirectory();
@@ -55,59 +56,79 @@ public sealed class FrozenNrGameDataUiConformanceTests
         // engine wires up without running the full suite (which the thorough lane covers).
         var smoke = Environment.GetEnvironmentVariable("NR_UI_SMOKE") == "1";
 
-        // Load every spec upfront so parsing happens before parallel execution.
-        var loadedSpecs = SpecLoader.DiscoverGameDataSpecs(specsDir!)
-            .Where(s => !smoke || $"{s.Category}/{s.Id}".Contains("kitchen-sink", StringComparison.Ordinal))
+        // Load every spec upfront so parsing happens before parallel execution — the whole corpus even in
+        // smoke mode, since it is what the [lane] line counts `applicable` from.
+        var corpus = SpecLoader.DiscoverGameDataSpecs(specsDir!)
             .Select(s => (
                 s.Path,
                 Name: $"{s.Category}/{s.Id}",
                 spec: SpecLoader.LoadGameData(s.Path)
             )).ToList();
+        var loadedSpecs = corpus
+            .Where(s => !smoke || s.Name.Contains("kitchen-sink", StringComparison.Ordinal))
+            .ToList();
 
-        await Parallel.ForEachAsync(
-            loadedSpecs,
-            new ParallelOptions { MaxDegreeOfParallelism = pool.Size },
-            async (item, ct) =>
-            {
-                var (specPath, specName, spec) = item;
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrGameDataUi", smoke ? AggregateMode.Smoke : AggregateMode.Full,
+            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
+            applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
+        var stop = TestContext.Current.CancellationToken;
 
-                if (!spec.IsApplicableTo(EngineName))
+        try
+        {
+            await Parallel.ForEachAsync(
+                loadedSpecs,
+                new ParallelOptions { MaxDegreeOfParallelism = pool.Size, CancellationToken = stop },
+                async (item, ct) =>
                 {
-                    Interlocked.Increment(ref skipped);
-                    return;
-                }
+                    var (specPath, specName, spec) = item;
 
-                var expectedToFail = spec.IsExpectedToFail(EngineName);
+                    if (!spec.IsApplicableTo(EngineName))
+                    {
+                        Interlocked.Increment(ref skipped);
+                        return;
+                    }
 
-                using var pooled = await _fixture.AcquireAsync(ct);
-                var engine = pooled.Engine;
+                    var expectedToFail = spec.IsExpectedToFail(EngineName);
 
-                var runner = new GameDataRunner(engine, EngineName);
-                var result = runner.Run(spec);
+                    using var pooled = await _fixture.AcquireAsync(ct);
+                    var engine = pooled.Engine;
+                    var clock = Stopwatch.StartNew();
 
-                if (result.Passed && expectedToFail)
-                {
-                    failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes! " +
-                        "Update the spec's engines field to remove the 'fail' expectation.");
-                    return;
-                }
+                    var runner = new GameDataRunner(engine, EngineName);
+                    var result = runner.Run(spec);
 
-                if (!result.Passed && expectedToFail)
-                {
-                    Interlocked.Increment(ref expectedFailures);
-                    return;
-                }
+                    if (result.Passed && expectedToFail)
+                    {
+                        failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes! " +
+                            "Update the spec's engines field to remove the 'fail' expectation.");
+                        lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
+                        return;
+                    }
 
-                if (!result.Passed)
-                {
-                    var msg = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
-                        string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
-                    failures.Add(msg);
-                    return;
-                }
+                    if (!result.Passed && expectedToFail)
+                    {
+                        Interlocked.Increment(ref expectedFailures);
+                        lane.Completed(specName, AggregateLaneRun.ExpectedFailure, clock.Elapsed);
+                        return;
+                    }
 
-                Interlocked.Increment(ref passed);
-            });
+                    if (!result.Passed)
+                    {
+                        var msg = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
+                            string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
+                        failures.Add(msg);
+                        lane.Completed(specName, AggregateLaneRun.Failed, clock.Elapsed);
+                        return;
+                    }
+
+                    Interlocked.Increment(ref passed);
+                    lane.Completed(specName, AggregateLaneRun.Passed, clock.Elapsed);
+                });
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            lane.Stop(stop);
+        }
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
         _output.WriteLine($"{LogPrefix}Pool size: {pool.Size} contexts");

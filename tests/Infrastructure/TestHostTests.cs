@@ -276,16 +276,16 @@ public sealed class TestHostTests
 
     /// <summary>
     /// <b>In GitHub Actions the run reports to GitHub with a failures-only summary</b>; a direct run also gets
-    /// detailed output, and an aggregate lane live output. What the caller already chose is kept.
+    /// detailed output and its ten slowest tests, and an aggregate lane live output. What the caller already chose is kept.
     /// </summary>
     [Theory]
-    [InlineData("--test-profile bs", "--filter Engine=BsRoster --zero-tests-policy strict --report-github --report-github-summary-include-passed false --output Detailed")]
-    [InlineData("--test-profile nr-ui-frozen", "--filter Engine=FrozenNrUiRoster --zero-tests-policy strict --report-github --report-github-summary-include-passed false --output Detailed --show-live-output on")]
-    [InlineData("--output Normal --report-github-summary-include-passed true", "--output Normal --report-github-summary-include-passed true --zero-tests-policy strict --report-github")]
+    [InlineData("--test-profile bs", "--filter Engine=BsRoster --zero-tests-policy strict --report-github --report-github-summary-include-passed false --output Detailed --show-slowest-tests 10")]
+    [InlineData("--test-profile nr-ui-frozen", "--filter Engine=FrozenNrUiRoster --zero-tests-policy strict --report-github --report-github-summary-include-passed false --output Detailed --show-slowest-tests 10 --show-live-output on")]
+    [InlineData("--output Normal --report-github-summary-include-passed true --show-slowest-tests 3", "--output Normal --report-github-summary-include-passed true --show-slowest-tests 3 --zero-tests-policy strict --report-github")]
     public void GitHubActions_ReportsToGitHub(string commandLine, string expected) =>
         Assert.Equal(expected, Args(Resolve(commandLine, ("GITHUB_ACTIONS", "true"))));
 
-    /// <summary><b>A <c>dotnet test</c> run in Actions gets the reporter but not <c>--output</c></b>, which is <c>dotnet test</c>'s own option there.</summary>
+    /// <summary><b>A <c>dotnet test</c> run in Actions gets the reporter but not <c>--output</c> or <c>--show-slowest-tests</c></b>, which are <c>dotnet test</c>'s own options there.</summary>
     [Fact]
     public void GitHubActions_DotnetTestRun_KeepsItsOutputOption()
     {
@@ -325,7 +325,7 @@ public sealed class TestHostTests
     // ── RunAsync: the decision, acted on ──
 
     /// <summary>A <see cref="HostIo"/> that records what the host does to the world, over an environment of the test's own.</summary>
-    private sealed class RecordingIo
+    internal sealed class RecordingIo
     {
         public Dictionary<string, string?> Environment { get; } = new(StringComparer.Ordinal);
 
@@ -337,6 +337,12 @@ public sealed class TestHostTests
 
         public string[]? ConsoleRunnerArgs { get; private set; }
 
+        /// <summary>What <see cref="HostIo.TelemetryArtifactBase"/> answers.</summary>
+        public string? ArtifactBase { get; set; }
+
+        /// <summary>Every file the host wrote or appended to, with its text, in order.</summary>
+        public List<(string Path, string Text, bool Append)> Files { get; } = [];
+
         public HostIo Io => new(
             name => Environment.GetValueOrDefault(name),
             (name, value) => Environment[name] = value,
@@ -347,7 +353,10 @@ public sealed class TestHostTests
             {
                 ConsoleRunnerArgs = args;
                 return Task.FromResult(0);
-            });
+            },
+            () => ArtifactBase,
+            (path, text) => Files.Add((path, text, true)),
+            (path, text) => Files.Add((path, text, false)));
     }
 
     /// <summary>
@@ -368,7 +377,7 @@ public sealed class TestHostTests
         string? contextAtStart = null;
         string[]? ran = null;
 
-        var exit = await TestHost.RunAsync(["--test-profile", "smoke-nr-frozen", "--list-tests"], TestProfiles.Tests, args =>
+        var exit = await TestHost.RunAsync(["--test-profile", "smoke-nr-frozen", "--list-tests"], TestProfiles.Tests, (args, _) =>
         {
             smokeAtStart = world.Environment.GetValueOrDefault("NR_FROZEN_SMOKE");
             contextAtStart = world.ProfileContext;
@@ -385,7 +394,7 @@ public sealed class TestHostTests
         Assert.Equal("", world.Error.ToString());
 
         var unprofiled = new RecordingIo();
-        Assert.Equal(0, await TestHost.RunAsync(["--list-tests"], TestProfiles.Tests, static _ => Task.FromResult(0), unprofiled.Io));
+        Assert.Equal(0, await TestHost.RunAsync(["--list-tests"], TestProfiles.Tests, static (_, _) => Task.FromResult(0), unprofiled.Io));
         Assert.Equal(TestProfileContext.Unprofiled, unprofiled.ProfileContext);
         Assert.Empty(unprofiled.Environment);
     }
@@ -399,7 +408,7 @@ public sealed class TestHostTests
     [Fact]
     public async Task RunAsync_ActsOnEachDecision()
     {
-        static Task<int> Unreachable(string[] _) => throw new InvalidOperationException("the platform was started");
+        static Task<int> Unreachable(string[] _, LaneTally __) => throw new InvalidOperationException("the platform was started");
 
         var refused = new RecordingIo();
         refused.Environment["NR_UI_ROSTER_FILTER"] = "x";
@@ -418,7 +427,7 @@ public sealed class TestHostTests
         Assert.Equal(["-automated", "x"], automated.ConsoleRunnerArgs);
 
         var ide = new RecordingIo();
-        Assert.Equal(2, await TestHost.RunAsync(["--server"], TestProfiles.Tests, static _ => Task.FromResult(2), ide.Io));
+        Assert.Equal(2, await TestHost.RunAsync(["--server"], TestProfiles.Tests, static (_, _) => Task.FromResult(2), ide.Io));
         Assert.Null(ide.ProfileContext);
     }
 }

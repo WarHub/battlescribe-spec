@@ -90,6 +90,16 @@ internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, str
     /// and <c>CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry</c> enforces.
     /// </summary>
     public string? CiExempt { get; init; }
+
+    /// <summary>
+    /// What it means when a run that claims this lane executed none of its <see cref="LaneTests"/> — every
+    /// one skipped, or none was selected — and what to do about it. <see cref="TestHost"/> prints it,
+    /// prefixed with the lane's name, when the engine-composition check fails (exit 8), and when the
+    /// platform's own zero-tests policy failed the run with this lane empty
+    /// (<see cref="LaneComposition"/>). Required, so a new lane cannot arrive without saying how it goes
+    /// empty: the compiler refuses an <see cref="EngineLane"/> that does not set it.
+    /// </summary>
+    public required string EmptyHint { get; init; }
 }
 
 /// <summary>
@@ -133,23 +143,34 @@ internal static class EngineLanes
         // ── In pre-push: offline, no app, and cheap against a 267.9s profile.
         new("BsRoster", Needs.None, InPrePush: true,
             "in-process IKVM reference engine; 266.8s across 367 specs, the critical path of pre-push, and not a UI",
-            ["BattleScribeSpec.Tests.BsRosterConformanceTests"]),
+            ["BattleScribeSpec.Tests.BsRosterConformanceTests"])
+        {
+            EmptyHint = SpecCorpusMissing,
+        },
         new("BsGameData", Needs.None, InPrePush: true,
             "in-process IKVM reference engine; 0.8s",
-            ["BattleScribeSpec.Tests.BsGameDataConformanceTests"]),
+            ["BattleScribeSpec.Tests.BsGameDataConformanceTests"])
+        {
+            EmptyHint = SpecCorpusMissing,
+        },
         new("FrozenNrRoster", Needs.LocalBrowser, InPrePush: true,
             "offline HAR replay, no network; 70.3s",
             ["BattleScribeSpec.Tests.FrozenNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialFrozenNrRosterConformanceTests"])
         {
+            EmptyHint = FrozenHarMissing,
             Aggregate = true,
         },
         new("FrozenNrGameData", Needs.LocalBrowser, InPrePush: true,
             "offline static-file serving of the pinned NR Editor snapshot, no network; 133.9s",
-            ["BattleScribeSpec.Tests.FrozenNrGameDataConformanceTests"]),
+            ["BattleScribeSpec.Tests.FrozenNrGameDataConformanceTests"])
+        {
+            EmptyHint = NrEditorSnapshotMissing,
+        },
         new("FrozenNrUiRoster", Needs.LocalBrowser, InPrePush: true,
             "Playwright over the frozen HAR, kitchen-sink only unless NR_UI_ROSTER_FULL is set; 22.6s",
             ["BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests"])
         {
+            EmptyHint = FrozenHarOrBrowsersMissing,
             Aggregate = true,
             DiagnosticsDir = NrUiDiagnostics,
             DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
@@ -158,6 +179,7 @@ internal static class EngineLanes
             "Playwright over the frozen NR Editor snapshot; 51.8s, and the NR Editor UI driver's only local signal",
             ["BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests"])
         {
+            EmptyHint = NrEditorSnapshotOrBrowsersMissing,
             Aggregate = true,
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
@@ -170,6 +192,7 @@ internal static class EngineLanes
             "launches the BattleScribe desktop app; 687.8s across 367 specs, sequential — it WAS the 689.2s run it joined by default (#405)",
             ["BattleScribeSpec.Tests.BsRosterUiConformanceTests"])
         {
+            EmptyHint = DesktopAppMissing,
             DiagnosticsDir = "artifacts/bs-ui-diagnostics",
             DiagnosticsDirSwitch = "BS_UI_DIAGNOSTICS_DIR",
         },
@@ -181,6 +204,7 @@ internal static class EngineLanes
             "launches the BattleScribe desktop app (the Data Editor half)",
             ["BattleScribeSpec.Tests.BsGameDataUiConformanceTests"])
         {
+            EmptyHint = DesktopAppMissing,
             DiagnosticsDir = "artifacts/bs-gamedata-ui-diagnostics",
             DiagnosticsDirSwitch = "BS_GAMEDATA_UI_DIAGNOSTICS_DIR",
         },
@@ -194,6 +218,7 @@ internal static class EngineLanes
             ["BattleScribeSpec.Tests.LiveNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrRosterConformanceTests",
              "BattleScribeSpec.Tests.LiveNrRosterSmokeTests"])
         {
+            EmptyHint = NrEngineUnreachable,
             Aggregate = true,
             RequiredEnv = ["NR_ENGINE_URL"],
         },
@@ -201,6 +226,7 @@ internal static class EngineLanes
             "opens sessions on newrecruit.eu",
             ["BattleScribeSpec.Tests.LiveNrUiRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrUiRosterConformanceTests"])
         {
+            EmptyHint = NrEngineUnreachable,
             Aggregate = true,
             RequiredEnv = ["NR_ENGINE_URL"],
             DiagnosticsDir = NrUiDiagnostics,
@@ -213,6 +239,7 @@ internal static class EngineLanes
             "opens sessions on the NR Editor deployment",
             ["BattleScribeSpec.Tests.LiveNrGameDataConformanceTests"])
         {
+            EmptyHint = NrEditorUnreachable,
             RequiredEnv = ["NR_EDITOR_URL"],
             CiExempt = NrEditorLiveNotInCi,
         },
@@ -220,6 +247,7 @@ internal static class EngineLanes
             "opens sessions on the NR Editor deployment",
             ["BattleScribeSpec.Tests.LiveNrGameDataUiConformanceTests"])
         {
+            EmptyHint = NrEditorUnreachable,
             RequiredEnv = ["NR_EDITOR_URL"],
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
@@ -233,6 +261,41 @@ internal static class EngineLanes
     private const string NrGameDataUiDiagnosticsSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS";
     private const string NrUiDiagnosticsDirSwitch = "NR_UI_DIAGNOSTICS_DIR";
     private const string NrGameDataUiDiagnosticsDirSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS_DIR";
+
+    // ── What an empty lane means (EngineLane.EmptyHint). Each names the cause a reader can act on first:
+    //    what setup.ps1 provisions, or the switch the lane cannot run without. A hint is printed only for a
+    //    profiled run, and a profiled run never has a lane's *_SKIP set: the host refuses one the profile does
+    //    not allow (exit 5), and the one it allows is for a MaySkip lane, which the check exempts — so no hint
+    //    offers "unset *_SKIP". Missing Playwright browsers skip only the two UI lanes; the HAR-replay and NR
+    //    Editor engines' fixtures rethrow a failed browser launch, so those lanes fail instead of going empty.
+    private const string SpecCorpusMissing =
+        "the in-process engine never skips, so its spec rows were never produced: the spec corpus (specs/) was not found "
+        + "from the test output folder. Run from a full checkout of this repository.";
+
+    private const string FrozenHarMissing =
+        "run ./setup.ps1 — the frozen New Recruit snapshot (.testdata/newrecruit-har/newrecruit.har) is missing.";
+
+    private const string FrozenHarOrBrowsersMissing =
+        "run ./setup.ps1 — the frozen New Recruit snapshot (.testdata/newrecruit-har/newrecruit.har) or the Playwright "
+        + "browsers are missing.";
+
+    private const string NrEditorSnapshotMissing =
+        "run ./setup.ps1 — the pinned NR Editor snapshot (.testdata/nr-editor/) is missing.";
+
+    private const string NrEditorSnapshotOrBrowsersMissing =
+        "run ./setup.ps1 — the pinned NR Editor snapshot (.testdata/nr-editor/) or the Playwright browsers are missing.";
+
+    private const string DesktopAppMissing =
+        "run ./setup.ps1 — the BattleScribe app (lib/battlescribe), the JavaFX-capable JDK (lib/liberica-jdk) or the Java "
+        + "agent jar is missing — and give it a display (xvfb-run -a on Linux).";
+
+    private const string NrEngineUnreachable =
+        "NR_ENGINE_URL is unset, or another live fixture in this process holds newrecruit.eu's whole session budget "
+        + "(the skip reason says which); Playwright browsers come from ./setup.ps1.";
+
+    private const string NrEditorUnreachable =
+        "NR_EDITOR_URL is unset, or another live fixture in this process holds the NR Editor deployment's session budget "
+        + "(the skip reason says which); Playwright browsers come from ./setup.ps1.";
 
     private const string NrEditorLiveNotInCi =
         "the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether "

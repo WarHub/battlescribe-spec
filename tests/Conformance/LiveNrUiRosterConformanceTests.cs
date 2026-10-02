@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
@@ -36,14 +37,21 @@ public sealed class LiveNrUiRosterConformanceTests
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
-        var loadedSpecs = allSpecs
+        // The whole corpus is read: it is what the [lane] line counts `applicable` from. This lane drives
+        // its target specs only, so it always runs in smoke mode.
+        var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
+        var loadedSpecs = corpus
             .Where(s => TargetSpecs.Contains(s.Name))
-            .Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path)))
             .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
         Assert.SkipWhen(loadedSpecs.Count == 0,
             $"No matching specs found for targets: {string.Join(", ", TargetSpecs)}");
+
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "LiveNrUiRoster", AggregateMode.Smoke,
+            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
+            applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
+        var stop = TestContext.Current.CancellationToken;
 
         var passed = 0;
         var skipped = 0;
@@ -53,6 +61,7 @@ public sealed class LiveNrUiRosterConformanceTests
 
         foreach (var (specPath, specName, spec) in loadedSpecs)
         {
+            lane.ThrowIfStopped(stop);
             if (!spec.IsApplicableTo(EngineName))
             {
                 skipped++;
@@ -60,6 +69,7 @@ public sealed class LiveNrUiRosterConformanceTests
             }
 
             var expectedToFail = spec.IsExpectedToFail(EngineName);
+            var clock = Stopwatch.StartNew();
             engine.SetTestContext(specName);
 
             var runner = new RosterRunner(engine, resolver, EngineName);
@@ -70,12 +80,14 @@ public sealed class LiveNrUiRosterConformanceTests
             if (result.Passed && expectedToFail)
             {
                 failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                 continue;
             }
 
             if (!result.Passed && expectedToFail)
             {
                 expectedFailures++;
+                lane.Completed(specName, AggregateLaneRun.ExpectedFailure, clock.Elapsed);
                 continue;
             }
 
@@ -84,10 +96,12 @@ public sealed class LiveNrUiRosterConformanceTests
                 var msg = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
                     string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
                 failures.Add(msg);
+                lane.Completed(specName, AggregateLaneRun.Failed, clock.Elapsed);
                 continue;
             }
 
             passed++;
+            lane.Completed(specName, AggregateLaneRun.Passed, clock.Elapsed);
         }
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");

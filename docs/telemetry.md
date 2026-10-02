@@ -110,7 +110,11 @@ artifacts/telemetry/run-<id>.logs.pb
 CI job that runs several lanes leaves one artifact per lane that a reader can tell apart — anchored at
 the repo root explicitly: the test app runs with its working directory set to the test assembly's own
 output folder, not the repo root, so a bare relative path would silently land somewhere under
-`artifacts/bin/.../`.)
+`artifacts/bin/.../`. A profiled test run adds a fourth file to its set, `xunit-<profile>-<timestamp>.composition.json`:
+not telemetry, but the test app's record of which engine lanes the run executed — per lane, the tests
+that ran and skipped and their summed duration, and the verdict of the engine-composition check
+(`tests/TestProfiles/LaneComposition.cs`). It sits in the set it describes, and the same verdict and
+per-lane table follow the trace summary in `$GITHUB_STEP_SUMMARY`.)
 
 Each file is a **length-delimited stream of protobuf messages** — the same
 `ExportTraceServiceRequest`/`ExportMetricsServiceRequest`/`ExportLogsServiceRequest` messages the
@@ -138,7 +142,8 @@ the checks page, without downloading anything.
 ## Retention: `artifacts/telemetry/` does not grow forever
 
 Every `run --all`, every `compare` arm, and every `dotnet test` writes a fresh, uniquely-named
-artifact set (three sibling `.pb` files — see above). Nothing deletes them on its own, so a
+artifact set (three sibling `.pb` files, plus a profiled test run's `.composition.json` — see above).
+Nothing deletes them on its own, so a
 developer's `artifacts/telemetry/` would otherwise accumulate indefinitely.
 
 `TelemetryRetention.Sweep` (`src/BattleScribeSpec.Telemetry.Collector/TelemetryRetention.cs`) keeps

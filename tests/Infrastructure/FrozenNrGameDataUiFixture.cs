@@ -63,10 +63,13 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
             EnginePool = await NrGameDataUiEnginePool.CreateFrozenAsync(staticDir, concurrency, headless, slowMo);
             FixtureTelemetry.SetPoolSize(span, EnginePool.Size);
         }
-        catch (Microsoft.Playwright.PlaywrightException)
+        catch (Microsoft.Playwright.PlaywrightException ex) when (PlaywrightBrowsers.AreMissing(ex))
         {
-            // Playwright browsers not installed — skip gracefully; the gate is released below
-            // since EnginePool stays null, mirroring the "not held" state DisposeAsync checks for.
+            // The Playwright browsers are not installed (setup.ps1 installs them): the lane skips, and the
+            // engine-composition check fails a profile that claims it, naming the fix. Any other Playwright
+            // failure at bring-up — a document request the static routes fail (net::ERR_*), a route handler's
+            // error — propagates and fails the lane (PlaywrightBrowsers). Either way the gate is released
+            // below, since EnginePool stays null, mirroring the "not held" state DisposeAsync checks for.
         }
         finally
         {

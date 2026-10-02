@@ -34,9 +34,13 @@ public sealed class FrozenNrUiRosterFixture : IAsyncLifetime
         {
             Engine = await NrRosterUiEngine.CreateFrozenAsync(harFile, headless: headless, slowMo: slowMo);
         }
-        catch (Microsoft.Playwright.PlaywrightException)
+        catch (Microsoft.Playwright.PlaywrightException ex) when (PlaywrightBrowsers.AreMissing(ex))
         {
-            // Playwright browsers not installed — skip gracefully
+            // The Playwright browsers are not installed (setup.ps1 installs them): the lane skips, and the
+            // engine-composition check fails a profile that claims it, naming the fix. Any other Playwright
+            // failure at bring-up — a document request the HAR replay fails (net::ERR_*), a route handler's
+            // error — propagates and fails the lane: a snapshot the driver cannot start on is a finding, not a
+            // skip (PlaywrightBrowsers).
         }
     }
 

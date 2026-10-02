@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using BattleScribeSpec.Roster;
 
 namespace BattleScribeSpec.Tests;
@@ -49,65 +50,78 @@ public sealed class FrozenNrRosterConformanceTests
         // knob shape, and same reason, as NR_UI_SMOKE in FrozenNrGameDataUiConformanceTests.
         var smoke = Environment.GetEnvironmentVariable("NR_FROZEN_SMOKE") == "1";
 
-        // Load all specs upfront and pre-resolve datasources before parallel execution
+        // Load all specs upfront and pre-resolve datasources before parallel execution. The whole corpus
+        // is read even in smoke mode: it is what the [lane] line counts `applicable` from.
         var resolver = new DataSourceResolver();
-        var loadedSpecs = allSpecs
+        var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
+        var loadedSpecs = corpus
             .Where(s => !smoke || s.Name.Contains("kitchen-sink", StringComparison.Ordinal))
-            .Select(s => (
-                s.Path,
-                s.Name,
-                spec: SpecLoader.Load(s.Path)
-            )).ToList();
+            .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
-        // A smoke lane that selected no spec is the same silent pass this knob was added to fix.
-        Assert.False(smoke && loadedSpecs.Count == 0,
-            "NR_FROZEN_SMOKE=1 selected no specs — expected at least the kitchen-sink spec.");
+        // A smoke lane that selected no spec is the same silent pass this knob was added to fix; Start fails a
+        // run that selected none, in every mode.
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrRoster", smoke ? AggregateMode.Smoke : AggregateMode.Full,
+            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
+            applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
+        var stop = TestContext.Current.CancellationToken;
 
-        await Parallel.ForEachAsync(
-            loadedSpecs,
-            new ParallelOptions { MaxDegreeOfParallelism = pool.Size },
-            async (item, ct) =>
-            {
-                var (specPath, specName, spec) = item;
-
-                if (!spec.IsApplicableTo(EngineName))
+        try
+        {
+            await Parallel.ForEachAsync(
+                loadedSpecs,
+                new ParallelOptions { MaxDegreeOfParallelism = pool.Size, CancellationToken = stop },
+                async (item, ct) =>
                 {
-                    Interlocked.Increment(ref skipped);
-                    return;
-                }
+                    var (specPath, specName, spec) = item;
 
-                var expectedToFail = spec.IsExpectedToFail(EngineName);
+                    if (!spec.IsApplicableTo(EngineName))
+                    {
+                        Interlocked.Increment(ref skipped);
+                        return;
+                    }
 
-                using var pooled = await _fixture.AcquireAsync(ct);
-                var engine = pooled.Engine;
+                    var expectedToFail = spec.IsExpectedToFail(EngineName);
 
-                var runner = new RosterRunner(engine, resolver, EngineName);
-                var result = runner.Run(spec);
-                skippedSteps.Record(specName, result);
+                    using var pooled = await _fixture.AcquireAsync(ct);
+                    var engine = pooled.Engine;
+                    var clock = Stopwatch.StartNew();
 
-                if (result.Passed && expectedToFail)
-                {
-                    failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
-                    return;
-                }
+                    var runner = new RosterRunner(engine, resolver, EngineName);
+                    var result = runner.Run(spec);
+                    skippedSteps.Record(specName, result);
 
-                if (!result.Passed && expectedToFail)
-                {
-                    Interlocked.Increment(ref expectedFailures);
-                    return;
-                }
+                    if (result.Passed && expectedToFail)
+                    {
+                        failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                        lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
+                        return;
+                    }
 
-                if (!result.Passed)
-                {
-                    var msg = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
-                        string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
-                    failures.Add(msg);
-                    return;
-                }
+                    if (!result.Passed && expectedToFail)
+                    {
+                        Interlocked.Increment(ref expectedFailures);
+                        lane.Completed(specName, AggregateLaneRun.ExpectedFailure, clock.Elapsed);
+                        return;
+                    }
 
-                Interlocked.Increment(ref passed);
-            });
+                    if (!result.Passed)
+                    {
+                        var msg = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
+                            string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
+                        failures.Add(msg);
+                        lane.Completed(specName, AggregateLaneRun.Failed, clock.Elapsed);
+                        return;
+                    }
+
+                    Interlocked.Increment(ref passed);
+                    lane.Completed(specName, AggregateLaneRun.Passed, clock.Elapsed);
+                });
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            lane.Stop(stop);
+        }
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
         _output.WriteLine($"{LogPrefix}Pool size: {pool.Size} contexts");
