@@ -198,6 +198,10 @@ jobs:
       # It belongs in THIS job: these tests are offline and CPU-only. They drive the in-process
       # BattleScribe engine and the dotnet: reference adapter — both of which this job already builds
       # and runs in the two steps below — and they touch no browser and no network.
+      - name: P7 probe (throwaway) — working directory when started from /tmp
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 10
+        run: cd /tmp && dotnet run --project "$GITHUB_WORKSPACE/tests/BattleScribeSpec.Tests.csproj" --no-build -- --test-profile non-conformance --filter "FullyQualifiedName~DiagnosticsIsolationTests"
       - name: CLI (engine selection / load target / protocol surface)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
