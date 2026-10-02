@@ -265,8 +265,9 @@ dotnet test -p:TestProfile=bs            # BattleScribe engine conformance
 dotnet test -p:TestProfile=lint              # spec lint and structure checks
 ```
 
-Profiles are `.runsettings` files in `tests/test-profiles/` — they set environment variables and test
-filters automatically. You can also run suites manually with `--filter`:
+Profiles are defined in `tests/TestProfiles/TestProfiles.cs` — each sets its test filter and the
+environment variables it needs automatically. The `.runsettings` files in `tests/test-profiles/` are
+generated from it; edit the registry, not those. You can also run suites manually with `--filter`:
 
 | Suite | Command | Notes |
 |-------|---------|-------|

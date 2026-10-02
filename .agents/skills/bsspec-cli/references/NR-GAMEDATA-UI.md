@@ -124,4 +124,4 @@ they can drift between snapshots.
 | `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | Non-UI reference implementation |
 | `tests/Infrastructure/FrozenNrGameDataUiFixture.cs` | Frozen mode test fixture |
 | `tests/Conformance/FrozenNrGameDataUiConformanceTests.cs` | Frozen mode conformance tests |
-| `tests/test-profiles/nr-editor-ui-frozen.runsettings` | Frozen test profile |
+| `tests/TestProfiles/TestProfiles.cs` | Frozen test profile `nr-editor-ui-frozen` (its `tests/test-profiles/` runsettings is generated) |

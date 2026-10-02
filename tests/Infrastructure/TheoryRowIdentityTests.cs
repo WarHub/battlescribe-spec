@@ -285,7 +285,8 @@ public sealed class TheoryRowIdentityTests
     /// <summary>
     /// Every test method xunit would run in this assembly — a public, concrete class's public method
     /// carrying a fact or theory attribute — with its fact and data attributes as discovery reads them.
-    /// Inherited methods are listed per concrete class, as xunit runs them.
+    /// Inherited methods are listed per concrete class, as xunit runs them. Shared with the lints that
+    /// read the suite's traits (<see cref="SuiteTraits"/>).
     /// </summary>
     /// <remarks>
     /// The attributes come from <see cref="ExtensibilityPointFactory"/>, as they do in discovery, and
@@ -294,7 +295,7 @@ public sealed class TheoryRowIdentityTests
     /// draft of the row sweep did exactly that, for every source but two, and only the check that every
     /// spec on disk appears in some row noticed.
     /// </remarks>
-    private static IEnumerable<(Type TestClass, MethodInfo Method, IReadOnlyCollection<IFactAttribute> Facts, IReadOnlyCollection<IDataAttribute> Data)> TestMethods()
+    internal static IEnumerable<(Type TestClass, MethodInfo Method, IReadOnlyCollection<IFactAttribute> Facts, IReadOnlyCollection<IDataAttribute> Data)> TestMethods()
     {
         foreach (var type in typeof(TheoryRowIdentityTests).Assembly.GetTypes())
         {

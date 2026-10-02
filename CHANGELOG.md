@@ -368,6 +368,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Test profiles are a typed registry; the runsettings are generated from it** — four records described
+  the same lanes (18 runsettings files, the CI step script, eight inline CI filters and the pre-push
+  decision table in `ConcurrencyConfigurationDriftTests`), free to disagree. `tests/TestProfiles/` is now
+  the one record: `TestProfiles.cs` holds every profile (name, purpose, selection, environment,
+  assemblies, which engines may skip whole), `EngineLanes.cs` every `Engine` lane (what it needs, whether
+  `pre-push` runs it and the measured cost behind that, its own test classes), `Knobs.cs` every
+  `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names, classified as lane-defining, default,
+  internal or retired, and `Selection.cs` the filters (`Engines(…)`, `AllExcept(…)`, `PrePush()`,
+  `Raw(…, claims)`, `Whole`, narrowed by `.Where(clause)`, which refuses a compound clause because it
+  appends unparenthesised), each rendering one canonical filter and stating which engines it claims.
+  `pre-push`'s filter is derived from the lanes' `InPrePush` column, so the decision and the filter can no
+  longer disagree. **Zero selection change:** the 18 existing profiles are carried exactly — `nr-ui-frozen`
+  still without `NR_UI_ROSTER_FULL`, `nr-editor-ui-live` still without its URL, the two `*-visible`
+  profiles kept — and `--list-tests -p:TestProfile=<p>` lists the same tests before and after for every
+  one of them, apart from the lint tests this change adds and removes. Ten profiles are new: `cli`
+  (registry only, no runsettings file), `non-conformance`, six `smoke-*` lanes and
+  `nr-frozen-sequential`/`nr-live-sequential`, each listing exactly what the inline CI filter or
+  documented recipe it names selects. CI is untouched. The `.runsettings` files in `tests/test-profiles/`
+  (27 now) are generated from the registry and committed, because VSTest still reads them;
+  `RunsettingsGenerationTests.Runsettings_MatchTheRegistry` fails on a hand edit, a missing or a stray
+  file, prints the expected text and writes every expected file under `artifacts/test-profiles-expected/`.
+  New lints, each mutation-checked: `TestProfileRegistryTests` reads the `Engine`, `Category` and `Mode`
+  values by reflection through xunit's own `ExtensibilityPointFactory` — the source regex it replaces had
+  to exclude its own file because its prose invented a lane — and requires a lane for every `Engine`
+  value and a trait for every lane, every engine-tagged class to be either a lane's own test class or
+  declared not to be with a reason (the six `FrozenNrUiRoster` regression facts that pass without the HAR
+  are the second kind), every filter clause to be `Property Operator Value` over a value the assembly
+  carries (a bare word is `FullyQualifiedName~word` to VSTest), every environment key to be a classified
+  switch, every assembly to be a solution test project, `MaySkip` to name only desktop-app engines with a
+  reason, no data source or theory row to carry an `Engine`, `Category` or `Mode` trait (the registry reads
+  those at the method level), and every selection to claim exactly the lanes its filter reaches — the filter
+  is evaluated against the traits and names of each lane's own tests, so a claimed lane it cannot select
+  (an aggregate `[Fact]` narrowed by `DisplayName~kitchen-sink`) fails, and so does a lane it reaches but
+  does not claim, unless a `Raw` filter declares it incidental with the reason (`non-conformance` reaches
+  `LiveNrRosterSmokeTests`, which carries `Category=Smoke`); `PrePushHonoursItsPromise` keeps every lane
+  that needs the desktop app or a third party's site out of `pre-push` and pins its filter to the one
+  derived from the lanes, a deny-list; `EveryKnobLiteral_IsClassified` fails on an unclassified switch
+  literal anywhere under `src/` or `tests/`, and on a table row no code outside the registry, the lint
+  tests and comments names any more. `BSSPEC_UPDATE_SNAPSHOTS` is classified lane-defining: set, every
+  snapshot comparison rewrites what it was meant to check. `LintTestSkipTests.NoLintTestSkips` bans skips
+  in `Category=Lint` tests — by attribute, on a data source or a row, and in source — with
+  `TestDataPinDriftTests`' no-fixtures-present skip allowed and its reason recorded;
+  `TestProfileWellFormedTests` now fails instead of skipping when it finds no runsettings.
+  `ConcurrencyConfigurationDriftTests.RetiredKnobs` is the retired rows of the knob table, and the three
+  knobs `ConcurrencyPolicy` retired stay pinned in its test, so un-retiring one takes an edit there.
+  **For contributors:** a lane is defined in `tests/TestProfiles/`, not in a runsettings file; edit the
+  registry and take the file the lint prints. `tests/TestProfiles/` joins the inputs that force the
+  thorough suites.
 - **Theory rows are named by spec id, not by checkout path** — the conformance, lint and schema theories
   took the spec's absolute path as their first argument and its name second. xunit renders a row's
   arguments into the test name, derives its uid from them and cuts each at 50 characters, so every one

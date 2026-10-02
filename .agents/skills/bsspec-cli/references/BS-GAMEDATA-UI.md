@@ -194,4 +194,4 @@ unimplemented — all current actions are implemented, so this only appears if y
 | `src/BattleScribeSpec.BsRosterUiDriver/BsUiDataStaging.cs` | Shared file staging |
 | `tests/Infrastructure/BsGameDataUiFixture.cs` | Test fixture |
 | `tests/Conformance/BsGameDataUiConformanceTests.cs` | Conformance tests |
-| `tests/test-profiles/bs-ui-gamedata.runsettings` | Test profile |
+| `tests/TestProfiles/TestProfiles.cs` | Test profile `bs-ui-gamedata` (its `tests/test-profiles/` runsettings is generated) |

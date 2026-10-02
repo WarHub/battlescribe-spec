@@ -30,7 +30,9 @@ public sealed class TestProfileWellFormedTests
         var dir = Path.Combine(ConcurrencyConfigurationDriftTests.RepoRoot, "tests", "test-profiles");
         var profiles = Directory.GetFiles(dir, "*.runsettings").Order(StringComparer.Ordinal).ToArray();
 
-        Assert.SkipWhen(profiles.Length == 0, $"No runsettings files found under '{dir}'.");
+        // A missing input is a failure, not a skip: no files here is the state in which every profile has
+        // stopped meaning anything (LintTestSkipTests).
+        Assert.True(profiles.Length > 0, $"No runsettings files found under '{dir}'; -p:TestProfile has nothing to hand VSTest.");
 
         var broken = new List<string>();
 
