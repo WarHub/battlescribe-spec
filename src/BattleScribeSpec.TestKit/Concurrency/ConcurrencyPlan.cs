@@ -46,12 +46,13 @@ namespace BattleScribeSpec.Concurrency;
 /// <b>What this plan does NOT govern — xUnit's own thread count.</b> The test runner's
 /// <c>maxParallelThreads</c> lives in <c>tests/xunit.runner.json</c> and
 /// <c>tests/BattleScribeSpec.Cli.Tests/xunit.runner.json</c>, because xUnit reads that JSON
-/// <em>before any of this code runs</em> and cannot call a C# function for it (the same is true of
-/// the VSTest RunSettings alternative — see <see cref="ConcurrencyPolicy"/>'s remarks). This record
-/// therefore carries no field for it: a field claiming to control a quantity it cannot reach is
-/// worse than no field, and the previous <c>MaxParallelThreads</c> member had zero consumers while
-/// its doc comment claimed it bounded the test runner. The JSON value stands on its own justification
-/// (<c>ConcurrencyConfigurationDriftTests</c>), not on a number borrowed from this plan.
+/// <em>before any of this code runs</em> and cannot call a C# function for it (nor can its overrides,
+/// <c>--max-threads</c> and a <c>testconfig.json</c> — see <see cref="ConcurrencyPolicy"/>'s
+/// remarks). This record therefore carries no field for it: a field claiming to control a quantity
+/// it cannot reach is worse than no field, and the previous <c>MaxParallelThreads</c> member had zero
+/// consumers while its doc comment claimed it bounded the test runner. The JSON value stands on its
+/// own justification (<c>ConcurrencyConfigurationDriftTests</c>), not on a number borrowed from this
+/// plan.
 /// </para>
 /// <para>
 /// <b>What is bounded and what is not (tracked in issue #314):</b> this plan bounds each individual

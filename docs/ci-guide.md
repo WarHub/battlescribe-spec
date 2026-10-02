@@ -14,25 +14,34 @@ jobs:
   conformance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      # The spec repo, submodule included, next to your code
+      - uses: actions/checkout@v7
         with:
-          dotnet-version: '10.0.x'
+          repository: WarHub/battlescribe-spec
+          path: spec
+          submodules: recursive
 
-      # Clone the spec repo and build the CLI
-      - run: |
-          git clone --recurse-submodules https://github.com/WarHub/battlescribe-spec.git /tmp/spec
-          dotnet build /tmp/spec/src/BattleScribeSpec.Cli/ -c Release
+      # The SDK band the spec repo pins in its global.json — not a floating '10.0.x', which moves
+      # under you when a runner image does and can bring analyzer rules the CLI was never built with
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: spec/global.json
+
+      # Build the CLI from inside spec/: dotnet picks the SDK by the global.json nearest the
+      # working directory, not the project, so from your root the pin above would not apply
+      - run: dotnet build src/BattleScribeSpec.Cli/ -c Release
+        working-directory: spec
 
       # Build your adapter
       - run: dotnet build src/MyAdapter/ -c Release
 
       # Run conformance tests (adapter as an anonymous dotnet: connectable)
       - run: |
-          dotnet /tmp/spec/artifacts/bin/BattleScribeSpec.Cli/release/bs-spec.dll run --all \
+          dotnet spec/artifacts/bin/BattleScribeSpec.Cli/release/bs-spec.dll run --all \
             --engine "dotnet:src/MyAdapter/bin/Release/net10.0/my-adapter.dll" \
-            --specs /tmp/spec/specs \
+            --specs spec/specs \
             --output github-actions
 ```
 
@@ -46,7 +55,7 @@ jobs:
   conformance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Build your adapter image
       - run: docker build -t my-adapter .
@@ -138,20 +147,26 @@ Exclude overrides include.
 
 ### Filtering in xUnit
 
-The BattleScribe conformance tests expose spec tags as xUnit traits. Filter by tag with `--filter`,
-naming the test project (a solution-wide run would start the CLI's tests too, which have no tags, and a
-run that executes no test fails):
+In this repository's own test suite, every per-spec theory row carries its spec's tags as `Tag` traits, so
+`--filter` selects by tag. Name the test project: a solution-wide run starts the CLI's tests too, which
+have no tags, and a run that executes no test fails. Narrowing a profile keeps the run to that profile's
+lanes — `pre-push`'s are the offline ones; without a profile, a tag filter also reaches the desktop-app
+lane wherever the app is provisioned:
 
 ```bash
-# Run only cost-tagged specs
-dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=cost"
+# Cost-tagged specs through the BattleScribe reference engine
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs --filter "Tag=cost"
 
-# Run specs tagged with either cost or constraint
-dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=cost|Tag=constraint"
+# Specs tagged cost or constraint, through every offline per-spec lane
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-push --filter "Tag=cost|Tag=constraint"
 
-# Combine tag filter with engine filter
-dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=cost&Category=Conformance"
+# A tag and an engine, without a profile
+dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=constraint&Engine=BsGameData"
 ```
+
+A tag filter never selects the five single-test aggregate lanes — `FrozenNrRoster`, `FrozenNrUiRoster`,
+`FrozenNrGameDataUi`, `LiveNrRoster` and `LiveNrUiRoster`. Each is one `[Fact]` that runs every spec
+itself, so it has no per-spec rows to carry a tag ([running-tests.md](running-tests.md#selecting-tests-by-name)).
 
 ## Exit Codes
 

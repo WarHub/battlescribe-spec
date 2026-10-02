@@ -4,7 +4,8 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared base class for running declarative YAML spec files against any IRosterEngine.
-/// Eliminates duplication between BattleScribe, NewRecruit, and FrozenNewRecruit conformance tests.
+/// The per-spec roster lanes derive from it (BsRoster, BsRosterUi and the Mode=Sequential NR classes), and the
+/// single-test aggregate lanes take their spec list from it.
 /// </summary>
 public abstract class ConformanceTestBase
 {

@@ -10,8 +10,9 @@ description: >
 
 ## Workflow
 
-1. Create `specs/{category}/{spec-id}.yaml`
-2. Run: `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"`
+1. Create `specs/roster/{category}/{spec-id}.yaml` (a GameData spec goes under `specs/gamedata/`)
+2. Run it with the one-spec command in [AGENTS.md, "Build & test"](../../../AGENTS.md#build--test), your spec id
+   in place of `my-spec-id` (what it runs: [docs/running-tests.md](../../../docs/running-tests.md#selecting-tests-by-name))
 3. Fix failures and re-run until BattleScribe passes
 4. Run: `pwsh -File tools/format-specs.ps1`
 5. Run: `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint"`

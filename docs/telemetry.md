@@ -1,11 +1,17 @@
 # Telemetry
 
 The harness emits [OpenTelemetry](https://opentelemetry.io/) (OTel) traces and metrics for every
-`bs-spec run --all`, `bs-spec compare`, and `dotnet test` invocation. This is not a bolted-on
+`bs-spec run --all`, every `bs-spec compare`, and every run of the test app (`dotnet test`, `dotnet run`
+of a test project, or its executable). This is not a bolted-on
 logging feature: it is how the repo answers questions it used to have no way to answer at
 all — "how many browsers/JVMs were alive at once during this test run?", "did warm-reuse actually
 change which specs failed?", "which specs are the slowest 10 in this batch?" — without adding a
 single print statement to a test.
+
+It is not the test platform's own usage telemetry. Microsoft.Testing.Platform, which runs the suites, sends
+usage data to Microsoft unless `TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (or `DOTNET_CLI_TELEMETRY_OPTOUT=1`) is
+set — CI sets it — and nothing on this page touches that ([running-tests.md](running-tests.md#reporting-and-telemetry)).
+What this page describes stays on the machine unless you point it at a collector yourself.
 
 ## What is emitted
 
@@ -141,7 +147,7 @@ the checks page, without downloading anything.
 
 ## Retention: `artifacts/telemetry/` does not grow forever
 
-Every `run --all`, every `compare` arm, and every `dotnet test` writes a fresh, uniquely-named
+Every `run --all`, every `compare` arm, and every run of the test app writes a fresh, uniquely-named
 artifact set (three sibling `.pb` files, plus a profiled test run's `.composition.json` — see above).
 Nothing deletes them on its own, so a
 developer's `artifacts/telemetry/` would otherwise accumulate indefinitely.
@@ -149,7 +155,7 @@ developer's `artifacts/telemetry/` would otherwise accumulate indefinitely.
 `TelemetryRetention.Sweep` (`src/BattleScribeSpec.Telemetry.Collector/TelemetryRetention.cs`) keeps
 the **20 most recent artifact sets** in a directory and deletes the rest, by last-write time. It is
 called once, right before each of the three real entry points starts its own collector: `RunBatch`,
-`CompareCommand`, and the `dotnet test` assembly fixture (`TelemetryAssemblyFixture`).
+`CompareCommand`, and the test app's assembly fixture (`TelemetryAssemblyFixture`).
 
 **Count-based, not age-based, on purpose.** A day-based policy ("delete anything older than N
 days") does not bound disk usage under a tight edit/test loop or a busy CI matrix — a developer can

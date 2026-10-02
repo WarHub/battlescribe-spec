@@ -5,8 +5,11 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Per-spec Theory version of live NR UI conformance tests.
 /// Each spec is an individual test case, enabling filtering via DisplayName~.
-/// Gated by NR_ENGINE_URL env var.
-/// Usage: dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=LiveNrUiRoster&amp;DisplayName~kitchen-sink"
+/// Gated by NR_ENGINE_URL env var, which the <c>nr-ui-live</c> profile sets; without it every row skips.
+/// Usage — a live session on newrecruit.eu:
+/// <c>dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-ui-live --filter "DisplayName~kitchen-sink"</c>
+/// (an unprofiled <c>--filter "Engine=LiveNrUiRoster&amp;DisplayName~kitchen-sink"</c> with no URL exported
+/// skips every row and fails with exit 8).
 /// </summary>
 [Collection("LiveNrUiRoster")]
 [Trait("Category", "Conformance")]

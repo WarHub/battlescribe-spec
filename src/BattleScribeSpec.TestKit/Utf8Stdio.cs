@@ -25,14 +25,14 @@ namespace BattleScribeSpec;
 /// path (<c>bs-spec run -</c>) hands it over raw.
 /// </para>
 /// <para>
-/// <b>Why VSTest hid it and Microsoft.Testing.Platform will not.</b> Under VSTest the test process
+/// <b>Why VSTest hid it and Microsoft.Testing.Platform does not.</b> Under VSTest the test process
 /// runs on a hidden console of its own on the OEM code page — measured from a <c>chcp 437</c>
 /// terminal: <c>GetConsoleCP</c> 65001 inside the test — so every child the suite spawns sees the
 /// same code page as its parent and the two ends agree by accident. Microsoft.Testing.Platform runs
 /// the test executable on the console it was started from and keeps that console's input code page
 /// (measured by running the xunit v3 test executable directly from the same terminal:
-/// <c>GetConsoleCP</c> 437), so the terminal's code page reaches every pipe. This lands before the
-/// runner moves, so that the move cannot be what changes it.
+/// <c>GetConsoleCP</c> 437), so the terminal's code page reaches every pipe. This landed before the
+/// suites moved to the new runner, so that the move could not be what changed it.
 /// </para>
 /// <para>
 /// <b>Why only redirected streams, and why never <see cref="Console.InputEncoding"/>.</b> A stream

@@ -11,10 +11,11 @@ description: >
 
 ## Quick start
 
-1. Run the failing spec:
-   ```bash
-   dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"
-   ```
+1. Run the failing spec with the one-spec command in [AGENTS.md, "Build & test"](../../../AGENTS.md#build--test),
+   your spec id in place of `my-spec-id`. It narrows `pre-push` to that spec: every offline engine that
+   runs specs one by one, plus the spec's lint and schema checks. A spec whose id matches nothing exits 8.
+   [docs/running-tests.md](../../../docs/running-tests.md#selecting-tests-by-name) says what a name filter
+   reaches and what it cannot (the single-test NR lanes).
 2. Read the assertion error output — it tells you the step index, field path, and mismatch.
 3. Check the matching rules below to understand *how* actual state was compared to expected.
 4. Fix the spec or the engine adapter and re-run.
@@ -203,7 +204,7 @@ See [ERROR-ASSERTIONS.md](references/ERROR-ASSERTIONS.md) for error matching det
    ```
    Default dumps after the last step. Use `--all-steps` to see state progression.
    Use `action: dump` in spec YAML for explicit dump points.
-2. **Isolate:** Run single spec with `--filter "DisplayName~{id}"`
+2. **Isolate:** Run the single spec — AGENTS.md's one-spec command (see Quick start)
 3. **Read:** Parse the `Step N: path: expected X but got Y` messages
 4. **Check matching:** Is it index vs name? Is ordering correct?
 5. **Check defaults:** Is zero-errors implicit check triggering?
