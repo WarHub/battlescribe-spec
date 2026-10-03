@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Diagnostics;
 
 namespace BattleScribeSpec.Cli.Tests;
 
@@ -99,7 +98,7 @@ public sealed class CommandSurfaceTests
         // Spawn the real CLI out-of-process and inspect stderr to tell the two apart (this is
         // the CliInputException path from EngineOptions.Resolve, thrown while constructing
         // RunCommand's RunOptions — see RunCommand.cs's SetAction try/catch).
-        var (exitCode, _, stdErr) = await RunCliAsync("run", "spec", "--engine", "warscroll");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("run", "spec", "--engine", "warscroll");
 
         Assert.Equal(1, exitCode);
         Assert.Contains("error:", stdErr);
@@ -113,7 +112,7 @@ public sealed class CommandSurfaceTests
     {
         // probe forwards to bs-engine-host, but the "-ui required" guard fires in the CLI
         // forwarder (before any host is spawned) so a non-UI engine gets the historical UX.
-        var (exitCode, _, stdErr) = await RunCliAsync("probe", "some/spec");
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync("probe", "some/spec");
 
         Assert.Equal(1, exitCode);
         Assert.Contains("probe requires --ui", stdErr);
@@ -148,11 +147,10 @@ public sealed class CommandSurfaceTests
         // only checks applicability when an identity exists; here the downstream "unknown
         // gamedata engine" failure is expected and fine — the NRE/ArgumentNullException crash
         // is not.
-        var repoRoot = FindRepoRoot();
-        var spec = Path.Combine(repoRoot, "specs", "gamedata", "nr", "nr-type-def-additions.yaml");
+        var spec = CliProcess.SpecPath("gamedata", "nr", "nr-type-def-additions.yaml");
         Assert.True(File.Exists(spec), $"Spec not found: {spec}");
 
-        var (exitCode, _, stdErr) = await RunCliAsync(
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "run", spec, "--engine", "exec:doesnotexist", "--gamedata");
 
         Assert.Equal(1, exitCode);
@@ -160,47 +158,6 @@ public sealed class CommandSurfaceTests
         Assert.DoesNotContain("Unhandled exception", stdErr);
         Assert.DoesNotContain("NullReferenceException", stdErr);
         Assert.DoesNotContain("ArgumentNullException", stdErr);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-
-        Assert.NotNull(dir);
-        return dir.FullName;
-    }
-
-    private static string FindCliDll()
-    {
-        var dll = Path.Combine(FindRepoRoot(), "artifacts", "bin", "BattleScribeSpec.Cli", "debug", "bs-spec.dll");
-        Assert.True(File.Exists(dll), $"CLI not built: {dll}");
-        return dll;
-    }
-
-    /// <summary>Spawn the real <c>bs-spec</c> CLI out-of-process and capture its output/exit code.</summary>
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(params string[] args)
-    {
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        psi.ArgumentList.Add(FindCliDll());
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start bs-spec.dll.");
-        var stdOutTask = process.StandardOutput.ReadToEndAsync();
-        var stdErrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return (process.ExitCode, await stdOutTask, await stdErrTask);
     }
 
     [Theory]

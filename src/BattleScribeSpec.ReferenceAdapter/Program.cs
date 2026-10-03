@@ -9,12 +9,19 @@ using BattleScribeSpec.ReferenceAdapter;
 // Roster/GameData engines are wrapped in the ForceFail* test hooks so BSSPEC_TEST_FORCE_FAIL can
 // make this adapter deliberately diverge from another run's verdicts (see ForceFailEngines.cs) —
 // used to red-test bs-spec compare's verdict-equality assertion. Unset, the hook is a no-op pass-through.
+// BSSPEC_TEST_ROSTER_ONLY=1 makes it a roster-only adapter (see RosterOnlyHook in the same file).
+
+// The protocol is UTF-8 without a byte-order mark on stdin, stdout and stderr (docs/adapter-protocol.md).
+// Console.In/Console.Out below are re-opened that way here whenever they are pipes, which they are
+// whenever a client drives this adapter; see Utf8Stdio for what goes wrong when only one end says so.
+Utf8Stdio.UseForRedirectedStreams();
 
 await AdapterHandler.RunAsync(
     new AdapterOptions
     {
         RosterEngineFactory = () => new ForceFailRosterEngine(new BattleScribeRosterEngine()),
-        GameDataEngineFactory = () => new ForceFailGameDataEngine(new BattleScribeGameDataEngine()),
+        // Null under BSSPEC_TEST_ROSTER_ONLY=1, so describe omits "gamedata" (RosterOnlyHook).
+        GameDataEngineFactory = RosterOnlyHook.IsSet ? null : () => new ForceFailGameDataEngine(new BattleScribeGameDataEngine()),
         Name = "battlescribe",
         Version = typeof(BattleScribeRosterEngine).Assembly.GetName().Version?.ToString(),
 

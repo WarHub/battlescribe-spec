@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -20,12 +19,9 @@ public sealed class CompareCommandTests
     {
         // A configuration change that alters conformance results is not an optimization, it is a
         // regression — and this assertion is the only thing in the harness that catches it.
-        var repoRoot = FindRepoRoot();
-        var adapterDll = FindReferenceAdapterDll(repoRoot);
-        var cliDll = FindCliDll(repoRoot);
+        var adapterDll = CliProcess.ReferenceAdapterDll;
 
-        var (exitCode, stdOut, stdErr) = await RunCliAsync(
-            cliDll,
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
             "compare",
             "--engine", $"battlescribe=dotnet:{adapterDll}",
             "--filter", "protocol/protocol-kitchen-sink",
@@ -43,12 +39,9 @@ public sealed class CompareCommandTests
     [Trait("Category", "Integration")]
     public async Task Compare_IdenticalConfigs_ExitsZero_AndReportsSpeedupNearOne()
     {
-        var repoRoot = FindRepoRoot();
-        var adapterDll = FindReferenceAdapterDll(repoRoot);
-        var cliDll = FindCliDll(repoRoot);
+        var adapterDll = CliProcess.ReferenceAdapterDll;
 
-        var (exitCode, stdOut, stdErr) = await RunCliAsync(
-            cliDll,
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
             "compare",
             "--engine", $"battlescribe=dotnet:{adapterDll}",
             "--filter", "protocol/protocol-kitchen-sink",
@@ -80,6 +73,37 @@ public sealed class CompareCommandTests
         Assert.InRange(speedup, 0.6, 1.6);
     }
 
+    /// <summary>
+    /// <b>Identical verdicts over specs that never ran are not "verdict-neutral".</b> Two arms that
+    /// both executed nothing agree perfectly and prove nothing, so <c>compare</c> exits 8 there, as an
+    /// empty <c>run --all</c> does, instead of printing "Verdicts identical across 0 spec(s)" and 0.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: delete the <c>executed == 0</c> check in <c>CompareCommand</c> and this exits 0; print
+    /// the message through <c>Ui.Error</c> and the last stderr line is only its wrapped tail.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Compare_FilterMatchingNothing_ExitsEight_NotIdentical()
+    {
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
+            "compare",
+            "--engine", $"battlescribe=dotnet:{CliProcess.ReferenceAdapterDll}",
+            "--filter", "no-such-spec",
+            "--config-a", "",
+            "--config-b", "");
+
+        var combined = stdOut + stdErr;
+        Assert.True(exitCode == 8, $"exit code {exitCode}; output:\n{combined}");
+        var lastLine = CliProcess.LastLine(stdErr);
+        Assert.True(
+            lastLine.StartsWith("error: compared ", StringComparison.Ordinal)
+                && lastLine.Contains("executed 0 in either arm", StringComparison.Ordinal)
+                && lastLine.EndsWith("(exit 8).", StringComparison.Ordinal),
+            $"the last stderr line is not the whole nothing-executed message: \"{lastLine}\"; output:\n{combined}");
+        Assert.DoesNotContain("Verdicts identical", combined, StringComparison.Ordinal);
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public async Task Compare_ExpectedFailures_ThreadsIntoBothArms_ReportsExpectedFailureNotFailed()
@@ -93,15 +117,12 @@ public sealed class CompareCommandTests
         // actually passed but was annotated to fail) and arm B must read "expected-failure" (it
         // actually failed and was annotated to fail), never the plain "passed"/"failed" that
         // omitting the flag would produce.
-        var repoRoot = FindRepoRoot();
-        var adapterDll = FindReferenceAdapterDll(repoRoot);
-        var cliDll = FindCliDll(repoRoot);
+        var adapterDll = CliProcess.ReferenceAdapterDll;
         var fixturesDir = WriteExpectedFailureFixture();
 
         try
         {
-            var (exitCode, stdOut, stdErr) = await RunCliAsync(
-                cliDll,
+            var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
                 "compare",
                 "--engine", $"cmp-xfail-engine=dotnet:{adapterDll}",
                 "--specs", fixturesDir,
@@ -190,8 +211,7 @@ public sealed class CompareCommandTests
     [Trait("Category", "Unit")]
     public async Task Compare_RejectsMalformedConfig()
     {
-        var (exitCode, _, stdErr) = await RunCliAsync(
-            FindCliDll(FindRepoRoot()),
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "compare", "--engine", "battlescribe",
             "--config-a", "NOT_KEY_VALUE",
             "--config-b", "");
@@ -210,8 +230,7 @@ public sealed class CompareCommandTests
         // the same vocabulary as `run --policy` and `serve --policy`, parsed by the shared
         // PolicyOverride.Apply. This asserts a malformed --policy-a is a clean CLI error, not an
         // unhandled exception, mirroring Compare_RejectsMalformedConfig for --config-a.
-        var (exitCode, _, stdErr) = await RunCliAsync(
-            FindCliDll(FindRepoRoot()),
+        var (exitCode, _, stdErr) = await CliProcess.RunAsync(
             "compare", "--engine", "battlescribe",
             "--policy-a", "workers=0",
             "--config-a", "",
@@ -235,8 +254,7 @@ public sealed class CompareCommandTests
         // docs/warm-reuse.md and the #271 plan's Task 6 gate), --config-a/--config-b must be
         // omittable — this is the literal command shape from that recipe, minus the real UI
         // engine (uses "battlescribe" so it runs hermetically, no JVM/browser needed).
-        var (exitCode, stdOut, stdErr) = await RunCliAsync(
-            FindCliDll(FindRepoRoot()),
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
             "compare",
             "--engine", "battlescribe",
             "--filter", "protocol/protocol-kitchen-sink",
@@ -263,8 +281,7 @@ public sealed class CompareCommandTests
         // spec or calls Cleanup() and keeps it alive, even though the engine's own profile
         // declares neither domain reuse-safe (an explicit override is allowed — it is exactly the
         // ablation this rail exists to run — just warned).
-        var (exitCode, stdOut, stdErr) = await RunCliAsync(
-            FindCliDll(FindRepoRoot()),
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
             "compare",
             "--engine", "battlescribe",
             "--filter", "protocol/protocol-kitchen-sink",
@@ -277,85 +294,5 @@ public sealed class CompareCommandTests
         Assert.Equal(0, exitCode);
         Assert.Contains("Verdicts identical", combined, StringComparison.Ordinal);
         Assert.DoesNotContain("DIVERGENCE", combined, StringComparison.Ordinal);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-
-        Assert.NotNull(dir);
-        return dir.FullName;
-    }
-
-    private static string FindReferenceAdapterDll(string repoRoot)
-    {
-        var pivot = ExtractPivot(AppContext.BaseDirectory);
-        foreach (var candidatePivot in new[] { pivot, "debug" }.Where(p => p is not null).Distinct())
-        {
-            var dll = Path.Combine(repoRoot, "artifacts", "bin",
-                "BattleScribeSpec.ReferenceAdapter", candidatePivot!, "bs-reference-adapter.dll");
-            if (File.Exists(dll))
-            {
-                return dll;
-            }
-        }
-
-        var expected = Path.Combine(repoRoot, "artifacts", "bin",
-            "BattleScribeSpec.ReferenceAdapter", pivot ?? "debug", "bs-reference-adapter.dll");
-        Assert.Fail($"Reference adapter not built: {expected}");
-        return expected;
-    }
-
-    private static string FindCliDll(string repoRoot)
-    {
-        var pivot = ExtractPivot(AppContext.BaseDirectory);
-        foreach (var candidatePivot in new[] { pivot, "debug" }.Where(p => p is not null).Distinct())
-        {
-            var dll = Path.Combine(repoRoot, "artifacts", "bin", "BattleScribeSpec.Cli", candidatePivot!, "bs-spec.dll");
-            if (File.Exists(dll))
-            {
-                return dll;
-            }
-        }
-
-        var expected = Path.Combine(repoRoot, "artifacts", "bin", "BattleScribeSpec.Cli", pivot ?? "debug", "bs-spec.dll");
-        Assert.Fail($"CLI not built: {expected}");
-        return expected;
-    }
-
-    private static string? ExtractPivot(string baseDirectory)
-    {
-        var segments = Path.GetFullPath(baseDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        var binIndex = Array.FindLastIndex(segments, s => s.Equals("bin", StringComparison.OrdinalIgnoreCase));
-        return binIndex >= 0 && binIndex + 2 < segments.Length ? segments[binIndex + 2] : null;
-    }
-
-    /// <summary>Spawn the built bs-spec CLI out-of-process and capture its output/exit code.</summary>
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string cliDll, params string[] args)
-    {
-        var psi = new ProcessStartInfo("dotnet")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        psi.ArgumentList.Add(cliDll);
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start bs-spec.dll.");
-        var stdOutTask = process.StandardOutput.ReadToEndAsync();
-        var stdErrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return (process.ExitCode, await stdOutTask, await stdErrTask);
     }
 }

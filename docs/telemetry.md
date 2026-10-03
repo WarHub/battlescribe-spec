@@ -187,7 +187,9 @@ that the two arms' **per-spec verdicts are identical**. The command's entire rea
 guarantee: **a configuration change that alters conformance results is not an optimization, it is
 a regression.** A speedup that also changes which specs pass or fail has not been validated — it
 has only been timed. `compare` exits non-zero the moment a verdict diverges, before printing a
-single timing number, so a regression can never hide behind an attractive speedup figure.
+single timing number, so a regression can never hide behind an attractive speedup figure. Nor can
+an empty comparison: when neither arm executed a spec (the filter matched nothing, or everything was
+skipped), `compare` exits 8 instead of reporting identical verdicts across nothing.
 
 The two arms can differ along **two independent axes**:
 

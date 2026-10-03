@@ -156,6 +156,8 @@ dotnet test --filter "Tag=cost&Category=Conformance"
 
 | Code | Meaning |
 |------|---------|
-| 0 | All specs passed |
-| 1 | One or more specs failed |
-| 2 | `bs-spec` error (bad args, adapter crash, etc.) |
+| 0 | Every executed spec passed |
+| 1 | One or more specs failed, or `bs-spec` refused the command (bad arguments, a missing specs directory) |
+| 8 | Nothing executed: the selection matched no spec, or every selected spec was skipped — a run that checks nothing does not pass. The last line on stderr says which, as one unwrapped line starting `error: selected N of M specs, executed 0`. 8 is the code Microsoft.Testing.Platform uses for "zero tests ran". |
+
+An adapter that crashes mid-run fails the specs it was running (exit 1); it is not a separate code.

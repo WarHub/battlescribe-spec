@@ -290,7 +290,8 @@ so neither local runs nor CI need to set anything. Tests self-skip when BS artif
 live resources) printed after the run and appended to `$GITHUB_STEP_SUMMARY` in CI. Use
 `bs-spec compare --config-a "" --config-b "SOME_ENV=1"` to prove a config change is
 **verdict-neutral** before shipping it as an optimization — it asserts identical per-spec
-pass/fail before reporting any timing delta, and exits non-zero on divergence. See
+pass/fail before reporting any timing delta, exits non-zero on divergence, and exits 8 when neither
+arm executed anything (as `run --all` does when its selection runs nothing). See
 [docs/telemetry.md](docs/telemetry.md) for the full model (spans/metrics emitted, the
 parent-as-collector design, reading the artifact, known limitations).
 

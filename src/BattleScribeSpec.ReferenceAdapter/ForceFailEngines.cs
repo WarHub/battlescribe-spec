@@ -77,6 +77,22 @@ internal static class ForceKillHook
 }
 
 /// <summary>
+/// Test-only hook, alongside <see cref="ForceFailHook"/> and <see cref="ForceKillHook"/>: with
+/// <c>BSSPEC_TEST_ROSTER_ONLY=1</c> this adapter leaves its gamedata engine unwired, so
+/// <c>describe</c> advertises the roster domain alone. That is the shape of an adapter that does not
+/// serve gamedata, whose selected gamedata specs <c>SpecSuiteRunner</c> must skip at its describe
+/// gate rather than run — and an empty run of that kind must still say "selected N, executed 0".
+/// <c>SpecSuiteRunnerTests</c> drives it to hold that path end to end; no other adapter in the repo
+/// is roster-only. Unset (or any other value), both domains are served.
+/// </summary>
+internal static class RosterOnlyHook
+{
+    internal const string EnvVar = "BSSPEC_TEST_ROSTER_ONLY";
+
+    public static bool IsSet => Environment.GetEnvironmentVariable(EnvVar) == "1";
+}
+
+/// <summary>
 /// Decorates an <see cref="IRosterEngine"/> so <c>BSSPEC_TEST_FORCE_FAIL</c> can inject a
 /// synthetic setup error — <see cref="Roster.RosterRunner"/> treats any non-empty <c>Setup</c>
 /// error list as an immediate spec failure, regardless of the spec's own assertions, which makes

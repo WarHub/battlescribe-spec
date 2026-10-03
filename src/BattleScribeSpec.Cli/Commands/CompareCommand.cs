@@ -292,6 +292,18 @@ internal static class CompareCommand
         var executed = allIds.Count(id => statusA.GetValueOrDefault(id, "(not run)") is not ("skipped" or "(not run)"));
         var skipped = allIds.Count - executed;
 
+        // Verdicts that are identical because neither arm ran anything are not evidence of anything,
+        // and "verdict-neutral" is the claim this command exists to make — so the same exit 8 as an
+        // empty `run --all`. (The arms agree here, so "executed" in A is also "executed" in B.)
+        if (executed == 0)
+        {
+            Ui.ErrorLine(
+                $"compared {allIds.Count} spec(s), executed 0 in either arm: nothing matched the selection, or " +
+                "every selected spec was skipped. A comparison of nothing proves nothing " +
+                $"(exit {SpecSuiteResult.NothingExecutedExitCode}).");
+            return SpecSuiteResult.NothingExecutedExitCode;
+        }
+
         Ui.Pass(skipped > 0
             ? $"Verdicts identical across {allIds.Count} spec(s) ({executed} executed, {skipped} skipped)."
             : $"Verdicts identical across {allIds.Count} spec(s).");

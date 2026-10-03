@@ -14,6 +14,9 @@ internal static class SpecLoading
     {
         if (input == "-")
         {
+            // Raw spec text, non-ASCII included. When stdin is a pipe, Console.In is UTF-8 here
+            // whatever the console code page is: bs-spec's entry point re-opened it (Utf8Stdio). When
+            // a person types the spec, it is the console's own reader, in the code page they typed in.
             var yaml = Console.In.ReadToEnd();
             return SpecLoader.LoadFromYaml(yaml, defaultId: "stdin");
         }
@@ -52,6 +55,9 @@ internal static class SpecLoading
     {
         if (input == "-")
         {
+            // Raw spec text, non-ASCII included. When stdin is a pipe, Console.In is UTF-8 here
+            // whatever the console code page is: bs-spec's entry point re-opened it (Utf8Stdio). When
+            // a person types the spec, it is the console's own reader, in the code page they typed in.
             var yaml = Console.In.ReadToEnd();
             return SpecLoader.LoadGameDataFromYaml(yaml, defaultId: "stdin");
         }

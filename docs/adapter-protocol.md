@@ -42,6 +42,14 @@ sequenceDiagram
    one response, in strict positional order.
 5. The `type` field discriminates message kinds.
 6. Unknown fields should be ignored (forward compatibility).
+7. Stdin, stdout and stderr are **UTF-8 without a byte-order mark**, in both directions, whatever the
+   console code page of either process. The built-in client and adapters escape non-ASCII in the JSON
+   they write, so their protocol bytes happen to be ASCII; an adapter MAY write raw UTF-8 JSON (Node's
+   `JSON.stringify` does), and the client decodes all three streams as UTF-8 — stderr included,
+   because it is forwarded to the user line by line. On Windows, where a process's console code page
+   is otherwise what its pipes speak, both ends have to say so: the client pins its side
+   (`AdapterProcess`), and a .NET adapter calls `Utf8Stdio.UseForRedirectedStreams()` first thing,
+   as `bs-engine-host` and `bs-reference-adapter` do.
 
 ### Correlation id (`corrId`)
 
