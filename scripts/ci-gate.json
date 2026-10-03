@@ -38,7 +38,11 @@
     },
     {
       "path": "tests/test-profiles/",
-      "why": "the profiles the thorough lanes select their tests with"
+      "why": "the runsettings the thorough lanes select their tests with, generated from tests/TestProfiles/"
+    },
+    {
+      "path": "tests/TestProfiles/",
+      "why": "the test-profile registry: every lane's selection, environment and engine decisions, rendered into tests/test-profiles/"
     },
     {
       "path": ".github/workflows/",

@@ -207,21 +207,32 @@ Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
 |---|---|---|
 | `BsRosterUi`, `BsGameDataUi` — launch the real BattleScribe desktop app | `-p:TestProfile=bs-ui-roster` / `bs-ui-gamedata` | `thorough-ui-bs` (opt-in) |
 | `LiveNr*` — traffic to a third party's production site | `-p:TestProfile=nr-live*`, `nr-editor-*-live` | `nr-conformance` (opt-in) |
-| `Mode=Sequential` — manual-only, gated behind `NR_SEQUENTIAL` | `NR_SEQUENTIAL=1` + the matching profile | — |
+| `Mode=Sequential` — manual-only, gated behind `NR_SEQUENTIAL` | `-p:TestProfile=nr-frozen-sequential` / `nr-live-sequential` (they set `NR_SEQUENTIAL=true`) | — |
 
-That table is enforced, not aspirational:
-`ConcurrencyConfigurationDriftTests.EveryEngineLane_IsADeliberateDecisionInThePrePushProfile` fails
-if a new `Engine` trait appears that `pre-push.runsettings` neither runs nor explicitly excludes.
-Adding a lane is therefore a decision, not a default — which it was not when `BsRosterUi` arrived and
-quietly spent 688.8s of a 689.2s run driving the desktop app, in a profile advertised here at `~40s`
-(#405). Note the `~40s` had stopped being true well before that: even with no UI lane at all,
-`BsRoster` alone is over three minutes now.
+That table is enforced, not aspirational. Every engine lane is a row in
+`tests/TestProfiles/EngineLanes.cs` saying what it needs and whether `pre-push` runs it, with the
+measured cost behind the answer, and `pre-push`'s filter is derived from that column.
+`TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared` fails if an `Engine` trait appears
+with no row, and `PrePushHonoursItsPromise` fails if a lane that needs the desktop app or a third
+party's site is put in. Adding a lane is therefore a decision, not a default — which it was not when
+`BsRosterUi` arrived and quietly spent 688.8s of a 689.2s run driving the desktop app, in a profile
+advertised here at `~40s` (#405). Note the `~40s` had stopped being true well before that: even with no
+UI lane at all, `BsRoster` alone is over three minutes now.
 
-Other profiles: `core` (offline suite, no NR engines), `lint`, `bs`, `nr-frozen`, `nr-ui-frozen`,
-`nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`, `nr-editor-ui-live`, `bs-ui-roster`,
-`bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`, `nr-live-visible`,
-`nr-ui-live`, `nr-ui-live-visible`. CI runs entirely through these profiles
-(`.github/workflows/ci.yml`).
+**Test profiles are defined in `tests/TestProfiles/TestProfiles.cs`**, the one record of every lane: its
+selection, the environment it sets, the assemblies it covers. The `.runsettings` files in
+`tests/test-profiles/` are generated from it for VSTest, and a hand edit there fails the lint
+(`RunsettingsGenerationTests`). Every `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names is
+classified in `tests/TestProfiles/Knobs.cs` (`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`).
+Other profiles: `core` (offline suite, no NR engines), `non-conformance`, `lint`, `bs`, `nr-frozen`,
+`nr-ui-frozen`, `nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`, `nr-editor-ui-live`,
+`bs-ui-roster`, `bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`, `nr-live-visible`,
+`nr-ui-live`, `nr-ui-live-visible`, `nr-frozen-sequential`, `nr-live-sequential`, and the smoke lanes
+`smoke-bs`, `smoke-nr-frozen`, `smoke-nr-ui`, `smoke-nr-editor`, `smoke-nr-editor-ui`,
+`smoke-bs-gamedata-ui`. `cli` (the CLI's own tests) exists in the registry only, with no runsettings
+file. Most of CI's thorough and live lanes run through these profiles (`.github/workflows/ci.yml`); its
+unit, smoke and BS UI steps still spell their filters inline, the same selections the `non-conformance`,
+`smoke-*` and `bs-ui-*` profiles record.
 
 ## NR frozen tests and HAR
 
@@ -359,5 +370,6 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/SpecLintTests.cs` | Roster lint rules, known tags |
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
+| `tests/TestProfiles/` | The test-profile registry: every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`); `tests/test-profiles/*.runsettings` is generated from it |
 | `tools/format-specs.ps1` | Spec formatter |
 
