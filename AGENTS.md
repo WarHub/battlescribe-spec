@@ -153,10 +153,21 @@ dealt with. `ToolchainPinDriftTests` fails if a workflow step starts picking its
 must move by hand **in the same PR** as an SDK bump: the `mcr.microsoft.com/dotnet/sdk` tag in
 `docker/`.
 
-**A PR that edits `Directory.Packages.props` or `global.json` runs the thorough suites**, exactly as one
-editing `testdata.json` does — the gate reads the changed files, not the author or a label. Package
-and SDK bumps swap out what the engines are built from (IKVM compiles the BattleScribe engine;
-Playwright ships the browser every NR UI driver drives), so kitchen-sink is not enough for them.
+**What makes CI run the thorough suites is one file: [`scripts/ci-gate.json`](scripts/ci-gate.json).**
+A PR that edits one of its `thoroughInputs` — `testdata.json`, `Directory.Packages.props`,
+`global.json`, the CI definition, the test profiles and projects, among others, each with the reason
+beside it — runs them; the gate reads the changed files, not the author or a label. Package and SDK
+bumps swap out what the engines are built from (IKVM compiles the BattleScribe engine; Playwright
+ships the browser every NR UI driver drives), so kitchen-sink is not enough for them. **Every PR whose
+base is not `main` — every layer of a stack — runs them too**, with no label. The live NR lane
+(`nr-conformance`) is a separate decision: it runs on a schedule, a manual dispatch, the `thorough-ci`
+label, or an input edit on a PR to `main` — never just because a PR is stacked, so a restack cannot put
+ten conformance runs on newrecruit.eu at once. `ci-gate` is red on a draft ("draft: nothing ran") and
+accepts a skipped thorough or live job only when the gate said it was not owed.
+`scripts/thorough-inputs.mjs` and `scripts/ci-gate.mjs` hold the rules (unit-tested with
+`node --test scripts/*.test.mjs`); `CiWorkflowDriftTests` holds the workflow to them — every job and
+every test step has a timeout (the job's holding all its steps'), every `steps.<id>` resolves, a test
+step names its project literally and is one invocation with nothing that could swallow its exit code.
 
 **The `docker` CI job builds `docker/bs-spec.Dockerfile` on every push, and runs the image.** It
 exists because nothing built these files and both rotted unnoticed — one referenced a project renamed

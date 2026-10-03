@@ -368,6 +368,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **`ci-gate` is computed from what it needs, and stops reading a skip as a pass** — the one required
+  check accepted `success` or `skipped` from every job, so it could not tell a decision from an
+  accident. A draft PR read green (every job skips on a draft); a gate output that was missing or
+  malformed would have skipped the thorough lanes on every PR, green; and the issue the weekly run opens
+  listed its failed jobs by hand and had dropped `docker`. `scripts/ci-gate.mjs` now reads
+  `toJSON(needs)`: every job must succeed, a thorough job may skip only when the gate said
+  `thorough=false`, the live job only when it said `live=false`, the gate's outputs must be exactly
+  `"true"` or `"false"` (and both `"true"` on a scheduled or manual run), and a draft is red with
+  "draft: nothing ran". The issue's job list comes from the same verdict.
+- **The gate has two outputs, its inputs live in one file, and every stack PR runs the thorough
+  suites** — what forces the thorough lanes is `scripts/ci-gate.json`, read by the gate
+  (`scripts/thorough-inputs.mjs`), by `ci-gate` and by the workflow lints; each entry carries its
+  reason, the gate writes the reasons that fired to the job summary, and a node test fails on an entry
+  that no longer matches a file. The list grows from three pins to the CI definition, the test profiles,
+  the test projects, `xunit.runner.json`, `Directory.Build.props`, `setup.ps1` and the gate's own
+  scripts. A renamed file counts under its old path too (the gate reads the PR-files API response,
+  `previous_filename` included, where it used to keep only the new names), so moving a profile or a
+  workflow out of an input path forces the suites like editing it does. A PR whose base is not the
+  default branch — a layer of a stack — forces the thorough suites with no label, because label-only
+  coverage failed open the moment a label was forgotten. The live NR lane (`nr-conformance`) is now its
+  own output: schedule, manual dispatch, the `thorough-ci` label, or an input edit on a PR to `main` —
+  not a stacked PR, so a restack cannot drive newrecruit.eu ten times at once. The label still asks for
+  both.
+- **Every job and every test step is bounded, and test steps no longer wait on each other** —
+  `checks`, `docker`, `smoke`, `nr-conformance`, `gate`, `ci-gate` and the NR snapshot workflow ran on
+  GitHub's six-hour default. Each job now has a `timeout-minutes`, and each test step its own (about
+  2.5x its measured duration, at least 5; 60 for the full NR UI roster lane), so a hang fails the step
+  and the `failure()`/`always()` uploads after it still run — and each job's bound holds all of its
+  steps' bounds plus room for setup (`checks` 30, `smoke` 40), or the job timeout would fire first and
+  take those uploads with it. Test steps run on
+  `!cancelled() && steps.build.outcome == 'success'`, so one red lane no longer hides the next — the
+  special case two NR Editor lanes had, made general (`nr-conformance` stays sequential, so a site
+  that is down is not hammered). `smoke`, which drives all four UI drivers on every push, now uploads
+  their diagnostics on failure and its telemetry always. The NR Editor GameData UI driver writes its
+  diagnostics only with `NR_GAMEDATA_UI_DIAGNOSTICS` set, which no CI step did — so its uploads, in
+  `smoke` and in `thorough-conformance`, had been empty; both steps set it now. The BS GameData UI
+  driver still writes none (its capture has no caller), so that path is uploaded for when it does.
+- **`CiWorkflowDriftTests` parses the workflows as YAML and holds them to that** — `ci-gate` needs
+  every job; the jobs gated on `thorough` and `live` are exactly `scripts/ci-gate.json`'s; every job in
+  every workflow and every test step has a timeout (a step's below its job's, and a job's above all its
+  steps' together plus setup); every test step carries the independent-lane condition, except in
+  `nr-conformance`, where none may; every `steps.<id>` and `needs.<job>` resolves (an unknown one is
+  null, not an error, and would skip every test step behind it); a test step is one invocation with no
+  `|`, `;`, `&&` or `||`, and names its project literally; nothing under `.github` uses
+  `continue-on-error` on a test step or on a job that runs one or that `ci-gate` judges,
+  `--ignore-exit-code`, `TESTINGPLATFORM_EXITCODE_IGNORE` or `|| true`. Test steps are found by
+  `CiTestInvocations`, which recognises a run of a test project by
+  the project — csproj, directory, or assembly from `BattleScribeSpec.slnx` — in any spelling, resolved
+  against the step's `working-directory`, and follows the repo scripts a step calls; a run whose project
+  is a `${{ }}` expression is reported as unresolved rather than read as the whole solution (which made
+  every project look covered); `EveryCiTestStep_ExecutesAtLeastOneTest` and
+  `EveryTestProject_IsRunBySomeCiStep` moved onto it from a line scan that only ever saw the wrapper
+  script's spelling. Every rule was mutation-checked. "Run script tests" runs `scripts/*.test.mjs`.
 - **xUnit.net v3 moves to 4.0.1, as `xunit.v3.mtp-off`** — and the `Microsoft.Testing.Platform` 2.2.1
   pin goes. Dependabot never offered xunit 4 (out since 2026-08-15): it needs the platform at 2.4.0 or
   later, the central pin held it at 2.2.1, restore failed NU1109, and Dependabot drops an update it
@@ -695,6 +748,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **The `[nr-test]` commit-message trigger** — it forced the thorough and live lanes from a commit
+  message, which only a push to `main` carries (a PR's event has no head commit), so it could never
+  fire on the PRs it would have been useful for. A manual `workflow_dispatch` run asks for the same
+  thing explicitly; a PR uses the `thorough-ci` label.
 - **NuGet lock files, and the `KnownILLinkPack` pin that existed to keep them stable** — all sixteen
   `packages.lock.json`, `RestorePackagesWithLockFile`, CI's `dotnet restore --locked-mode` step and
   `Directory.Build.targets` are gone. `Directory.Packages.props` already pins every version exactly

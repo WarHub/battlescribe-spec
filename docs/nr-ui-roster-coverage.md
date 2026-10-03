@@ -154,7 +154,8 @@ declarations rather than earning them — a spec marked `fail` with no reason be
 indistinguishable from a bug someone decided to stop looking at. So the lane grew as the
 classifications did, and the allow-list was deleted the moment it had nothing left to exclude.
 
-**The lane is opt-in only** — label, schedule or manual dispatch — so per-PR CI is untouched. It
+**The lane is opt-in only** — label, schedule, manual dispatch, or a PR that edits one of the thorough
+inputs in `scripts/ci-gate.json` or targets a branch other than `main` — so per-PR CI is untouched. It
 was 47 minutes when first widened to 363 specs; it is now 18m17s. See below; §8 covers a
 snapshot-introduced cost that none of these sleeps could explain.
 
