@@ -92,7 +92,8 @@ public sealed class ServeCommandPolicyTests
     /// <c>SetupAsync</c>), so these paths are never dereferenced here — the same trick
     /// <c>BsUiSetupFailureTeardownTests</c> uses. This is what lets the KeepAlive-follows-the-plan
     /// gate below run in EVERY CI job, including the ones that do not build the Java agent jar
-    /// (<c>checks</c>, <c>thorough-conformance</c>: <c>setup.ps1</c> skips the jar when CI=true).
+    /// (<c>checks</c>, <c>thorough-conformance</c>, <c>thorough-nr-ui-roster</c>: <c>setup.ps1</c> skips
+    /// the jar when CI=true).
     /// Going through <c>HostEngineFactory.Create*EngineAsync</c> instead would throw "Agent JAR not
     /// found" there — a gate that cannot fail in CI is not a gate.
     /// </summary>

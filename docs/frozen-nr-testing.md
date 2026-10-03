@@ -212,9 +212,9 @@ were one night's.
 
 A snapshot bump changes what every frozen suite replays, and the every-push CI lanes trim those
 suites to kitchen-sink — so the bump PR must run the full ones or it proves nothing. `ci.yml`
-turns the `thorough-conformance` lane on for **any** PR whose diff touches `testdata.json`,
-whether the bot or a maintainer made the edit; the `thorough-ci` label the bot applies is the
-visible marker of the same decision. #301 (`v34.93-20260708` → `v35.12`) is why: it was green
+turns the thorough jobs (`thorough-conformance`, `thorough-nr-ui-roster`, `thorough-ui-bs`) on
+for **any** PR whose diff touches `testdata.json`, whether the bot or a maintainer made the edit;
+the `thorough-ci` label the bot applies is the visible marker of the same decision. #301 (`v34.93-20260708` → `v35.12`) is why: it was green
 through three weeks of daily bot re-runs, merged, and broke the NR-UI roster driver and the
 store-direct roster export.
 

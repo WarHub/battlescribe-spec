@@ -316,8 +316,9 @@ failures):
 **Six times of headroom under the ceiling, against a 67ms average.** Nothing here is running out of
 time, which rules out "30s is too tight for a cold setup under load" — and with it the targeted
 increase and the retry-on-setup. (It also rules out CI contention as the mechanism: each
-`ubuntu-latest` job gets its own runner VM, so `thorough-conformance` never shares CPU with the four
-`thorough-ui-bs` legs or `nr-conformance` in the first place.)
+`ubuntu-latest` job gets its own runner VM, so the lane's job — `thorough-conformance` then,
+`thorough-nr-ui-roster` now — never shares CPU with the `thorough-ui-bs` legs or `nr-conformance` in
+the first place.)
 
 The same run shows the race alive and frequent, and the phase counts say exactly where each
 occurrence landed. Four `navigated to '/app/MyLists' mid-install` retries; `wait-mysystems-rendered`
@@ -398,7 +399,7 @@ for the URL to go quiet costs every spec a sampling interval to cancel a race th
 in 378 specs** (zero in the most recent full run, 28m, green) and that the sequence-level retry
 already absorbs end to end. The race is now named where it happens rather than guarded twice.
 
-### What to do when `thorough-conformance` goes red here
+### What to do when `thorough-nr-ui-roster` goes red here
 
 Read the `Observed:` clause; it is there to make this a decision rather than a judgement call.
 
@@ -419,7 +420,7 @@ now describe themselves the same way (`NrRosterUiEngine.WithDiagnosticsAsync`, `
   Re-run; a driver that is on `/app/MyLists` is not being told anything about NR's UI.
 - The page is the editor and the counts are zero (`forceRows=0`, `unitRows=0`) — the panel the action
   reached for did not render. That is a driver-or-NR question and wants a person: pair it with the
-  screenshot and DOM in the run's `thorough-conformance-nr-ui-diagnostics` artifact.
+  screenshot and DOM in the run's `thorough-nr-ui-roster-diagnostics` artifact.
 - The counts look right — the timeout is downstream of rendering; the store trace in the same
   artifact is the next thing to read.
 

@@ -368,6 +368,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **CI sets every job up through one composite action** — `.github/actions/setup` holds what five jobs
+  each carried a copy of: setup-dotnet from `global.json`, the bot token, the caches, a JDK, `setup.ps1`
+  and the BS UI agent build. Each job states what it needs (`java: none|plain|jdk-fx`, `nr-caches`,
+  `playwright`, `agent-jar`, extra `setup-args`), and the action refuses anything but the exact values —
+  its `if:` conditions compare strings ignoring case while its bash steps compare them exactly, so
+  `playwright: True` would have restored the browser cache and still passed `-SkipPlaywright` (on a
+  cache miss, no browser, and the frozen NR UI lanes skip), and `java: jdk+fx` would have matched no
+  setup-java step. `-SkipPlaywright` follows `playwright` rather than being written beside it, and
+  setup-java now runs before `setup.ps1` in every job (two ran it after, compiling the engine-jar patch
+  tool with the runner's default JDK). Checkout and Build stay in the job, so `steps.build.outcome`
+  still resolves. The scans that hold CI to its rules read the action as well as the workflows, through
+  one enumerator (`CiDefinitionFiles`): the setup-dotnet pin check, the retired-knob scan, the
+  step-reference lint, the test-step classifier and the ban on spelling out the functional-build
+  properties — each fails if it read no action, and a new lint fails if an action ever runs a test or
+  `bs-spec` step (its timeout, condition and uploads are only checked in a job). Dependabot's
+  `github-actions` entry now lists `directories: ["/", "/.github/actions/*"]`, because `directory: "/"`
+  never reads `.github/actions` and the action's own pins would never have been bumped;
+  `EveryActionDirectory_IsWatchedByDependabot` keeps it so. `.github/actions/` joins the inputs that
+  force the thorough suites.
+- **One functional-build switch, and `checks` is the only analyzer gate** — `dotnet build
+  -p:FunctionalBuild=true` (root `Directory.Build.props`) turns off the analyzers, code-style enforcement
+  and XML doc generation in this repository's projects: the same binaries, about 25s sooner on a CI
+  runner. The vendored `.deps/wham` keeps its own settings — its `Directory.Build.props` does not import
+  ours — so its analyzers still run under the switch: ~2s that `smoke`'s raw flags, being global
+  properties, used to save as well. Every `ci.yml` build except `checks` uses it; before, `smoke` spelled
+  the three flags out and the other three jobs ran a second analyzer pass by omission. Three lints keep it
+  that way: `checks` builds with the gates on (nothing on its build line or in an `env:` it inherits may
+  set the switch, a property it controls, or another that turns a gate off — `TreatWarningsAsErrors`,
+  `RunAnalyzersDuringBuild`, `EnableNETAnalyzers`, `AnalysisLevel*`, `AnalysisMode*`; MSBuild reads
+  environment variables as properties), every other `ci.yml` build passes the switch, and no CI step
+  spells out the switch's properties by hand (the list is read from the props group, which must keep the
+  three, so it can grow but not quietly shrink).
+- **The full frozen NR UI roster lane has a job of its own, `thorough-nr-ui-roster`** — it was one step
+  of `thorough-conformance`, ~27 of that job's 36 minutes, which made it the critical path of every
+  thorough run and held the four other lanes' verdicts until it finished. It moves unchanged (same step,
+  same profile, same `NR_UI_ROSTER_FULL`, same 60-minute step bound) into a 75-minute job that uploads its
+  own diagnostics as `thorough-nr-ui-roster-diagnostics`; `thorough-conformance` drops to 45 minutes and
+  keeps the NR Editor GameData UI upload. The thorough critical path drops from about 36 minutes to about
+  31, and a red NR UI roster lane is a red job of its own name. The new job is gated on `thorough`, needed
+  by `ci-gate` and listed in `scripts/ci-gate.json`, which the existing lints require.
 - **`ci-gate` is computed from what it needs, and stops reading a skip as a pass** — the one required
   check accepted `success` or `skipped` from every job, so it could not tell a decision from an
   accident. A draft PR read green (every job skips on a draft); a gate output that was missing or

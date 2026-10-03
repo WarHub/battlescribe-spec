@@ -111,6 +111,13 @@ internal sealed record CiProject(string RelativePath, string Directory, bool Dir
 /// here.
 /// </para>
 /// <para>
+/// <b>Every step CI runs, composite actions included.</b> <see cref="ClassifiedSteps"/> reads the steps
+/// of <c>.github/actions</c> as well as the workflows' (<see cref="CiWorkflows.AllSteps"/>), and fails
+/// the calling lint if it read no action — so a test step moved into the setup action is still a test
+/// step to every lint that holds one, and a classifier that stopped seeing actions is a red run rather
+/// than a quiet one.
+/// </para>
+/// <para>
 /// Tokenising is quote-aware (<c>--filter "(A|B)&amp;C"</c> holds no shell operator) and treats
 /// <c>${{ … }}</c> as one opaque token. A step's <c>run</c> is split into commands on newlines after
 /// joining backslash continuations (and backtick continuations under <c>pwsh</c>); comment lines are
@@ -136,9 +143,16 @@ internal static class CiTestInvocations
     /// <summary>The <c>bs-spec</c> CLI project.</summary>
     internal static CiProject CliProject => Projects.Value.Cli;
 
-    /// <summary>Every step in every workflow with its classification.</summary>
-    internal static IEnumerable<(CiStep Step, CiInvocation Invocation)> ClassifiedSteps() =>
-        CiWorkflows.AllSteps.Select(static s => (s, Classify(s)));
+    /// <summary>
+    /// Every step in every workflow and composite action, with its classification. Fails the calling
+    /// lint if no step came from an action (<see cref="CiDefinitionFiles.AssertReadAnAction"/>).
+    /// </summary>
+    internal static IEnumerable<(CiStep Step, CiInvocation Invocation)> ClassifiedSteps()
+    {
+        var steps = CiWorkflows.AllSteps.ToList();
+        CiDefinitionFiles.AssertReadAnAction(steps.Select(static s => s.Job.Workflow), nameof(CiTestInvocations));
+        return steps.Select(static s => (s, Classify(s)));
+    }
 
     /// <summary>Steps that run a test project or <c>bs-spec</c>: the steps whose exit code is a verdict.</summary>
     internal static IEnumerable<(CiStep Step, CiInvocation Invocation)> VerdictSteps() =>
@@ -288,6 +302,48 @@ internal static class CiTestInvocations
         }
 
         return list.Any(static p => p.Kind == CiStepKind.CliRun) ? CiInvocation.None with { Kind = CiStepKind.CliRun } : CiInvocation.None;
+    }
+
+    /// <summary>Whether <paramref name="command"/> runs <c>dotnet &lt;verb&gt;</c>, by any spelling of <c>dotnet</c>.</summary>
+    internal static bool RunsDotnet(string command, string verb)
+    {
+        var tokens = Tokenize(command).Tokens.Select(Normalise).ToList();
+        return tokens.Zip(tokens.Skip(1)).Any(p => IsDotnet(p.First) && p.Second == verb);
+    }
+
+    /// <summary>
+    /// The MSBuild global properties a command line sets, in order: <c>-p:</c>, <c>/p:</c>,
+    /// <c>-property:</c> and <c>--property:</c> (any case), <c>-p Name=Value</c>, and several pairs in one
+    /// switch separated by <c>;</c> or <c>,</c>. Names keep their spelling; MSBuild compares them
+    /// case-insensitively, and so should a caller.
+    /// </summary>
+    internal static IReadOnlyList<(string Name, string Value)> MsBuildProperties(string command)
+    {
+        var tokens = Tokenize(command).Tokens;
+        var properties = new List<(string, string)>();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            string? assignments = null;
+            if (Regex.Match(tokens[i], @"^(?:--|-|/)(?:p|property):(.+)$", RegexOptions.IgnoreCase) is { Success: true } m)
+            {
+                assignments = m.Groups[1].Value;
+            }
+            else if (Regex.IsMatch(tokens[i], @"^(?:--|-|/)(?:p|property)$", RegexOptions.IgnoreCase) && i + 1 < tokens.Count)
+            {
+                assignments = tokens[++i];
+            }
+
+            foreach (var pair in (assignments ?? "").Split([';', ',']))
+            {
+                var eq = pair.IndexOf('=', StringComparison.Ordinal);
+                if (eq > 0)
+                {
+                    properties.Add((pair[..eq].Trim(), pair[(eq + 1)..].Trim()));
+                }
+            }
+        }
+
+        return properties;
     }
 
     private static bool IsDotnet(string token)

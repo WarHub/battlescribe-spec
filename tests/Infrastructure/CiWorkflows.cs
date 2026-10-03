@@ -6,8 +6,9 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// The CI definition as data: every workflow under <c>.github/workflows</c>, parsed as YAML into jobs
-/// and steps, plus <c>scripts/ci-gate.json</c>. The workflow lints read CI through this rather than
-/// through lines of text.
+/// and steps, every composite action under <c>.github/actions</c> (its <c>runs.steps</c>, held as a
+/// job-shaped <see cref="CiJob"/>), plus <c>scripts/ci-gate.json</c>. The workflow lints read CI
+/// through this rather than through lines of text; the files come from <see cref="CiDefinitionFiles"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -22,41 +23,53 @@ namespace BattleScribeSpec.Tests;
 internal static class CiWorkflows
 {
     /// <summary>The repository root, from the test binaries' own location.</summary>
-    internal static string Root { get; } = RepoRoot.FromBinaries
-        ?? throw new DirectoryNotFoundException(
-            $"No {RepoRoot.MarkerFileName} above {AppContext.BaseDirectory}: the CI lints read the checkout's .github/ and scripts/.");
+    internal static string Root => CiDefinitionFiles.Root;
+
+    /// <summary>What <see cref="CiJob.Id"/> is for a composite action's steps.</summary>
+    internal const string ActionStepsId = "runs.steps";
 
     private static readonly Lazy<IReadOnlyList<CiWorkflow>> Loaded = new(LoadAll);
+
+    private static readonly Lazy<IReadOnlyList<CiJob>> LoadedActions = new(LoadActions);
 
     /// <summary>Every workflow under <c>.github/workflows</c>, in path order.</summary>
     internal static IReadOnlyList<CiWorkflow> All => Loaded.Value;
 
+    /// <summary>
+    /// Every action under <c>.github/actions</c>, as a job whose steps are its <c>runs.steps</c> (none
+    /// for an action that is not composite). Not a workflow job: it has no <c>needs</c>, no
+    /// <c>timeout-minutes</c> and no runner, so the job-level lints do not read it — the step-level ones do.
+    /// </summary>
+    internal static IReadOnlyList<CiJob> Actions => LoadedActions.Value;
+
     /// <summary>The main workflow, <c>.github/workflows/ci.yml</c>.</summary>
     internal static CiWorkflow Ci => All.Single(static w => w.File == ".github/workflows/ci.yml");
 
-    /// <summary>Every step of every job of every workflow.</summary>
-    internal static IEnumerable<CiStep> AllSteps => All.SelectMany(static w => w.Jobs).SelectMany(static j => j.Steps);
+    /// <summary>
+    /// Every step CI runs: each job's of every workflow, then each composite action's. A step moved into
+    /// an action is still a step every step-level lint sees.
+    /// </summary>
+    internal static IEnumerable<CiStep> AllSteps =>
+        All.SelectMany(static w => w.Jobs).SelectMany(static j => j.Steps).Concat(Actions.SelectMany(static a => a.Steps));
 
     /// <summary>The path of <paramref name="absolute"/> relative to the root, with forward slashes.</summary>
     internal static string Relative(string absolute) =>
         Path.GetRelativePath(Root, absolute).Replace(Path.DirectorySeparatorChar, '/');
 
-    private static List<CiWorkflow> LoadAll()
+    private static List<CiWorkflow> LoadAll() =>
+        [.. CiDefinitionFiles.Workflows.Select(static f => Parse(f.Path, f.Text))];
+
+    private static List<CiJob> LoadActions() =>
+        [.. CiDefinitionFiles.Actions.Select(static f => ParseAction(f.Path, f.Text))];
+
+    /// <summary>Parses one action's metadata. Public to the tests so a lint's rules can be exercised on inline YAML.</summary>
+    internal static CiJob ParseAction(string file, string yaml)
     {
-        var directory = Path.Combine(Root, ".github", "workflows");
-        var workflows = Directory
-            .EnumerateFiles(directory, "*.*", SearchOption.AllDirectories)
-            .Where(static f => f.EndsWith(".yml", StringComparison.Ordinal) || f.EndsWith(".yaml", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .Select(static f => Parse(Relative(f), File.ReadAllText(f)))
-            .ToList();
-
-        if (workflows.Count == 0)
-        {
-            throw new InvalidOperationException($"No workflow files under {directory}: every CI lint would pass by vacuous truth.");
-        }
-
-        return workflows;
+        var root = LoadDocument(file, yaml);
+        var runs = root.Children.TryGetValue(new YamlScalarNode("runs"), out var node) && node is YamlMappingNode map
+            ? map
+            : throw new InvalidDataException($"{file}: an action needs a `runs:` mapping.");
+        return new CiJob(file, ActionStepsId, runs);
     }
 
     /// <summary>Parses one workflow document. Public to the tests so a lint's own rules can be exercised on inline YAML.</summary>

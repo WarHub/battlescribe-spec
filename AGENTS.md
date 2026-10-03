@@ -144,14 +144,16 @@ dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id
 
 **The SDK band is pinned, and CI installs from `global.json`.** `rollForward: latestPatch` holds the
 feature band; every `setup-dotnet` step uses `global-json-file: global.json`, so your machine and CI
-run the same analyzers. This matters because `AnalysisLevel=latest-recommended` +
+run the same analyzers. (In `ci.yml` that step lives in `.github/actions/setup`, the one composite
+action every building job sets up through — SDK, bot token, caches, JDK, `setup.ps1` — each job stating
+what it needs in its `with:`.) This matters because `AnalysisLevel=latest-recommended` +
 `TreatWarningsAsErrors=true` make the set of rules that can fail the build a property of the
 installed SDK — unpinned, a runner-image bump turns untouched code red. Bumping the band is
 Dependabot's job (`dotnet-sdk` ecosystem), and reviewing that PR is where a widened rule set gets
-dealt with. `ToolchainPinDriftTests` fails if a workflow step starts picking its own SDK again, or if
-`docker/`'s SDK image tag leaves the pinned band. One SDK-derived pin is invisible to Dependabot and
-must move by hand **in the same PR** as an SDK bump: the `mcr.microsoft.com/dotnet/sdk` tag in
-`docker/`.
+dealt with. `ToolchainPinDriftTests` fails if a workflow or composite-action step starts picking its
+own SDK again, or if `docker/`'s SDK image tag leaves the pinned band. One SDK-derived pin is
+invisible to Dependabot and must move by hand **in the same PR** as an SDK bump: the
+`mcr.microsoft.com/dotnet/sdk` tag in `docker/`.
 
 **What makes CI run the thorough suites is one file: [`scripts/ci-gate.json`](scripts/ci-gate.json).**
 A PR that edits one of its `thoroughInputs` — `testdata.json`, `Directory.Packages.props`,
@@ -168,6 +170,15 @@ accepts a skipped thorough or live job only when the gate said it was not owed.
 `node --test scripts/*.test.mjs`); `CiWorkflowDriftTests` holds the workflow to them — every job and
 every test step has a timeout (the job's holding all its steps'), every `steps.<id>` resolves, a test
 step names its project literally and is one invocation with nothing that could swallow its exit code.
+
+**`checks` is the analyzer gate; every other CI build is `dotnet build -p:FunctionalBuild=true`.** The
+switch (`Directory.Build.props`) turns off the analyzers, code-style enforcement and XML doc generation
+in this repository's projects — the same binaries, ~25s sooner per job. The vendored `.deps/wham`
+keeps its own settings: its `Directory.Build.props` does not import ours. `CiWorkflowDriftTests`
+keeps `checks` building with the gates on (no switch, and no property that turns analyzers, code
+style, docs or `TreatWarningsAsErrors` off), every other `ci.yml` build using the switch, and the
+switch's properties out of any CI command line. Locally the switch is a faster inner loop, but run a
+plain `dotnet build` before pushing — `checks` will.
 
 **The `docker` CI job builds `docker/bs-spec.Dockerfile` on every push, and runs the image.** It
 exists because nothing built these files and both rotted unnoticed — one referenced a project renamed
@@ -250,7 +261,7 @@ checks out the **exact commit** pinned in `testdata.json` (fetch-by-SHA, so the 
 it stops being the `gh-pages` tip) and **fails** if that commit cannot be obtained — it never
 substitutes the branch tip. Re-pinning is a deliberate edit to `testdata.json`, and because a
 `testdata.json` change swaps out what the frozen suites replay, any PR touching that file runs
-the full `thorough-conformance` lane.
+the thorough jobs — the NR Editor lanes in `thorough-conformance` among them.
 
 ## BS desktop UI tests (local)
 

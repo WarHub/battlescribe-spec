@@ -130,8 +130,8 @@ On failure, `NrUiDiagnostics` captures:
 Artifacts are saved to `artifacts/nr-ui-diagnostics/` — relative to the working directory, which is
 the repo root under `bs-spec`. Under `dotnet test` that would be the test assembly's output folder,
 so the fixtures anchor it at the repo root (`TestPaths.AnchorDiagnosticsAtRepoRoot`); an explicit
-`NR_UI_DIAGNOSTICS_DIR` wins over both. CI's `thorough-conformance` job uploads the directory as
-`thorough-conformance-nr-ui-diagnostics` when it fails.
+`NR_UI_DIAGNOSTICS_DIR` wins over both. CI's `thorough-nr-ui-roster` job uploads the directory as
+`thorough-nr-ui-roster-diagnostics` when it fails.
 
 **A timeout inside an action names itself.** Playwright's own message for a `WaitForFunctionAsync` is
 `Timeout 20000ms exceeded.` and nothing more, so `NrRosterUiEngine.WithDiagnosticsAsync` rewrites it
