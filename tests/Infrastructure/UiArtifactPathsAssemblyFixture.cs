@@ -8,7 +8,7 @@ namespace BattleScribeSpec.Tests;
 /// <remarks>
 /// <para>
 /// <b>Why anchoring is needed at all</b> is <see cref="TestPaths.AnchorDiagnosticsAtRepoRoot"/>'s
-/// subject: the drivers' default is relative to the working directory, which VSTest sets to the test
+/// subject: the drivers' default is relative to the working directory, which xunit sets to the test
 /// assembly's output folder, so every screenshot and DOM dump landed three levels below where CI
 /// looks for it.
 /// </para>

@@ -8,27 +8,11 @@ namespace BattleScribeSpec.Tests.Features;
 
 public sealed class SpecSuiteRunnerTests
 {
-    private static string FindAdapterDll()
-    {
-        // Tests run from artifacts/bin/BattleScribeSpec.Tests/<pivot>/ — walk up to the repo root.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-
-        Assert.NotNull(dir);
-        var dll = Path.Combine(dir.FullName, "artifacts", "bin",
-            "BattleScribeSpec.ReferenceAdapter", "debug", "bs-reference-adapter.dll");
-        Assert.True(File.Exists(dll), $"Reference adapter not built: {dll}");
-        return dll;
-    }
-
     [Fact]
     [Trait("Category", "Integration")]
     public async Task FilteredSuite_RunsAgainstReferenceAdapter()
     {
-        var dll = FindAdapterDll();
+        var dll = AdapterTestHost.ReferenceAdapterDll;
 
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
@@ -58,7 +42,7 @@ public sealed class SpecSuiteRunnerTests
     [Trait("Category", "Integration")]
     public async Task GameDataDomain_RunsOverTheSameAdapterPool()
     {
-        var dll = FindAdapterDll();
+        var dll = AdapterTestHost.ReferenceAdapterDll;
 
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
@@ -75,7 +59,7 @@ public sealed class SpecSuiteRunnerTests
     [Trait("Category", "Integration")]
     public async Task MixedDomains_ParallelWorkers_RunBothDomains()
     {
-        var dll = FindAdapterDll();
+        var dll = AdapterTestHost.ReferenceAdapterDll;
 
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
@@ -103,7 +87,7 @@ public sealed class SpecSuiteRunnerTests
     [Trait("Category", "Integration")]
     public async Task FilterSelectingNothing_ExitsEight_AndSaysSo()
     {
-        var dll = FindAdapterDll();
+        var dll = AdapterTestHost.ReferenceAdapterDll;
 
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
@@ -134,7 +118,7 @@ public sealed class SpecSuiteRunnerTests
     [Trait("Category", "Integration")]
     public async Task SelectedThenSkippedAtTheDescribeGate_ExitsEight_AndSaysTheyWereSkipped()
     {
-        var dll = FindAdapterDll();
+        var dll = AdapterTestHost.ReferenceAdapterDll;
         var rosterOnly = new Dictionary<string, string> { ["BSSPEC_TEST_ROSTER_ONLY"] = "1" };
 
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
@@ -192,7 +176,7 @@ public sealed class SpecSuiteRunnerTests
     [Trait("Category", "Integration")]
     public async Task LegacyDefaultDomains_ExcludeGameData()
     {
-        var dll = FindAdapterDll();
+        var dll = AdapterTestHost.ReferenceAdapterDll;
 
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {

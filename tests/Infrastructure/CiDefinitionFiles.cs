@@ -52,10 +52,8 @@ internal static class CiDefinitionFiles
     /// <summary>Where this repo's own actions live, relative to the root.</summary>
     internal const string ActionsDirectory = ".github/actions";
 
-    /// <summary>The repository root, from the test binaries' own location.</summary>
-    internal static string Root { get; } = RepoRoot.FromBinaries
-        ?? throw new DirectoryNotFoundException(
-            $"No {RepoRoot.MarkerFileName} above {AppContext.BaseDirectory}: the CI lints read the checkout's .github/ and scripts/.");
+    /// <summary>The repository root, from the test binaries' own location: the CI lints read the checkout's .github/ and scripts/.</summary>
+    internal static string Root => TestPaths.Root;
 
     private static readonly Lazy<IReadOnlyList<CiDefinitionFile>> Loaded = new(Load);
 

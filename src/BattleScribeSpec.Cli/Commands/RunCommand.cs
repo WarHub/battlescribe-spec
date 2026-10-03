@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BattleScribeSpec.Concurrency;
+using BattleScribeSpec.Engines;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
@@ -47,7 +48,7 @@ internal static class RunCommand
             Description = "Spec file path, spec ID (e.g. \"selection/selection-page\"), or \"-\" for stdin. Omit with --all or --matrix.",
             Arity = ArgumentArity.ZeroOrOne,
         };
-        var engineOptions = new EngineOptions();
+        var engineOptions = new EngineOptions(EngineRegistry.LoadDefault);
         var output = new Option<string?>("--output", "-o")
         {
             Description = "Output format. Single-spec: tree|json (default tree). --all: summary|json|github-actions (default summary).",

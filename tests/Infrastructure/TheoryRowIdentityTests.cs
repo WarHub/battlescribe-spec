@@ -50,8 +50,7 @@ public sealed class TheoryRowIdentityTests
     [Fact]
     public async Task EveryComputedRow_CarriesNoCheckoutPath_AndEverySpecRowIsLabelledWithItsName()
     {
-        var checkout = RepoRoot.FromBinaries
-            ?? throw new InvalidOperationException($"No BattleScribeSpec.slnx above '{AppContext.BaseDirectory}'.");
+        var checkout = TestPaths.Root;
         string[] checkoutSpellings = [checkout.Replace('\\', '/'), checkout.Replace('/', '\\')];
 
         var rosterSpecs = SpecNames(SpecLoader.FindRosterSpecsDirectory(), SpecLoader.DiscoverSpecs);
@@ -202,8 +201,7 @@ public sealed class TheoryRowIdentityTests
     [Fact]
     public void EveryTestName_KeepsItsClass()
     {
-        var checkout = RepoRoot.FromBinaries
-            ?? throw new InvalidOperationException($"No BattleScribeSpec.slnx above '{AppContext.BaseDirectory}'.");
+        var checkout = TestPaths.Root;
         var violations = new List<string>();
 
         var methods = 0;

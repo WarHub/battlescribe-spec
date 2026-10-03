@@ -13,7 +13,7 @@ namespace BattleScribeSpec.Tests;
 /// (non-UI engine). No additional setup step needed.
 ///
 /// Skipped when:
-///   - .testdata/nr-editor/ directory doesn't exist (run setup.ps1)
+///   - .testdata/nr-editor/ doesn't exist in the checkout these binaries were built in (run setup.ps1)
 ///   - NR_EDITOR_UI_FROZEN_SKIP=true
 ///
 /// Environment variables:
@@ -39,7 +39,7 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
             return;
         }
 
-        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir();
+        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         if (staticDir is null)
         {
             return;

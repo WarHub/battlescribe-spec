@@ -368,6 +368,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Tests find their checkout from their own binaries, never the working directory, and the compiler
+  holds them to it** — test code located the repository root five different ways: `TestPaths`' own walk
+  up from the binaries, four inline copies of it (each with a hard-coded `debug` pivot) in the adapter and
+  engine-host suites, five walks up from the source file (`[CallerFilePath]`) in the lint classes,
+  `RepoRoot.FromWorkingDirectory` in one more, and — the ones that mattered — the CLI's lookups, which
+  walk up from the **working directory**: the five frozen NR fixtures and five pool and metrics tests
+  found `.testdata/` that way, the BS Roster UI fixture its app and agent jar, and every fixture's pool
+  size came from the nearest `engines.json` above it. That held only because xunit sets the working
+  directory to the output folder, and a walk that escapes the checkout lands in whatever encloses it: a
+  worktree under `.claude/worktrees/` with no `.testdata` of its own silently replayed the main checkout's
+  snapshot, which `TestDataPinDriftTests` never checked. **Now there is one root,
+  `RepoRoot.FromBinaries`** (`TestPaths.Root` where a test cannot run without a checkout), and the lookups
+  gained explicit-root overloads for test code: `HarRecorder.FindFrozenHarFile(root)` and
+  `NewRecruitGameDataEngine`/`NrGameDataUiEngine.FindFrozenStaticDir(root)` (exactly `<root>/.testdata/…`,
+  no walk), `HostEngineFactory.ResolveBsUiOptions(root)` and `EngineRegistry.LoadDefault(directory)`, plus
+  `EngineRegistry.BuiltInOnly`, which the fixtures and the profile tests resolve against now: they
+  construct the built-in engines, and an operator's `engines.json` at the repo root — where
+  docs/adapter-guide.md puts it — may register their own adapter under a built-in's name.
+  `FrozenSnapshotLookupTests` pins the no-walk rule in a temp tree, since every lane stays green without
+  it. Two routes reached the working directory through production code a test calls in process, and are
+  closed: `bs-engine-host serve` reported its ceiling from the nearest `engines.json` (it now reads the
+  built-in it serves — `serve` serves nothing else — so an operator's adapter registered as
+  `battlescribe-ui` no longer makes it report that adapter's `maxParallel` for the one-app engine), and the
+  CLI's engine options defaulted to the nearest `engines.json` (they take their registry explicitly now;
+  every command passes `EngineRegistry.LoadDefault`, which a test cannot name). Otherwise the CLI is
+  unchanged: its argument-less lookups still start where `bs-spec` was run, and so do the `bs-spec` and
+  `bs-engine-host` processes tests start. **Banned at compile time:**
+  `Microsoft.CodeAnalysis.BannedApiAnalyzers` (pinned centrally, referenced by both test projects so
+  Dependabot sees it) reads `tests/BannedSymbols.txt`, which bans `Directory.GetCurrentDirectory`,
+  `Directory.SetCurrentDirectory`, `Environment.CurrentDirectory`, `RepoRoot.FromWorkingDirectory` and the
+  five argument-less lookups in test code (method groups included): error RS0030 with the replacement
+  named, wherever analyzers run (local builds and CI's `checks`). `BannedSymbolsTests`, mutation-checked,
+  reads each test project as MSBuild evaluates it and fails if one drops the analyzer or the list (a
+  conditioned item group or a `Remove` in a targets file included), if anything keeps RS0030 from being an
+  error — `NoWarn`, `WarningsNotAsErrors` (where `CodeAnalysisTreatWarningsAsErrors=false` puts it),
+  `TreatWarningsAsErrors` off, `WarningLevel` 0, `RunAnalyzers` off, a `#pragma warning disable` naming it
+  or nothing, a suppression attribute, or an `.editorconfig`/`.globalconfig` severity for the rule, its
+  `ApiDesign` category or every analyzer (the last two never name it) — if an entry stops naming a real
+  member (a renamed API would otherwise leave its ban matching nothing), or if a banned lookup has no
+  overload to use instead. **For contributors:** a working-directory walk in test code is a compile error,
+  and a worktree needs its own `setup.ps1` for the frozen NR lanes — `pre-push` names the empty lanes and
+  that fix.
+
 - **A profiled run proves each lane it claims executed; long lanes stream their progress** — the strict
   zero-tests policy fails a run that executed nothing at all, which `pre-push` (six lanes, three thousand
   tests) never is: on a machine where `setup.ps1` never fetched the HAR, both frozen NR roster lanes

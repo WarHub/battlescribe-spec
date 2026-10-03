@@ -46,7 +46,7 @@ public sealed class NewRecruitEnginePoolResourceMetricsTests
     [Trait("Engine", "FrozenNrRoster")]
     public async Task CreateFrozenAsync_TracksBrowserAndContextLifecycle_ReturnsToZeroAfterDispose()
     {
-        var harFile = HarRecorder.FindFrozenHarFile();
+        var harFile = HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries);
         Assert.SkipWhen(harFile is null,
             "Frozen HAR file not found (run setup.ps1) — skipping frozen NR pool resource-metrics test");
 
@@ -144,7 +144,7 @@ public sealed class NrGameDataUiEnginePoolResourceMetricsTests
     [Trait("Engine", "FrozenNrGameDataUi")]
     public async Task CreateFrozenAsync_TracksBrowserAndContextLifecycle_ReturnsToZeroAfterDispose()
     {
-        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir();
+        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         Assert.SkipWhen(staticDir is null,
             "NR Editor static files not found (run setup.ps1) — skipping frozen NR Editor UI pool resource-metrics test");
 

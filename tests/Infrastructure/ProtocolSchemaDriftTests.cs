@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using BattleScribeSpec.Protocol;
@@ -17,30 +16,13 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Lint")]
 public sealed class ProtocolSchemaDriftTests
 {
-    private static readonly string RepoRoot = FindRepoRoot();
+    private static readonly string RepoRoot = TestPaths.Root;
 
     private static readonly Lazy<JsonDocument> SchemaDoc = new(() =>
     {
         var schemaPath = Path.Combine(RepoRoot, "docs", "protocol-schema.json");
         return JsonDocument.Parse(File.ReadAllText(schemaPath));
     });
-
-    private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
-    {
-        var dir = Path.GetDirectoryName(callerFilePath);
-        while (dir is not null)
-        {
-            if (Directory.EnumerateFiles(dir, "*.slnx").Any())
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not find repository root (no *.slnx marker found) while traversing parents of '{callerFilePath}'.");
-    }
 
     /// <summary>
     /// Derives the JSON Schema $defs key from a C# type name using naming conventions:

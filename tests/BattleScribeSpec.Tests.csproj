@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="GitHubActionsTestLogger" />
     <PackageReference Include="JsonSchema.Net" />
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Yaml2JsonNode" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>
@@ -29,6 +30,11 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- What the analyzer bans in test code: the working directory, and the CLI overloads that read it (BannedSymbolsTests). -->
+    <AdditionalFiles Include="BannedSymbols.txt" />
   </ItemGroup>
 
   <ItemGroup>

@@ -294,7 +294,7 @@ public sealed class EngineRegistry
     {
         if (configPath is null)
         {
-            return new EngineRegistry([]);
+            return BuiltInOnly;
         }
 
         var config = JsonSerializer.Deserialize(
@@ -530,10 +530,35 @@ public sealed class EngineRegistry
         }
     }
 
-    /// <summary>Walk up from <paramref name="startDirectory"/> looking for engines.json.</summary>
-    public static EngineRegistry LoadDefault(string? startDirectory = null)
+    /// <summary>
+    /// The built-in engines and nothing else, whatever <c>engines.json</c> exists anywhere: what a caller
+    /// resolves against when it means the engines this repository ships.
+    /// </summary>
+    /// <remarks>
+    /// The test fixtures are that caller, and so is <c>bs-engine-host serve</c>, which serves built-ins and
+    /// nothing else. Both construct the built-in engines and size them from the built-in profiles; an
+    /// operator's <c>engines.json</c> at the repo root — where docs/adapter-guide.md tells them to put it —
+    /// describes their own adapters, and may legitimately register one under a built-in's name
+    /// (<c>newrecruit</c> is the name that selects the NewRecruit specs). Read by either, that entry would
+    /// size engines it does not describe.
+    /// </remarks>
+    public static EngineRegistry BuiltInOnly { get; } = new([]);
+
+    /// <summary>
+    /// The CLI's registry: built-ins plus the nearest <c>engines.json</c> at or above the working
+    /// directory, where a hand-run <c>bs-spec</c> stands. Test code uses <see cref="BuiltInOnly"/>, or
+    /// <see cref="LoadDefault(string)"/> with a directory it chose; <c>tests/BannedSymbols.txt</c> makes this
+    /// overload a compile error there.
+    /// </summary>
+    public static EngineRegistry LoadDefault() => LoadDefault(Directory.GetCurrentDirectory());
+
+    /// <summary>Built-ins plus the nearest <c>engines.json</c> at or above <paramref name="startDirectory"/>.</summary>
+    /// <param name="startDirectory">Where the walk starts (inclusive).</param>
+    public static EngineRegistry LoadDefault(string startDirectory)
     {
-        var dir = new DirectoryInfo(startDirectory ?? Directory.GetCurrentDirectory());
+        ArgumentException.ThrowIfNullOrEmpty(startDirectory);
+
+        var dir = new DirectoryInfo(startDirectory);
         for (; dir is not null; dir = dir.Parent)
         {
             var candidate = Path.Combine(dir.FullName, "engines.json");
@@ -543,7 +568,7 @@ public sealed class EngineRegistry
             }
         }
 
-        return new EngineRegistry([]);
+        return BuiltInOnly;
     }
 
     /// <summary>Resolve a parsed connectable to a full entry (see class doc for rules).</summary>

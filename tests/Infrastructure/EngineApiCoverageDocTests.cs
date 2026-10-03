@@ -83,9 +83,7 @@ public sealed class EngineApiCoverageDocTests
     /// </summary>
     private static HashSet<string> DocumentedMethods()
     {
-        var root = RepoRoot.FromWorkingDirectory
-            ?? throw new DirectoryNotFoundException("Could not locate the repository root.");
-        var path = Path.Combine(root, ReportPath);
+        var path = Path.Combine(TestPaths.Root, ReportPath);
         var report = File.ReadAllText(path);
 
         var section = Regex.Match(

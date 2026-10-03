@@ -538,15 +538,45 @@ public static class HarRecorder
         return null;
     }
 
+    /// <summary>The frozen HAR's path below a checkout's root.</summary>
+    private static readonly string FrozenHarRelativePath = Path.Combine(".testdata", "newrecruit-har", "newrecruit.har");
+
     /// <summary>
-    /// Finds the frozen HAR file by searching upward from the given directory.
+    /// The frozen HAR of the checkout at <paramref name="repoRoot"/> — exactly
+    /// <c>&lt;repoRoot&gt;/.testdata/newrecruit-har/newrecruit.har</c> — or null when that file is absent or
+    /// <paramref name="repoRoot"/> is null (binaries outside a checkout).
     /// </summary>
-    public static string? FindFrozenHarFile(string? startDir = null)
+    /// <remarks>
+    /// For a caller that knows which checkout it belongs to, which is every test: they pass
+    /// <see cref="RepoRoot.FromBinaries"/>, so a run replays the snapshot of the tree it was built from —
+    /// the one <c>setup.ps1</c> provisioned there and the pin drift test checks — whatever directory it was
+    /// started in. No walk: a worktree with no <c>.testdata</c> of its own gets null (the lane skips and the
+    /// engine-composition check names <c>setup.ps1</c>), not the enclosing checkout's snapshot.
+    /// </remarks>
+    /// <param name="repoRoot">The checkout's root directory, or null.</param>
+    public static string? FindFrozenHarFile(string? repoRoot)
     {
-        var dir = startDir ?? Directory.GetCurrentDirectory();
+        if (repoRoot is null)
+        {
+            return null;
+        }
+
+        var candidate = Path.Combine(repoRoot, FrozenHarRelativePath);
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    /// <summary>
+    /// The CLI's lookup: the nearest <c>.testdata/newrecruit-har/newrecruit.har</c> at or above the working
+    /// directory, where a hand-run <c>bs-spec</c> stands. Test code passes its checkout to
+    /// <see cref="FindFrozenHarFile(string)"/> instead; <c>tests/BannedSymbols.txt</c> makes this overload a
+    /// compile error there.
+    /// </summary>
+    public static string? FindFrozenHarFile()
+    {
+        var dir = Directory.GetCurrentDirectory();
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir, ".testdata", "newrecruit-har", "newrecruit.har");
+            var candidate = Path.Combine(dir, FrozenHarRelativePath);
             if (File.Exists(candidate))
             {
                 return candidate;

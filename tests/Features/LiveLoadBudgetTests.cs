@@ -147,7 +147,7 @@ public sealed class LiveLoadBudgetTests
     {
         // The mechanical pin: the budget must DERIVE its limit, in source, not restate it.
         var source = File.ReadAllText(Path.Combine(
-            ConcurrencyConfigurationDriftTests.RepoRoot, "tests", "Infrastructure", "LiveLoadBudget.cs"));
+            TestPaths.Root, "tests", "Infrastructure", "LiveLoadBudget.cs"));
 
         Assert.Contains(
             $"public static int {nameof(LiveLoadBudget.PerHostLimit)} => " +

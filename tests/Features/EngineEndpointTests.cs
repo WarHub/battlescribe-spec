@@ -184,7 +184,7 @@ public sealed class EngineEndpointTests
     [InlineData("newrecruit-ui")]
     public void Registry_NewRecruitEngines_DeclareTheirRosterEndpointLive_AndTheirGameDataEndpointLocal(string name)
     {
-        var entry = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(name));
+        var entry = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(name));
 
         var live = NrEngineUrl("https://www.newrecruit.eu");
 
@@ -203,7 +203,7 @@ public sealed class EngineEndpointTests
     [InlineData("battlescribe-ui")]
     public void Registry_BattleScribeEngines_AreLocalInBothDomains(string name)
     {
-        var entry = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(name));
+        var entry = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(name));
         var live = NrEngineUrl("https://www.newrecruit.eu");
 
         Assert.Equal(LoadTarget.Local, entry.EndpointFor("roster").ResolveLoadTarget(live));
@@ -221,7 +221,7 @@ public sealed class EngineEndpointTests
     [Fact]
     public void Registry_AdHocLaunchableAdapter_IsUndeclared_AndThereforeThirdPartyLive()
     {
-        var entry = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse("exec:./some-third-party-adapter"));
+        var entry = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse("exec:./some-third-party-adapter"));
 
         Assert.Equal(EngineEndpointKind.Undeclared, entry.EndpointFor("roster").Kind);
         Assert.Equal(LoadTarget.ThirdPartyLive, entry.EndpointFor("roster").ResolveLoadTarget(Nothing));

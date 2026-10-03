@@ -69,14 +69,14 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
 
             var runId = DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssfff", CultureInfo.InvariantCulture);
 
-            // Anchored at the repo root, NOT a bare relative path: VSTest runs the test host with
-            // its working directory set to the test assembly's own output folder (e.g.
+            // Anchored at the repo root, NOT a bare relative path: xunit sets the test app's working
+            // directory to the test assembly's own output folder (e.g.
             // artifacts/bin/BattleScribeSpec.Tests/debug/), not the repo root the CLI path uses. A
             // bare "artifacts/telemetry" here would silently write under that nested bin folder —
             // a path CI's "Upload telemetry" step (which looks at the repo-root artifacts/telemetry/)
             // would never find. Falls back to the bare relative path (old behavior) only if the
-            // repo root genuinely cannot be located.
-            var artifactRoot = TestPaths.RepoRootDirectory is { } repoRoot
+            // binaries are not inside a checkout at all.
+            var artifactRoot = RepoRoot.FromBinaries is { } repoRoot
                 ? Path.Combine(repoRoot, "artifacts", "telemetry")
                 : Path.Combine("artifacts", "telemetry");
             // Named for the lane: TestHost resolved the profile before the platform started, so a CI job

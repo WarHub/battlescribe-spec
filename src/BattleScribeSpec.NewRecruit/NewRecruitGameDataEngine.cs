@@ -88,16 +88,44 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         return engine;
     }
 
+    /// <summary>The NR Editor snapshot's directory below a checkout's root.</summary>
+    private static readonly string FrozenStaticRelativePath = Path.Combine(".testdata", "nr-editor");
+
     /// <summary>
-    /// Locates the NR Editor static files directory by walking up from startDir
-    /// looking for .testdata/nr-editor/index.html.
+    /// The NR Editor snapshot of the checkout at <paramref name="repoRoot"/> — exactly
+    /// <c>&lt;repoRoot&gt;/.testdata/nr-editor</c>, when it holds an <c>index.html</c> — or null when it does
+    /// not, or <paramref name="repoRoot"/> is null (binaries outside a checkout).
     /// </summary>
-    public static string? FindFrozenStaticDir(string? startDir = null)
+    /// <remarks>
+    /// For a caller that knows which checkout it belongs to, which is every test: they pass
+    /// <see cref="RepoRoot.FromBinaries"/>, so a run serves the snapshot of the tree it was built from,
+    /// whatever directory it was started in. No walk: a worktree with no <c>.testdata</c> of its own gets
+    /// null, not the enclosing checkout's snapshot.
+    /// </remarks>
+    /// <param name="repoRoot">The checkout's root directory, or null.</param>
+    public static string? FindFrozenStaticDir(string? repoRoot)
     {
-        var dir = startDir ?? Directory.GetCurrentDirectory();
+        if (repoRoot is null)
+        {
+            return null;
+        }
+
+        var candidate = Path.Combine(repoRoot, FrozenStaticRelativePath);
+        return File.Exists(Path.Combine(candidate, "index.html")) ? candidate : null;
+    }
+
+    /// <summary>
+    /// The CLI's lookup: the nearest <c>.testdata/nr-editor</c> holding an <c>index.html</c> at or above the
+    /// working directory, where a hand-run <c>bs-spec</c> stands. Test code passes its checkout to
+    /// <see cref="FindFrozenStaticDir(string)"/> instead; <c>tests/BannedSymbols.txt</c> makes this overload
+    /// a compile error there.
+    /// </summary>
+    public static string? FindFrozenStaticDir()
+    {
+        var dir = Directory.GetCurrentDirectory();
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir, ".testdata", "nr-editor");
+            var candidate = Path.Combine(dir, FrozenStaticRelativePath);
             if (File.Exists(Path.Combine(candidate, "index.html")))
             {
                 return candidate;

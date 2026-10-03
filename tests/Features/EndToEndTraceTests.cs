@@ -18,22 +18,6 @@ namespace BattleScribeSpec.Tests.Features;
 [Trait("Category", "Integration")]
 public sealed class EndToEndTraceTests
 {
-    private static string FindHostDll()
-    {
-        // Tests run from artifacts/bin/BattleScribeSpec.Tests/<pivot>/ — walk up to the repo root.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-
-        Assert.NotNull(dir);
-        var dll = Path.Combine(dir.FullName, "artifacts", "bin",
-            "BattleScribeSpec.EngineHost", "debug", "bs-engine-host.dll");
-        Assert.True(File.Exists(dll), $"Engine host not built: {dll}");
-        return dll;
-    }
-
     /// <summary>
     /// The exact spec id under test — <c>SpecLoader.DiscoverSpecs</c> derives it as the yaml
     /// filename minus extension (<c>specs/roster/protocol/protocol-kitchen-sink.yaml</c>), and
@@ -47,7 +31,7 @@ public sealed class EndToEndTraceTests
     public async Task RunAsync_ChildProcessSpans_NestUnderTheParentsSpans_InOneArtifact()
     {
         var ct = TestContext.Current.CancellationToken;
-        var hostDll = FindHostDll();
+        var hostDll = AdapterTestHost.EngineHostDll;
         var artifact = Path.Combine(Path.GetTempPath(), $"bsspec-e2e-{Guid.NewGuid():N}");
 
         try

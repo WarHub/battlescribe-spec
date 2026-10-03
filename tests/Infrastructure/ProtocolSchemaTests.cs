@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
@@ -13,7 +12,7 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Lint")]
 public sealed class ProtocolSchemaTests
 {
-    private static readonly string RepoRoot = FindRepoRoot();
+    private static readonly string RepoRoot = TestPaths.Root;
 
     private static readonly Lazy<JsonSchema> Schema = new(() =>
     {
@@ -24,23 +23,6 @@ public sealed class ProtocolSchemaTests
 
     private static readonly JsonSerializerOptions SerializerOptions =
         ProtocolJsonContext.Default.Options;
-
-    private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
-    {
-        var dir = Path.GetDirectoryName(callerFilePath);
-        while (dir is not null)
-        {
-            if (Directory.EnumerateFiles(dir, "*.slnx").Any())
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not find repository root (no *.slnx marker found) while traversing parents of '{callerFilePath}'.");
-    }
 
     public static TheoryData<string, string> AllProtocolMessages()
     {

@@ -1,14 +1,23 @@
 using BattleScribeSpec.Protocol;
+using BattleScribeSpec.TestSupport;
 
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Shared helpers for tests that need a live adapter process. Centralizes the "walk up to the
-/// repo root, then down into artifacts/bin" resolution that several suites duplicated inline
-/// (e.g. the former <c>FindAdapterDll</c> in <c>SpecSuiteRunnerTests</c>).
+/// Shared helpers for tests that need a live adapter process, and the one place this project finds the
+/// sibling binaries it starts (<c>bs-reference-adapter.dll</c>, <c>bs-engine-host.dll</c>). Four suites
+/// used to walk up from the binaries to the repository root on their own, each with a hard-coded
+/// <c>debug</c> pivot; they resolve through <see cref="TestPaths.Root"/> and <see cref="BuiltBinaries"/>, the
+/// rule Cli.Tests applies too, here instead.
 /// </summary>
 internal static class AdapterTestHost
 {
+    /// <summary>The built in-repo reference adapter (<c>src/BattleScribeSpec.ReferenceAdapter</c>).</summary>
+    public static string ReferenceAdapterDll => BuiltBinaries.Find(TestPaths.Root, "BattleScribeSpec.ReferenceAdapter", "bs-reference-adapter.dll");
+
+    /// <summary>The built engine host (<c>src/BattleScribeSpec.EngineHost</c>), which serves the built-in engines.</summary>
+    public static string EngineHostDll => BuiltBinaries.Find(TestPaths.Root, "BattleScribeSpec.EngineHost", "bs-engine-host.dll");
+
     /// <summary>
     /// Starts the in-repo reference adapter (<c>src/BattleScribeSpec.ReferenceAdapter</c>,
     /// <c>bs-reference-adapter.dll</c>), which advertises unlimited parallelism (<c>MaxParallel = 0</c>
@@ -22,29 +31,5 @@ internal static class AdapterTestHost
     /// adapter-death recovery.
     /// </param>
     public static AdapterProcess StartReferenceAdapter(IReadOnlyDictionary<string, string>? environment = null) =>
-        AdapterProcess.Start("dotnet", FindAdapterDll(), environment);
-
-    private static string FindAdapterDll()
-    {
-        // Tests run from artifacts/bin/BattleScribeSpec.Tests/<pivot>/ — walk up to the repo root.
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "BattleScribeSpec.slnx")))
-        {
-            dir = dir.Parent!;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException("Could not locate repo root (BattleScribeSpec.slnx) from " + AppContext.BaseDirectory);
-        }
-
-        var dll = Path.Combine(dir.FullName, "artifacts", "bin",
-            "BattleScribeSpec.ReferenceAdapter", "debug", "bs-reference-adapter.dll");
-        if (!File.Exists(dll))
-        {
-            throw new InvalidOperationException($"Reference adapter not built: {dll}");
-        }
-
-        return dll;
-    }
+        AdapterProcess.Start("dotnet", ReferenceAdapterDll, environment);
 }

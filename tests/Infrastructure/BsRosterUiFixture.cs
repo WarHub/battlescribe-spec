@@ -54,8 +54,10 @@ public sealed class BsRosterUiFixture : IAsyncLifetime
         {
             // Throws when the app or agent JAR is missing, which is every machine that has not run
             // setup.ps1 — and every CI job except the ones that build the agent. Treated as "not
-            // available" rather than a failure, exactly as the gamedata fixture treats it.
-            options = HostEngineFactory.ResolveBsUiOptions();
+            // available" rather than a failure, exactly as the gamedata fixture treats it. Resolved in the
+            // checkout these binaries were built in, as BsGameDataUiEngine.FindOptions resolves the Data
+            // Editor's: never another tree's app or (gitignored, never rebuilt by dotnet build) agent jar.
+            options = HostEngineFactory.ResolveBsUiOptions(RepoRoot.FromBinaries);
         }
         catch (Exception ex)
         {
@@ -74,13 +76,13 @@ public sealed class BsRosterUiFixture : IAsyncLifetime
 
     /// <summary>
     /// Points <see cref="BsUiDiagnostics"/> at the repo root's <c>artifacts/</c>, not the test
-    /// host's.
+    /// app's output folder.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The driver defaults to <c>Directory.GetCurrentDirectory()/artifacts/bs-ui-diagnostics</c>,
-    /// which is right for the CLI and wrong here: VSTest runs the test host with its working
-    /// directory set to the test assembly's own output folder, so a failing spec in this lane writes
+    /// which is right for the CLI and wrong here: xunit sets the test app's working directory to the
+    /// test assembly's own output folder, so a failing spec in this lane writes
     /// its dump to <c>artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/bs-ui-diagnostics/</c> —
     /// measured, 19 dumps there against 1 at the repo root — and CI's "Upload diagnostics" step
     /// looks only at the latter. The artifact would be empty for exactly the failures it exists to
@@ -89,8 +91,8 @@ public sealed class BsRosterUiFixture : IAsyncLifetime
     /// <para>
     /// The same trap, with the same cause and the same fix, is written down in
     /// <see cref="TelemetryAssemblyFixture"/> for the telemetry artifact. It is done here rather
-    /// than in the driver because <c>TestPaths</c> is test-side, and because knowing that this
-    /// process is a VSTest host is the fixture's business, not the driver's.
+    /// than in the driver because knowing that this process is a test app, whose working directory
+    /// xunit chose, is the fixture's business, not the driver's.
     /// </para>
     /// <para>
     /// An explicit <c>BS_UI_DIAGNOSTICS_DIR</c> still wins — this only replaces the default, and
@@ -104,7 +106,7 @@ public sealed class BsRosterUiFixture : IAsyncLifetime
             return;
         }
 
-        if (TestPaths.RepoRootDirectory is { } repoRoot)
+        if (RepoRoot.FromBinaries is { } repoRoot)
         {
             BsUiDiagnostics.DiagnosticsDirectory =
                 Path.Combine(repoRoot, "artifacts", "bs-ui-diagnostics");

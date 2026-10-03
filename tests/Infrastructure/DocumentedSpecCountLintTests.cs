@@ -26,32 +26,8 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Lint")]
 public sealed class DocumentedSpecCountLintTests
 {
-    private static readonly string RepoRoot = FindRepoRoot();
+    private static readonly string RepoRoot = TestPaths.Root.Replace('\\', '/');
     private static readonly string ThisFile = ThisFileRelativePath();
-
-    private static string FindRepoRoot([CallerFilePath] string callerFilePath = "")
-    {
-        if (!Path.IsPathRooted(callerFilePath))
-        {
-            throw new InvalidOperationException(
-                $"[CallerFilePath] returned a non-rooted path '{callerFilePath}'. " +
-                "Ensure the project is not built with a PathMap that strips the absolute path.");
-        }
-
-        var dir = Path.GetDirectoryName(callerFilePath);
-        while (dir is not null)
-        {
-            if (Directory.EnumerateFiles(dir, "*.slnx").Any())
-            {
-                return dir.Replace('\\', '/');
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not find repository root (no *.slnx marker found) while traversing parents of '{callerFilePath}'.");
-    }
 
     private static string ThisFileRelativePath([CallerFilePath] string callerFilePath = "")
     {

@@ -50,7 +50,7 @@ public sealed class ConcurrencyPolicyTests
     [Fact]
     public void EngineProfiles_EncodeWhatWasMeasured_NotWhatWasAssumed()
     {
-        var registry = EngineRegistry.LoadDefault();
+        var registry = EngineRegistry.BuiltInOnly;
 
         // battlescribe-ui: expensive cold start (JVM + JavaFX), cannot be parallelized,
         // and reuse is verdict-neutral in BOTH domains (measured: 2.20x gamedata / 1.79x roster).
@@ -89,7 +89,7 @@ public sealed class ConcurrencyPolicyTests
         long expectedMemPerContextBytes,
         long expectedMemPoolBaselineBytes)
     {
-        var registry = EngineRegistry.LoadDefault();
+        var registry = EngineRegistry.BuiltInOnly;
         var profile = registry.Resolve(EngineConnectable.Parse(engineName)).Profile;
 
         // Pin the four measured/declared fields that affect policy decisions.
@@ -239,7 +239,7 @@ public sealed class ConcurrencyPolicyTests
     private static readonly MachineProfile GitHubRunner = new(CpuCount: 2, AvailableMemoryBytes: 8_375_186_227L);
 
     private static EngineProfile Builtin(string name) =>
-        EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(name)).Profile;
+        EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(name)).Profile;
 
     [Fact]
     public void Policy_MeasuredEngine_IsBoundByTheRealMemoryBound_NotTheUndeclaredCap()

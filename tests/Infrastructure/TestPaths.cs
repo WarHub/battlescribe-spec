@@ -1,33 +1,50 @@
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Resolves paths to external test data.
+/// Where the tests find the checkout they were built in, and the external test data under it.
 /// Default: .testdata/ directory relative to the repo root.
 /// Override: set environment variables (e.g., WH40K_DATA_DIR).
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>One root, from the binaries.</b> Every path a test anchors at the checkout — specs, schemas, the CI
+/// definition, <c>.testdata/</c>, <c>artifacts/</c> — comes from <see cref="RepoRoot.FromBinaries"/>: the
+/// nearest <c>BattleScribeSpec.slnx</c> above this assembly, which is the tree it was built from. Nullable
+/// callers (an artifact path with a fallback, a diagnostics default) read it directly; a test that cannot
+/// run without a checkout reads <see cref="Root"/>, which says why when there is none.
+/// </para>
+/// <para>
+/// <b>Never the working directory.</b> xunit sets it to the test assembly's output folder before any test
+/// runs, under every runner and entry point (<c>xunit.v3.core</c> calls <c>SetCurrentDirectory</c>;
+/// <c>dotnet test</c>, <c>dotnet run</c> and the exe started from elsewhere all report the output folder).
+/// So a walk up from it reaches the same checkout today — because of a choice inside xunit that nothing here
+/// states, and a walk that escapes the checkout lands in whatever tree encloses it: a worktree under
+/// <c>.claude/worktrees/</c> sits inside the main checkout. <c>tests/BannedSymbols.txt</c> makes the
+/// working-directory APIs, and the production overloads that read the working directory on the CLI's behalf,
+/// compile errors in both test projects (<see cref="BannedSymbolsTests"/>).
+/// </para>
+/// </remarks>
 internal static class TestPaths
 {
-    private static readonly Lazy<string?> RepoRoot = new(FindRepoRoot);
-
     /// <summary>
-    /// The repository root directory (identified by <c>BattleScribeSpec.slnx</c>), resolved by
-    /// walking up from the test assembly's own location. Null if it could not be found (e.g. the
-    /// test binaries were copied somewhere outside a checkout). Public so any caller needing a
-    /// path anchored at the repo root — regardless of the test host process's own working
-    /// directory, which VSTest sets to the test assembly's output folder, not the repo root — can
-    /// reuse this instead of re-deriving it (see <see cref="BattleScribeSpec.Tests.TelemetryAssemblyFixture"/>).
+    /// The checkout these test binaries were built in (<see cref="RepoRoot.FromBinaries"/>), for a test that
+    /// reads it and cannot run without it. Throws, naming the binaries' folder, when they are not inside a
+    /// checkout.
     /// </summary>
-    public static string? RepoRootDirectory => RepoRoot.Value;
+    public static string Root => RepoRoot.FromBinaries
+        ?? throw new DirectoryNotFoundException(
+            $"No {RepoRoot.MarkerFileName} above {AppContext.BaseDirectory}: this test reads the checkout its binaries "
+            + "were built in, and they are not inside one.");
 
     /// <summary>
     /// Points a driver's diagnostics directory at the repo root's <c>artifacts/</c>, not the test
-    /// host's, by setting <paramref name="environmentVariable"/> when the caller has not.
+    /// app's output folder, by setting <paramref name="environmentVariable"/> when the caller has not.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The NR UI drivers default to <c>artifacts/&lt;folder&gt;</c> <b>relative to the process's
-    /// working directory</b>, which is right for <c>bs-spec</c> and wrong under <c>dotnet test</c>:
-    /// VSTest sets the test host's working directory to the test assembly's output folder, so a
+    /// working directory</b>, which is right for <c>bs-spec</c> and wrong in the test app: xunit sets the
+    /// test app's working directory to the test assembly's output folder, so a
     /// failing spec writes its screenshot, DOM and Pinia dump to
     /// <c>artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/nr-ui-diagnostics/</c> — a path no
     /// CI upload step looks at. The same trap, with the same cause and the same fix, is written down
@@ -35,9 +52,9 @@ internal static class TestPaths
     /// </para>
     /// <para>
     /// Done test-side rather than in the drivers because the CWD-relative default is correct for
-    /// every other caller, and because knowing that this process is a VSTest host is the test
-    /// project's business. An explicit environment variable still wins — this only replaces the
-    /// default, and only when the repo root can be found.
+    /// every other caller, and because knowing that this process is a test app whose working directory
+    /// xunit chose is the test project's business. An explicit environment variable still wins — this only
+    /// replaces the default, and only when the repo root can be found.
     /// </para>
     /// <para>
     /// Called from <see cref="UiArtifactPathsAssemblyFixture"/>, which explains why it is an
@@ -51,7 +68,7 @@ internal static class TestPaths
             return;
         }
 
-        if (RepoRootDirectory is { } repoRoot)
+        if (RepoRoot.FromBinaries is { } repoRoot)
         {
             Environment.SetEnvironmentVariable(
                 environmentVariable, Path.Combine(repoRoot, "artifacts", folderName));
@@ -81,29 +98,12 @@ internal static class TestPaths
             return envDir;
         }
 
-        var repoRoot = RepoRoot.Value;
-        if (repoRoot is null)
+        if (RepoRoot.FromBinaries is not { } repoRoot)
         {
             return null;
         }
 
         var candidate = Path.GetFullPath(Path.Combine(repoRoot, ".testdata", "wh40k-9e"));
         return Directory.Exists(candidate) ? candidate : null;
-    }
-
-    private static string? FindRepoRoot()
-    {
-        // Walk up from the test assembly location looking for the .slnx file
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir, "BattleScribeSpec.slnx")))
-            {
-                return dir;
-            }
-
-            dir = Path.GetDirectoryName(dir);
-        }
-        return null;
     }
 }

@@ -117,7 +117,7 @@ public sealed class DiagnosticsIsolationTests
     /// </summary>
     /// <remarks>
     /// Relative is the whole defect: <c>artifacts/nr-ui-diagnostics</c> resolves against the
-    /// process's working directory, which VSTest sets to the test assembly's output folder — so the
+    /// process's working directory, which xunit sets to the test assembly's output folder — so the
     /// dumps landed in <c>artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/…</c>, three levels
     /// below where every CI upload step looks. Asserting "absolute, under the repo root" fails for
     /// that path and passes for the fix, which "ends with the folder name" would not.
@@ -134,13 +134,13 @@ public sealed class DiagnosticsIsolationTests
 
             var anchored = Environment.GetEnvironmentVariable(Variable);
             Assert.SkipWhen(
-                TestPaths.RepoRootDirectory is null,
+                RepoRoot.FromBinaries is null,
                 "Test binaries are not inside a checkout, so there is no repo root to anchor at.");
 
             Assert.NotNull(anchored);
             Assert.True(Path.IsPathRooted(anchored), $"'{anchored}' is not an absolute path.");
             Assert.Equal(
-                Path.Combine(TestPaths.RepoRootDirectory!, "artifacts", "nr-ui-diagnostics"),
+                Path.Combine(RepoRoot.FromBinaries!, "artifacts", "nr-ui-diagnostics"),
                 anchored);
         }
         finally

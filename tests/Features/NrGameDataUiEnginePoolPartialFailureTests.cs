@@ -54,7 +54,7 @@ public sealed class NrGameDataUiEnginePoolPartialFailureTests
     [Trait("Engine", "FrozenNrGameDataUi")]
     public async Task CreateFrozenAsync_MidLoopFailure_LeaksNothing_AndResourceMetricsReturnToZero()
     {
-        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir();
+        var staticDir = NrGameDataUiEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         Assert.SkipWhen(staticDir is null,
             "NR Editor static files not found (run setup.ps1) — skipping partial-failure pool test");
 

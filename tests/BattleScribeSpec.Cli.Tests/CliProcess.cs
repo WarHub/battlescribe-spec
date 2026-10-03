@@ -36,7 +36,8 @@ internal sealed record CliResult(int ExitCode, string StdOut, string StdErr);
 /// <c>AdapterProcess</c> gives every adapter: the child needs no console — all three streams are
 /// pipes — and must never be able to change this one.</item>
 /// <item><b>Paths</b> resolve through <see cref="RepoRoot.FromBinaries"/>, the repository's one
-/// root resolution, not another hand-rolled walk.</item>
+/// root resolution, not another hand-rolled walk, and built binaries through <see cref="BuiltBinaries"/>,
+/// the rule BattleScribeSpec.Tests applies too.</item>
 /// </list>
 /// </para>
 /// </remarks>
@@ -48,10 +49,10 @@ internal static class CliProcess
             $"No {RepoRoot.MarkerFileName} above {AppContext.BaseDirectory}: Cli.Tests must run from a checkout's artifacts/bin.");
 
     /// <summary>The built <c>bs-spec.dll</c>.</summary>
-    public static string CliDll => FindBuiltDll("BattleScribeSpec.Cli", "bs-spec.dll");
+    public static string CliDll => BuiltBinaries.Find(RepoRootDirectory, "BattleScribeSpec.Cli", "bs-spec.dll");
 
     /// <summary>The built <c>bs-reference-adapter.dll</c> (not referenced by this project, so built separately).</summary>
-    public static string ReferenceAdapterDll => FindBuiltDll("BattleScribeSpec.ReferenceAdapter", "bs-reference-adapter.dll");
+    public static string ReferenceAdapterDll => BuiltBinaries.Find(RepoRootDirectory, "BattleScribeSpec.ReferenceAdapter", "bs-reference-adapter.dll");
 
     /// <summary>An absolute path under the repository root, e.g. <c>SpecPath("roster", "protocol", "x.yaml")</c> under <c>specs/</c>.</summary>
     public static string SpecPath(params string[] segments) =>
@@ -132,32 +133,5 @@ internal static class CliProcess
         }
 
         return psi;
-    }
-
-    /// <summary>
-    /// <c>artifacts/bin/&lt;project&gt;/&lt;pivot&gt;/&lt;file&gt;</c>, trying this test assembly's own
-    /// pivot first (debug/release) and then <c>debug</c>, the pivot CI builds under. Fails the test
-    /// naming the path it expected when neither exists.
-    /// </summary>
-    private static string FindBuiltDll(string project, string file)
-    {
-        var binRoot = Path.Combine(RepoRootDirectory, "artifacts", "bin");
-        var ownPivot = Path.GetRelativePath(binRoot, AppContext.BaseDirectory)
-            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
-            .Skip(1)
-            .FirstOrDefault();
-
-        foreach (var pivot in new[] { ownPivot, "debug" }.OfType<string>().Distinct())
-        {
-            var dll = Path.Combine(binRoot, project, pivot, file);
-            if (File.Exists(dll))
-            {
-                return dll;
-            }
-        }
-
-        var expected = Path.Combine(binRoot, project, ownPivot ?? "debug", file);
-        Assert.Fail($"{file} not built: {expected}");
-        return expected;
     }
 }

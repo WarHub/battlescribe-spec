@@ -90,7 +90,15 @@ internal static class ServeCommand
         // EngineRegistry.Builtins) — not a string-match here, and not the plan's chosen worker
         // count either: this is the engine's hard CEILING, reported to the client so it knows how
         // many adapter processes it may spawn; a --policy workers=N override must not leak into it.
-        var maxParallel = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(name)).Profile.MaxParallel;
+        //
+        // BuiltInOnly, not LoadDefault(): `serve` serves built-ins and nothing else (HostEngineFactory throws
+        // for any other name), so the ceiling it reports is the built-in's. An engines.json above the working
+        // directory describes an operator's own adapters and may register one under a built-in's name
+        // (docs/adapter-guide.md); read here, it reported THAT adapter's ceiling for the built-in actually
+        // being served. Reproduced: an engines.json redefining battlescribe-ui with maxParallel 4 made this
+        // say 4 for the one-app engine. It also kept the working directory out of every test that builds
+        // these options in process (ServeCommandPolicyTests, ServeCommandCapabilityTests).
+        var maxParallel = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(name)).Profile.MaxParallel;
 
         return new()
         {

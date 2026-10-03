@@ -298,7 +298,7 @@ public sealed class RunBatchSurfaceTests
 
     private static EngineSelection ResolveSelection(string engineName)
     {
-        var entry = EngineRegistry.LoadDefault().Resolve(EngineConnectable.Parse(engineName));
+        var entry = EngineRegistry.BuiltInOnly.Resolve(EngineConnectable.Parse(engineName));
         return new EngineSelection(entry, EngineDomain.Roster, Headed: false);
     }
 

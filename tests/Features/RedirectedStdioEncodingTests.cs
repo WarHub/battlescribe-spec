@@ -128,8 +128,7 @@ public sealed class RedirectedStdioEncodingTests
     public async Task Adapter_DecodesRawUtf8_FromALegacyCodePageConsole(string project, string dll, string arguments)
     {
         var ct = TestContext.Current.CancellationToken;
-        var path = Path.Combine(RepoRootDirectory, "artifacts", "bin", project, "debug", dll);
-        Assert.True(File.Exists(path), $"Not built: {path}");
+        var path = BuiltBinaries.Find(TestPaths.Root, project, dll);
 
         var psi = AdapterProcess.BuildStartInfo("dotnet", $"\"{path}\"{arguments}", environment: null);
         LegacyCodePageConsole.Apply(psi);
@@ -154,9 +153,6 @@ public sealed class RedirectedStdioEncodingTests
 
         Assert.True(process.ExitCode == 0, $"{dll} exited {process.ExitCode}; stderr:\n{await stdErr}");
     }
-
-    private static string RepoRootDirectory => RepoRoot.FromBinaries
-        ?? throw new InvalidOperationException($"No {RepoRoot.MarkerFileName} above {AppContext.BaseDirectory}.");
 
     private static async Task<ProtocolResponse?> ReadResponseAsync(Process process, CancellationToken ct)
     {
