@@ -31,12 +31,12 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
 
     [Theory]
     [MemberData(nameof(ConformanceTestBase.AllSpecs), MemberType = typeof(ConformanceTestBase))]
-    public void LiveNrUiRosterEngine(string specPath, string specName)
+    public void LiveNrUiRosterEngine(string specName)
     {
         Assert.SkipWhen(!_fixture.Available, _fixture.Unavailable);
         Assert.SkipWhen(!TargetSpecs.Contains(specName), $"Spec '{specName}' not in NR UI target list");
 
-        var spec = SpecLoader.Load(specPath);
+        var spec = SpecLoader.Load(SpecLoader.ResolveRosterSpec(specName));
         if (!spec.IsApplicableTo(EngineName))
         {
             _output.WriteLine($"{LogPrefix}Skipping spec: {specName} — not applicable to {EngineName}");

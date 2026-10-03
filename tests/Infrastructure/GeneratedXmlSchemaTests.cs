@@ -25,28 +25,30 @@ namespace BattleScribeSpec.Tests;
 /// </remarks>
 public sealed class GeneratedXmlSchemaTests
 {
-    public static TheoryData<string, string> RosterSpecs()
+    /// <summary>
+    /// One row per roster spec, carrying and labelled with its name (<c>category/id</c>), never its
+    /// path — see <see cref="TheoryRowIdentityTests"/>.
+    /// </summary>
+    public static TheoryDataRow<string>[] RosterSpecs()
     {
-        var data = new TheoryData<string, string>();
         var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
         {
-            return data;
+            return [];
         }
 
-        foreach (var spec in SpecLoader.DiscoverSpecs(specsDir))
+        return [.. SpecLoader.DiscoverSpecs(specsDir).Select(spec =>
         {
-            data.Add(spec.Path, $"{spec.Category}/{spec.Id}");
-        }
-
-        return data;
+            var specName = SpecLoader.SpecName(spec.Category, spec.Id);
+            return new TheoryDataRow<string>(specName) { Label = specName };
+        })];
     }
 
     [Theory]
     [MemberData(nameof(RosterSpecs))]
-    public void GeneratedXml_IsValidAgainstBattleScribeSchema(string specPath, string specName)
+    public void GeneratedXml_IsValidAgainstBattleScribeSchema(string specName)
     {
-        var spec = SpecLoader.Load(specPath);
+        var spec = SpecLoader.Load(SpecLoader.ResolveRosterSpec(specName));
         if (spec.Setup.DataSource is { Length: > 0 })
         {
             // File-based setup ships its own data; there is nothing generated to validate.

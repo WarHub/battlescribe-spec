@@ -14,7 +14,7 @@ namespace BattleScribeSpec.Tests;
 /// starts a <see cref="HarnessCollector"/> around the whole batch and hands each child
 /// <c>bs-engine-host</c> process its own OTLP exporter env. The <c>dotnet test</c> path has no
 /// such entry point to hook — there are 11 independent collection fixtures, each free to spin up
-/// whenever xUnit decides to run their collection, with <c>parallelizeTestCollections: true</c> and
+/// whenever xUnit decides to run their collection, with <c>"parallelMode": "collections"</c> and
 /// <c>maxParallelThreads</c> set to the machine-relative <c>"0.5x"</c> (see
 /// <c>tests/xunit.runner.json</c> and <c>ConcurrencyConfigurationDriftTests</c> for why it is a
 /// multiplier and not a thread count — that file is static JSON read by the runner before any of our

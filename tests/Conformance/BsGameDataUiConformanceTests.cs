@@ -54,5 +54,5 @@ public sealed class BsGameDataUiConformanceTests : GameDataConformanceTestBase
 
     [Theory]
     [MemberData(nameof(AllGameDataSpecs))]
-    public void BsGameDataUiEngine(string specPath, string specName) => RunSpec(specPath, specName);
+    public void BsGameDataUiEngine(string specName) => RunSpec(specName);
 }

@@ -20,7 +20,7 @@ public sealed class TraceparentPropagationTests
     {
         // A different W3C example traceparent from HarnessTelemetryTests' — both files' literal
         // used to be the identical example id, a latent collision trap now that
-        // parallelizeTestCollections runs both test classes concurrently against the same
+        // "parallelMode": "collections" runs both test classes concurrently against the same
         // process-wide ActivitySource.
         var command = new GetStateCommand { Traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" };
 

@@ -58,7 +58,31 @@ public abstract class ConformanceTestBase
     /// </summary>
     protected abstract IRosterEngine? GetEngine();
 
-    public static TheoryDataRow<string, string>[] AllSpecs()
+    /// <summary>
+    /// One row per roster spec. A row carries the spec's name (<c>category/id</c>) and nothing else,
+    /// and is labelled with it, so the test reads
+    /// <c>&lt;Namespace&gt;.&lt;Class&gt;.&lt;Method&gt; [category/id]</c> — never a checkout path, never cut
+    /// short, and selectable with <c>--filter "DisplayName~&lt;id&gt;"</c> whatever the id's length.
+    /// <see cref="TheoryRowIdentityTests"/> holds every data-driven theory to that.
+    /// </summary>
+    public static TheoryDataRow<string>[] AllSpecs()
+        => [.. RosterSpecTags.Value.Select(s =>
+        {
+            var row = new TheoryDataRow<string>(s.Name) { Label = s.Name };
+            if (s.Tags.Length > 0)
+            {
+                row.Traits.Add("Tag", [.. s.Tags]);
+            }
+
+            return row;
+        })];
+
+    /// <summary>
+    /// Each roster spec's name and tags, read once per process: every per-spec roster lane takes its
+    /// rows from <see cref="AllSpecs"/>, and discovery (and <see cref="TheoryRowIdentityTests"/>) asks
+    /// once per lane — which parsed all 400-odd specs each time. The rows are still built fresh per call.
+    /// </summary>
+    private static readonly Lazy<IReadOnlyList<(string Name, string[] Tags)>> RosterSpecTags = new(() =>
     {
         var specsDir = SpecLoader.FindRosterSpecsDirectory();
         if (specsDir is null || !Directory.Exists(specsDir))
@@ -68,24 +92,21 @@ public abstract class ConformanceTestBase
 
         return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s =>
         {
-            var specName = $"{s.Category}/{s.Id}";
-            var row = new TheoryDataRow<string, string>(s.Path, specName);
+            string[] tags;
             try
             {
-                var spec = SpecLoader.Load(s.Path);
-                if (spec.Tags is { Count: > 0 })
-                {
-                    row.Traits.Add("Tag", [.. spec.Tags]);
-                }
+                tags = SpecLoader.Load(s.Path).Tags?.ToArray() ?? [];
             }
             catch
             {
                 // Spec load failure during discovery — emit untagged row
                 // so execution reports the load error normally.
+                tags = [];
             }
-            return row;
+
+            return (SpecLoader.SpecName(s.Category, s.Id), tags);
         })];
-    }
+    });
 
     /// <summary>
     /// Returns spec discovery data as simple tuples for use outside xUnit theory data.
@@ -99,7 +120,7 @@ public abstract class ConformanceTestBase
             return [];
         }
 
-        return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s => (s.Path, Name: $"{s.Category}/{s.Id}"))];
+        return [.. SpecLoader.DiscoverSpecs(specsDir).Select(s => (s.Path, Name: SpecLoader.SpecName(s.Category, s.Id)))];
     }
 
     /// <summary>Run one <see cref="AddressingScenarios"/> scenario on this lane and require the addressing verdict.</summary>
@@ -124,6 +145,13 @@ public abstract class ConformanceTestBase
         }
     }
 
+    /// <summary>Run the roster spec named <paramref name="specName"/> (<c>category/id</c>) on this lane.</summary>
+    protected void RunSpec(string specName) => RunSpec(SpecLoader.ResolveRosterSpec(specName), specName);
+
+    /// <summary>
+    /// Run a spec file that is not in the corpus — <c>ConformanceLaneEngineIdentityTests</c> writes its
+    /// own — on this lane, reporting it as <paramref name="specName"/>.
+    /// </summary>
     protected void RunSpec(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);

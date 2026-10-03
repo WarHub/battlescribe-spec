@@ -40,8 +40,5 @@ public sealed class LiveNrGameDataConformanceTests : GameDataConformanceTestBase
 
     [Theory]
     [MemberData(nameof(AllGameDataSpecs))]
-    public void Spec(string specPath, string specName)
-    {
-        RunSpec(specPath, specName);
-    }
+    public void Spec(string specName) => RunSpec(specName);
 }

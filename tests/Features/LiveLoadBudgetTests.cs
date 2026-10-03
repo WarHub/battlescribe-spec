@@ -14,7 +14,8 @@ namespace BattleScribeSpec.Tests;
 /// </para>
 /// <para>
 /// Each test uses its own invented host, so the process-wide budget is not shared state between them
-/// and <c>parallelizeTestCollections</c> cannot make them flake into each other.
+/// and running collections in parallel (<c>"parallelMode": "collections"</c>) cannot make them flake
+/// into each other.
 /// </para>
 /// </remarks>
 [Trait("Category", "Unit")]
