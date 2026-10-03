@@ -322,10 +322,10 @@ describe("thorough-inputs.mjs (process)", () => {
   it("forces thorough when a PR to main renames a file out of an input path", () => {
     const { output, summary } = run(
       { EVENT: "pull_request", LABELS: "[]", BASE_REF: "main", DEFAULT_BRANCH: "main" },
-      [{ filename: "docs/old-profile.runsettings", previous_filename: "tests/test-profiles/old.runsettings", status: "renamed" }],
+      [{ filename: "docs/old-profiles.cs", previous_filename: "tests/TestProfiles/TestProfiles.cs", status: "renamed" }],
     );
     assert.equal(output, "thorough=true\nlive=true\n");
-    assert.match(summary, /tests\/test-profiles\/old\.runsettings/);
+    assert.match(summary, /tests\/TestProfiles\/TestProfiles\.cs/);
   });
 
   it("fails the step on a plain file list instead of the API response", () => {

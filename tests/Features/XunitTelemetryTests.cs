@@ -16,11 +16,11 @@ namespace BattleScribeSpec.Tests.Features;
 /// Reading the ASSEMBLY fixture's own artifact from inside a test is not possible:
 /// <c>OtlpArtifactWriter</c> holds its files open (<c>FileShare.None</c>) until
 /// <see cref="TelemetryAssemblyFixture.DisposeAsync"/> runs at the very end of the whole run — see
-/// the Task 9 report for that number, read back after a real <c>dotnet test</c> run completes.
+/// the Task 9 report for that number, read back after a real test-app run completes.
 /// What this test proves instead is the MECHANISM that number depends on: that a short
 /// <c>OTEL_METRIC_EXPORT_INTERVAL</c> turns <c>harness.resource.count</c> into a readable time
 /// series whose max exceeds its last value — exactly what makes the real
-/// <c>artifacts/telemetry/xunit-&lt;timestamp&gt;.metrics.pb</c> artifact's peak recoverable.
+/// <c>artifacts/telemetry/xunit-&lt;profile&gt;-&lt;timestamp&gt;.metrics.pb</c> artifact's peak recoverable.
 /// </para>
 /// <para>
 /// Shares <c>HarnessCollectorEnv</c> with <c>TelemetryCollectorTests</c>/<c>EndToEndTraceTests</c>:

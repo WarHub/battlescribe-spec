@@ -23,8 +23,9 @@ internal sealed record TestProfile(
     IReadOnlyList<(string Engine, string Why)> MaySkip);
 
 /// <summary>
-/// <b>Every test profile — the one record of every lane.</b> <c>-p:TestProfile=&lt;name&gt;</c> selects
-/// one; every CI step that runs <c>BattleScribeSpec.Tests</c> runs one, and nothing else.
+/// <b>Every test profile — the one record of every lane.</b> <c>-p:TestProfile=&lt;name&gt;</c> (under
+/// <c>dotnet test</c>) or <c>--test-profile &lt;name&gt;</c> (on the test app) selects one; every CI test
+/// step runs one, and nothing else.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -36,12 +37,12 @@ internal sealed record TestProfile(
 /// all of it, rather than the one spec it ran before the job's <c>env:</c> block supplied the rest.
 /// </para>
 /// <para>
-/// While the suites run on VSTest, each profile that covers <see cref="EngineLanes.Assembly"/> is
-/// rendered into <c>tests/test-profiles/&lt;name&gt;.runsettings</c>, which is what
-/// <c>-p:TestProfile</c> hands VSTest. Those files are generated from this table and committed;
-/// <c>RunsettingsGenerationTests.Runsettings_MatchTheRegistry</c> fails on any difference and prints
-/// the expected file, so a hand edit there is a red build, not a second record. <see cref="Cli"/> has
-/// no file: it covers only <c>BattleScribeSpec.Cli.Tests</c>, which CI runs unfiltered.
+/// <b>The test app reads this table itself.</b> Both test projects' entry point is <see cref="TestHost"/>:
+/// it finds the profile, refuses one that does not cover the assembly it is running in, sets the
+/// profile's environment in its own process before the first test, applies the strict zero-tests
+/// policy, and hands the platform the profile's filter — ANDed with a caller's <c>--filter</c>, which
+/// narrows a profile rather than replacing it. Nothing is rendered to a file: there is no second
+/// record of a lane to drift from this one. <c>--list-test-profiles [--json]</c> prints the table.
 /// </para>
 /// <para>
 /// The lint that holds this table to the suite is <c>TestProfileRegistryTests</c>: names, clause
@@ -58,6 +59,17 @@ internal static class TestProfiles
 
     /// <summary>The <c>bs-spec</c> CLI's own tests.</summary>
     public const string Cli = "BattleScribeSpec.Cli.Tests";
+
+    /// <summary>
+    /// Each test assembly's project, repo-relative: what <see cref="TestHost"/> tells a caller to name
+    /// with <c>--project</c> when a solution-wide run reaches an assembly the profile does not cover.
+    /// <c>TestProfileRegistryTests.EveryProfileAssembly_IsASolutionTestProject</c> holds it to the solution.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Projects { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [Tests] = "tests/BattleScribeSpec.Tests.csproj",
+        [Cli] = "tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj",
+    };
 
     private const string NrEngineUrl = "https://www.newrecruit.eu";
     private const string NrEditorUrl = "https://giloushaker.github.io/nr-editor/";
@@ -87,9 +99,9 @@ internal static class TestProfiles
             + "it launches the real desktop app and drives every roster spec through it (minutes, and a display), "
             + "while CI's offline lanes run setup.ps1 -SkipJavaAgent, the agent jar is absent, and every one of those "
             + "tests skips. Kept that way on purpose: the local half is what has caught this suite's cross-spec reuse "
-            + "defects, each invisible to CI at the time. To sit out the app for one run, set BS_UI_SKIP=true. On "
-            + "VSTest a filter given on the command line REPLACES this profile's filter rather than narrowing it, so "
-            + "it is not the way to subtract one engine.",
+            + "defects, each invisible to CI at the time. To sit out the app for one run, set BS_UI_SKIP=true — the "
+            + "one lane-defining switch this profile lets a caller set, because BsRosterUi may skip here — or narrow "
+            + "the run with --filter \"Engine!=BsRosterUi\", which the test app ANDs onto this profile's filter.",
             Selection.AllExcept("FrozenNrRoster", "FrozenNrGameData", "LiveNrRoster", "LiveNrGameData", "FrozenNrUiRoster",
                 "LiveNrUiRoster", "FrozenNrGameDataUi", "LiveNrGameDataUi", "BsGameDataUi"),
             maySkip: [("BsRosterUi", "CI does not provision the app: thorough-conformance runs setup.ps1 -SkipJavaAgent, so the agent jar is absent and every BsRosterUi test skips there")]),
@@ -106,7 +118,8 @@ internal static class TestProfiles
             + "the protocol surface. They are offline and CPU-only (the in-process BattleScribe engine and the dotnet: "
             + "reference adapter, no browser, no network), so they run in the checks job. CI once ran only the other "
             + "test project, so every gate on the CLI's third-party load limit had never been executed by CI; a gate "
-            + "nobody invokes is a gate nobody has. No runsettings file: on VSTest this assembly runs without one.",
+            + "nobody invokes is a gate nobody has. CI runs it as its one dotnet test step (dotnet test --project "
+            + "<csproj> -p:TestProfile=cli), so the MSBuild-carried arguments and server mode stay exercised.",
             Selection.Whole, assemblies: [Cli]),
         Profile("lint",
             "Spec lint and structure validation: every Category=Lint test, the repo's own drift gates included.",

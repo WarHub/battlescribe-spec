@@ -19,7 +19,7 @@ namespace BattleScribeSpec.Concurrency;
 /// <item><term>Who reads it</term><description>
 /// <see cref="Workers"/>: the CLI batch path only (<c>bs-spec run --all</c> → <c>SpecSuiteRunner</c>
 /// → <c>EngineHostLocator</c>, which puts <c>workers=</c> on the wire). <see cref="PoolSize"/>: the
-/// xUnit path only (<c>dotnet test</c> → <c>FixtureConcurrency.PoolSizeFor</c> → the fixture pools'
+/// xUnit path only (the test app → <c>FixtureConcurrency.PoolSizeFor</c> → the fixture pools'
 /// <c>MaxDegreeOfParallelism</c>) — <b>which is what every NewRecruit CI conformance lane runs</b>.
 /// Neither path reads the other's field; <see cref="PoolSize"/> is not even on the protocol wire.
 /// </description></item>

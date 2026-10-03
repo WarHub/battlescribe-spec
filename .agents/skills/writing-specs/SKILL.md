@@ -11,10 +11,10 @@ description: >
 ## Workflow
 
 1. Create `specs/{category}/{spec-id}.yaml`
-2. Run: `dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"`
+2. Run: `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"`
 3. Fix failures and re-run until BattleScribe passes
 4. Run: `pwsh -File tools/format-specs.ps1`
-5. Run: `dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint"`
+5. Run: `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint"`
 
 ## Spec structure
 

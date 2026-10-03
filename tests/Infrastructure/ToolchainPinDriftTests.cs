@@ -107,6 +107,75 @@ public sealed class ToolchainPinDriftTests
     }
 
     /// <summary>
+    /// <b><c>global.json</c> puts <c>dotnet test</c> on Microsoft.Testing.Platform.</b> Without the
+    /// <c>test.runner</c> entry the .NET 10 SDK runs <c>dotnet test</c> in VSTest mode, which these
+    /// projects cannot run at all: xunit.v3 4's platform targets refuse it ("Testing with VSTest target
+    /// is no longer supported"), so every <c>dotnet test</c> — the pre-push gate, the CLI's CI step —
+    /// would fail on the toolchain rather than on a test.
+    /// </summary>
+    /// <remarks>Mutation-checked when written: the <c>test</c> block deleted, and the runner renamed <c>VSTest</c>, each go red.</remarks>
+    [Fact]
+    public void GlobalJson_SelectsTheTestingPlatformRunner()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "global.json")));
+        var runner = doc.RootElement.TryGetProperty("test", out var test) && test.TryGetProperty("runner", out var value)
+            ? value.GetString()
+            : null;
+
+        Assert.True(runner == "Microsoft.Testing.Platform",
+            $"global.json's test.runner is {(runner is null ? "missing" : $"'{runner}'")}; it must be \"Microsoft.Testing.Platform\". "
+            + "The suites are Microsoft.Testing.Platform apps (tests/Directory.Build.props, tests/TestProfiles/TestHost.cs), and "
+            + "`dotnet test` in the SDK's default VSTest mode cannot run them.");
+    }
+
+    /// <summary>
+    /// <b>No VSTest package is referenced anywhere in the repository's projects</b>, nor pinned in
+    /// <c>Directory.Packages.props</c>: <c>Microsoft.NET.Test.Sdk</c>, <c>xunit.runner.visualstudio</c>,
+    /// <c>xunit.v3.mtp-off</c> (the VSTest flavour of xunit.v3), <c>coverlet.collector</c> (a VSTest data
+    /// collector) and the <c>Microsoft.TestPlatform.*</c> family.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One of them back in a test project would bring a second runner into a build that has one: the
+    /// VSTest adapter and test SDK compete with the platform's entry point and its MSBuild targets, and
+    /// <c>Microsoft.NET.Test.Sdk</c> generates an entry point of its own. A pin with no reference is the
+    /// other half: invisible to Dependabot, and ready to hold a transitive version back.
+    /// </para>
+    /// <para>Mutation-checked when written: <c>Microsoft.NET.Test.Sdk</c> re-added to Cli.Tests goes red naming the file.</para>
+    /// </remarks>
+    [Fact]
+    public void NoVsTestPackage_IsReferencedOrPinned()
+    {
+        var package = new Regex(
+            @"<Package(?:Reference|Version)\s+(?:Include|Update)=""(Microsoft\.NET\.Test\.Sdk|xunit\.runner\.visualstudio|xunit\.v3\.mtp-off|coverlet\.collector|Microsoft\.TestPlatform[^""]*)""",
+            RegexOptions.IgnoreCase);
+        // The repository's own MSBuild files: the root, and the source trees. The vendored .deps/ and the
+        // downloaded lib/ and artifacts/ are not this repository's projects.
+        string[] extensions = [".csproj", ".props", ".targets"];
+        string[] trees = ["src", "tests", "tools", "docker"];
+        var files = Directory.EnumerateFiles(RepoRoot)
+            .Concat(trees
+                .Select(d => Path.Combine(RepoRoot, d))
+                .Where(Directory.Exists)
+                .SelectMany(static d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories)))
+            .Where(f => extensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+            .Select(f => (Path: f, Relative: Path.GetRelativePath(RepoRoot, f).Replace('\\', '/')))
+            .Where(static f => !f.Relative.Split('/').Any(static s => s is "bin" or "obj" or "node_modules"))
+            .ToList();
+        Assert.Contains(files, static f => f.Relative == "Directory.Packages.props");
+        Assert.Contains(files, static f => f.Relative.StartsWith("tests/", StringComparison.Ordinal) && f.Relative.EndsWith(".csproj", StringComparison.Ordinal));
+
+        var offenders = files
+            .SelectMany(f => package.Matches(File.ReadAllText(f.Path)).Select(m => $"  {f.Relative}: {m.Groups[1].Value}"))
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "These VSTest packages are referenced or pinned:\n" + string.Join("\n", offenders) + "\n\n"
+            + "The suites run on Microsoft.Testing.Platform with xunit.v3's own runner; a VSTest adapter or test SDK in a test "
+            + "project is a second runner with its own entry point. Remove it, and its pin from Directory.Packages.props.");
+    }
+
+    /// <summary>
     /// <b>A Dockerfile's SDK tag is the same decision, spelled somewhere Dependabot's dotnet-sdk
     /// updater cannot reach.</b> The images COPY <c>global.json</c>, so a tag outside the pinned band
     /// does not build differently — it fails outright ("A compatible .NET SDK was not found"). Two

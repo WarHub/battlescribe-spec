@@ -138,18 +138,19 @@ Exclude overrides include.
 
 ### Filtering in xUnit
 
-The BattleScribe conformance tests expose spec tags as xUnit traits. Filter by tag
-with `dotnet test --filter`:
+The BattleScribe conformance tests expose spec tags as xUnit traits. Filter by tag with `--filter`,
+naming the test project (a solution-wide run would start the CLI's tests too, which have no tags, and a
+run that executes no test fails):
 
 ```bash
 # Run only cost-tagged specs
-dotnet test --filter "Tag=cost"
+dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=cost"
 
 # Run specs tagged with either cost or constraint
-dotnet test --filter "Tag=cost|Tag=constraint"
+dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=cost|Tag=constraint"
 
 # Combine tag filter with engine filter
-dotnet test --filter "Tag=cost&Category=Conformance"
+dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=cost&Category=Conformance"
 ```
 
 ## Exit Codes

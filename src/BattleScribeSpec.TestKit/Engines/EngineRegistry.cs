@@ -146,8 +146,8 @@ public sealed class EngineRegistry
         // ---- CONTEXT AXIS (the xUnit fixture pool — `nr-frozen`, `nr-live-conformance`) ----
         //
         // ContextPoolSize: 4 is MEASURED, and it is an ABSOLUTE COUNT, NOT ceil(cpuCount × anything).
-        // The `dotnet test` wall bottoms out at pool 4 on a 32-core box AND on a 4-CPU/16 GiB
-        // container — the same 4 (§7.2). The [Fact] wall FLOORS at ~9s (dev) / ~11s (container) from
+        // The test app's wall (measured as `dotnet test`, under VSTest) bottoms out at pool 4 on a
+        // 32-core box AND on a 4-CPU/16 GiB container — the same 4 (§7.2). The [Fact] wall FLOORS at ~9s (dev) / ~11s (container) from
         // pool 4 and never improves again however many contexts you add: all contexts share ONE
         // Chromium and ONE Playwright Node driver, and every CDP message funnels through that single
         // driver. Per-spec work is 19 ms — the driver round-trip IS the workload. Past 4, extra

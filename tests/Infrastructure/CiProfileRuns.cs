@@ -17,9 +17,9 @@ namespace BattleScribeSpec.Tests;
 /// well-formed profiled step.
 /// </param>
 /// <param name="UnderXvfb">Whether the command runs under <c>xvfb-run</c>.</param>
-/// <param name="SelectionOverrides">
-/// The tokens on the line that would replace or narrow the profile's selection
-/// (<see cref="CiProfileRuns.SelectionOverridesIn"/>).
+/// <param name="Overrides">
+/// The tokens on the line that would narrow or replace the profile's selection or weaken its verdict
+/// (<see cref="CiProfileRuns.OverridesIn"/>).
 /// </param>
 internal sealed record CiTestRun(
     CiStep Step,
@@ -28,8 +28,11 @@ internal sealed record CiTestRun(
     CiInvocation Invocation,
     IReadOnlyList<string> ProfileNames,
     bool UnderXvfb,
-    IReadOnlyList<string> SelectionOverrides)
+    IReadOnlyList<string> Overrides)
 {
+    /// <summary>How each profile name on the line is spelled (<see cref="CiProfileRuns.ProfileSpellings"/>).</summary>
+    public IReadOnlyList<(string Name, ProfileSpelling How)> Spellings => CiProfileRuns.ProfileSpellings(Command);
+
     /// <summary>The registry profile the line names, when it names exactly one that exists.</summary>
     public TestProfile? Profile => ProfileNames is [var only] ? TestProfiles.Find(only) : null;
 
@@ -47,6 +50,19 @@ internal sealed record CiTestRun(
     public string Where => Matrix.Count == 0
         ? Step.Where
         : $"{Step.Where} [{string.Join(", ", Matrix.Select(static kv => $"{kv.Key}={kv.Value}"))}]";
+}
+
+/// <summary>How a command line names a test profile.</summary>
+internal enum ProfileSpelling
+{
+    /// <summary>The MSBuild property <c>-p:TestProfile=&lt;name&gt;</c>, which reaches the app as <c>--test-profile</c>.</summary>
+    MsBuildProperty,
+
+    /// <summary>The test app's own <c>--test-profile &lt;name&gt;</c>, with no <c>--</c> before it.</summary>
+    Option,
+
+    /// <summary><c>--test-profile &lt;name&gt;</c> after a <c>--</c>: handed to the app by <c>dotnet run</c>.</summary>
+    OptionAfterSeparator,
 }
 
 /// <summary>
@@ -83,7 +99,7 @@ internal sealed record CiCliUiRun(
 /// <remarks>
 /// <para>
 /// <b>Why the matrix is expanded rather than skipped.</b> <c>thorough-ui-bs</c> runs
-/// <c>-TestProfile ${{ matrix.suite.profile }}</c>; read as written, that step names no profile at all, and
+/// <c>--test-profile ${{ matrix.suite.profile }}</c>; read as written, that step names no profile at all, and
 /// every rule about profiled steps would have to exempt it — the leg that drives the desktop app for
 /// thirteen minutes. Expanded, each leg is a run with a profile the lints can check, and a typo in the
 /// matrix key stays an unresolved expression, which is not a profile.
@@ -141,57 +157,68 @@ internal static class CiProfileRuns
     });
 
     /// <summary>
-    /// The profiles a command line names, in every spelling that selects one: the step script's
-    /// <c>-TestProfile x</c> / <c>-TestProfile:x</c> (PowerShell parameters ignore case), the test app's
-    /// <c>--test-profile x</c> / <c>--test-profile=x</c>, and the MSBuild property <c>-p:TestProfile=x</c>.
+    /// The profiles a command line names, in every spelling that selects one: the test app's
+    /// <c>--test-profile x</c> / <c>--test-profile=x</c> / <c>--test-profile:x</c> (the platform reads all
+    /// three, in any case), and the MSBuild property <c>-p:TestProfile=x</c>.
     /// </summary>
-    internal static IReadOnlyList<string> ProfilesNamedBy(string command)
+    internal static IReadOnlyList<string> ProfilesNamedBy(string command) => [.. ProfileSpellings(command).Select(static s => s.Name)];
+
+    /// <summary>
+    /// Each profile a command line names (<see cref="ProfilesNamedBy"/>), with how it is spelled — which
+    /// <c>CiProfileLaneTests.EveryCiTestRun_NamesAProfile</c> holds to one spelling per verb.
+    /// </summary>
+    internal static IReadOnlyList<(string Name, ProfileSpelling How)> ProfileSpellings(string command)
     {
         var tokens = CiTestInvocations.Tokenize(command).Tokens;
-        var names = new List<string>();
+        var separator = tokens.IndexOf("--");
+        var found = new List<(string, ProfileSpelling)>();
         for (var i = 0; i < tokens.Count; i++)
         {
+            var how = separator >= 0 && i > separator ? ProfileSpelling.OptionAfterSeparator : ProfileSpelling.Option;
             var token = tokens[i];
-            foreach (var flag in ProfileFlags)
+            if (token.Equals(ProfileOption, StringComparison.OrdinalIgnoreCase) && i + 1 < tokens.Count)
             {
-                if (token.Equals(flag, StringComparison.OrdinalIgnoreCase) && i + 1 < tokens.Count)
-                {
-                    names.Add(tokens[++i]);
-                }
-                else if (token.Length > flag.Length + 1
-                    && token.StartsWith(flag, StringComparison.OrdinalIgnoreCase)
-                    && token[flag.Length] is ':' or '=')
-                {
-                    names.Add(token[(flag.Length + 1)..]);
-                }
+                found.Add((tokens[++i], how));
+            }
+            else if (token.Length > ProfileOption.Length + 1
+                && token.StartsWith(ProfileOption, StringComparison.OrdinalIgnoreCase)
+                && token[ProfileOption.Length] is ':' or '=')
+            {
+                found.Add((token[(ProfileOption.Length + 1)..], how));
             }
         }
 
-        names.AddRange(CiTestInvocations.MsBuildProperties(command)
+        found.AddRange(CiTestInvocations.MsBuildProperties(command)
             .Where(static p => p.Name.Equals("TestProfile", StringComparison.OrdinalIgnoreCase))
-            .Select(static p => p.Value));
-        return names;
+            .Select(static p => (p.Value, ProfileSpelling.MsBuildProperty)));
+        return found;
     }
 
     /// <summary>
-    /// The tokens on a command line that would replace or narrow a profile's selection: a test filter
-    /// in any runner's spelling (<c>--filter</c>, MTP's <c>--filter-*</c>, an inline
-    /// <c>RunConfiguration.TestCaseFilter</c>), a settings file (<c>--settings</c>, <c>-s</c>), and the
+    /// The tokens on a command line that would narrow or replace a profile's selection, or weaken its
+    /// verdict: a test filter in any runner's spelling (<c>--filter</c>, xunit's <c>--filter-*</c>, an
+    /// inline <c>RunConfiguration.TestCaseFilter</c>), a settings file (<c>--settings</c>, <c>-s</c>), the
     /// MSBuild properties those become (<c>VSTestTestCaseFilter</c>, <c>VSTestSetting</c>,
-    /// <c>RunSettingsFilePath</c>). An option's value may follow it as the next token or after
-    /// <c>=</c> or <c>:</c> — System.CommandLine, which <c>dotnet test</c> parses with, takes all three.
-    /// Options of an <c>xvfb-run</c> prefix are not the runner's.
+    /// <c>RunSettingsFilePath</c>), a zero-tests policy, a logger, and <c>--test-modules</c> (which runs
+    /// assemblies without evaluating their projects, so the MSBuild-carried profile never arrives) — and
+    /// every option the test host refuses alongside a profile (<see cref="TestHost.RefusedWithAProfile"/>:
+    /// <c>--ignore-exit-code</c>, <c>--config-file</c>, <c>--xunit-config-filename</c>, a response file),
+    /// read by the host's own parser. An option's value may follow it as the next token or after <c>=</c>
+    /// or <c>:</c> — both <c>dotnet test</c> and the platform take all three. Options of an <c>xvfb-run</c>
+    /// prefix are not the runner's.
     /// </summary>
-    internal static IReadOnlyList<string> SelectionOverridesIn(string command)
+    internal static IReadOnlyList<string> OverridesIn(string command)
     {
         var tokens = WithoutXvfb(CiTestInvocations.Tokenize(command).Tokens);
-        string[] options = ["--filter", "--settings", "-s"];
+        string[] options = ["--filter", "--settings", "-s", "--zero-tests-policy", "--logger", "--test-modules"];
         var found = tokens
             .Where(static t => !MsBuildPropertySwitch.IsMatch(t))
             .Where(t => options.Any(o => t == o || OptionValue(t, o) is not null)
                 || t.StartsWith("--filter-", StringComparison.Ordinal)
                 || t.Contains("TestCaseFilter", StringComparison.OrdinalIgnoreCase))
             .ToList();
+        var refusedByTheHost = TestHost.OptionsRefusedWithAProfile(tokens).Where(t => !found.Contains(t, StringComparer.Ordinal)).ToList();
+        found.AddRange(refusedByTheHost);
         string[] properties = ["VSTestTestCaseFilter", "VSTestSetting", "RunSettingsFilePath"];
         found.AddRange(CiTestInvocations.MsBuildProperties(command)
             .Where(p => properties.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
@@ -208,8 +235,8 @@ internal static class CiProfileRuns
     /// <summary>An MSBuild property switch (<c>-p:</c>, <c>/p:</c>, <c>-property:</c>), read through <see cref="CiTestInvocations.MsBuildProperties"/> instead.</summary>
     private static readonly Regex MsBuildPropertySwitch = new(@"^(?:--|-|/)(?:p|property):", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    /// <summary>The two flags that name a profile: the step script's parameter and the test app's option.</summary>
-    private static readonly string[] ProfileFlags = ["-TestProfile", "--test-profile"];
+    /// <summary>The test app's option that names a profile.</summary>
+    private const string ProfileOption = "--test-profile";
 
     /// <summary>Whether a command runs under <c>xvfb-run</c>.</summary>
     internal static bool RunsUnderXvfb(string command) =>
@@ -250,9 +277,11 @@ internal static class CiProfileRuns
                     var classified = CiTestInvocations.ClassifyCommand(command, workingDirectory: workingDirectory);
                     if (classified.Kind == CiStepKind.TestRun)
                     {
-                        tests.Add(new CiTestRun(step, combination, command, classified, ProfilesNamedBy(command), RunsUnderXvfb(command), SelectionOverridesIn(command)));
+                        tests.Add(new CiTestRun(step, combination, command, classified, ProfilesNamedBy(command), RunsUnderXvfb(command), OverridesIn(command)));
                     }
-                    else if (classified.Kind == CiStepKind.CliRun)
+                    // A bs-spec run this cannot read (inside a shell's quoted string) has no arguments to read
+                    // lanes from; CiWorkflowDriftTests.EveryTestStep_NamesItsProject fails on it instead.
+                    else if (classified.Kind == CiStepKind.CliRun && classified.Unresolved is null)
                     {
                         var (lanes, arguments) = CliUiLanesOf(command);
                         cliUi.AddRange(lanes.Select(lane => new CiCliUiRun(step, combination, command, arguments, lane, RunsUnderXvfb(command))));

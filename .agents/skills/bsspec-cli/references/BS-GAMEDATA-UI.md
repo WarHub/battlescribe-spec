@@ -106,7 +106,7 @@ Other gotchas baked into the implementation:
 
 ```powershell
 pwsh -File setup.ps1                        # once — downloads BattleScribe + Liberica JDK, builds the agent
-dotnet test -p:TestProfile=bs-ui-gamedata
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs-ui-gamedata
 ```
 
 Java runtime and jars auto-discover (`BsUiPaths.ResolveJavaPath`, `BsGameDataUiEngine.FindOptions`);
@@ -194,4 +194,4 @@ unimplemented — all current actions are implemented, so this only appears if y
 | `src/BattleScribeSpec.BsRosterUiDriver/BsUiDataStaging.cs` | Shared file staging |
 | `tests/Infrastructure/BsGameDataUiFixture.cs` | Test fixture |
 | `tests/Conformance/BsGameDataUiConformanceTests.cs` | Conformance tests |
-| `tests/TestProfiles/TestProfiles.cs` | Test profile `bs-ui-gamedata` (its `tests/test-profiles/` runsettings is generated) |
+| `tests/TestProfiles/TestProfiles.cs` | Test profile `bs-ui-gamedata`, which the test app resolves itself (`tests/TestProfiles/TestHost.cs`) |

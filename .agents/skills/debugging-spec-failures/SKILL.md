@@ -13,7 +13,7 @@ description: >
 
 1. Run the failing spec:
    ```bash
-   dotnet test tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"
+   dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~{spec-id}"
    ```
 2. Read the assertion error output — it tells you the step index, field path, and mismatch.
 3. Check the matching rules below to understand *how* actual state was compared to expected.
@@ -208,7 +208,7 @@ See [ERROR-ASSERTIONS.md](references/ERROR-ASSERTIONS.md) for error matching det
 4. **Check matching:** Is it index vs name? Is ordering correct?
 5. **Check defaults:** Is zero-errors implicit check triggering?
 6. **Compare engines:** Does it fail for one engine only? Use `engines:` overrides.
-7. **Verify NR frozen:** Run `dotnet test -p:TestProfile=nr-frozen` — catches NR-specific regressions quickly.
+7. **Verify NR frozen:** Run `dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen` — catches NR-specific regressions quickly.
 8. **Iterate:** Fix and re-run. Lint after: `pwsh -File tools/format-specs.ps1`
 
 ## Reference files

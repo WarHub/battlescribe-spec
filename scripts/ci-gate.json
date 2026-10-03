@@ -26,7 +26,15 @@
     },
     {
       "path": "Directory.Build.props",
-      "why": "maps -p:TestProfile to a profile, and sets the build every test project inherits"
+      "why": "sets the build every project inherits, the test projects included"
+    },
+    {
+      "path": "tests/Directory.Build.props",
+      "why": "makes the test projects Microsoft.Testing.Platform apps behind the profile host: maps -p:TestProfile, carries the strict zero-tests policy, turns off xunit's own entry point"
+    },
+    {
+      "path": "tests/**/Program.cs",
+      "why": "each test project's entry point: the one call that puts the profile host in front of the test platform"
     },
     {
       "path": "tests/**/*.csproj",
@@ -37,12 +45,8 @@
       "why": "the runner's parallelism and ordering, which reorders the warm chains the UI lanes exercise"
     },
     {
-      "path": "tests/test-profiles/",
-      "why": "the runsettings the thorough lanes select their tests with, generated from tests/TestProfiles/"
-    },
-    {
       "path": "tests/TestProfiles/",
-      "why": "the test-profile registry: every lane's selection, environment and engine decisions, rendered into tests/test-profiles/"
+      "why": "the test-profile registry and the host that resolves it: every lane's selection, environment and engine decisions, and the rules a command line is held to"
     },
     {
       "path": ".github/workflows/",
@@ -51,10 +55,6 @@
     {
       "path": ".github/actions/",
       "why": "the composite setup action every building job runs: an edit can drop a cache, a JDK or a provisioned input that only a thorough lane consumes"
-    },
-    {
-      "path": "scripts/dotnet-test-step.ps1",
-      "why": "the executed-at-least-one-test guard every CI test step runs through"
     },
     {
       "path": "scripts/thorough-inputs.mjs",

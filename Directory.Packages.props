@@ -19,13 +19,11 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="GitHubActionsTestLogger" Version="3.0.5" />
     <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
     <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
     <PackageVersion Include="IKVM" Version="8.16.1" />
     <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.63.0" />
     <PackageVersion Include="OpenTelemetry" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
@@ -33,14 +31,17 @@
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <!--
-      mtp-off, NOT xunit.v3: every test here runs through VSTest — the TestProfile runsettings and
-      their TestCaseFilters, the GitHubActions logger, the TRX counters scripts/dotnet-test-step.ps1
-      reads. From 4.0 the plain xunit.v3 package brings Microsoft.Testing.Platform v2, whose MSBuild
-      targets refuse VSTest-mode `dotnet test` on the .NET 10 SDK outright ("Testing with VSTest
-      target is no longer supported"). Moving to MTP is a runner migration, not a package bump.
+      xunit.v3 4.x is the Microsoft.Testing.Platform v2 flavour, and the suites run on that platform: a
+      test project is an executable whose entry point is tests/TestProfiles/TestHost.cs (it resolves
+      the test profile a run names from the registry), and global.json selects the platform for
+      `dotnet test`. There is deliberately NO pin here for Microsoft.Testing.Platform or any of its
+      extensions: xunit.v3 states the platform it needs, and a central pin of a package no project
+      references is one Dependabot cannot see — it is how 2.2.1 once held xunit 4 back for six weeks
+      (NU1109, and an update Dependabot dropped without a word). GitHubActionsTestLogger is a platform
+      extension too (annotations and the step summary in Actions); it is referenced directly, so it is
+      pinned and watched like any other package.
     -->
-    <PackageVersion Include="xunit.v3.mtp-off" Version="4.0.1" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="Yaml2JsonNode" Version="3.0.1" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />

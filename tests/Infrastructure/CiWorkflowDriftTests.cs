@@ -449,7 +449,7 @@ public sealed class CiWorkflowDriftTests
     /// <para>
     /// The coverage lint (<c>EveryTestProject_IsRunBySomeCiStep</c>) and every per-project rule can only
     /// check a project they can read. A step whose project is an expression — a matrix over projects,
-    /// <c>--project ${{ env.X }}</c>, the wrapper given <c>${{ env.CLI_TESTS }}</c> — used to be read as
+    /// <c>--project ${{ env.X }}</c>, <c>dotnet test ${{ env.CLI_TESTS }}</c> — used to be read as
     /// a run of the whole solution, so every project looked covered: replacing the CLI step's csproj
     /// with <c>${{ env.CLI_TESTS }}</c> left every lint green while no step named
     /// <c>BattleScribeSpec.Cli.Tests</c>. <see cref="CiTestInvocations"/> now reports such a run as
@@ -1024,7 +1024,7 @@ public sealed class CiWorkflowDriftTests
     /// mention and the Docker image's name are neither.
     /// </remarks>
     [Theory]
-    [InlineData("pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter \"Engine=X\"", CiStepKind.TestRun)]
+    [InlineData("pwsh scripts/run-lane.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter \"Engine=X\"", CiStepKind.TestRun)]
     [InlineData("dotnet test --no-build --filter \"(A|B)&C\" tests/BattleScribeSpec.Tests.csproj", CiStepKind.TestRun)]
     [InlineData("dotnet test --project=tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj", CiStepKind.TestRun)]
     [InlineData("dotnet run --no-build --project ./tests/BattleScribeSpec.Tests.csproj -- --test-profile bs", CiStepKind.TestRun)]
@@ -1043,6 +1043,9 @@ public sealed class CiWorkflowDriftTests
     [InlineData("dotnet run --project ${{ matrix.project }} --no-build -- --test-profile x", CiStepKind.TestRun)]
     [InlineData("dotnet run --project src/BattleScribeSpec.Cli --no-build -- run --engine ${{ matrix.engine }} protocol-kitchen-sink", CiStepKind.CliRun)]
     [InlineData("dotnet run --project src/BattleScribeSpec.NewRecruit.HarTool --no-build -- -o .har-staging", CiStepKind.Other)]
+    [InlineData("pwsh -c \"dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-frozen --filter DisplayName~x\"", CiStepKind.TestRun)]
+    [InlineData("bash -c \"bs-spec run --all --engine newrecruit\"", CiStepKind.CliRun)]
+    [InlineData("pwsh -NoProfile -Command \"Write-Host done\"", CiStepKind.Other)]
     public void CiTestInvocations_ClassifiesByWhatIsRun(string command, CiStepKind expected)
     {
         Assert.Equal(expected, CiTestInvocations.ClassifyCommand(command).Kind);
@@ -1052,15 +1055,13 @@ public sealed class CiWorkflowDriftTests
     [Fact]
     public void CiTestInvocations_ReportsTheProjectsARunNames()
     {
-        var one = CiTestInvocations.ClassifyCommand("pwsh scripts/dotnet-test-step.ps1 -TestProfile core tests/BattleScribeSpec.Tests.csproj --no-build");
+        var one = CiTestInvocations.ClassifyCommand("dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile core");
         Assert.Equal("tests/BattleScribeSpec.Tests.csproj", Assert.Single(one.Projects));
-        Assert.True(one.ThroughTestStepScript);
         Assert.False(one.TargetsSolution);
 
         var bare = CiTestInvocations.ClassifyCommand("dotnet test -p:TestProfile=pre-push");
         Assert.Empty(bare.Projects);
         Assert.True(bare.TargetsSolution);
-        Assert.False(bare.ThroughTestStepScript);
     }
 
     /// <summary>
@@ -1071,12 +1072,15 @@ public sealed class CiWorkflowDriftTests
     /// the one in that directory (the checkout root holds only the solution). An expression where the
     /// project goes — or on a line that names no target literally — leaves the run unresolved: no
     /// project, not the solution. Before this, <c>working-directory: tests</c> with
-    /// <c>dotnet run --no-build -- --test-profile bs</c> was not a test step at all, and the wrapper given
-    /// <c>${{ env.CLI_TESTS }}</c> counted as a run of every project.
+    /// <c>dotnet run --no-build -- --test-profile bs</c> was not a test step at all, and the (since
+    /// deleted) test-step wrapper given <c>${{ env.CLI_TESTS }}</c> counted as a run of every project. A
+    /// run inside a shell's quoted string (<c>pwsh -c "…"</c>, <c>bash -lc '…'</c>, <c>cmd /c …</c>) is
+    /// unresolved too: it used to be no test step at all, so <c>pwsh -c "dotnet run … --test-profile
+    /// nr-frozen --filter DisplayName~x"</c> narrowed a CI lane with every lint green.
     /// </remarks>
     [Theory]
     [InlineData("dotnet run --no-build -- --test-profile bs", "tests", "tests/BattleScribeSpec.Tests.csproj", false, false)]
-    [InlineData("pwsh ../scripts/dotnet-test-step.ps1 BattleScribeSpec.Tests.csproj --no-build", "tests", "tests/BattleScribeSpec.Tests.csproj", false, false)]
+    [InlineData("pwsh ../scripts/run-lane.ps1 BattleScribeSpec.Tests.csproj --no-build", "tests", "tests/BattleScribeSpec.Tests.csproj", false, false)]
     [InlineData("dotnet test --no-build", "tests/BattleScribeSpec.Cli.Tests", "tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj", false, false)]
     [InlineData("dotnet test --no-build", "${{ github.workspace }}/tests/", "tests/BattleScribeSpec.Tests.csproj", false, false)]
     [InlineData("dotnet test --no-build", null, "", true, false)]
@@ -1086,11 +1090,15 @@ public sealed class CiWorkflowDriftTests
     [InlineData("dotnet test BattleScribeSpec.slnx --filter \"${{ matrix.filter }}\"", null, "", true, false)]
     [InlineData("dotnet run --project ${{ matrix.project }} --no-build -- --test-profile x", null, "", false, true)]
     [InlineData("dotnet test --project=${{ matrix.project }}", null, "", false, true)]
-    [InlineData("pwsh scripts/dotnet-test-step.ps1 ${{ env.CLI_TESTS }} --no-build", null, "", false, true)]
+    [InlineData("dotnet test ${{ env.CLI_TESTS }} --no-build", null, "", false, true)]
     [InlineData("dotnet ${{ env.TEST_DLL }} --list-tests", null, "", false, true)]
     [InlineData("dotnet test --filter \"${{ matrix.filter }}\"", null, "", false, true)]
     [InlineData("dotnet test --no-build", "${{ matrix.directory }}", "", false, true)]
     [InlineData("dotnet run -- --test-profile bs", null, "", false, true)]
+    [InlineData("pwsh -c \"dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-frozen --filter DisplayName~x\"", null, "", false, true)]
+    [InlineData("bash -lc 'dotnet test --project tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj -p:TestProfile=cli || true'", null, "", false, true)]
+    [InlineData("xvfb-run -a pwsh -NoProfile -Command \"dotnet test -p:TestProfile=pre-push\"", null, "", false, true)]
+    [InlineData("cmd /c dotnet test --project tests/BattleScribeSpec.Tests.csproj", null, "", false, true)]
     public void CiTestInvocations_ResolvesTheProjectARunNames(
         string command, string? workingDirectory, string projects, bool solution, bool unresolved)
     {
@@ -1154,7 +1162,6 @@ public sealed class CiWorkflowDriftTests
             var direct = CiTestInvocations.ClassifyCommand("bash scripts/run-lane.sh", root);
             Assert.Equal(CiStepKind.TestRun, direct.Kind);
             Assert.Equal("scripts/run-lane.sh", direct.FollowedScript);
-            Assert.False(direct.ThroughTestStepScript);
 
             Assert.Equal(CiStepKind.TestRun, CiTestInvocations.ClassifyCommand("pwsh scripts/outer.ps1", root).Kind);
             Assert.Equal(CiStepKind.Other, CiTestInvocations.ClassifyCommand("bash scripts/notes.sh", root).Kind);

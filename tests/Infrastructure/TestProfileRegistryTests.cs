@@ -209,9 +209,14 @@ public sealed class TestProfileRegistryTests
 
     /// <summary>
     /// Every assembly a profile covers is a test project in <c>BattleScribeSpec.slnx</c>, a profile
-    /// that claims an engine covers the assembly the engine lanes live in, and <c>pre-push</c>
-    /// covers every test project.
+    /// that claims an engine covers the assembly the engine lanes live in, <c>pre-push</c> covers every
+    /// test project, and <see cref="TestProfiles.Projects"/> — the project <c>TestHost</c> tells a caller
+    /// to name — maps each test assembly to its project in the solution.
     /// </summary>
+    /// <remarks>
+    /// Mutation-checked when written: a typo in the Cli.Tests path in <see cref="TestProfiles.Projects"/>
+    /// goes red naming both paths.
+    /// </remarks>
     [Fact]
     public void EveryProfileAssembly_IsASolutionTestProject()
     {
@@ -247,6 +252,14 @@ public sealed class TestProfileRegistryTests
         problems.AddRange(testAssemblies
             .Where(a => !prePush.Assemblies.Contains(a, StringComparer.Ordinal))
             .Select(static a => $"  pre-push does not cover {a}; the gate runs every test project"));
+
+        var solution = CiTestInvocations.TestProjects.ToDictionary(static p => p.AssemblyName, static p => p.RelativePath, StringComparer.Ordinal);
+        problems.AddRange(solution
+            .Where(p => TestProfiles.Projects.GetValueOrDefault(p.Key) != p.Value)
+            .Select(p => $"  TestProfiles.Projects maps {p.Key} to '{TestProfiles.Projects.GetValueOrDefault(p.Key)}'; the solution's project is '{p.Value}'"));
+        problems.AddRange(TestProfiles.Projects.Keys
+            .Where(a => !solution.ContainsKey(a))
+            .Select(static a => $"  TestProfiles.Projects names {a}, which is not a test project in the solution"));
 
         Assert.True(problems.Count == 0, "Profile assemblies disagree with the solution:\n" + string.Join("\n", problems));
     }
@@ -404,6 +417,47 @@ public sealed class TestProfileRegistryTests
             + "before every push without anyone choosing that. It is how BsRosterUi came to spend 688.8s of a 689.2s run "
             + "launching the desktop app in a profile documented as offline and fast (#405). Add a row to EngineLanes.All "
             + "saying what the lane needs and whether pre-push runs it, with the measured cost that justifies the answer.");
+    }
+
+    /// <summary>
+    /// <b>A lane is marked <see cref="EngineLane.Aggregate"/> exactly when one of its own classes runs the
+    /// spec suite as a single <c>[Fact] AllSpecs()</c>.</b> The mark is what puts live output on such a
+    /// lane in CI (<c>TestHost</c>), so a new aggregate that is not marked runs 27 silent minutes, and
+    /// a mark left on a lane that became a theory asks for output nobody needs.
+    /// </summary>
+    /// <remarks>
+    /// Mutation-checked when written: <c>Aggregate</c> removed from <c>FrozenNrUiRoster</c>, and set on
+    /// <c>BsRoster</c>, each go red naming the lane.
+    /// </remarks>
+    [Fact]
+    public void EveryAggregateLane_IsDeclared()
+    {
+        var assembly = typeof(TestProfileRegistryTests).Assembly;
+        var problems = new List<string>();
+        var aggregates = 0;
+        foreach (var lane in EngineLanes.All)
+        {
+            var allSpecs = lane.LaneTests
+                .Select(n => assembly.GetType(n, throwOnError: false))
+                .OfType<Type>()
+                .Where(static t => t.GetMethod("AllSpecs")?.GetCustomAttributes(typeof(FactAttribute), inherit: true).Any(static a => a is not TheoryAttribute) == true)
+                .Select(static t => t.Name)
+                .ToList();
+            aggregates += allSpecs.Count > 0 ? 1 : 0;
+            if (allSpecs.Count > 0 && !lane.Aggregate)
+            {
+                problems.Add($"  {lane.Trait}: {string.Join(", ", allSpecs)} runs the suite as one [Fact] AllSpecs(), and the lane is not marked Aggregate");
+            }
+            else if (allSpecs.Count == 0 && lane.Aggregate)
+            {
+                problems.Add($"  {lane.Trait} is marked Aggregate, and none of its own classes has a [Fact] AllSpecs()");
+            }
+        }
+
+        Assert.True(aggregates > 0, "No lane class has a [Fact] AllSpecs(); the scan has stopped finding the aggregates.");
+        Assert.True(problems.Count == 0,
+            "EngineLane.Aggregate must say which lanes run their spec suite as one test (tests/TestProfiles/EngineLanes.cs):\n"
+            + string.Join("\n", problems));
     }
 
     /// <summary>

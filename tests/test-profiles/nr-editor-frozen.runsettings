@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- GENERATED from the test-profile registry: profile 'nr-editor-frozen' in tests/TestProfiles/TestProfiles.cs,
-     whose Purpose says what it is for. Do not edit: RunsettingsGenerationTests.Runsettings_MatchTheRegistry
-     fails on any difference and prints the file the registry renders. -->
-<RunSettings>
-  <RunConfiguration>
-    <TestCaseFilter>Engine=FrozenNrGameData</TestCaseFilter>
-  </RunConfiguration>
-</RunSettings>

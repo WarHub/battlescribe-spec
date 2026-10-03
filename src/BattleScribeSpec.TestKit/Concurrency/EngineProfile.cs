@@ -118,7 +118,8 @@ public enum ColdStartCost
 /// <em>processes</em> on the CLI path (<c>bs-spec run --all</c>). <see cref="MaxContexts"/> /
 /// <see cref="ContextPoolSize"/> / <see cref="MemPerContextBytes"/> / <see cref="MemPoolBaselineBytes"/>
 /// size browser <em>contexts</em> on
-/// the xUnit path (<c>dotnet test</c> — what every NewRecruit CI lane runs). No number is shared
+/// the xUnit path (the test app, under <c>dotnet test</c> or <c>dotnet run</c> — what every NewRecruit CI
+/// lane runs). No number is shared
 /// between them, deliberately: the whole bug was two quantities wearing one name. <see cref="MaxParallel"/>
 /// was the last one still shared, and it is not any more.
 /// </para>

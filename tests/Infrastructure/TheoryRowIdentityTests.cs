@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using Xunit.Sdk;
 using Xunit.v3;
 
@@ -185,8 +184,9 @@ public sealed class TheoryRowIdentityTests
     /// <remarks>
     /// <para>
     /// Every place that can take the class out of a name is checked: <c>methodDisplay</c> in each
-    /// <c>xunit.runner.json</c>, <c>&lt;MethodDisplay&gt;</c> in each runsettings file, the inline
-    /// <c>xUnit.MethodDisplay=</c> argument in anything that invokes the tests, and — for every test
+    /// <c>xunit.runner.json</c>; xunit's <c>--method-display</c> and <c>--method-display-options</c> in
+    /// anything that invokes the tests, and in the profile registry and host that build a lane's command
+    /// line (a runsettings file could do it too, under VSTest, and none exists now); and — for every test
     /// method in this assembly — a fact or theory attribute's <c>DisplayName</c> or a data attribute's
     /// <c>TestDisplayName</c>, either of which xunit uses as the base name in place of
     /// <c>&lt;Class&gt;.&lt;Method&gt;</c>. A row's own <c>TestDisplayName</c> is the third such override;
@@ -196,7 +196,7 @@ public sealed class TheoryRowIdentityTests
     /// <para>
     /// Mutation-checked when written: <c>"methodDisplay": "method"</c>, <c>[Theory(DisplayName = …)]</c> on
     /// a conformance theory, a <c>[MemberData(…, TestDisplayName = …)]</c>, and
-    /// <c>-- xUnit.MethodDisplay=Method</c> in the test step script each turn this red.
+    /// <c>--method-display method</c> on a CI test step each turn this red.
     /// </para>
     /// </remarks>
     [Fact]
@@ -242,26 +242,16 @@ public sealed class TheoryRowIdentityTests
             }
         }
 
-        var runsettings = Directory.GetFiles(Path.Combine(checkout, "tests", "test-profiles"), "*.runsettings");
-        Assert.NotEmpty(runsettings);
-        foreach (var file in runsettings)
+        // xunit's --method-display and --method-display-options do it for one invocation: in anything that
+        // invokes the tests, and in the registry and host, which build a lane's command line.
+        var option = new Regex(@"(?<![\w-])--method-display(?:-options)?\b", RegexOptions.IgnoreCase);
+        var registry = Directory.EnumerateFiles(Path.Combine(checkout, "tests", "TestProfiles"), "*.cs").ToList();
+        Assert.NotEmpty(registry);
+        foreach (var file in ConcurrencyConfigurationDriftTests.TestInvocationFiles(checkout).Concat(registry))
         {
-            foreach (var element in XDocument.Load(file).Descendants("MethodDisplay"))
+            if (option.Match(File.ReadAllText(file)) is { Success: true } match)
             {
-                if (!string.Equals(element.Value.Trim(), "ClassAndMethod", StringComparison.OrdinalIgnoreCase))
-                {
-                    violations.Add($"{Path.GetRelativePath(checkout, file)}: <MethodDisplay>{element.Value}</MethodDisplay>");
-                }
-            }
-        }
-
-        // `dotnet test -- xUnit.MethodDisplay=Method` is the same runsettings element, passed inline.
-        var inline = new Regex(@"\bxUnit\.MethodDisplay\s*=", RegexOptions.IgnoreCase);
-        foreach (var file in ConcurrencyConfigurationDriftTests.TestInvocationFiles(checkout))
-        {
-            if (inline.IsMatch(File.ReadAllText(file)))
-            {
-                violations.Add($"{Path.GetRelativePath(checkout, file)}: passes xUnit.MethodDisplay= inline");
+                violations.Add($"{Path.GetRelativePath(checkout, file)}: passes {match.Value}");
             }
         }
 
