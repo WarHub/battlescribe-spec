@@ -178,6 +178,38 @@ public sealed class CiProfileLaneTests
     }
 
     /// <summary>
+    /// <b>The selection audit (<see cref="ProfileSelectionAuditTests"/>) runs in exactly one CI test run.</b> At
+    /// least one, because <c>pre-push</c> leaves it out: a profile filter that stopped selecting it would leave
+    /// nothing checking what the profiles really select, and nothing would say so. At most one, because each run
+    /// is most of a minute of child processes on a four-thread runner — <c>checks</c> runs it on every push, so
+    /// <c>core</c> in the thorough job leaves it out.
+    /// </summary>
+    /// <remarks>
+    /// Judged by evaluating each CI run's profile filter against the audit's test methods
+    /// (<see cref="FilterReach"/>). Mutation-checked when written: <c>core</c>'s <c>Category!=SelectionAudit</c>
+    /// dropped (two runs), and <c>non-conformance</c> narrowed by the same clause (none), each go red naming the runs.
+    /// </remarks>
+    [Fact]
+    public void TheSelectionAudit_RunsInExactlyOneCiTestRun()
+    {
+        var audit = SuiteTraits.TestMethods.Where(static t => t.TestClass == typeof(ProfileSelectionAuditTests)).ToList();
+        Assert.NotEmpty(audit);
+
+        var runs = CiProfileRuns.All
+            .Where(static r => r.Profile is { } p && p.Assemblies.Contains(TestProfiles.Tests, StringComparer.Ordinal))
+            .Where(r => audit.Any(t => FilterReach.Parse(r.Profile!.Selection.Filter).Evaluate(t) != Reach.No))
+            .Select(static r => $"  {r.Where}: --test-profile {r.Profile!.Name}")
+            .ToList();
+
+        Assert.True(runs.Count == 1,
+            $"The selection audit (Category={ProfileSelectionAuditTests.Category}) must run in exactly one CI test run, and runs in "
+            + $"{runs.Count}:\n{string.Join("\n", runs)}\n\n"
+            + "None means no CI run checks what each profile really selects (pre-push leaves it out); more than one spends most "
+            + "of a minute of child processes again on a result CI already has. Select it from the checks job's profile "
+            + "(non-conformance) and exclude it with .Where(\"Category!=SelectionAudit\") from any other.");
+    }
+
+    /// <summary>
     /// <b>No lane-defining switch, and no switch a profile sets, appears anywhere under <c>.github/</c></b>
     /// — not in a workflow's, a job's or a step's <c>env:</c>, not in a <c>$GITHUB_ENV</c> write, not on a
     /// command line, not in a composite action.

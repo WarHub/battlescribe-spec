@@ -368,6 +368,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **A profiled run proves each lane it claims executed; long lanes stream their progress** — the strict
+  zero-tests policy fails a run that executed nothing at all, which `pre-push` (six lanes, three thousand
+  tests) never is: on a machine where `setup.ps1` never fetched the HAR, both frozen NR roster lanes
+  skipped whole and the gate stayed green. **The test app now checks the engine composition of every
+  profiled run** (`tests/TestProfiles/LaneComposition.cs`): each lane the profile claims must execute at
+  least one of its *own* tests (`EngineLane.LaneTests`), counted by a platform data consumer the host
+  registers next to the project's extensions as results arrive — so the six `Engine=FrozenNrUiRoster`
+  regression facts, which pass against a blank page with no HAR, cannot stand in for the lane — or the run
+  exits 8 and prints each empty lane's new `EngineLane.EmptyHint` (required by the compiler: "run
+  ./setup.ps1 — the frozen New Recruit snapshot … or the Playwright browsers are missing"). It does not
+  apply to listings, help, an IDE's session, an unprofiled run or one narrowed with `--filter`; a lane
+  the profile lets skip (`MaySkip`) is exempt, and a run that failed by itself keeps its exit code with
+  the hints of the lanes that came up empty printed — never for a lane the caller's `--filter` or an
+  aborted session simply did not reach, and a filter that selected nothing is named as the cause, not
+  sent to `setup.ps1`. The verdict and a per-lane table follow the trace summary in `$GITHUB_STEP_SUMMARY`,
+  and `artifacts/telemetry/xunit-<profile>-<ts>.composition.json` records it, swept with its set by
+  `TelemetryRetention`. **Fixed with it: a spec a lane opts out of reported Passed.** The per-spec bases
+  logged and returned for an `engines: <engine>: skip` spec, or an engine that was not there, and xunit
+  records a returned test as passed — so `--filter "Engine=FrozenNrRoster&Mode=Sequential"` with
+  `NR_SEQUENTIAL` unset "passed" two opted-out specs and exited 0, and the live `nr-live-conformance`
+  step counted 3 executed where 1 ran (the aggregate, plus the same two rows). Those rows are skips now, with
+  the reason: each per-spec lane's passed count drops, and its skipped count rises, by the specs its engine opts
+  out of — `pre-push` 18 (BsRoster 1, BsGameData 10, FrozenNrGameData 7), `core` 22 (those, less FrozenNrGameData,
+  plus 11 BsRosterUi rows that "passed" while the app was skipped), `bs-ui-roster` 11, `bs-ui-gamedata` 10,
+  `nr-editor-frozen` 7, `bs` 1; no CI lane loses its last executed test.
+  **The frozen UI fixtures skip only when the browsers are not installed**: they caught every
+  `PlaywrightException` as that, so a bring-up the snapshot broke with one — a request the HAR or the
+  static routes failed (`net::ERR_*`), a route handler's error, a closed page — skipped the lane; now it
+  fails it. (A bring-up navigation that timed out already failed: Playwright for .NET raises
+  `System.TimeoutException`, which those catches never matched.) **The five single-test aggregate lanes**
+  report through `AggregateLaneRun`: `[lane] <Engine> mode=<full|smoke|filtered> selected=N applicable=M`
+  first — a lane that selected no spec fails, in any mode, and a full lane that selects fewer than apply
+  fails — then `[i/N] <spec> <verdict> <secs>s` per spec (live in
+  Actions, so the 27-minute NR UI lane is no longer 27 silent minutes) and a stop check between specs
+  ("stopped after k/N; last completed …"). In Actions a direct run also lists its ten slowest tests.
+  **`ProfileSelectionAuditTests`** lists every profile through the test app itself (`--list-tests json`,
+  each child with every registry switch and `GITHUB_*` variable removed) and holds the listings to the
+  registry: non-empty, every claimed lane selected, each smoke profile inside its thorough lane, every
+  engine reached by a CI profile or `CiExempt`, no machine path in a test's name, unique uids — and runs
+  one profile for real to prove the platform feeds the host's tally. It takes 25–45 seconds of child
+  processes (47 seconds held to a CI runner's four threads), so it carries `Category=SelectionAudit`,
+  which `pre-push` and `core` exclude and CI's `checks` job runs on every push, in a collection of its own that runs after every parallel one (beside the suite, its children doubled
+  other tests' times and timed one out). Lints and tests, each mutation-checked: `LaneCompositionTests`,
+  `AggregateLaneRunTests`, `OptedOutSpecRegressionTests`,
+  `TestProfileRegistryTests.EveryAggregateLane_ReportsItsSelectionAndProgress`, the retention test, and
+  `TestHostWiringTests` requiring each `Program.cs` to hand the host its generated extensions (the host
+  now registers them, then its tally); a passing run whose results never reached the tally also exits 8,
+  naming the wiring. **For contributors:** an unprovisioned machine fails `pre-push` instead of passing
+  without the frozen lanes — exit 8 with each empty lane's fix when a snapshot is missing; with no
+  Playwright browsers the browser tests fail too (exit 2), and the empty lanes are still named.
+
 - **The test suites run on Microsoft.Testing.Platform, and the test app resolves its own profiles
   (breaking for local workflows)** — both test projects move from VSTest to the platform: xUnit.net v3
   4.0.1 (the plain `xunit.v3` package, the platform-v2 flavour), `global.json` selecting the platform for
@@ -384,9 +435,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and the executable; the host sets the profile's environment in its own process, ANDs a caller's
   `--filter` onto the profile's (it narrows; on VSTest it replaced), and runs under the **strict
   zero-tests policy: a run that executes no test exits 8**, every selected test skipping included —
-  both historical silent greens were that shape (one gap remains, as it was under VSTest: a spec a
-  per-spec lane opts out of reports as passed, not skipped, so a lane whose other rows all skip still
-  counts as having executed). It **refuses with exit 5, saying why**: an unknown
+  both historical silent greens were that shape. It **refuses with exit 5, saying why**: an unknown
   profile, a profile that does not cover the assembly (so a solution-wide `dotnet test` needs
   `--project` for a profile that covers one test project), a VSTest option (`--settings` — which
   `-p:RunSettingsFilePath` now becomes — `--logger`, `--collect`, `--blame*`),

@@ -53,10 +53,37 @@ public abstract class ConformanceTestBase
     protected virtual string LogPrefix => "";
 
     /// <summary>
-    /// Return the engine to run the spec against, or null to skip the test.
-    /// Implementations should call Assert.SkipWhen() for environment-gated engines.
+    /// Return the engine to run the spec against. An environment-gated engine calls
+    /// <c>Assert.Skip</c>/<c>Assert.SkipWhen</c> with the reason; a <see langword="null"/> returned without
+    /// one is reported as a skip too (<see cref="EngineOrSkip"/>), never as a pass.
     /// </summary>
     protected abstract IRosterEngine? GetEngine();
+
+    /// <summary>
+    /// <see cref="GetEngine"/>, or a skip: a row that drove no engine must not report Passed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why a row that does not run is a skip, never a quiet return.</b> xunit records a test that
+    /// returns as Passed. The strict zero-tests policy counts a Passed row as executed, and the
+    /// engine-composition check counts it as the lane having run (<c>LaneComposition</c>) — so a row that
+    /// returned without driving an engine was a phantom pass in both. That is not hypothetical: with
+    /// <c>NR_SEQUENTIAL</c> unset, <c>--filter "Engine=FrozenNrRoster&amp;Mode=Sequential"</c> selected 403 rows
+    /// whose engine was gated off, and exited 0 on the two specs that opt out of <c>newrecruit</c>, which
+    /// returned before the gate was ever asked. Every not-applicable spec and every missing engine is now
+    /// <c>Assert.Skip</c> with its reason.
+    /// </para>
+    /// </remarks>
+    private IRosterEngine EngineOrSkip()
+    {
+        var engine = GetEngine();
+        if (engine is null)
+        {
+            Assert.Skip($"{LogPrefix}no {EngineName} engine on this machine ({GetType().Name}.GetEngine returned none)");
+        }
+
+        return engine;
+    }
 
     /// <summary>
     /// One row per roster spec. A row carries the spec's name (<c>category/id</c>) and nothing else,
@@ -126,12 +153,7 @@ public abstract class ConformanceTestBase
     /// <summary>Run one <see cref="AddressingScenarios"/> scenario on this lane and require the addressing verdict.</summary>
     protected void RunAddressingScenario(string scenario)
     {
-        var engine = GetEngine();
-        if (engine is null)
-        {
-            return;
-        }
-
+        var engine = EngineOrSkip();
         var result = new RosterRunner(engine, new DataSourceResolver(), BaseEngineName, EngineName)
             .Run(AddressingScenarios.Load(scenario));
         foreach (var failure in result.Failures)
@@ -157,21 +179,18 @@ public abstract class ConformanceTestBase
         var spec = SpecLoader.Load(specPath);
         var expectation = ExpectationFor(spec);
 
+        // A skip, not a return: a returned row is Passed, and a lane whose every other row skipped would
+        // count as executed on this one (EngineOrSkip's remarks).
         if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
         {
-            _output.WriteLine($"{LogPrefix}Skipping spec: {specName} — not applicable to {EngineName} engine");
-            return;
+            var opted = spec.Engines?.ContainsKey(EngineName) == true ? EngineName : BaseEngineName;
+            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{opted}: skip}})");
         }
 
         var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
         _output.WriteLine($"{LogPrefix}Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
-        var engine = GetEngine();
-        if (engine is null)
-        {
-            return;
-        }
-
+        var engine = EngineOrSkip();
         var runner = new RosterRunner(engine, new DataSourceResolver(), BaseEngineName, EngineName);
         var result = runner.Run(spec);
 

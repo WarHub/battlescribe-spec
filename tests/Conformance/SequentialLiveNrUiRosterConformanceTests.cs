@@ -37,11 +37,9 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
         Assert.SkipWhen(!TargetSpecs.Contains(specName), $"Spec '{specName}' not in NR UI target list");
 
         var spec = SpecLoader.Load(SpecLoader.ResolveRosterSpec(specName));
-        if (!spec.IsApplicableTo(EngineName))
-        {
-            _output.WriteLine($"{LogPrefix}Skipping spec: {specName} — not applicable to {EngineName}");
-            return;
-        }
+
+        // A skip, not a return: a returned row is Passed (ConformanceTestBase.EngineOrSkip's remarks).
+        Assert.SkipWhen(!spec.IsApplicableTo(EngineName), $"{LogPrefix}{specName} is not applicable to the {EngineName} engine");
 
         var expectedToFail = spec.IsExpectedToFail(EngineName);
         _output.WriteLine($"{LogPrefix}Running spec: {specName}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");

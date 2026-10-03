@@ -3,7 +3,8 @@ namespace BattleScribeSpec.Telemetry.Collector;
 /// <summary>
 /// Bounds <c>artifacts/telemetry/</c>'s growth. Every <c>bs-spec run --all</c>/<c>compare</c> and
 /// every <c>dotnet test</c> writes a fresh, GUID/timestamp-named artifact SET (<c>.traces.pb</c> /
-/// <c>.metrics.pb</c> / <c>.logs.pb</c>) and nothing ever cleaned them up — a developer's directory
+/// <c>.metrics.pb</c> / <c>.logs.pb</c>, plus the test app's <c>.composition.json</c> engine-lane record for a
+/// profiled test run) and nothing ever cleaned them up — a developer's directory
 /// grew forever. <see cref="Sweep"/> deletes the oldest sets, keeping the most recent
 /// <see cref="DefaultKeepRuns"/>.
 /// </summary>
@@ -89,7 +90,12 @@ public static class TelemetryRetention
     /// </summary>
     public static readonly TimeSpan DefaultMinAge = TimeSpan.FromMinutes(5);
 
-    private static readonly string[] Suffixes = [".traces.pb", ".metrics.pb", ".logs.pb"];
+    /// <summary>
+    /// The files of one artifact set, by suffix. <c>.composition.json</c> is the test-profile host's record of
+    /// which engine lanes a profiled run executed (<c>tests/TestProfiles/LaneComposition.cs</c>), written next to
+    /// the run's telemetry under the same base name so it lives and dies with the set it describes.
+    /// </summary>
+    private static readonly string[] Suffixes = [".traces.pb", ".metrics.pb", ".logs.pb", ".composition.json"];
 
     /// <summary>
     /// Delete artifact sets in <paramref name="artifactDirectory"/> beyond the most recent
@@ -136,9 +142,9 @@ public static class TelemetryRetention
             return;
         }
 
-        // Group the three sibling files of each run/compare-arm/xunit-run by their shared base
-        // name (path minus the ".traces.pb"/".metrics.pb"/".logs.pb" suffix), keyed by the newest
-        // last-write time among whichever of the three currently exist (a set can be incomplete —
+        // Group the sibling files of each run/compare-arm/xunit-run by their shared base name (path
+        // minus the ".traces.pb"/".metrics.pb"/".logs.pb"/".composition.json" suffix), keyed by the
+        // newest last-write time among whichever of them currently exist (a set can be incomplete —
         // e.g. it is still being written, or a prior sweep already lost a race on one file).
         //
         // Ordinal, NOT OrdinalIgnoreCase: every baseName here comes verbatim from

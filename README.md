@@ -274,7 +274,11 @@ so `-p:TestProfile=nr-ui-frozen` is the full ~27-minute NR UI roster lane here a
 profile means the same under `dotnet test`, `dotnet run` and the test executable. Name the project for
 a profile that covers one test project — a solution-wide run starts both, and the one outside the lane
 refuses it (exit 5, saying so). A `--filter` you add narrows the profile (the two are ANDed), and a run
-that executes no test fails (exit 8) — every selected test skipping counts. One exception to "the same
+that executes no test fails (exit 8) — every selected test skipping counts — as does a profiled run in
+which an engine lane the profile claims executed none of its own tests: a frozen lane whose snapshot
+`./setup.ps1` never fetched fails `pre-push` with exit 8 and names the fix instead of passing without it
+(with no Playwright browsers, the browser tests fail outright, exit 2, and the empty lanes are named all
+the same). One exception to "the same
 lane": a lane a profile lets CI skip whole runs here and skips there (`core`'s desktop-app lane, which
 CI's offline runners do not provision). You can also run suites without a profile, with `--filter`:
 

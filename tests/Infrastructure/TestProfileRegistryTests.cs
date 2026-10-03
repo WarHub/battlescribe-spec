@@ -461,6 +461,115 @@ public sealed class TestProfileRegistryTests
     }
 
     /// <summary>
+    /// <b>Every aggregate lane class reports through <see cref="AggregateLaneRun"/></b>: it starts one under its own
+    /// lane's name (the <c>[lane] &lt;Engine&gt; mode=… selected=N applicable=M</c> line, and the full-mode check that
+    /// the two match), reports each spec as it completes (<c>[i/N]</c>), and checks for a stop between specs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An aggregate is one test however many specs it drives, so these lines are the only record of how much of
+    /// its lane a run covered and how far a hung run got. A new aggregate that skips them is back to reading
+    /// 1 passed for one spec or for 378, and to 27 silent minutes.
+    /// </para>
+    /// <para>
+    /// Read from source, because what matters is the call: the declaring file of each class's
+    /// <c>[Fact] AllSpecs()</c>. Every lane marked <see cref="EngineLane.Aggregate"/> must have one such class here,
+    /// so an aggregate whose method was renamed does not leave the check while it stays green. The stop is checked
+    /// on the run <c>Start</c> returned, in the form that actually stops: <c>lane.ThrowIfStopped(token)</c> in a
+    /// sequential loop, and for a <c>Parallel.ForEachAsync</c> lane both the token in its <c>ParallelOptions</c> (what
+    /// stops it scheduling specs) and <c>lane.Stop(token)</c> where the cancellation surfaces. Mutation-checked when
+    /// written: the <c>Start</c> call in <c>FrozenNrGameDataUiConformanceTests</c> naming <c>FrozenNrRoster</c>, the
+    /// cancellation check removed from <c>FrozenNrUiRosterConformanceTests</c>, <c>CancellationToken = stop</c> removed
+    /// from <c>FrozenNrRosterConformanceTests</c>' <c>ParallelOptions</c> (its <c>catch … lane.Stop(stop)</c> kept), and
+    /// <c>LiveNrRosterConformanceTests.AllSpecs</c> renamed, each go red naming the class or the lane.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryAggregateLane_ReportsItsSelectionAndProgress()
+    {
+        var assembly = typeof(TestProfileRegistryTests).Assembly;
+        var repoRoot = ConcurrencyConfigurationDriftTests.RepoRoot;
+        var sources = SourceFiles(repoRoot, "tests").Select(static f => (Path: f, Lines: File.ReadAllLines(f))).ToList();
+        var start = new Regex(@"AggregateLaneRun\.Start\([^;]*?""(\w+)""", RegexOptions.Singleline);
+        var started = new Regex(@"var\s+(\w+)\s*=\s*AggregateLaneRun\.Start\(");
+        var parallelToken = new Regex(@"new\s+ParallelOptions\s*\{[^}]*\bCancellationToken\s*=\s*(\w+)", RegexOptions.Singleline);
+        var problems = new List<string>();
+        var aggregateLanes = EngineLanes.All.Where(static l => l.Aggregate).ToList();
+        Assert.True(aggregateLanes.Count > 0, "No lane is marked Aggregate, so there is nothing to check.");
+        foreach (var lane in aggregateLanes)
+        {
+            var classes = lane.LaneTests.Select(n => assembly.GetType(n, throwOnError: false)).OfType<Type>()
+                .Where(static t => t.GetMethod("AllSpecs")?.GetCustomAttributes(typeof(FactAttribute), inherit: true).Any(static a => a is not TheoryAttribute) == true)
+                .ToList();
+            if (classes.Count == 0)
+            {
+                problems.Add($"  {lane.Trait} is marked Aggregate, and none of its own classes has a [Fact] AllSpecs() for this check to read");
+            }
+
+            foreach (var type in classes)
+            {
+                var file = DeclaringFiles(type, sources).SingleOrDefault();
+                if (file is null)
+                {
+                    problems.Add($"  {type.Name}: no single source file under tests/ declares it");
+                    continue;
+                }
+
+                var text = File.ReadAllText(file);
+                var engines = start.Matches(text).Select(static m => m.Groups[1].Value).ToList();
+                if (engines.Count == 0)
+                {
+                    problems.Add($"  {type.Name} never starts an AggregateLaneRun, so it prints no [lane] line and no progress");
+                }
+                else if (engines.Any(e => e != lane.Trait))
+                {
+                    problems.Add($"  {type.Name} reports as {string.Join(", ", engines.Distinct())}, and it is a lane test of {lane.Trait}");
+                }
+
+                if (!text.Contains(".Completed(", StringComparison.Ordinal))
+                {
+                    problems.Add($"  {type.Name} never reports a completed spec ([i/N])");
+                }
+
+                // The stop between specs, on the run Start returned: a sequential loop asks lane.ThrowIfStopped(token)
+                // before each spec; a Parallel.ForEachAsync lane hands the token to ParallelOptions — which is what
+                // stops it scheduling the next spec — and reports where it stopped with lane.Stop(token) when the
+                // cancellation surfaces. Either half alone compiles, runs and looks like it stops.
+                if (started.Match(text) is not { Success: true } run)
+                {
+                    if (engines.Count > 0)
+                    {
+                        problems.Add($"  {type.Name} does not keep the run AggregateLaneRun.Start returns in a local (var lane = …), so "
+                            + "this check cannot follow its stop between specs");
+                    }
+
+                    continue;
+                }
+
+                var name = run.Groups[1].Value;
+                if (text.Contains("Parallel.ForEachAsync(", StringComparison.Ordinal))
+                {
+                    var token = parallelToken.Match(text) is { Success: true } m ? m.Groups[1].Value : null;
+                    if (token is null || !text.Contains($"{name}.Stop({token})", StringComparison.Ordinal))
+                    {
+                        problems.Add($"  {type.Name} runs its specs through Parallel.ForEachAsync and does not both pass the test's "
+                            + $"cancellation token as ParallelOptions.CancellationToken and call {name}.Stop(<that token>) when it "
+                            + "surfaces, so a stopped run either keeps scheduling specs or does not say where it stopped");
+                    }
+                }
+                else if (!text.Contains($"{name}.ThrowIfStopped(", StringComparison.Ordinal))
+                {
+                    problems.Add($"  {type.Name} never checks for a stop between specs ({name}.ThrowIfStopped(token) before each one)");
+                }
+            }
+        }
+
+        Assert.True(problems.Count == 0,
+            "Every single-[Fact] aggregate lane reports its selection and its progress through AggregateLaneRun "
+            + "(tests/Infrastructure/AggregateLaneRun.cs):\n" + string.Join("\n", problems));
+    }
+
+    /// <summary>
     /// <b>Every class that carries an <c>Engine</c> trait is either one of its lane's own classes or
     /// declared not to be, with a reason</b> — and every name in either list is a class in this
     /// assembly carrying that engine.
@@ -576,7 +685,8 @@ public sealed class TestProfileRegistryTests
     /// <para>
     /// Mutation-checked when written: <c>BsRosterUi</c> set <c>InPrePush: true</c>; <c>pre-push</c> as
     /// <c>AllExcept("BsRosterUi")</c>; as <c>Engines(…the six InPrePush lanes…).Where("Mode!=Sequential")</c>;
-    /// and <see cref="Selection.PrePush"/> with its <c>Mode!=Sequential</c> dropped.
+    /// <see cref="Selection.PrePush"/> with its <c>Mode!=Sequential</c> dropped; and with its
+    /// <c>Category!=SelectionAudit</c> dropped.
     /// </para>
     /// </remarks>
     [Fact]
@@ -620,6 +730,12 @@ public sealed class TestProfileRegistryTests
             if (!Selection.ClausesOf(filter).Contains("Mode!=Sequential", StringComparer.Ordinal))
             {
                 broken.Add("  pre-push does not exclude Mode=Sequential (manual-only, gated behind NR_SEQUENTIAL)");
+            }
+
+            if (!Selection.ClausesOf(filter).Contains($"Category!={ProfileSelectionAuditTests.Category}", StringComparer.Ordinal))
+            {
+                broken.Add($"  pre-push does not exclude Category={ProfileSelectionAuditTests.Category} (it starts the test app once per "
+                    + "profile, about 30s; CI's checks job runs it)");
             }
         }
 

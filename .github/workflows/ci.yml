@@ -155,10 +155,14 @@ jobs:
       #
       # WHAT A RED STEP'S EXIT CODE SAYS (https://aka.ms/testingplatform/exitcodes): 2 a test failed;
       # 5 the command line was refused — the host prints why (an unknown profile, a lane-defining switch
-      # the profile does not allow, a VSTest option, …); 8 nothing executed — the profile's lane skipped
-      # whole, or selected nothing; 3 the session was aborted; 7 the test host process died. Any other
-      # value is the process itself failing (an unhandled exception, a signal) before the platform could
-      # report one.
+      # the profile does not allow, a VSTest option, …); 8 nothing executed — the step selected nothing or
+      # skipped everything, or a lane its profile claims executed none of its own tests while the rest
+      # passed (the host's engine-composition check, tests/TestProfiles/LaneComposition.cs, names each
+      # empty lane and the fix, and puts a per-lane table in the step summary); 3 the session was aborted;
+      # 7 the test host process died. Any other value is the process itself failing (an unhandled
+      # exception, a signal) before the platform could report one. A single-test aggregate lane streams
+      # `[i/N] <spec> <verdict> <secs>s` as it goes and opens with `[lane] <Engine> mode=… selected=N
+      # applicable=M`, so a hang shows how far it got.
       #
       # CiProfileLaneTests.EveryCiTestRun_NamesAProfile holds every test step to that: one registry
       # profile that covers the project the step runs; `--test-profile` after `--` on a `dotnet run`
@@ -243,8 +247,10 @@ jobs:
             --output github-actions
       # The trace summary (wall time, cold-starts vs reuses, peak live resources) for the steps
       # above is appended to $GITHUB_STEP_SUMMARY automatically by the CLI's and the test app's own
-      # telemetry code (TraceSummary.AppendToGitHubStepSummary), one section per lane, headed by the
-      # profile's name — no extra script needed here.
+      # telemetry code (TraceSummary.AppendToGitHubStepSummary), headed by the profile's name, for each
+      # lane that recorded telemetry (the CLI's own test project records none). Every profiled test run
+      # also appends a `Lane composition — <profile> (<assembly>)` section, its verdict and per-lane
+      # table — one per test module, whatever it recorded. No extra script needed here.
       - name: Upload telemetry
         if: always()
         uses: actions/upload-artifact@v7

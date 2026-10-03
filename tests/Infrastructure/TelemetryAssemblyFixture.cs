@@ -84,6 +84,10 @@ public sealed class TelemetryAssemblyFixture : IAsyncLifetime
             // xunit-nr-frozen-…), and the step summary's headings say the same.
             var artifactPath = Path.Combine(artifactRoot, $"xunit-{TestProfileContext.Current}-{runId}");
 
+            // Published before the collector starts, so the host's engine-composition record
+            // (<base>.composition.json) lands in this set even if telemetry itself fails open below.
+            TestProfileContext.TelemetryArtifactBase = artifactPath;
+
             // Bound artifacts/telemetry/'s growth before adding to it — this run's own artifact set
             // doesn't exist yet, so it is never a sweep candidate. See TelemetryRetention for why
             // this isn't wired into HarnessCollector.StartAsync itself (it would also fire for ad

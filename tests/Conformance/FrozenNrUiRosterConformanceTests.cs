@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BattleScribeSpec.NrRosterUiDriver;
 using BattleScribeSpec.Roster;
 
@@ -47,8 +48,9 @@ public sealed class FrozenNrUiRosterConformanceTests
     /// The obvious hazard of an opt-in is that the thorough lane silently stops opting in and nobody
     /// notices a suite shrinking from 363 specs to 1 — which is the exact failure this lane already
     /// had once (<c>docs/warm-reuse.md</c>: "CI never caught the original bug because the NR-UI
-    /// roster lane runs a single spec"). Two things guard it: the run logs which mode it chose and
-    /// how many specs that selected, and
+    /// roster lane runs a single spec"). Three things guard it: the run prints
+    /// <c>[lane] FrozenNrUiRoster mode=… selected=N applicable=M</c>, and in full mode fails unless it
+    /// selected every applicable spec (<see cref="AggregateLaneRun"/>);
     /// <c>CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c> fails if the
     /// <c>nr-ui-frozen</c> profile stops setting this, if CI's thorough step stops running that
     /// profile, or if a fast lane starts setting it.
@@ -137,32 +139,32 @@ public sealed class FrozenNrUiRosterConformanceTests
     public async Task AllSpecs()
     {
         Assert.SkipWhen(!_fixture.Available,
-            "Frozen HAR file not found or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
+            "Frozen HAR file not found, Playwright browsers not installed (run setup.ps1), or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
 
         var engine = _fixture.Engine!;
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
         var full = RunFullSet;
-        var loadedSpecs = allSpecs
+        static bool Applies(SpecFile spec) => !string.Equals(ExpectationFor(spec), "skip", StringComparison.OrdinalIgnoreCase);
+
+        // The whole corpus is read in every mode: it is what the [lane] line counts `applicable` from.
+        var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
+        var loadedSpecs = corpus
             .Where(s => full
                 ? InFullSet(s.Name)
                 : SmokeSpecs.Contains(s.Name))
-            .Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path)))
-            .Where(s => !string.Equals(ExpectationFor(s.spec), "skip", StringComparison.OrdinalIgnoreCase))
+            .Where(s => Applies(s.spec))
             .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
-        // Say which mode ran and how big it was. A lane that quietly stops opting in shows up here as
-        // "1 spec" next to a step called "Full frozen NR UI roster", instead of as silence.
-        _output.WriteLine(
-            $"{LogPrefix}mode={(full ? $"FULL ({FullVariable} set)" : "smoke (kitchen-sink)")}, "
-            + $"{loadedSpecs.Count} spec(s) selected");
-
-        Assert.False(loadedSpecs.Count == 0,
-            full
-                ? $"{FullVariable} is set but no applicable specs were discovered."
-                : $"No matching specs found for targets: {string.Join(", ", SmokeSpecs)}");
+        // Say which mode ran and how big it was against what applies — `[lane] FrozenNrUiRoster mode=full
+        // selected=N applicable=N` — fail a run that selected nothing, and in full mode require the two to
+        // match. A lane that quietly stops opting in shows up as mode=smoke next to a step called "Full frozen
+        // NR UI roster", and one that narrows without saying so fails, instead of either being silence.
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrUiRoster",
+            !full ? AggregateMode.Smoke : FullSetFilters.Length > 0 ? AggregateMode.Filtered : AggregateMode.Full,
+            selected: loadedSpecs.Count, applicable: corpus.Count(s => Applies(s.spec)));
 
         // A "full" run that selected a single spec is the shrink this guard exists to catch. It does
         // not apply to a deliberately filtered run, which is allowed to select exactly one.
@@ -177,8 +179,10 @@ public sealed class FrozenNrUiRosterConformanceTests
         var skippedSteps = new SkippedStepLog();
 
         // Sequential execution — UI interactions require a single-browser flow
+        var stop = TestContext.Current.CancellationToken;
         foreach (var (specPath, specName, spec) in loadedSpecs)
         {
+            lane.ThrowIfStopped(stop);
             var expectation = ExpectationFor(spec);
             if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
             {
@@ -187,6 +191,7 @@ public sealed class FrozenNrUiRosterConformanceTests
             }
 
             var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
+            var clock = Stopwatch.StartNew();
             engine.SetTestContext(specName);
 
             // Both identities: this drives `newrecruit-ui`, and a spec addressing that name by its
@@ -201,12 +206,14 @@ public sealed class FrozenNrUiRosterConformanceTests
             if (result.Passed && expectedToFail)
             {
                 failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                 continue;
             }
 
             if (!result.Passed && expectedToFail)
             {
                 expectedFailures++;
+                lane.Completed(specName, AggregateLaneRun.ExpectedFailure, clock.Elapsed);
                 continue;
             }
 
@@ -215,10 +222,12 @@ public sealed class FrozenNrUiRosterConformanceTests
                 var msg = $"Spec '{specName}' failed with {result.Failures.Count} error(s):\n" +
                     string.Join("\n", result.Failures.Select((f, i) => $"  [{i + 1}] {f}"));
                 failures.Add(msg);
+                lane.Completed(specName, AggregateLaneRun.Failed, clock.Elapsed);
                 continue;
             }
 
             passed++;
+            lane.Completed(specName, AggregateLaneRun.Passed, clock.Elapsed);
         }
 
         _output.WriteLine($"{LogPrefix}Results: {passed} passed, {skipped} skipped, {expectedFailures} expected failures, {failures.Count} failures");
@@ -254,7 +263,7 @@ public sealed class FrozenNrUiRosterConformanceTests
     public void AnIdTheRosterDoesNotHave_IsAnAddressingFailure()
     {
         Assert.SkipWhen(!_fixture.Available,
-            "Frozen HAR file not found or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
+            "Frozen HAR file not found, Playwright browsers not installed (run setup.ps1), or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
 
         var engine = _fixture.Engine!;
         var wrong = new List<string>();
