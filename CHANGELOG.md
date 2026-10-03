@@ -368,6 +368,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **xUnit.net v3 moves to 4.0.1, as `xunit.v3.mtp-off`** — and the `Microsoft.Testing.Platform` 2.2.1
+  pin goes. Dependabot never offered xunit 4 (out since 2026-08-15): it needs the platform at 2.4.0 or
+  later, the central pin held it at 2.2.1, restore failed NU1109, and Dependabot drops an update it
+  cannot restore without a word. It could not bump the pin either, because no project references the
+  platform directly, so the pin was invisible to it. The pin had also left the graph mixed: platform
+  2.2.1 under 1.9.1 extensions. The `mtp-off` flavour, because the plain 4.x package brings platform
+  v2, whose MSBuild targets refuse VSTest-mode `dotnet test` on the .NET 10 SDK, and every test step
+  and `TestProfile` here runs through VSTest. Same 2883 tests discovered as on 3.2.2; `pre-push`
+  green on both.
 - **Package and SDK bumps run the thorough suites** — CI's gate forced them for a PR editing
   `testdata.json`; it now does the same for `Directory.Packages.props` and `global.json`. Those
   files swap out what the engines are built from — IKVM compiles the BattleScribe engine the

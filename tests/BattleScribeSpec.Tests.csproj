@@ -13,7 +13,7 @@
     <PackageReference Include="JsonSchema.Net" />
     <PackageReference Include="Yaml2JsonNode" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.v3.mtp-off" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
