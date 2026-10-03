@@ -24,9 +24,17 @@ internal sealed record TestProfile(
 
 /// <summary>
 /// <b>Every test profile — the one record of every lane.</b> <c>-p:TestProfile=&lt;name&gt;</c> selects
-/// one; CI runs its lanes through them.
+/// one; every CI step that runs <c>BattleScribeSpec.Tests</c> runs one, and nothing else.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <b>A profile is a whole lane.</b> What CI runs under a name is what a developer gets from the same
+/// name: the selection and every environment switch the lane depends on live here, not in a workflow
+/// step's <c>env:</c>. <c>CiProfileLaneTests</c> holds CI to that — every Tests-project step names a
+/// profile and adds no filter of its own, and no lane-defining or profile-owned switch appears anywhere
+/// under <c>.github/</c> — so <c>-p:TestProfile=nr-ui-frozen</c> on a laptop is the thorough job's lane,
+/// all of it, rather than the one spec it ran before the job's <c>env:</c> block supplied the rest.
+/// </para>
 /// <para>
 /// While the suites run on VSTest, each profile that covers <see cref="EngineLanes.Assembly"/> is
 /// rendered into <c>tests/test-profiles/&lt;name&gt;.runsettings</c>, which is what
@@ -142,9 +150,14 @@ internal static class TestProfiles
             + "Excludes Mode=Sequential (manual-only; also excluded by pre-push and CI).",
             Selection.Engines("FrozenNrRoster").Where("Mode!=Sequential")),
         Profile("nr-ui-frozen",
-            "The NR UI roster driver over the pre-recorded HAR snapshot. Without NR_UI_ROSTER_FULL the class runs "
-            + "kitchen-sink alone; CI's thorough step sets it for the whole applicable spec set.",
-            Selection.Engines("FrozenNrUiRoster")),
+            "The full NR UI roster lane: one browser drives every applicable roster spec in turn over the pre-recorded "
+            + "HAR snapshot — about 27 minutes in CI (thorough-nr-ui-roster), roughly the same locally. NR_UI_ROSTER_FULL "
+            + "is what makes it full: the class runs kitchen-sink alone without it, which is smoke-nr-ui. It used to be "
+            + "CI's step env that set it, so this profile meant the full lane in CI and one spec everywhere else. To "
+            + "reproduce a warm-session failure in a few minutes, keep the lane's execution shape and narrow its specs "
+            + "with NR_UI_ROSTER_FILTER=<prefix>,… — a lane-defining switch, which this profile says must be unset, so "
+            + "set it in an unprofiled run: --filter \"Engine=FrozenNrUiRoster\" with NR_UI_ROSTER_FULL=1.",
+            Selection.Engines("FrozenNrUiRoster"), env: new() { ["NR_UI_ROSTER_FULL"] = "1" }),
         Profile("nr-editor-frozen",
             "Frozen NR Editor GameData conformance, served locally from the pinned static snapshot.",
             Selection.Engines("FrozenNrGameData")),
@@ -161,7 +174,10 @@ internal static class TestProfiles
 
         // ── Live: sessions on a third party's production site.
         Profile("nr-live",
-            "Live New Recruit roster conformance and integration tests against newrecruit.eu (sets NR_ENGINE_URL).",
+            "Live New Recruit roster conformance and integration tests against newrecruit.eu (sets NR_ENGINE_URL). To "
+            + "watch a run, set NR_HEADLESS=false (and NR_VISUAL=true for the roster editor) in your own environment: "
+            + "no profile sets either, so your value reaches the run. That replaced the nr-live-visible and "
+            + "nr-ui-live-visible profiles, which were these lanes with those two switches fixed.",
             Selection.Engines("LiveNrRoster"), env: new() { ["NR_ENGINE_URL"] = NrEngineUrl }),
         Profile("nr-live-smoke",
             "Live New Recruit roster smoke tests against newrecruit.eu: the nr-conformance job's first step.",
@@ -169,23 +185,16 @@ internal static class TestProfiles
         Profile("nr-live-conformance",
             "Live New Recruit roster conformance against newrecruit.eu: the nr-conformance job's spec suite.",
             Selection.Engines("LiveNrRoster").Where("Category=Conformance"), env: new() { ["NR_ENGINE_URL"] = NrEngineUrl }),
-        Profile("nr-live-visible",
-            "Same as nr-live, with a visible browser window and visual editor navigation for debugging.",
-            Selection.Engines("LiveNrRoster"),
-            env: new() { ["NR_ENGINE_URL"] = NrEngineUrl, ["NR_HEADLESS"] = "false", ["NR_VISUAL"] = "true" }),
         Profile("nr-ui-live",
-            "Live NR UI driver roster conformance against newrecruit.eu.",
+            "Live NR UI driver roster conformance against newrecruit.eu. Set NR_HEADLESS=false to watch it.",
             Selection.Engines("LiveNrUiRoster"), env: new() { ["NR_ENGINE_URL"] = NrEngineUrl }),
-        Profile("nr-ui-live-visible",
-            "Live NR UI driver roster tests with the browser window visible, for debugging.",
-            Selection.Engines("LiveNrUiRoster"), env: new() { ["NR_ENGINE_URL"] = NrEngineUrl, ["NR_HEADLESS"] = "false" }),
         Profile("nr-editor-live",
             "Live NR Editor GameData conformance against the NR Editor deployment (sets NR_EDITOR_URL).",
             Selection.Engines("LiveNrGameData"), env: new() { ["NR_EDITOR_URL"] = NrEditorUrl }),
         Profile("nr-editor-ui-live",
-            "Live NR Editor GameData UI conformance. Requires NR_EDITOR_URL to be set: this profile does not set it, "
-            + "and without it every test skips.",
-            Selection.Engines("LiveNrGameDataUi")),
+            "Live NR Editor GameData UI conformance against the NR Editor deployment (sets NR_EDITOR_URL). It used to "
+            + "leave the URL to the caller, and without it every test skips: a profile that ran nothing and passed.",
+            Selection.Engines("LiveNrGameDataUi"), env: new() { ["NR_EDITOR_URL"] = NrEditorUrl }),
 
         // ── Sequential: manual-only, one engine, the specs one after another.
         Profile("nr-frozen-sequential",

@@ -259,14 +259,17 @@ Use test profiles for one-command test runs:
 
 ```bash
 dotnet test -p:TestProfile=nr-live          # live NR conformance + integration (sets NR_ENGINE_URL automatically)
-dotnet test -p:TestProfile=nr-live-visible   # same, with visible browser window
 dotnet test -p:TestProfile=nr-frozen         # frozen NR conformance (offline, needs ./setup.ps1)
 dotnet test -p:TestProfile=bs            # BattleScribe engine conformance
 dotnet test -p:TestProfile=lint              # spec lint and structure checks
 ```
 
 Profiles are defined in `tests/TestProfiles/TestProfiles.cs` — each sets its test filter and the
-environment variables it needs automatically. The `.runsettings` files in `tests/test-profiles/` are
+environment variables it needs automatically, and each is a whole lane: CI runs the same profiles, so
+`-p:TestProfile=nr-ui-frozen` is the full ~27-minute NR UI roster lane here as it is there (`smoke-nr-ui` is
+its one-spec smoke). Two exceptions: a lane a profile lets CI skip whole runs here and skips there
+(`core`'s desktop-app lane, which CI's offline runners do not provision), and a switch exported in your
+own shell reaches every profile that does not set it. The `.runsettings` files in `tests/test-profiles/` are
 generated from it; edit the registry, not those. You can also run suites manually with `--filter`:
 
 | Suite | Command | Notes |
@@ -297,10 +300,13 @@ $env:NR_VISUAL = "true"
 dotnet test tests/BattleScribeSpec.Tests.csproj --filter "LiveNewRecruitConformanceTests"
 ```
 
-Alternatively, use the `nr-live-visible` test profile which sets all three:
+Or let the `nr-live` profile supply the URL and keep the two display switches in your shell — no profile sets
+them, so your values reach the run:
 
-```bash
-dotnet test -p:TestProfile=nr-live-visible
+```powershell
+$env:NR_HEADLESS = "false"
+$env:NR_VISUAL = "true"
+dotnet test tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live
 ```
 
 ### End-to-End Test

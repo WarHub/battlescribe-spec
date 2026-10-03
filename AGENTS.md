@@ -201,17 +201,29 @@ Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
 `BattleScribeSpec.Cli.Tests` — 5m47s end to end including the build. The critical path is `BsRoster`
 (367 specs, 267s of in-process engine), not any UI lane. It was **11m29s** before #405.
 
-**What `pre-push` deliberately does NOT cover**, so you know when to run something else yourself:
+**What `pre-push` deliberately does NOT cover**, so you know when to run something else yourself
+("thorough" and "live" are the gate outputs that turn a job on — see `scripts/ci-gate.json`):
 
-| Not in `pre-push` | Run it with | Covered in CI by |
-|---|---|---|
-| `BsRosterUi`, `BsGameDataUi` — launch the real BattleScribe desktop app | `-p:TestProfile=bs-ui-roster` / `bs-ui-gamedata` | `thorough-ui-bs` (opt-in) |
-| `LiveNr*` — traffic to a third party's production site | `-p:TestProfile=nr-live*`, `nr-editor-*-live` | `nr-conformance` (opt-in) |
-| `Mode=Sequential` — manual-only, gated behind `NR_SEQUENTIAL` | `-p:TestProfile=nr-frozen-sequential` / `nr-live-sequential` (they set `NR_SEQUENTIAL=true`) | — |
+<!-- BEGIN GENERATED: lanes outside pre-push. Rendered from tests/TestProfiles/ and ci.yml by CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry; edit those, not this. -->
+| Not in `pre-push` | Why | Run it with | Run in CI by |
+|---|---|---|---|
+| `BsRosterUi` | launches the BattleScribe desktop app; 687.8s across 367 specs, sequential — it WAS the 689.2s run it joined by default (#405) | `-p:TestProfile=bs-ui-roster` | `smoke` (`bs-spec run --engine battlescribe --ui protocol-kitchen-sink`; every push); `thorough-ui-bs` (`bs-ui-roster`; thorough) |
+| `BsGameDataUi` | launches the BattleScribe desktop app (the Data Editor half) | `-p:TestProfile=smoke-bs-gamedata-ui`, `-p:TestProfile=bs-ui-gamedata` | `smoke` (`smoke-bs-gamedata-ui`; every push); `thorough-ui-bs` (`bs-ui-gamedata`; thorough) |
+| `LiveNrRoster` | opens sessions on newrecruit.eu | `-p:TestProfile=nr-live`, `-p:TestProfile=nr-live-smoke`, `-p:TestProfile=nr-live-conformance`, `-p:TestProfile=nr-live-sequential` | `nr-conformance` (`nr-live-smoke`, `nr-live-conformance`; live) |
+| `LiveNrUiRoster` | opens sessions on newrecruit.eu | `-p:TestProfile=nr-ui-live` | not in CI: nr-conformance, the one job that drives newrecruit.eu, runs the store-direct live lane only; the UI driver over every spec would add a browser clicking through the whole suite to a volunteer-run site's load on every scheduled run. Run nr-ui-live by hand when the UI driver changes. |
+| `LiveNrGameData` | opens sessions on the NR Editor deployment | `-p:TestProfile=nr-editor-live` | not in CI: the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether nr-conformance should also drive the live one is an open decision, not an oversight. Run it by hand to check a new deployment against the snapshot. |
+| `LiveNrGameDataUi` | opens sessions on the NR Editor deployment | `-p:TestProfile=nr-editor-ui-live` | not in CI: the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether nr-conformance should also drive the live one is an open decision, not an oversight. Run it by hand to check a new deployment against the snapshot. |
+<!-- END GENERATED: lanes outside pre-push -->
 
-That table is enforced, not aspirational. Every engine lane is a row in
+`Mode=Sequential` classes are out too: manual-only, they skip unless `NR_SEQUENTIAL=true`, which
+`-p:TestProfile=nr-frozen-sequential` / `-p:TestProfile=nr-live-sequential` set.
+
+That table is generated, not written. Every engine lane is a row in
 `tests/TestProfiles/EngineLanes.cs` saying what it needs and whether `pre-push` runs it, with the
-measured cost behind the answer, and `pre-push`'s filter is derived from that column.
+measured cost behind the answer, and `pre-push`'s filter is derived from that column. The table above is
+rendered from those rows, the profiles that claim each lane and the CI steps that run them, and
+`CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry` fails on any difference
+(printing the block to paste) — and on a lane that no CI step runs and that gives no `CiExempt` reason.
 `TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared` fails if an `Engine` trait appears
 with no row, and `PrePushHonoursItsPromise` fails if a lane that needs the desktop app or a third
 party's site is put in. Adding a lane is therefore a decision, not a default — which it was not when
@@ -220,19 +232,34 @@ advertised here at `~40s` (#405). Note the `~40s` had stopped being true well be
 UI lane at all, `BsRoster` alone is over three minutes now.
 
 **Test profiles are defined in `tests/TestProfiles/TestProfiles.cs`**, the one record of every lane: its
-selection, the environment it sets, the assemblies it covers. The `.runsettings` files in
-`tests/test-profiles/` are generated from it for VSTest, and a hand edit there fails the lint
-(`RunsettingsGenerationTests`). Every `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names is
-classified in `tests/TestProfiles/Knobs.cs` (`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`).
-Other profiles: `core` (offline suite, no NR engines), `non-conformance`, `lint`, `bs`, `nr-frozen`,
-`nr-ui-frozen`, `nr-editor-frozen`, `nr-editor-live`, `nr-editor-ui-frozen`, `nr-editor-ui-live`,
-`bs-ui-roster`, `bs-ui-gamedata`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`, `nr-live-visible`,
-`nr-ui-live`, `nr-ui-live-visible`, `nr-frozen-sequential`, `nr-live-sequential`, and the smoke lanes
-`smoke-bs`, `smoke-nr-frozen`, `smoke-nr-ui`, `smoke-nr-editor`, `smoke-nr-editor-ui`,
-`smoke-bs-gamedata-ui`. `cli` (the CLI's own tests) exists in the registry only, with no runsettings
-file. Most of CI's thorough and live lanes run through these profiles (`.github/workflows/ci.yml`); its
-unit, smoke and BS UI steps still spell their filters inline, the same selections the `non-conformance`,
-`smoke-*` and `bs-ui-*` profiles record.
+selection, the environment it sets, the assemblies it covers. **A profile is a whole lane**: every CI
+step that runs `BattleScribeSpec.Tests` runs one, with no filter of its own and no `env:` entry that
+changes what runs, so `-p:TestProfile=<name>` on your machine selects what CI selects under that name,
+with the same switches — `nr-ui-frozen` included, which is the full ~27-minute NR UI roster lane (it
+sets `NR_UI_ROSTER_FULL`; `smoke-nr-ui` is the one-spec smoke). `CiProfileLaneTests` holds CI to that,
+and fails if a lane-defining or profile-owned switch appears anywhere under `.github/`. Two things can
+still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
+skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
+runners, which do not provision it. And a switch exported in your own shell reaches every profile that
+does not set it, because VSTest passes it through — an exported `NR_UI_ROSTER_FILTER` or
+`NR_FROZEN_SKIP` still narrows or skips a lane. The `.runsettings` files in `tests/test-profiles/` are
+generated from the registry for VSTest, one per profile that covers `BattleScribeSpec.Tests`, and a hand
+edit there fails the lint (`RunsettingsGenerationTests`). Every `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*`
+variable the code names is classified in `tests/TestProfiles/Knobs.cs`
+(`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`). To watch a live lane, set
+`NR_HEADLESS=false` (and `NR_VISUAL=true`) in your own environment: no profile sets them, so your value
+reaches the run. The list below is generated from the registry
+(`CiProfileLaneTests.AgentsMd_ProfileList_IsGeneratedFromTheRegistry`), so it can neither name a deleted
+profile nor leave out a new one:
+
+<!-- BEGIN GENERATED: profiles. Rendered from tests/TestProfiles/TestProfiles.cs by CiProfileLaneTests.AgentsMd_ProfileList_IsGeneratedFromTheRegistry; edit that, not this. -->
+Every profile (26), in registry order: `pre-push` (BattleScribeSpec.Tests and
+BattleScribeSpec.Cli.Tests), `core`, `non-conformance`, `cli` (BattleScribeSpec.Cli.Tests only),
+`lint`, `bs`, `smoke-bs`, `smoke-nr-frozen`, `smoke-nr-ui`, `smoke-nr-editor`, `smoke-nr-editor-ui`,
+`smoke-bs-gamedata-ui`, `nr-frozen`, `nr-ui-frozen`, `nr-editor-frozen`, `nr-editor-ui-frozen`,
+`bs-ui-gamedata`, `bs-ui-roster`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`, `nr-ui-live`,
+`nr-editor-live`, `nr-editor-ui-live`, `nr-frozen-sequential`, `nr-live-sequential`.
+<!-- END GENERATED: profiles -->
 
 ## NR frozen tests and HAR
 
@@ -371,5 +398,6 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
 | `tests/TestProfiles/` | The test-profile registry: every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`); `tests/test-profiles/*.runsettings` is generated from it |
+| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every Tests-project step runs a profile, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, the generated AGENTS.md table and profile list, no dangling profile reference |
 | `tools/format-specs.ps1` | Spec formatter |
 

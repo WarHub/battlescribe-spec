@@ -441,7 +441,7 @@ internal static class CiTestInvocations
     /// The ways one token can name a path: as written (normalised to forward slashes, no leading
     /// <c>./</c>), and — for <c>--project=x</c> or <c>NAME=x</c> — the part after the last <c>=</c>.
     /// </summary>
-    private static IEnumerable<string> Spellings(string token)
+    internal static IEnumerable<string> Spellings(string token)
     {
         var normalised = Normalise(token);
         yield return normalised;

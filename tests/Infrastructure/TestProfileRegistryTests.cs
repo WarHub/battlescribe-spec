@@ -151,6 +151,63 @@ public sealed class TestProfileRegistryTests
     }
 
     /// <summary>
+    /// <b>A profile that claims a lane sets every switch the lane cannot run without</b>
+    /// (<see cref="EngineLane.RequiredEnv"/>): a live lane's endpoint URL.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every live fixture skips whole when its URL is unset, so a live profile without one passes
+    /// having run nothing. Two were like that: <c>nr-editor-ui-live</c> left <c>NR_EDITOR_URL</c> to
+    /// the caller for its whole life, and <c>nr-live-sequential</c> needed the URL added when it was
+    /// written. A <c>MaySkip</c> engine is exempt (it may skip whole by definition), and so is a lane a
+    /// <c>Raw</c> filter reaches only incidentally: <c>non-conformance</c> reaches
+    /// <c>LiveNrRosterSmokeTests</c> and must not drive the live site from the <c>checks</c> job, which
+    /// is why it declares the lane incidental rather than claiming it.
+    /// </para>
+    /// <para>
+    /// Mutation-checked when written: <c>NR_ENGINE_URL</c> removed from <c>nr-live-sequential</c>, and
+    /// <c>RequiredEnv</c> naming an unclassified switch, each turn this red.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryProfile_SuppliesItsEnginesRequiredEnv()
+    {
+        var problems = EngineLanes.All
+            .SelectMany(static l => l.RequiredEnv.Select(key => (Lane: l, Key: key, Knob: Knobs.Find(key))))
+            .Where(static r => r.Knob is null || r.Knob.Kind is KnobKind.Internal or KnobKind.Retired)
+            .Select(static r => r.Knob is null
+                ? $"  {r.Lane.Trait} requires {r.Key}, which Knobs does not classify"
+                : $"  {r.Lane.Trait} requires {r.Key}, a {r.Knob.Kind} switch no profile may set")
+            .ToList();
+
+        var checkedPairs = 0;
+        foreach (var profile in TestProfiles.All)
+        {
+            foreach (var lane in profile.Selection.Claims.Select(EngineLanes.Find).OfType<EngineLane>())
+            {
+                if (profile.MaySkip.Any(m => m.Engine == lane.Trait))
+                {
+                    continue;
+                }
+
+                foreach (var key in lane.RequiredEnv)
+                {
+                    checkedPairs++;
+                    if (profile.Env.GetValueOrDefault(key) is not { Length: > 0 })
+                    {
+                        problems.Add($"  {profile.Name} claims {lane.Trait} but does not set {key}; every {lane.Trait} test skips without it");
+                    }
+                }
+            }
+        }
+
+        Assert.True(checkedPairs > 0, "No profile claims a lane with RequiredEnv, so this check checked nothing.");
+        Assert.True(problems.Count == 0,
+            "A profile that names a lane it cannot reach passes having run none of it. Set the switch in the profile's Env, "
+            + "and classify it in Knobs:\n" + string.Join("\n", problems));
+    }
+
+    /// <summary>
     /// Every assembly a profile covers is a test project in <c>BattleScribeSpec.slnx</c>, a profile
     /// that claims an engine covers the assembly the engine lanes live in, and <c>pre-push</c>
     /// covers every test project.
@@ -537,9 +594,9 @@ public sealed class TestProfileRegistryTests
     /// <i>other</i> code names its switch: a hit inside <c>tests/TestProfiles/</c>, in a file that
     /// declares a <c>Category=Lint</c> test, or on a comment line does not count, because each of those
     /// keeps naming a switch after the code that read it has gone. The profile table names
-    /// <c>NR_FROZEN_SMOKE</c> as an environment key, this test's own remarks quote two switches, and a
-    /// drift test asserts a workflow sets <c>NR_UI_ROSTER_FULL</c>; counted, any of them would keep a
-    /// row green forever once its reader was renamed.
+    /// <c>NR_FROZEN_SMOKE</c> as an environment key, this test's own remarks quote two switches, and
+    /// <c>CiProfileLaneTests</c> asserts the <c>nr-ui-frozen</c> profile sets <c>NR_UI_ROSTER_FULL</c>;
+    /// counted, any of them would keep a row green forever once its reader was renamed.
     /// </para>
     /// <para>
     /// Mutation-checked when written: an unclassified <c>NR_FOO</c> literal; a row no file names; and

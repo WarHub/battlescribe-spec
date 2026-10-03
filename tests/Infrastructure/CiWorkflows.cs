@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 
 namespace BattleScribeSpec.Tests;
@@ -161,6 +162,20 @@ internal static class CiWorkflows
     }
 
     /// <summary>
+    /// <paramref name="text"/> with every <c>${{ matrix.… }}</c> expression replaced by its value in
+    /// <paramref name="combination"/> (<see cref="CiJob.MatrixCombinations"/>). An expression naming a
+    /// key the combination does not have is left as written, so a typo stays an opaque expression the
+    /// lints report rather than an empty string they might accept.
+    /// </summary>
+    internal static string ExpandMatrix(string text, IReadOnlyDictionary<string, string> combination) =>
+        combination.Count == 0
+            ? text
+            : Regex.Replace(
+                text,
+                @"\$\{\{\s*(matrix(?:\.[A-Za-z0-9_-]+)+)\s*\}\}",
+                m => combination.TryGetValue(m.Groups[1].Value, out var value) ? value : m.Value);
+
+    /// <summary>
     /// A <c>timeout-minutes</c> value as a number, or null when it is absent, not a plain number, or not
     /// positive. An expression is refused on purpose: a bound nobody can read is a bound nobody checked.
     /// </summary>
@@ -222,6 +237,75 @@ internal sealed class CiJob
     /// <summary>The <c>defaults.run</c> value for <paramref name="key"/>: the job's, else the workflow's.</summary>
     public string? RunDefault(string key) =>
         CiWorkflows.Scalar(CiWorkflows.RunDefaults(Node), key) ?? CiWorkflows.Scalar(_workflowRunDefaults, key);
+
+    /// <summary>
+    /// The job's <c>strategy.matrix</c>, one dictionary per combination, keyed the way an expression
+    /// names a value (<c>matrix.suite.profile</c>); one empty combination for a job with no matrix.
+    /// Feed each to <see cref="CiWorkflows.ExpandMatrix"/> to read a step as that leg runs it.
+    /// </summary>
+    /// <remarks>
+    /// The cartesian product of the axes; a mapping value is flattened into dotted keys. <c>include</c>,
+    /// <c>exclude</c>, a matrix given as an expression, and a sequence nested in a value are refused with
+    /// an exception rather than approximated: a lint that read a leg the matrix does not run, or missed
+    /// one it does, would hold CI to a matrix nobody wrote. Teach this method the shape first.
+    /// </remarks>
+    public IReadOnlyList<IReadOnlyDictionary<string, string>> MatrixCombinations()
+    {
+        if (!Node.Children.TryGetValue(new YamlScalarNode("strategy"), out var strategyNode)
+            || strategyNode is not YamlMappingNode strategy
+            || !strategy.Children.TryGetValue(new YamlScalarNode("matrix"), out var matrixNode))
+        {
+            return [new Dictionary<string, string>(StringComparer.Ordinal)];
+        }
+
+        if (matrixNode is not YamlMappingNode matrix)
+        {
+            throw new NotSupportedException($"{Where}: strategy.matrix is not a mapping (an expression?), so the workflow lints cannot read its legs.");
+        }
+
+        var combinations = new List<Dictionary<string, string>> { new(StringComparer.Ordinal) };
+        foreach (var (keyNode, valueNode) in matrix.Children)
+        {
+            var axis = (keyNode as YamlScalarNode)?.Value ?? "";
+            if (axis is "include" or "exclude" || valueNode is not YamlSequenceNode values)
+            {
+                throw new NotSupportedException(
+                    $"{Where}: matrix '{axis}' is {(axis is "include" or "exclude" ? "an include/exclude list" : "not a list")}, which " +
+                    "CiJob.MatrixCombinations does not expand. Extend it before relying on that shape, or every lint over the legs reads the wrong set.");
+            }
+
+            combinations =
+            [
+                .. combinations.SelectMany(combination => values.Children.Select(value =>
+                {
+                    var next = new Dictionary<string, string>(combination, StringComparer.Ordinal);
+                    Flatten($"matrix.{axis}", value, next);
+                    return next;
+                })),
+            ];
+        }
+
+        return combinations;
+
+        void Flatten(string prefix, YamlNode node, Dictionary<string, string> into)
+        {
+            switch (node)
+            {
+                case YamlScalarNode scalar:
+                    into[prefix] = scalar.Value ?? "";
+                    break;
+                case YamlMappingNode mapping:
+                    foreach (var (k, v) in mapping.Children)
+                    {
+                        Flatten($"{prefix}.{(k as YamlScalarNode)?.Value}", v, into);
+                    }
+
+                    break;
+                default:
+                    throw new NotSupportedException($"{Where}: matrix value '{prefix}' is a list, which CiJob.MatrixCombinations does not expand.");
+            }
+        }
+    }
 
     /// <summary>Where this job starts, for messages: <c>file:line job</c>.</summary>
     public string Where => $"{Workflow}:{Node.Start.Line} {Id}";

@@ -33,16 +33,18 @@
     script's more general one.
 
 .PARAMETER TestProfile
-    Test profile name, forwarded as `-p:TestProfile=<name>` (tests/test-profiles/<name>.runsettings).
+    Test profile name, forwarded as `-p:TestProfile=<name>` (tests/test-profiles/<name>.runsettings, generated
+    from the registry in tests/TestProfiles/). Every CI step that runs tests/BattleScribeSpec.Tests.csproj
+    passes one and no --filter: on VSTest a command-line filter replaces the profile's (CiProfileLaneTests).
     A real parameter rather than a pass-through argument because PowerShell splits a bare
     `-p:TestProfile=core` at the colon into `-p` and `TestProfile=core`.
 
 .PARAMETER DotnetTestArgs
-    Everything else, forwarded to `dotnet test` verbatim (project path, --filter, --logger, …).
+    Everything else, forwarded to `dotnet test` verbatim (project path, --no-build, --logger, …).
     Do NOT pass `--` RunSettings arguments here; this script appends its own.
 
 .EXAMPLE
-    pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Tests.csproj --no-build --filter "Engine=FrozenNrUiRoster"
+    pwsh scripts/dotnet-test-step.ps1 tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build
 
 .EXAMPLE
     pwsh scripts/dotnet-test-step.ps1 -TestProfile core tests/BattleScribeSpec.Tests.csproj --no-build
@@ -119,9 +121,9 @@ try {
             '',
             '    * a DisplayName clause against a [Fact] aggregate. Classes shaped as one',
             '      `[Fact] AllSpecs()` collapse every spec into a single test whose name carries no',
-            '      spec id, so `--filter "...&DisplayName~kitchen-sink"` can never match. Narrow such',
-            '      a suite from the engine side (see NR_FROZEN_SMOKE / NR_UI_SMOKE) and filter on the',
-            '      Engine trait alone.',
+            '      spec id, so `...&DisplayName~kitchen-sink` can never match. Narrow such a suite',
+            '      from the engine side, in its profile (tests/TestProfiles/TestProfiles.cs: smoke-nr-frozen',
+            '      sets NR_FROZEN_SMOKE), and select it by the Engine trait alone.',
             '',
             '    * selecting a self-skipping test. The Mode=Sequential conformance classes are gated',
             '      behind NR_SEQUENTIAL and skip in CI, and a filter that reaches only those looks',

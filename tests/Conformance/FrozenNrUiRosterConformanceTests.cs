@@ -49,8 +49,9 @@ public sealed class FrozenNrUiRosterConformanceTests
     /// had once (<c>docs/warm-reuse.md</c>: "CI never caught the original bug because the NR-UI
     /// roster lane runs a single spec"). Two things guard it: the run logs which mode it chose and
     /// how many specs that selected, and
-    /// <c>ConcurrencyConfigurationDriftTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c> fails if
-    /// the CI step stops setting this.
+    /// <c>CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c> fails if the
+    /// <c>nr-ui-frozen</c> profile stops setting this, if CI's thorough step stops running that
+    /// profile, or if a fast lane starts setting it.
     /// </para>
     /// </remarks>
     internal const string FullVariable = "NR_UI_ROSTER_FULL";
