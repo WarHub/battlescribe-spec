@@ -809,7 +809,8 @@ the step `id`. Side-files resolve in three tiers (`ext` ∈ `cat`/`gst`, from th
 
 Resolution prefers exact → family → base; the writer keeps each tier minimal (no override is written
 when an engine matches the tier above it). `BSSPEC_UPDATE_SNAPSHOTS=1` (re)writes the side-files —
-it is the only switch, honored by both `bs-spec run` and `dotnet test`, and there is no
+it is the only switch, honored by `bs-spec run` and by an unprofiled test run (a profiled one refuses it,
+exit 5: a gate that rewrites what it checks passes by construction), and there is no
 `--update-snapshots` flag; generate the base first, then the family-canonical engine, then variants.
 
 ### Open / load mid-spec

@@ -903,12 +903,14 @@ The NR adapter uses **Playwright** to drive a headless Chromium browser loading
 
 ### Test Infrastructure
 
-- **Browser lifecycle**: `NewRecruitFixture` (xUnit collection fixture) shares
-  one Playwright browser across all NR tests, which run serially
+- **Browser lifecycle**: `FrozenNrRosterFixture` and `LiveNrRosterFixture` (xUnit collection
+  fixtures) each hold one Playwright browser and a pool of browser contexts, sized by
+  `ConcurrencyPolicy` (the live pool held to newrecruit.eu's session budget); each lane is one
+  `[Fact]` that runs every applicable spec over its pool
 - **Live testing**: NR tests only run when `NR_ENGINE_URL` environment variable
   is set (in CI, the `nr-conformance` job: `workflow_dispatch`, the weekly schedule, a `thorough-ci`
   label, or a PR to `main` that edits one of the inputs in `scripts/ci-gate.json`)
-- **Frozen testing**: `FrozenNewRecruitFixture` loads HAR recordings from
+- **Frozen testing**: `FrozenNrRosterFixture` loads HAR recordings from
   [WarHub/newrecruit-har](https://github.com/WarHub/newrecruit-har) for fully
   offline, deterministic replay via Playwright's `RouteFromHARAsync`
 - **Expected failures**: Encoded directly in spec YAML files via the `engines`

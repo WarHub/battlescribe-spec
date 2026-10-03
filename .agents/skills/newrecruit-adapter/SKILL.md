@@ -284,18 +284,22 @@ The recorder filters entries to minimize file size:
 
 | Class | Purpose |
 |-------|---------|
-| `FrozenNewRecruitFixture` | Shared browser for frozen tests, finds HAR via `HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries)`: this checkout's own `.testdata`, no walk (the argument-less overload is the CLI's, banned in test code) |
-| `NewRecruitFixture` | Shared browser for live tests, uses `NR_ENGINE_URL` |
-| `FrozenNewRecruitConformanceTests` | Runs all specs against HAR replay |
-| `NewRecruitConformanceTests` | Runs all specs against live NR |
+| `FrozenNrRosterFixture` | Pool of browser contexts over one browser for the frozen lane, sized by `ConcurrencyPolicy`; finds the HAR via `HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries)`: this checkout's own `.testdata`, no walk (the argument-less overload is the CLI's, banned in test code) |
+| `LiveNrRosterFixture` | The same pool against the live site, gated by `NR_ENGINE_URL`, held to newrecruit.eu's session budget (`LiveLoadBudget`) |
+| `FrozenNrRosterConformanceTests` | The frozen lane (`Engine=FrozenNrRoster`): one `[Fact]`, `AllSpecs`, that runs every applicable spec over the pool |
+| `LiveNrRosterConformanceTests` | The live lane (`Engine=LiveNrRoster`), the same shape against newrecruit.eu |
+| `SequentialFrozenNrRosterConformanceTests`, `SequentialLiveNrRosterConformanceTests` | One row per spec through one engine (`Mode=Sequential`), for isolating a failure; skipped unless `NR_SEQUENTIAL=true` |
+
+The profiles that run them are `nr-frozen`, `nr-live` and the `*-sequential` pair
+(`tests/TestProfiles/TestProfiles.cs`; [docs/running-tests.md](../../../docs/running-tests.md)).
 
 ### Environment variables
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `NR_ENGINE_URL` | Live NR URL | *(required for live tests)* |
-| `NR_HEADLESS` | Run browser headless | `true` |
-| `NR_FROZEN_SKIP` | Skip frozen tests | `false` |
+| `NR_ENGINE_URL` | Live NR URL; the live profiles set it | *(required for live tests)* |
+| `NR_HEADLESS` | `false` shows the browser | headless |
+| `NR_FROZEN_SKIP` | `true` skips the frozen tests; a profile that runs them refuses it (exit 5) | unset |
 
 ## Reference files
 

@@ -57,17 +57,18 @@ public static class ConcurrencyPolicy
     /// </para>
     /// <para>
     /// The reason xUnit's thread count cannot simply come from <see cref="For"/>: the runner reads
-    /// that static JSON <em>before any of this code executes</em>. The obvious alternative was
-    /// investigated and rejected — xunit.v3's VSTest RunSettings override (confirmed live via
-    /// <c>Xunit.Runner.VisualStudio.RunSettings.Parse</c>: an
-    /// <c>&lt;xUnit&gt;&lt;MaxParallelThreads&gt;</c> element in a <c>.runsettings</c> file, or
-    /// <c>dotnet test -- xUnit.MaxParallelThreads=&lt;value&gt;</c>, both genuinely honored by this
-    /// repo's adapter) is read by the runner at the same point, so it cannot call <see cref="For"/>
-    /// either. It would only move a static literal from one file format to another, at the cost of a
-    /// second file to keep in sync. Making the value truly dynamic would need an external wrapper
-    /// script that computes it and rewrites the config before invoking the runner — reintroducing the
-    /// wrapper-script axis this design exists to remove. The value therefore stays declarative, and
-    /// uses xUnit's own machine-relative multiplier syntax instead of a hardcoded thread count.
+    /// that static JSON <em>before any of this code executes</em>. Its overrides are no way round that.
+    /// On Microsoft.Testing.Platform they are xunit's <c>--max-threads</c> option and the <c>xUnit</c>
+    /// section of a <c>testconfig.json</c> (<c>maxParallelThreads</c>); under VSTest it was a runsettings
+    /// file's <c>&lt;xUnit&gt;&lt;MaxParallelThreads&gt;</c>. Each is read at the same point, so none can
+    /// call <see cref="For"/> either: each would only move a static literal into a second record, which
+    /// the tests refuse — <c>ConcurrencyConfigurationDriftTests</c> the option (and the parallelism
+    /// attributes), <c>TestHostWiringTests.NoImplicitTestInputs</c> any <c>testconfig.json</c> under
+    /// <c>tests/</c>. A value computed per machine needs code that runs before the runner and builds its
+    /// command line. The test app has that now — its own entry point, <c>tests/TestProfiles/TestHost.cs</c>
+    /// — so <c>--max-threads</c> from this policy is possible, and deferred, not done. Until then the
+    /// value stays declarative, in xUnit's own machine-relative multiplier syntax instead of a hardcoded
+    /// thread count.
     /// </para>
     /// </remarks>
     internal const int UndeclaredMemoryWorkerCap = 8;

@@ -128,8 +128,9 @@ On failure, `NrUiDiagnostics` captures:
 - **Pinia state dump** (serialized stores)
 
 Artifacts are saved to `artifacts/nr-ui-diagnostics/` — relative to the working directory, which is
-the repo root under `bs-spec`. Under `dotnet test` that would be the test assembly's output folder,
-so the fixtures anchor it at the repo root (`TestPaths.AnchorDiagnosticsAtRepoRoot`); an explicit
+the repo root under `bs-spec`. In the test app that would be the test assembly's output folder, where
+xunit puts the working directory however the app is started (`dotnet test`, `dotnet run`, the
+executable), so the fixtures anchor it at the repo root (`TestPaths.AnchorDiagnosticsAtRepoRoot`); an explicit
 `NR_UI_DIAGNOSTICS_DIR` wins over both. CI's `thorough-nr-ui-roster` job uploads the directory as
 `thorough-nr-ui-roster-diagnostics` when it fails.
 

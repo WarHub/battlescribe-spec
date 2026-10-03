@@ -138,33 +138,33 @@ that restates a field is a second record that drifts from the first.
 
 ```bash
 dotnet restore && dotnet build                                                     # first time
-dotnet test -p:TestProfile=pre-push                                                # offline gate (~4.5 min, no app)
-dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~my-spec-id"  # one spec
-dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs   # a lane, results streamed
+dotnet test -p:TestProfile=pre-push                                                # offline gate (~5 min, no app)
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-push --filter "DisplayName~my-spec-id"  # one spec: its lint + every per-spec offline engine (not the aggregate NR lanes)
+dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs --output Detailed   # a lane, every result as it finishes
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles # what each profile runs
 ```
 
-**The suites run on Microsoft.Testing.Platform, and the test app resolves its own profiles.**
-`global.json` puts `dotnet test` on the platform; each test project is an executable whose entry point
-(`tests/TestProfiles/TestHost.cs`, wired by `tests/Directory.Build.props`) reads the registry. So
-`dotnet test -p:TestProfile=<name>`, `dotnet run --project <csproj> -- --test-profile <name>` and
-the executable run the same lane. A run that **executes no test fails with exit 8** — strict policy,
-every selected test skipping counts, and a spec a lane's engine opts out of (`engines: <engine>: skip`)
-is a skipped row, never a passed one — and so does a profiled run in which **any engine lane the profile
-claims executed none of its own tests**: on a machine without the HAR or the NR Editor snapshot that
-`setup.ps1` fetches, `pre-push` exits 8 naming each empty lane and the fix, even though thousands of
-other tests passed (`tests/TestProfiles/LaneComposition.cs`; a run you narrow with `--filter` is not held
-to it). Without the Playwright browsers it fails harder — the tests that launch Chromium themselves fail
-(exit 2) — and still names each lane that went empty and the fix. The app **refuses a command line with exit 5, saying why**: an unknown profile, a
-profile that does not cover the project (a solution-wide `dotnet test` starts both test projects, so name
-the project for a profile that covers one), a VSTest option (`--settings`, `--logger`, …), or a
-lane-defining variable exported in your shell that the profile does not allow. A `--filter` you add
-**narrows** a profile (the two are ANDed). `dotnet test` shows a test's output only when it fails;
-`dotnet run` streams every result, which is why CI runs lanes that way — with `--show-live-output on`, the
-single-test aggregate lanes stream `[i/N] <spec> <verdict> <secs>` as they go and open with a
-`[lane] <Engine> mode=… selected=N applicable=M` line (a full lane that selects fewer than apply fails).
-After a profiled run the app appends a lane-composition table to `$GITHUB_STEP_SUMMARY` and writes
-`artifacts/telemetry/xunit-<profile>-<ts>.composition.json` beside the run's telemetry.
+**This block is the one home for these commands** — the skills and the other docs link here rather than
+copy them. **[docs/running-tests.md](docs/running-tests.md) is the model behind them**: the test app and
+its one entry point, test profiles and the registry, environment switches, the zero-tests policy and the
+engine-composition check, every refusal and exit code, and why CI runs its lanes with `dotnet run`. The
+suites run on Microsoft.Testing.Platform, and each test project is an executable whose entry point
+(`tests/TestProfiles/TestHost.cs`) resolves the profile itself, so
+`dotnet test --project <csproj> -p:TestProfile=<name>`, `dotnet run --project <csproj> -- --test-profile <name>`
+and the executable run the same lane. What to know before reading a result:
+
+- **A run that executes no test fails with exit 8** — every selected test skipping counts — **and so does
+  a profiled run in which a lane the profile claims executed none of its own tests**: on a machine
+  without the HAR or the NR Editor snapshot `setup.ps1` fetches, `pre-push` exits 8 naming each empty lane
+  and the fix, though thousands of other tests passed. A run you narrow with `--filter` is not held to the
+  lanes.
+- **A command line that would run less than it says is refused with exit 5, saying why**: an unknown
+  profile; a profile that does not cover the project (a solution-wide `dotnet test` starts both test
+  projects, so name the project for a profile that covers one); a VSTest option; or a lane-defining
+  variable exported in your shell that the profile does not allow.
+- **A `--filter` you add narrows a profile** (the two are ANDed); it never replaces it.
+- **`dotnet test` shows a test's output only when it fails.** `dotnet run` shows what the app prints — the
+  profile it resolved, every failure, the composition verdict — and every result with `--output Detailed`.
 
 **The SDK band is pinned, and CI installs from `global.json`.** `rollForward: latestPatch` holds the
 feature band; every `setup-dotnet` step uses `global-json-file: global.json`, so your machine and CI
@@ -217,19 +217,22 @@ used to be shadowed by went stale on every Dependabot bump that reached a projec
 `ProjectReference`, and failed CI for it; the comment at the top of that file has the history. A
 package change is a one-line edit there and nothing else.
 
-**Always run `pre-push` before pushing.** It is the **offline** gate: lint, the in-process
-BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor
-snapshot, and the two frozen Playwright UI drivers. No desktop app, and no test traffic to any site;
-the one network call is the test platform's own usage telemetry, on by default — opt out with
-`TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (or `DOTNET_CLI_TELEMETRY_OPTOUT=1`), as CI does. It needs what
-`setup.ps1` provisions, and says so rather than leaving a green run that never ran a lane: a frozen lane
-that skips whole for want of its snapshot fails the run with exit 8, naming the lane and the fix; with
-no Playwright browsers the browser tests fail outright (exit 2), and the lanes that went empty are named
-with the fix all the same.
-**Measured 2026-08-12 on a 32-core dev box: `Failed: 0, Passed: 2571, Skipped: 0, Total: 2571,
-Duration: 4 m 27 s`** for `BattleScribeSpec.Tests`, plus 126 tests / 53s for
-`BattleScribeSpec.Cli.Tests` — 5m47s end to end including the build. The critical path is `BsRoster`
-(367 specs, 267s of in-process engine), not any UI lane. It was **11m29s** before #405.
+**Always run `pre-push` before pushing.** It is the **offline** gate: lint, the in-process BattleScribe
+engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor snapshot, and
+the two frozen Playwright UI drivers. No desktop app, and no test reaches any site. The tools send
+usage telemetry of their own by default — the test platform, and the .NET SDK under `dotnet test` or
+`dotnet run`. `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off both, `TESTINGPLATFORM_TELEMETRY_OPTOUT=1`
+(which CI sets) only the platform's. It needs what `setup.ps1` provisions, and says so rather than
+leaving a green run that never ran a lane: a frozen lane that skips whole for want of its snapshot
+fails the run with exit 8, naming the lane and the fix; with no Playwright browsers the browser tests
+fail outright (exit 2), and the lanes that went empty are named with the fix all the same.
+**Measured 2026-10-03 on a 32-core dev box, on Microsoft.Testing.Platform: `total: 3332, failed: 0,
+succeeded: 3293, skipped: 39, duration: 4m 59s`** — `BattleScribeSpec.Tests` 3193 tests in 4m59s and
+`BattleScribeSpec.Cli.Tests` 139 in 2m34s, side by side; 309s for the command after a 25s no-op build.
+The 39 skips are specs that opt out of an engine and the real-world tests whose wh40k data this box had
+not fetched. The critical path is `BsRoster` (every roster spec plus seven addressing scenarios, 252s of
+in-process engine), not any UI lane. It was **11m29s** before #405, and 5m47s on VSTest in August, when
+the suite was 2697 tests.
 
 **What `pre-push` deliberately does NOT cover**, so you know when to run something else yourself
 ("thorough" and "live" are the gate outputs that turn a job on — see `scripts/ci-gate.json`):
@@ -275,7 +278,8 @@ sets `NR_UI_ROSTER_FULL`; `smoke-nr-ui` is the one-spec smoke). `CiProfileLaneTe
 and fails if a lane-defining or profile-owned switch appears anywhere under `.github/`. Two things can
 still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
 skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
-runners, which do not provision it. A switch exported in your own shell is held to its kind. Every
+runners, which do not provision it. A switch exported in your own shell is held to its kind
+([docs/running-tests.md](docs/running-tests.md#environment-switches)). Every
 `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names is classified in `tests/TestProfiles/Knobs.cs`
 (`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`): a **lane-defining** one — `NR_UI_ROSTER_FILTER`,
 `NR_FROZEN_SKIP`, `BSSPEC_UPDATE_SNAPSHOTS`, … — takes the profile's value or must be unset, and a profiled
@@ -353,18 +357,22 @@ do — so run them when you touch `BsUiRosterEngine`, `BsGameDataUiEngine`, or
 `src/bs-ui-java-agent/`.
 
 The JavaFX-capable JDK is auto-discovered (`BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`),
-so neither local runs nor CI need to set anything. Tests self-skip when BS artifacts are absent.
+so neither local runs nor CI need to set anything. Without the app, the JDK or the agent jar the tests
+skip — and a profile that runs those lanes (`bs-ui-roster`, `bs-ui-gamedata`, `smoke-bs-gamedata-ui`) then
+exits 8, naming the lane and `setup.ps1`, rather than passing on nothing. `core` is the one profile that
+lets `BsRosterUi` skip: CI's offline runners do not provision the app.
 
 ## Telemetry
 
-`bs-spec run --all`/`compare` and `dotnet test` all emit OpenTelemetry traces + metrics — a
-`.traces.pb`/`.metrics.pb` artifact under `artifacts/telemetry/run-<id>.*` (or `compare-a/b-<id>.*`,
-`xunit-<profile>-<timestamp>.*`), plus a trace-summary table (wall time, cold-starts vs warm-reuses, peak
-live resources) printed after the run and appended to `$GITHUB_STEP_SUMMARY` in CI. Use
+`bs-spec run --all`/`compare` and every run of the test app (`dotnet test`, `dotnet run`) emit
+OpenTelemetry traces + metrics — a `.traces.pb`/`.metrics.pb` artifact under
+`artifacts/telemetry/run-<id>.*` (or `compare-a/b-<id>.*`, `xunit-<profile>-<timestamp>.*`), plus a
+trace-summary table (wall time, cold-starts vs warm-reuses, peak live resources) printed after the
+run and appended to `$GITHUB_STEP_SUMMARY` in CI. Use
 `bs-spec compare --config-a "" --config-b "SOME_ENV=1"` to prove a config change is
-**verdict-neutral** before shipping it as an optimization — it asserts identical per-spec
-pass/fail before reporting any timing delta, exits non-zero on divergence, and exits 8 when neither
-arm executed anything (as `run --all` does when its selection runs nothing). See
+**verdict-neutral** before shipping it as an optimization — it asserts identical per-spec pass/fail
+before reporting any timing delta, exits non-zero on divergence, and exits 8 when neither arm
+executed anything (as `run --all` does when its selection runs nothing). See
 [docs/telemetry.md](docs/telemetry.md) for the full model (spans/metrics emitted, the
 parent-as-collector design, reading the artifact, known limitations).
 
@@ -411,6 +419,7 @@ pwsh -File tools/format-specs.ps1                                               
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (403 total, 24 categories) |
 | `specs/gamedata/{category}/{id}.yaml` | GameData spec files (120 total, 23 categories) |
 | `docs/error-assertions.md` | The two ways a spec is about something going wrong, and they are not the same: `expectedState.errors` asserts the validation list of a roster the engine **accepted**; `expectFailure` asserts an action the engine **refused** |
+| `docs/running-tests.md` | How the tests run: the test app and its entry point, test profiles, environment switches, the zero-tests policy and the engine-composition check, refusals and exit codes, what CI adds. The commands themselves are in "Build & test" above |
 | `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk. Tests use `RepoRoot.FromBinaries` (`TestPaths.Root` when they need a checkout), never the working directory |
 | `tests/BannedSymbols.txt` | What test code may not call — the working directory and the CLI lookups that read it — enforced at compile time (RS0030) by BannedApiAnalyzers in both test projects |
 | `src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs` | All Protocol setup types |

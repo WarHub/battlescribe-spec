@@ -43,8 +43,8 @@ immune to site downtime or breaking changes.
              │ RouteFromHARAsync
              ▼
 ┌──────────────────────────┐
-│  FrozenNewRecruit tests  │  xUnit test collection
-│  (offline Playwright)    │
+│  Frozen NR test lanes    │  FrozenNrRoster, FrozenNrUiRoster
+│  (offline Playwright)    │  (and the Sequential class)
 └──────────────────────────┘
 ```
 
@@ -56,13 +56,18 @@ The `testdata.json` file pins the HAR release version:
 {
   "newrecruit-har": {
     "repo": "WarHub/newrecruit-har",
-    "tag": "v34.53-20260506"
+    "tag": "v34.53-20260506",
+    "sha256": {
+      "newrecruit.har": "<sha256 of the release asset>"
+    }
   }
 }
 ```
 
-This ensures all developers and CI use the same snapshot version. To update, change the `tag`
-value and re-run `setup.ps1`.
+This ensures all developers and CI use the same snapshot. The pin has two halves: the `tag` names the
+release, and `sha256` names the bytes it must contain. `setup.ps1` refuses a download that misses the
+hash, and `TestDataPinDriftTests` fails a working copy whose fixture is not what the pin declares — so to
+update, change the tag and the hash together (the snapshot bot's PR does both) and re-run `setup.ps1`.
 
 ## Recording a New Snapshot
 
@@ -149,27 +154,36 @@ gh release create v<version> \
 ### Locally
 
 ```bash
-# Download the pinned snapshot
+# Download the pinned snapshot, and install the Playwright browsers (-SkipPlaywright skips them)
 ./setup.ps1
 
-# Install Playwright browsers (first time)
-pwsh src/BattleScribeSpec.NewRecruit/bin/Debug/net10.0/playwright.ps1 install chromium
-
-# Run frozen tests
+# Run the frozen NR roster lane
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-frozen
 ```
 
+`nr-ui-frozen` is the frozen NR UI roster lane (about 27 minutes), and `pre-push` runs both frozen roster
+lanes — the UI one at its kitchen-sink default — with everything else that is offline. The commands for
+narrowing a run are in [running-tests.md](running-tests.md).
+
 ### In CI
 
-The `nr-frozen` job in `.github/workflows/ci.yml` handles this automatically:
-1. Runs `setup.ps1` to download the pinned HAR snapshot
-2. Installs Playwright Chromium
-3. Runs `FrozenNewRecruitConformanceTests` (parallel by default)
+Each job sets up through the repository's composite action (`.github/actions/setup`), which runs
+`setup.ps1` — the pinned snapshot and the Playwright browsers among what it provisions. Then:
+
+- the `smoke` job runs `smoke-nr-frozen` and `smoke-nr-ui` on every push: kitchen-sink through the
+  frozen NR roster engine and the NR UI roster driver;
+- `thorough-conformance` runs `nr-frozen`, every applicable roster spec through the frozen engine over a
+  pool of browser contexts, and `thorough-nr-ui-roster` runs `nr-ui-frozen`, every one through the UI
+  driver in one warm browser — both whenever the gate owes the thorough jobs ([`scripts/ci-gate.json`](../scripts/ci-gate.json)).
 
 ### Skipping
 
-Set `NR_FROZEN_SKIP=true` to skip frozen tests, or simply don't download the HAR file —
-the fixture gracefully skips when the HAR is not found.
+Without the HAR the frozen NR roster tests skip — the store-direct lane's and the UI driver's — and
+`NR_FROZEN_SKIP=true` (`NR_UI_FROZEN_SKIP=true` for the UI driver) skips them on purpose. Only an
+unprofiled run takes that quietly. A profile that runs one of those lanes — `pre-push`, `nr-frozen`,
+`nr-ui-frozen`, the smoke profiles — refuses its skip switch (exit 5), and when the HAR is missing it exits
+8, naming the lane and `setup.ps1`, instead of passing on nothing ([running-tests.md](running-tests.md#the-engine-composition-check)).
+To leave the frozen lanes out of a run, narrow it: `--filter "Engine!=FrozenNrRoster&Engine!=FrozenNrUiRoster"`.
 
 ## Automated Daily Updates
 
@@ -221,7 +235,8 @@ store-direct roster export.
 ## Key Design Decisions
 
 - **Separate test collection** — Frozen tests run independently from live NR tests, in their
-  own xUnit collection (`FrozenNewRecruit`) with a dedicated fixture.
+  own xUnit collection (`FrozenNrRoster`) with a dedicated fixture (`FrozenNrRosterFixture`, a pool of
+  browser contexts over one browser).
 - **External HAR storage** — HAR files (~11 MB) are stored as GitHub Releases in a separate
   repo to keep the spec repository lightweight.
 - **Version pinning** — `testdata.json` pins the exact release tag, ensuring reproducible
@@ -243,8 +258,10 @@ store-direct roster export.
 | `setup.ps1` | Clones dependencies and downloads pinned test data |
 | `src/BattleScribeSpec.NewRecruit/HarRecorder.cs` | Recording, post-processing, version extraction |
 | `src/BattleScribeSpec.NewRecruit.HarTool/` | Console app for recording HAR snapshots |
-| `tests/Infrastructure/FrozenNewRecruitFixture.cs` | xUnit fixture (browser context pool for parallel execution) |
-| `tests/Conformance/FrozenNewRecruitConformanceTests.cs` | Parallel conformance tests against frozen snapshot |
-| `.github/workflows/ci.yml` | `nr-frozen` CI job |
+| `tests/Infrastructure/FrozenNrRosterFixture.cs` | xUnit fixture (browser context pool for parallel execution) |
+| `tests/Conformance/FrozenNrRosterConformanceTests.cs` | The frozen NR roster lane: one `[Fact]` that runs every applicable spec over the pool |
+| `tests/Conformance/FrozenNrUiRosterConformanceTests.cs` | The frozen NR UI roster lane, through the UI driver |
+| `tests/TestProfiles/TestProfiles.cs` | The `nr-frozen`, `nr-ui-frozen` and smoke profiles |
+| `.github/workflows/ci.yml` | The `smoke`, `thorough-conformance` and `thorough-nr-ui-roster` jobs |
 | `.github/workflows/update-nr-snapshot.yml` | Daily snapshot update workflow |
 | `.testdata/newrecruit-har/` | Downloaded HAR files (gitignored) |

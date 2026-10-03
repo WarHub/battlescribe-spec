@@ -496,7 +496,9 @@ internal static class TestHost
             messages.AddRange(applied.Select(a => $"{Prefix} {profile.Name}: {a}"));
         }
 
-        // 6. Strict on every run outside an IDE: `dotnet test` has it from MSBuild, a direct run gets it here.
+        // 6. Strict unless a direct, unprofiled run names another policy: `dotnet test` and `dotnet run` have it from
+        //    MSBuild (a second one was refused above, as was a profiled run naming another); a direct run naming none
+        //    gets it here.
         if (session == TestSession.Direct && Named(items, "zero-tests-policy").Count == 0)
         {
             items.Add(new Item("zero-tests-policy", ["--zero-tests-policy", "strict"], ["strict"]));

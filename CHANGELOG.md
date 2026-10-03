@@ -368,6 +368,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **One home for running the tests, and the docs stop describing a runner the suites left** — the
+  commands live in AGENTS.md's "Build & test", and the model behind them in a new
+  `docs/running-tests.md`: the test app and its one entry point, test profiles and the registry, how a
+  profiled run treats each kind of environment switch, the strict zero-tests policy and the
+  engine-composition check, every refusal and exit code, why CI runs lanes with `dotnet run`, reporting,
+  and the usage telemetry the test platform and the .NET SDK send by default (how to turn each off; CI
+  turns off the platform's). The skills link there instead of carrying their own copies of the one-spec
+  command, which had been copied into four places. **The one-spec command now narrows `pre-push`**
+  (`-p:TestProfile=pre-push --filter "DisplayName~my-spec-id"`): the bare filter it replaces also
+  selected the spec's `BsRosterUi` row, which launches the BattleScribe desktop app wherever `setup.ps1`
+  provisioned it, and three sequential and live rows that skip without their switches. **Claims that
+  were false, now true:** `dotnet run` shows every result only with `--output Detailed` (CI's host adds
+  it; AGENTS.md and README said it streamed them anyway); `docs/frozen-nr-testing.md` and README named
+  an `nr-frozen` CI job and test classes that do not exist, an unhashed `testdata.json` pin, a
+  Playwright install path from before `artifacts/`, and a frozen lane that "gracefully skips" without
+  its HAR (a profiled run exits 8, and refuses `NR_FROZEN_SKIP`); `docs/ci-guide.md`'s workflow
+  installed a floating `10.0.x` SDK instead of the pinned band (it now installs from the spec repo's
+  `global.json` and builds the CLI inside that checkout, where the pin applies), and claimed tag filters
+  reach every conformance test when the five single-test aggregate lanes carry no `Tag`; the
+  `newrecruit-adapter` skill and `docs/nr-behavioral-differences.md` named fixtures and classes renamed
+  long ago; `docs/adapter-protocol.md` and `docs/gamedata-coverage.md` said `BSSPEC_UPDATE_SNAPSHOTS`
+  works under `dotnet test` (an unprofiled run only; a profiled one refuses it); AGENTS.md said the
+  desktop-app tests "self-skip" (a `bs-ui-*` profile exits 8, naming the fix); the `writing-specs` skill
+  put a new spec under `specs/{category}/`, a path from before the roster/GameData split; and the
+  `managing-skills` inventory listed a reference file that does not exist, left out one that does, and
+  said nothing in CI reads the skills. That inventory is now checked: **`SkillInventoryLintTests`**
+  fails when a skill's `name` differs from its directory or the table disagrees with `.agents/skills/`
+  (a skill or a reference file added, removed or misnamed). AGENTS.md's `pre-push` figure — 2,571 tests
+  in 4m27s, measured in August on VSTest — is re-measured on the new runner: 3,332 tests in 4m59s. The
+  concurrency measurements say they were taken under VSTest, and the remarks that still described the
+  VSTest world (`ConcurrencyPolicy`, `ConcurrencyPlan`, `Utf8Stdio`, the sequential live NR UI class's
+  usage line) describe this one.
+
 - **Tests find their checkout from their own binaries, never the working directory, and the compiler
   holds them to it** — test code located the repository root five different ways: `TestPaths`' own walk
   up from the binaries, four inline copies of it (each with a hard-coded `debug` pivot) in the adapter and

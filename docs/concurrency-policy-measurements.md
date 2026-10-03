@@ -21,6 +21,14 @@
 > | Costs (measured) | `MemPerInstanceBytes`: **1.22–1.44 GiB** per worker | `MemPerContextBytes`: **163–225 MiB** per context |
 > | Which one does CI run? | the `checks` / batch lanes | **every NewRecruit conformance lane** |
 >
+> **Measured under VSTest.** Every `dotnet test` wall below was timed when the suites still ran on
+> VSTest: the tests ran in a `testhost` process under `dotnet test`, the same fixture pools inside it.
+> They run on Microsoft.Testing.Platform now, in the test project's own executable, started by
+> `dotnet test` or `dotnet run` (see [running-tests.md](running-tests.md)). The move left the fixture
+> pools and the engines alone, which is what the knees and the per-context costs measure; each wall also
+> holds VSTest's own start-up, and none was re-measured on the new runner. The `testhost` trees the
+> hygiene steps reap are VSTest's.
+>
 > `ConcurrencyPolicy.For` **used to** set `PoolSize: workers` — feeding **one number to both axes**.
 > §7 measured how wrong that is for the context axis; **§8 records the code change that separated
 > them** (issue #314). The two axes now have four separate declared facts and share no number.
@@ -889,7 +897,7 @@ why one integer could never have served both:
 
 **Every NewRecruit CI conformance lane runs the xUnit path.** `nr-frozen`, `nr-ui-frozen`,
 `nr-editor-frozen`, `nr-editor-ui-frozen` are all test-profile runs of the test project (see `ci.yml`;
-`dotnet test -p:TestProfile=...` when this was measured, under VSTest, and the test app started with
+`dotnet test -p:TestProfile=<name>` when this was measured, under VSTest, and the test app started with
 `--test-profile` since the suites moved to Microsoft.Testing.Platform — the same process and the same
 fixture pools either way). The axis that governs CI's wall-clock is the one that had never been measured.
 
