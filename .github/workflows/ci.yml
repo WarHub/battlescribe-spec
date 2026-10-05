@@ -404,6 +404,70 @@ jobs:
           path: artifacts/telemetry/
           if-no-files-found: ignore
 
+  # ── WINDOWS PRE-PUSH — every push. The offline `pre-push` profile, whole, on windows-latest. ──
+  #
+  # Development happens on Windows and every other job runs on Linux, so the only Windows check used to
+  # be a developer's local pre-push — run several times per layer of a stack, because Windows-only
+  # failures are real here: console code pages (#512), path-length limits, line endings, process
+  # handling. This job makes that check CI's, beside the Linux jobs, and local pre-push optional (#535).
+  windows-pre-push:
+    if: github.event.pull_request.draft != true
+    runs-on: windows-latest
+    timeout-minutes: 60
+    # Bash, as on the Linux runners (Git Bash here), so every run line reads the same in every job.
+    defaults:
+      run:
+        shell: bash
+    # pre-push runs the NR Editor GameData UI lane; same switch, and same reason it is CI's, as smoke's.
+    # On the job rather than a step, because both steps run the pre-push profile.
+    env:
+      NR_GAMEDATA_UI_DIAGNOSTICS: 1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      # pre-push's lanes need both NR snapshots, the browsers, and a plain JDK for the engine-jar patch.
+      # No desktop app, so no agent, no JavaFX and no display.
+      - name: Set up
+        uses: ./.github/actions/setup
+        with:
+          app-client-id: ${{ vars.WARHUB_BOT_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.WARHUB_BOT_APP_PRIVATE_KEY }}
+          setup-args: -SkipJavaAgent -SkipWh40k
+          java: plain
+          nr-caches: 'true'
+          playwright: 'true'
+          agent-jar: 'false'
+      - name: Build
+        id: build
+        run: dotnet build -p:FunctionalBuild=true
+      # pre-push covers both test projects: one step each.
+      - name: pre-push — BattleScribeSpec.Tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 30
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile pre-push
+      - name: pre-push — BattleScribeSpec.Cli.Tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 10
+        run: dotnet run --project tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build -- --test-profile pre-push
+      - name: Upload UI diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-pre-push-ui-diagnostics
+          path: |
+            artifacts/nr-ui-diagnostics*/
+            artifacts/nr-gamedata-ui-diagnostics*/
+          if-no-files-found: ignore
+      - name: Upload telemetry
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: telemetry-${{ github.job }}-${{ strategy.job-index || '0' }}
+          path: artifacts/telemetry/
+          if-no-files-found: ignore
+
   # ── THOROUGH conformance (opt-in): the full offline + frozen-NR suites that the
   #    every-push lanes trim to kitchen-sink — all of them except the NR UI roster lane, which is
   #    thorough-nr-ui-roster's below. ──
@@ -719,7 +783,7 @@ jobs:
   #    to read as a pass. CiWorkflowDriftTests.CiGate_NeedsEveryOtherJob keeps `needs` complete. ──
   ci-gate:
     if: always()
-    needs: [gate, checks, docker, smoke, thorough-conformance, thorough-nr-ui-roster, thorough-ui-bs, nr-conformance]
+    needs: [gate, checks, docker, smoke, windows-pre-push, thorough-conformance, thorough-nr-ui-roster, thorough-ui-bs, nr-conformance]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

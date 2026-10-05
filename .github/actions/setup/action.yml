@@ -126,36 +126,38 @@ runs:
         repositories: newrecruit-har,battlescribe-archive
 
     # The BattleScribe project IKVM-compiles lib/battlescribe/lib/*.jar at build time, so every job
-    # that builds the solution needs the app.
+    # that builds the solution needs the app. Every key carries runner.os: the windows-pre-push job
+    # runs this action too, and an archive saved on one OS is not restored on another.
     - name: Cache the BattleScribe app
       uses: actions/cache@v6
       with:
         path: lib/battlescribe
-        key: bsapp-${{ hashFiles('testdata.json') }}
+        key: bsapp-${{ runner.os }}-${{ hashFiles('testdata.json') }}
     - name: Cache the frozen NR HAR
       if: inputs.nr-caches == 'true'
       uses: actions/cache@v6
       with:
         path: .testdata/newrecruit-har
-        key: nrhar-${{ hashFiles('testdata.json') }}
+        key: nrhar-${{ runner.os }}-${{ hashFiles('testdata.json') }}
     - name: Cache the frozen NR Editor snapshot
       if: inputs.nr-caches == 'true'
       uses: actions/cache@v6
       with:
         path: .testdata/nr-editor
-        key: nreditor-${{ hashFiles('testdata.json') }}
+        key: nreditor-${{ runner.os }}-${{ hashFiles('testdata.json') }}
+    # Where Playwright keeps its browsers, which differs per OS (setup.ps1 resolves the same paths).
     - name: Cache the Playwright browsers
       if: inputs.playwright == 'true'
       uses: actions/cache@v6
       with:
-        path: ~/.cache/ms-playwright
-        key: pw-linux-${{ hashFiles('Directory.Packages.props') }}
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
+        key: pw-${{ runner.os }}-${{ hashFiles('Directory.Packages.props') }}
     - name: Cache the BS UI Java agent
       if: inputs.agent-jar == 'true'
       uses: actions/cache@v6
       with:
         path: src/bs-ui-java-agent/bs-ui-java-agent.jar
-        key: bsjar-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
+        key: bsjar-${{ runner.os }}-${{ hashFiles('src/bs-ui-java-agent/**', 'testdata.json') }}
 
     # BEFORE setup.ps1, in every job. setup.ps1 compiles the engine-jar patch tool with JAVA_HOME (it
     # skips its own Liberica download under CI=true), and two jobs used to run it before setup-java,

@@ -103,7 +103,8 @@ public static GameSystem CreateGameSystem(
 dotnet build --no-restore
 ```
 
-Then run the offline gate, `pre-push` — the command is in [AGENTS.md, "Build & test"](../../../AGENTS.md#build--test).
+Then run the tests the change reaches (`--filter`); CI runs the offline gate, `pre-push`, on every PR, and running
+it locally is optional — the commands are in [AGENTS.md, "Build & test"](../../../AGENTS.md#build--test).
 A bare `dotnet test` is not the gate: it runs both test projects unfiltered, the desktop-app lanes included
 wherever the app is provisioned.
 
@@ -119,7 +120,7 @@ Use this checklist for every protocol type change:
 - [ ] **Roster/RosterRunner.cs**: Added assertion logic in relevant Assert* method
 - [ ] **JavaModelFactory.cs**: Updated factory method (if BattleScribe needs it)
 - [ ] **Build passes**: `dotnet build --no-restore`
-- [ ] **Tests pass**: `pre-push` (AGENTS.md, "Build & test")
+- [ ] **Tests pass**: the ones the change reaches locally, `pre-push` in CI (AGENTS.md, "Build & test")
 
 ## Common mistakes
 

@@ -76,13 +76,13 @@ internal static class TestProfiles
 
     private static readonly IReadOnlyDictionary<string, string?> NoEnv = new Dictionary<string, string?>();
 
-    /// <summary>Every profile, grouped as the lanes are: local gate and CI unit lanes, smoke, thorough, live, sequential.</summary>
+    /// <summary>Every profile, grouped as the lanes are: the offline gate and CI unit lanes, smoke, thorough, live, sequential.</summary>
     public static IReadOnlyList<TestProfile> All { get; } =
     [
-        // ── The local gate and the CI unit lanes.
+        // ── The offline gate and the CI unit lanes.
         Profile("pre-push",
-            "The gate AGENTS.md tells every contributor to run before every push, so it runs everything that is "
-            + "OFFLINE and CHEAP and nothing else: lint, the in-process BattleScribe engines, and the frozen NR lanes "
+            "The offline gate: CI's windows-pre-push job runs it on every PR, and running it locally is optional. It "
+            + "runs everything that is OFFLINE and CHEAP and nothing else: lint, the in-process BattleScribe engines, and the frozen NR lanes "
             + "(HAR replay and the local NR Editor snapshot, Playwright included; those cost seconds). It covers both "
             + "test assemblies. Its exclusions are not written here: the filter is derived from EngineLane.InPrePush, "
             + "so every engine lane carries a recorded decision and its measured cost, and a lane that needs the "

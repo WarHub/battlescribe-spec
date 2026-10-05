@@ -103,8 +103,8 @@ internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, str
 
 /// <summary>
 /// <b>Every engine lane in the suite, and the decision each one carries.</b> The one record of which
-/// <c>Engine</c> trait values exist, what they need, and whether the gate every contributor runs before
-/// every push includes them.
+/// <c>Engine</c> trait values exist, what they need, and whether the offline gate, <c>pre-push</c>,
+/// includes them.
 /// </summary>
 /// <remarks>
 /// <para>

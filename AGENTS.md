@@ -138,7 +138,7 @@ that restates a field is a second record that drifts from the first.
 
 ```bash
 dotnet restore && dotnet build                                                     # first time
-dotnet test -p:TestProfile=pre-push                                                # offline gate (no app), once per pushed tree
+dotnet test -p:TestProfile=pre-push                                                # offline gate (no app); CI runs it, locally optional
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-push --filter "DisplayName~my-spec-id"  # one spec: its lint + every per-spec offline engine (not the aggregate NR lanes)
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs --output Detailed   # a lane, every result as it finishes
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles # what each profile runs
@@ -217,19 +217,19 @@ used to be shadowed by went stale on every Dependabot bump that reached a projec
 `ProjectReference`, and failed CI for it; the comment at the top of that file has the history. A
 package change is a one-line edit there and nothing else.
 
-**Run `pre-push` once, on the tree you are about to push.** It is the **offline** gate: lint, the
-in-process BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR
-Editor snapshot, and the two frozen Playwright UI drivers. No desktop app, and no test reaches any site.
-While you iterate, run the `lint` profile, the tests you touched (`--filter`), or a `smoke-*` profile
-instead; an edit to comments or docs alone after a green `pre-push` needs no re-run (`lint` covers the
-docs). The tools send usage telemetry of their own by default — the test platform, and the .NET SDK
-under `dotnet test` or `dotnet run`. `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off both,
-`TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (which CI sets) only the platform's. It needs what `setup.ps1`
-provisions, and says so rather than leaving a green run that never ran a lane: a frozen lane that skips
-whole for want of its snapshot fails the run with exit 8, naming the lane and the fix; with no
-Playwright browsers the browser tests fail outright (exit 2), and the lanes that went empty are named
-with the fix all the same. Its skips are specs that opt an engine out and, without the wh40k data, the
-real-world tests. The critical path is the in-process `BsRoster` lane, not any UI lane.
+**Local `pre-push` is optional.** Run the tests you touched (`--filter`), the `lint` profile, or a
+`smoke-*` profile, and push when they pass: CI runs `pre-push` whole on Windows on every PR
+(`windows-pre-push`, which `ci-gate` requires) beside the Linux jobs, and that is the verdict. It is the
+**offline** gate: lint, the in-process BattleScribe engines (roster + gamedata), and every frozen NR
+lane — HAR replay, the local NR Editor snapshot, and the two frozen Playwright UI drivers. No desktop
+app, and no test reaches any site. The tools send usage telemetry of their own by default — the test
+platform, and the .NET SDK under `dotnet test` or `dotnet run`. `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns
+off both, `TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (which CI sets) only the platform's. `pre-push` needs
+what `setup.ps1` provisions, and says so rather than leaving a green run that never ran a lane: a
+frozen lane that skips whole for want of its snapshot fails the run with exit 8, naming the lane and
+the fix; with no Playwright browsers the browser tests fail outright (exit 2), and the lanes that went
+empty are named with the fix all the same. Its skips are specs that opt an engine out and, without the
+wh40k data, the real-world tests. The critical path is the in-process `BsRoster` lane, not any UI lane.
 
 **Not in `pre-push`:** the BattleScribe desktop-app lanes (`bs-ui-roster`, `bs-ui-gamedata` — run them
 when you touch the BS UI drivers or `src/bs-ui-java-agent/`), the live lanes that open sessions on
