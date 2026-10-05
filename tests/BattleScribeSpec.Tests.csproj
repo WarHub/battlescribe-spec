@@ -41,15 +41,6 @@
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- Copy IKVM-generated assemblies that aren't transitively referenced -->
-  <Target Name="CopyIkvmAssemblies" AfterTargets="Build">
-    <PropertyGroup>
-      <_BattleScribeBinPath>$(ArtifactsPath)\bin\BattleScribeSpec.BattleScribe\$(ArtifactsPivots)\</_BattleScribeBinPath>
-    </PropertyGroup>
-    <ItemGroup>
-      <IkvmDlls Include="$(_BattleScribeBinPath)DataUtils.dll;$(_BattleScribeBinPath)CommonsIo.dll;$(_BattleScribeBinPath)KotlinStdlib.dll;$(_BattleScribeBinPath)KotlinStdlibCommon.dll;$(_BattleScribeBinPath)Stax.dll;$(_BattleScribeBinPath)StaxApi.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(IkvmDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-  </Target>
+  <Import Project="..\src\BattleScribeSpec.BattleScribe\BattleScribeIkvmConsumer.targets" />
 
 </Project>
