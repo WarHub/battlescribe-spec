@@ -713,7 +713,7 @@ jobs:
           path: artifacts/telemetry/
           if-no-files-found: ignore
 
-  # ── LIVE NR conformance (opt-in). ──
+  # ── LIVE NR conformance (opt-in): newrecruit.eu and the NR Editor deployment. ──
   #
   # Gated on `live`, not `thorough` (scripts/thorough-inputs.mjs has the reasoning): every stack PR
   # owes the thorough suites, but ten of them must not drive newrecruit.eu at once on every restack.
@@ -724,7 +724,7 @@ jobs:
     needs: [gate]
     if: needs.gate.outputs.live == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - name: Set up
@@ -765,8 +765,28 @@ jobs:
         with:
           name: battlescribe-conformance-report
           path: artifacts/battlescribe-conformance-report.json
-      # `if: always()` — this is the ONE lane that drives a third party's live site, so it is the one
-      # lane whose diagnostics matter most on a FAILING run, and it was the only lane in this workflow
+      # The frozen NR Editor lanes replay a pinned snapshot; only these notice when the deployment
+      # (giloushaker.github.io/nr-editor/, a volunteer's) drifts from it. One session each, from that
+      # host's LiveLoadBudget. After the report, so a drifted deployment does not cost it.
+      - name: Run NR Editor conformance tests
+        timeout-minutes: 10
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-live
+      # NR_GAMEDATA_UI_DIAGNOSTICS: same switch, and same reason it is CI's, as smoke's step.
+      - name: Run NR Editor UI conformance tests
+        timeout-minutes: 10
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-ui-live
+        env:
+          NR_GAMEDATA_UI_DIAGNOSTICS: 1
+      - name: Upload NR Editor GameData UI diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nr-conformance-nr-gamedata-ui-diagnostics
+          path: |
+            artifacts/nr-gamedata-ui-diagnostics*/
+          if-no-files-found: ignore
+      # `if: always()` — this is the ONE job that drives third parties' live sites, so it is the one
+      # whose diagnostics matter most on a FAILING run, and it was the only job in this workflow
       # without this step. When it crashed (#318) the traces died with the runner: no pool size, no
       # span timings, nothing to distinguish a resource exhaustion from a network blip. Telemetry is
       # cheap; a crash you cannot read twice is not.
