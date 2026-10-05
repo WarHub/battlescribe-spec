@@ -21,11 +21,12 @@
     the destination path.
     Already-present items are skipped.
 
-    Requires the GitHub CLI (gh) for test data downloads.
+    Requires the GitHub CLI (gh) for test data downloads (not with -LinkFrom).
     Requires the .NET SDK (dotnet) for Playwright browser installation.
 
 .PARAMETER Force
     Re-download test data and re-install Playwright browsers even if already present.
+    With -LinkFrom, re-link instead of re-downloading.
 
 .PARAMETER SkipPlaywright
     Skip Playwright browser installation.
@@ -38,6 +39,15 @@
     Skip cloning the wh40k-9e real-world test data. Safe for the fast CI lane and any
     workflow that does not run the real-world integration tests.
 
+.PARAMETER LinkFrom
+    Take what this script downloads — the test data, the BattleScribe app, ASM and the Liberica
+    JDK — from another checkout it has already set up, as hard links: a new worktree is ready in
+    seconds, with no GitHub token. Each item must pass the check that lets one already on disk
+    stand without a download, against THIS checkout's pins; one the other checkout lacks or holds
+    at another pin is refused. The submodule, the Java builds and Playwright run as usual. Both
+    checkouts must be on one volume, and the links share their bytes: write nothing into lib/ or
+    .testdata/, and run ./setup.ps1 without -LinkFrom to replace them with downloads of your own.
+
 .EXAMPLE
     ./setup.ps1
 
@@ -49,17 +59,28 @@
 
 .EXAMPLE
     ./setup.ps1 -SkipJavaAgent
+
+.EXAMPLE
+    ./setup.ps1 -LinkFrom ../../..
+
+    In a worktree under .claude/worktrees/: link what the main checkout downloaded.
 #>
 param(
     [switch]$Force,
     [switch]$SkipPlaywright,
     [switch]$SkipJavaAgent,
-    [switch]$SkipWh40k
+    [switch]$SkipWh40k,
+    [string]$LinkFrom
 )
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = $PSScriptRoot
+
+if ($LinkFrom) {
+    $LinkFrom = (Resolve-Path $LinkFrom).Path
+    if ($LinkFrom.TrimEnd('\', '/') -eq $repoRoot.TrimEnd('\', '/')) { throw "-LinkFrom names this checkout itself" }
+}
 
 # Locate a JDK home under $root, tolerating the three extraction layouts we produce:
 #   - bin directly under $root            (Linux: tar --strip-components=1)
@@ -192,11 +213,65 @@ function Get-ContentPinMismatch {
         $expected = "$($Sha256.$file)".Trim()
         $actual = (Get-FileHash $path -Algorithm SHA256).Hash
         if ($actual -ne $expected.ToUpperInvariant()) {
-            return "'$file' is sha256 $($actual.ToLowerInvariant()), testdata.json pins $expected"
+            return "'$file' is sha256 $($actual.ToLowerInvariant()), the pin is $expected"
         }
     }
 
     return $null
+}
+
+# Why $Destination does not hold $Pin, as a sentence, or $null when it does: its .tag marker names
+# the pin and every content pin matches. The check TestDataPinDriftTests applies to a working copy,
+# and the one that decides whether a download is already present.
+function Get-PinMismatch {
+    param(
+        [Parameter(Mandatory)][string]$Pin,
+        $Sha256,
+        [Parameter(Mandatory)][string]$Destination
+    )
+
+    $marker = Join-Path $Destination '.tag'
+    if (-not (Test-Path $marker)) { return "'$Destination' has no .tag marker" }
+    $actual = (Get-Content $marker -Raw).Trim()
+    if ($actual -ne $Pin) { return "'$Destination' holds '$actual', the pin is '$Pin'" }
+    if ($Sha256) { return Get-ContentPinMismatch $Sha256 $Destination }
+    return $null
+}
+
+# -LinkFrom: provide $Destination from the same place in the provisioned checkout, once $Mismatch —
+# the check that decides whether a download of it is already present — passes there. Never
+# downloads: a fixture the source lacks or holds at another pin is a refusal, because linking it
+# would replay a snapshot this checkout does not pin (the fixture lookups stop at the checkout's own
+# root, so nothing else would notice).
+#
+# Hard links, file by file, rather than one junction per directory: `git worktree remove` follows a
+# junction and empties the directory it points to, while deleting a hard link deletes only its name.
+function Install-FromLinkSource {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Destination,
+        [Parameter(Mandatory)][scriptblock]$Mismatch
+    )
+
+    $source = Join-Path $LinkFrom ([IO.Path]::GetRelativePath($repoRoot, $Destination))
+    $why = if (Test-Path $source) { & $Mismatch $source } else { "'$source' does not exist" }
+    if ($why) {
+        throw "[$Name] refusing to link from ${LinkFrom}: $why. Link from a checkout provisioned at " +
+            "this checkout's pin, or run ./setup.ps1 without -LinkFrom to download it."
+    }
+
+    if (Test-Path $Destination) { Remove-Item $Destination -Recurse -Force }
+    try {
+        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+        foreach ($item in Get-ChildItem $source -Recurse -Force) {
+            $path = Join-Path $Destination ([IO.Path]::GetRelativePath($source, $item.FullName))
+            if ($item.PSIsContainer) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+            else { New-Item -ItemType HardLink -Path $path -Target $item.FullName | Out-Null }
+        }
+    } catch {
+        throw "[$Name] could not hard-link $source into ${Destination} (both checkouts must be on one volume): $_"
+    }
+    Write-Host "  [OK] Linked from $source" -ForegroundColor Green
 }
 
 Write-Host "Setting up battlescribe-spec dependencies..." -ForegroundColor Cyan
@@ -219,11 +294,14 @@ $testdataDir = Join-Path $repoRoot '.testdata'
 $wh40kTag = 'v9.8.0'
 $wh40kDir = Join-Path $testdataDir 'wh40k-9e'
 $wh40kTagMarker = Join-Path $wh40kDir '.tag'
+$wh40kMismatch = { param($dir) Get-PinMismatch $wh40kTag $null $dir }
 
 if ($SkipWh40k) {
     Write-Host "[SKIP] wh40k-9e clone (-SkipWh40k)" -ForegroundColor DarkGray
-} elseif (-not $Force -and (Test-Path $wh40kTagMarker) -and ((Get-Content $wh40kTagMarker -Raw).Trim() -eq $wh40kTag)) {
+} elseif (-not $Force -and -not (& $wh40kMismatch $wh40kDir)) {
     Write-Host "[OK] wh40k-9e already cloned ($wh40kTag)" -ForegroundColor Green
+} elseif ($LinkFrom) {
+    Install-FromLinkSource 'wh40k-9e' $wh40kDir $wh40kMismatch
 } else {
     if (Test-Path $wh40kDir) { Remove-Item $wh40kDir -Recurse -Force }
     Write-Host "Cloning wh40k-9e (shallow, tag $wh40kTag)..." -ForegroundColor Yellow
@@ -257,16 +335,21 @@ if (Test-Path $configPath) {
                 Write-Host "[$key] release: $repo @ $tag" -ForegroundColor Cyan
 
                 $contentPins = if ($entry.PSObject.Properties['sha256']) { $entry.sha256 } else { $null }
+                $pinMismatch = { param($dir) Get-PinMismatch $tag $contentPins $dir }
 
                 $tagMarker = Join-Path $destDir '.tag'
-                if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $tag)) {
-                    $mismatch = if ($contentPins) { Get-ContentPinMismatch $contentPins $destDir } else { $null }
-                    if (-not $mismatch) {
-                        Write-Host "  [OK] Already downloaded ($tag)" -ForegroundColor Green
-                        continue
-                    }
-                    # The marker claims the pin and the bytes say otherwise, so the marker is the
-                    # thing that is wrong. Re-download over it rather than trusting either.
+                $mismatch = & $pinMismatch $destDir
+                if (-not $Force -and -not $mismatch) {
+                    Write-Host "  [OK] Already downloaded ($tag)" -ForegroundColor Green
+                    continue
+                }
+                if ($LinkFrom) {
+                    Install-FromLinkSource $key $destDir $pinMismatch
+                    continue
+                }
+                if (-not $Force -and (Test-Path $destDir)) {
+                    # The checkout holds something other than the pin — a marker that claims it over
+                    # bytes that say otherwise, or another pin. Re-download rather than trust either.
                     Write-Warning "[$key] $mismatch — re-downloading."
                 }
 
@@ -326,8 +409,13 @@ if (Test-Path $configPath) {
                 # warn-and-continue on mismatch, that is how a fixture documented as frozen came
                 # to serve the upstream branch tip on every machine and every CI run.
                 $tagMarker = Join-Path $destDir '.tag'
-                if (-not $Force -and (Test-Path $tagMarker) -and ((Get-Content $tagMarker -Raw).Trim() -eq $commit)) {
+                $pinMismatch = { param($dir) Get-PinMismatch $commit $null $dir }
+                if (-not $Force -and -not (& $pinMismatch $destDir)) {
                     Write-Host "  [OK] Already downloaded ($($commit.Substring(0, 12)))" -ForegroundColor Green
+                    continue
+                }
+                if ($LinkFrom) {
+                    Install-FromLinkSource $key $destDir $pinMismatch
                     continue
                 }
 
@@ -362,10 +450,11 @@ $asmDir = Join-Path $repoRoot 'lib/asm'
 $asmJar = Join-Path $asmDir "asm-$asmVersion.jar"
 $asmUrl = "https://repo1.maven.org/maven2/org/ow2/asm/asm/$asmVersion/asm-$asmVersion.jar"
 
-$asmOk = (Test-Path $asmJar) -and
-    ((Get-FileHash $asmJar -Algorithm SHA256).Hash -eq $asmSha256)
-if (-not $Force -and $asmOk) {
+$asmMismatch = { param($dir) Get-ContentPinMismatch ([pscustomobject]@{ "asm-$asmVersion.jar" = $asmSha256 }) $dir }
+if (-not $Force -and -not (& $asmMismatch $asmDir)) {
     Write-Host "  [OK] ASM $asmVersion already vendored" -ForegroundColor Green
+} elseif ($LinkFrom) {
+    Install-FromLinkSource 'asm' $asmDir $asmMismatch
 } else {
     if (Test-Path $asmDir) { Remove-Item $asmDir -Recurse -Force }
     New-Item -ItemType Directory -Path $asmDir -Force | Out-Null
@@ -398,11 +487,16 @@ if ($SkipJavaAgent -or $env:CI -eq 'true') {
 
     # Re-extract if forced, version-mismatched, OR a legacy non-normalized layout is present
     # (correct version on .tag but no top-level bin/ — e.g. an install from before normalization).
-    $libericaReady = (Test-Path $libericaTagFile) -and
-        ((Get-Content $libericaTagFile -Raw).Trim() -eq $libericaVersion) -and
-        (Test-Path (Join-Path $libericaDir 'bin'))
-    if (-not $Force -and $libericaReady) {
+    $libericaMismatch = {
+        param($dir)
+        $reason = Get-PinMismatch $libericaVersion $null $dir
+        if (-not $reason -and -not (Test-Path (Join-Path $dir 'bin'))) { $reason = "'$dir' has no top-level bin/" }
+        $reason
+    }
+    if (-not $Force -and -not (& $libericaMismatch $libericaDir)) {
         Write-Host "  [OK] Already downloaded ($libericaVersion)" -ForegroundColor Green
+    } elseif ($LinkFrom) {
+        Install-FromLinkSource 'liberica-jdk' $libericaDir $libericaMismatch
     } else {
         if (Test-Path $libericaDir) { Remove-Item $libericaDir -Recurse -Force }
         $staging = Join-Path $libericaDir '.staging'
