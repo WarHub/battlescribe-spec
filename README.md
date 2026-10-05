@@ -322,4 +322,4 @@ and running frozen tests.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).

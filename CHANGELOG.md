@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **An MIT licence (#528).** The README pointed at a `LICENSE` file the repository did not have, so
+  nobody had been granted any right to use the suite; `LICENSE` now grants MIT, as `wham` does.
+
 - **What the engines do with invalid and edge-of-range input (#25)** — the spike #25 was rescoped
   into, and the specs and harness fixes it turned up. Every roster mutation was probed on all four
   lanes with inputs at or past the edge of what it takes (counts past a max, below a min, zero,
