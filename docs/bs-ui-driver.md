@@ -81,10 +81,12 @@ This prevents interference with the user's real BattleScribe installation.
 BS data directory before launch:
 
 1. Removes the game system directory **this stager** put under `data/` for the previous spec.
-2. Creates a subdirectory named by the game system ID under `data/`.
-3. Writes all `.gst` and `.cat` files.
-4. Generates an `index.bsi` file — a BattleScribe data index XML that lists all data files
-   with their IDs, names, and types.
+2. Stops there if `data/<game system ID>/` already holds exactly the files it would write.
+3. Writes all `.gst` and `.cat` files into a fresh directory **beside** `data/`, with an
+   `index.bsi` — a BattleScribe data index XML that lists all data files with their IDs, names,
+   and types.
+4. Renames that directory into place as `data/<game system ID>/`, after renaming any directory
+   already there out of `data/`.
 
 The XML files are generated from Protocol types via `CatXmlGenerator` (from the
 `BattleScribeSpec.NewRecruit` project which shares the XML generation logic).
@@ -109,8 +111,15 @@ Two properties are load-bearing and both have tests in `tests/Features/BsUiDataS
   that isn't mine" sweep would have one engine destroying another's staged data the first time two
   of them shared a home, surfacing as an unrelated spec failing.
 - **Best-effort.** BattleScribe keeps handles open on data files it has loaded, and Windows refuses
-  to delete a directory holding one, so retirement logs `[bs-ui] Could not remove the previously
+  to move a directory holding one, so retirement logs `[bs-ui] Could not remove the previously
   staged game system …` and continues. The current spec's staging is the part that has to succeed.
+
+Steps 2–4 are about a running app, which walks `data/` whenever it likes. A game system appears or
+disappears there in one rename, never file by file, so the app cannot read a half-written file or
+a directory whose catalogues are already gone. And files that would not change are not written at
+all: rewriting the data of a roster the app has open — even with the same bytes — makes it ask "A
+file was modified outside of BattleScribe. Would you like to reload your roster?" (#526). Both have
+tests beside the two above.
 
 The removal takes effect inside a running JVM, not only at the next cold start. `javap` on
 `RosterEditor.jar` traces the combo to a fresh read of `data/`: `actNewRoster` loads
@@ -125,20 +134,29 @@ the `Getting game systems...` dialog string.)
 ## Warm Start (KeepAlive)
 
 When `KeepAlive = true`, the adapter preserves the running BattleScribe process between
-spec runs. On subsequent `Setup()` calls:
+spec runs — but only an app that has not failed and is where the next spec expects it. One spec's
+trouble must not reach the specs after it, whatever the order.
 
-1. Pings the existing agent to verify it's responsive.
-2. Re-stages data files for the new spec, which is also where the previous spec's game system is
-   removed — the data directory outlives every `Setup` on this path, so this is where it accumulated.
-3. Skips JVM startup entirely.
+- **Any failure closes the app.** Every call the engine makes against the app runs once; if it
+  throws — for any reason, with any message — the engine records which spec and call failed, and
+  that spec's own `Cleanup` closes the app (`[bs-ui] spec 'x' failed in RemoveForce (…) — closing
+  that BattleScribe instance …`). Nothing is retried on it. The app is not replaced mid-spec: the
+  runner stops a spec at its first unexpected failure, and an expected one leaves the roster the
+  next step asserts on.
+- **A passing spec's leftovers close it too, and are blamed on it.** Before reusing, `Setup` asks
+  the agent whether its FX thread answers (not `ping`, which a wedged FX thread still answers) and
+  what windows are showing. Anything besides the main window — a dialog, or a `Loading...` spinner
+  still turning — logs `Not reusing the running BattleScribe instance: spec 'x' left [New Roster]
+  (…) open` and starts a fresh one.
+- **The previous spec's roster stays open, and its data is not rewritten under it.** The roster
+  engine has no roster-close step: `rosterCreateRosterAction` replaces that roster, answering
+  BattleScribe's "Continue? Roster has not been saved" with NO, and every state read is gated on the
+  engine having created or loaded its own. What that roster does make dangerous is its game data
+  changing, so a spec whose game system id is already staged with other content — the corpus's many
+  explicit `gs-1` setups make it routine — gets a fresh app rather than a rewrite. The Data Editor
+  loads each spec's files explicitly and has no such roster, so it restages in place.
 
-Any open roster is closed on the Java side, by
-`RosterActions.waitForNewRosterWindowDismissingContinuePrompt` answering BattleScribe's "Continue?
-Roster has not been saved" prompt with NO — not by the C# warm-start path, which has no roster-close
-step.
-
-If the ping fails, falls back to a cold start (kills the old process, launches fresh).
-This is useful for iterative debugging where JVM startup time (~5-10s) is significant.
+Otherwise data is staged as above and JVM startup (~5-10s) is skipped.
 
 ---
 
@@ -192,8 +210,9 @@ action that fails for any reason other than BattleScribe's own judgement has to 
 The last row is the only one `expectFailure` can match, which is the point. Before #25 every row was
 the last row: a deselect of an already-removed selection, a count spinner clamping at the entry's
 max, and the agent's own `count must be >= 0` guard all passed for BattleScribe refusing the action.
-Address and capability failures are raised straight out of the call and are not retried; the gap
-marker is translated after the retry, so what is retried is unchanged.
+Address and capability failures are raised straight out of the call; the gap marker is translated
+after the failure's diagnostic dump. None of them is retried, and every one of them closes the app at
+the end of the spec (see Warm Start).
 
 ### Threading Model
 
@@ -936,10 +955,8 @@ a timing failure.
 
 The offered list is captured while the New Roster dialog is still open (in the same FX dispatch that
 does the selection); by the time the postcondition runs, `#btnDone` has closed that window and there
-is no combo left to ask. The closing sentence is there because `BsUiRosterEngine.RunWithRetryAsync`
-treats any `AgentException` as transient and will run the whole action again — a deterministic
-postcondition cannot benefit from that, and the message says so rather than letting the retry read as
-a flake.
+is no combo left to ask. The closing sentence tells whoever reads the failure not to rerun it hoping
+for a flake: a deterministic postcondition answers the same every time.
 
 #### Available Actions
 

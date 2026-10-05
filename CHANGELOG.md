@@ -899,6 +899,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **One spec's trouble no longer reaches the BattleScribe desktop-app specs after it (#526)** — the
+  `BsRosterUi` and `BsGameDataUi` lanes reuse one running app across specs, and a failure could
+  cascade: a createRoster cut off by BattleScribe's "Would you like to reload your roster?" prompt
+  was retried on the same app, left a New Roster dialog open, and failed the next specs on it. That
+  prompt came from the harness itself, restaging identical game data under the previous spec's open
+  roster. Now any failed call, whatever it said, closes the app at the end of its spec, and nothing is
+  retried (`BS_UI_MAX_RETRIES` is gone; a removeForce that BattleScribe completed before its own
+  NullPointerException now fails with that error, not as "Force not found"). A warm start refuses an
+  app that is unresponsive or showing anything besides its main window, naming the spec that left it
+  so. `BsUiDataStaging` renames each game system into and out of `data/` whole, writes nothing when
+  the disk already holds the files, and the roster engine starts a fresh app rather than rewrite the
+  data of a roster left open. Tests: `BsUiDataStagingTests` (half-way failure, identical staging,
+  `WouldReplaceAsync`) and `BsUiWarmReuseTests`.
+
 - **Redirected stdio is UTF-8 at both ends, whatever the console code page** — on Windows .NET encodes a
   pipe with the console's code page, and the two ends of one pipe need not share a console: an adapter
   started with `CreateNoWindow` gets a hidden console on the OEM code page, while its parent follows

@@ -238,6 +238,34 @@ public sealed class AgentClient : IDisposable
     /// <summary>How long <see cref="ProbeFxThreadAsync"/> waits when the caller names no timeout.</summary>
     public static readonly TimeSpan DefaultFxProbeTimeout = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// Every window showing besides the app's main one, described for a log line, or null when the
+    /// main window is all there is — the state a warm start hands the next spec.
+    /// </summary>
+    public async Task<string?> DescribeWindowsBesidesAsync(string mainWindowTitle, TimeSpan timeout)
+        => DescribeWindowsBesides(await CallAsync("getOpenDialogs", timeout: timeout), mainWindowTitle);
+
+    /// <summary>
+    /// The <c>getOpenDialogs</c> reply, less the main window, as <c>[title] (text)</c> entries.
+    /// </summary>
+    /// <remarks>
+    /// Stricter than the agent's own post-condition (<c>DialogInspector.assertNoUnexpectedModals</c>),
+    /// which also lets BattleScribe's <c>Loading...</c> spinner through: mid-action that spinner is
+    /// progress, but one still turning when a spec is over is the previous spec's work still running
+    /// under the next one. Untitled windows are skipped, as there.
+    /// </remarks>
+    public static string? DescribeWindowsBesides(JsonNode? openDialogs, string mainWindowTitle)
+    {
+        var others = (openDialogs as JsonArray ?? [])
+            .Select(w => (Title: w?["title"]?.GetValue<string>(), Text: w?["text"]?.GetValue<string>()))
+            .Where(w => w.Title is not null
+                && !string.Equals(w.Title, mainWindowTitle, StringComparison.Ordinal)
+                && !w.Title.StartsWith(mainWindowTitle + " ", StringComparison.Ordinal))
+            .Select(w => w.Text is null ? $"[{w.Title}]" : $"[{w.Title}] ({w.Text})")
+            .ToList();
+        return others.Count == 0 ? null : string.Join(", ", others);
+    }
+
     /// <summary>Dumps the JavaFX scene graph tree.</summary>
     /// <param name="maxDepth">How deep to walk the scene graph.</param>
     /// <param name="windowTitle">Which window to dump, or null for the main one.</param>

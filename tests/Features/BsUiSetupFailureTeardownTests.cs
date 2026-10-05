@@ -9,7 +9,7 @@ namespace BattleScribeSpec.Tests.Features;
 /// Regression test for a real product bug found in code review: <c>SetupAsync</c>'s failure path in
 /// both <see cref="BsUiRosterEngine"/> and <see cref="BsGameDataUiEngine"/> called the unforced
 /// <c>CleanupAsync()</c>. Since <c>KeepAlive</c> defaults to true for these engines (see
-/// <c>HostEngineFactory</c>) and <c>_poisoned</c>/force are only ever set by an <b>action</b>-phase
+/// <c>HostEngineFactory</c>) and <c>_poisonedBy</c>/force are only ever set by an <b>action</b>-phase
 /// failure — never a <b>setup</b>-phase one — a cold-start failure (e.g. the JavaFX window never
 /// appearing) left <c>CleanupAsync()</c> a no-op: <c>_app</c> was never disposed, then silently
 /// overwritten by the next cold-start attempt. That orphans the underlying JVM process.
