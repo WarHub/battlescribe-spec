@@ -413,7 +413,9 @@ jobs:
   windows-pre-push:
     if: github.event.pull_request.draft != true
     runs-on: windows-latest
-    timeout-minutes: 60
+    # The two step bounds plus room for setup and build (~6 minutes measured on cold caches, run
+    # 37389533047), held above their sum plus the setup allowance (EveryJob_OutlastsItsStepBounds).
+    timeout-minutes: 30
     # Bash, as on the Linux runners (Git Bash here), so every run line reads the same in every job.
     defaults:
       run:
@@ -442,14 +444,15 @@ jobs:
       - name: Build
         id: build
         run: dotnet build -p:FunctionalBuild=true
-      # pre-push covers both test projects: one step each.
+      # pre-push covers both test projects: one step each. 10 = 2.5x this step's 246s in run
+      # 37389533047; the CLI tests took 42s there, so theirs is the 5-minute floor.
       - name: pre-push — BattleScribeSpec.Tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 30
+        timeout-minutes: 10
         run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile pre-push
       - name: pre-push — BattleScribeSpec.Cli.Tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: dotnet run --project tests/BattleScribeSpec.Cli.Tests/BattleScribeSpec.Cli.Tests.csproj --no-build -- --test-profile pre-push
       - name: Upload UI diagnostics
         if: failure()
