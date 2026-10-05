@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using BattleScribeSpec.Tests.Profiles;
 using YamlDotNet.RepresentationModel;
@@ -8,8 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// <b>CI runs its lanes through the profile registry, and nothing in CI redefines one.</b> A profile is a
 /// whole lane (<c>tests/TestProfiles/</c>): what CI runs under a name is what a developer gets from the
-/// same name, and what the docs say about a lane is generated from — or checked against — the same
-/// record.
+/// same name, and every profile the docs name is checked against the same record.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -31,20 +29,6 @@ namespace BattleScribeSpec.Tests;
 public sealed class CiProfileLaneTests
 {
     private const string CiFile = ".github/workflows/ci.yml";
-
-    /// <summary>The marker lines around the generated block in AGENTS.md.</summary>
-    internal const string AgentsBlockBegin =
-        "<!-- BEGIN GENERATED: lanes outside pre-push. Rendered from tests/TestProfiles/ and ci.yml by "
-        + "CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry; edit those, not this. -->";
-
-    internal const string AgentsBlockEnd = "<!-- END GENERATED: lanes outside pre-push -->";
-
-    /// <summary>The marker lines around the generated profile list in AGENTS.md.</summary>
-    internal const string AgentsProfilesBegin =
-        "<!-- BEGIN GENERATED: profiles. Rendered from tests/TestProfiles/TestProfiles.cs by "
-        + "CiProfileLaneTests.AgentsMd_ProfileList_IsGeneratedFromTheRegistry; edit that, not this. -->";
-
-    internal const string AgentsProfilesEnd = "<!-- END GENERATED: profiles -->";
 
     /// <summary>
     /// <b>Every CI test run names exactly one registry profile that covers what it runs, in the one
@@ -175,38 +159,6 @@ public sealed class CiProfileLaneTests
             "These test assemblies are run by no CI step under a profile that covers them:\n" + string.Join("\n", unrun) + "\n\n"
             + "A test project nobody runs is a gate nobody has. Give it a step that runs a profile covering it "
             + "(tests/TestProfiles/TestProfiles.cs lists each profile's assemblies).");
-    }
-
-    /// <summary>
-    /// <b>The selection audit (<see cref="ProfileSelectionAuditTests"/>) runs in exactly one CI test run.</b> At
-    /// least one, because <c>pre-push</c> leaves it out: a profile filter that stopped selecting it would leave
-    /// nothing checking what the profiles really select, and nothing would say so. At most one, because each run
-    /// is most of a minute of child processes on a four-thread runner — <c>checks</c> runs it on every push, so
-    /// <c>core</c> in the thorough job leaves it out.
-    /// </summary>
-    /// <remarks>
-    /// Judged by evaluating each CI run's profile filter against the audit's test methods
-    /// (<see cref="FilterReach"/>). Mutation-checked when written: <c>core</c>'s <c>Category!=SelectionAudit</c>
-    /// dropped (two runs), and <c>non-conformance</c> narrowed by the same clause (none), each go red naming the runs.
-    /// </remarks>
-    [Fact]
-    public void TheSelectionAudit_RunsInExactlyOneCiTestRun()
-    {
-        var audit = SuiteTraits.TestMethods.Where(static t => t.TestClass == typeof(ProfileSelectionAuditTests)).ToList();
-        Assert.NotEmpty(audit);
-
-        var runs = CiProfileRuns.All
-            .Where(static r => r.Profile is { } p && p.Assemblies.Contains(TestProfiles.Tests, StringComparer.Ordinal))
-            .Where(r => audit.Any(t => FilterReach.Parse(r.Profile!.Selection.Filter).Evaluate(t) != Reach.No))
-            .Select(static r => $"  {r.Where}: --test-profile {r.Profile!.Name}")
-            .ToList();
-
-        Assert.True(runs.Count == 1,
-            $"The selection audit (Category={ProfileSelectionAuditTests.Category}) must run in exactly one CI test run, and runs in "
-            + $"{runs.Count}:\n{string.Join("\n", runs)}\n\n"
-            + "None means no CI run checks what each profile really selects (pre-push leaves it out); more than one spends most "
-            + "of a minute of child processes again on a result CI already has. Select it from the checks job's profile "
-            + "(non-conformance) and exclude it with .Where(\"Category!=SelectionAudit\") from any other.");
     }
 
     /// <summary>
@@ -500,39 +452,24 @@ public sealed class CiProfileLaneTests
     }
 
     /// <summary>
-    /// <b>AGENTS.md's table of lanes outside <c>pre-push</c> is generated</b> from the registry and the
-    /// workflow, and every engine lane is either run by a CI step's profile or carries a
-    /// <see cref="EngineLane.CiExempt"/> reason — not both, not neither.
+    /// <b>Every engine lane is run by a CI step's profile or carries a <see cref="EngineLane.CiExempt"/>
+    /// reason</b> — not both, not neither. A step runs a lane when its profile claims it; a <c>bs-spec</c>
+    /// step drives a driver over the specs it names, not the lane's test classes, so it does not count.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The hand-written table it replaces claimed coverage it did not check: <c>LiveNr*</c>, "covered in CI
-    /// by <c>nr-conformance</c>", when that job runs one of the four live lanes. The rows are the lanes not
-    /// marked <see cref="EngineLane.InPrePush"/>, in registry order; each says why it is out, the profiles
-    /// that run it, and the CI jobs that run it (with the gate output that turns the job on, from
-    /// <c>scripts/ci-gate.json</c>) — or the lane's reason for not being in CI. A job runs a lane when a
-    /// step runs a profile that claims it, and the cell also names the <c>bs-spec</c> steps that drive the
-    /// lane's driver (<see cref="CiProfileRuns.CliUi"/>): smoke drives the BattleScribe roster UI driver on
-    /// every push, and a table that said only "thorough" would tell a reader the opposite. The
-    /// run-XOR-exempt rule counts profile runs alone: a <c>bs-spec</c> step drives the driver over the
-    /// specs it names, not the lane's test classes, so it does not excuse a lane from CI. On a mismatch
-    /// the message carries the block to paste between the markers.
-    /// </para>
-    /// <para>
-    /// Mutation-checked when written: a row edited by hand in AGENTS.md; a <c>CiExempt</c> added to
-    /// <c>LiveNrRoster</c>, which CI runs; and <c>LiveNrUiRoster</c>'s removed — each goes red.
-    /// </para>
-    /// </remarks>
     [Fact]
-    public void AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry()
+    public void EveryEngineLane_IsRunByCi_OrSaysWhyNot()
     {
         var problems = new List<string>();
         foreach (var lane in EngineLanes.All)
         {
-            var jobs = CiJobsRunning(lane);
+            var jobs = CiProfileRuns.All
+                .Where(r => r.Step.Job.Workflow == CiFile && r.Lanes.Contains(lane))
+                .Select(static r => r.Step.Job.Id)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
             if (jobs.Count > 0 && lane.CiExempt is not null)
             {
-                problems.Add($"  {lane.Trait} carries CiExempt, but CI runs it ({string.Join("; ", jobs.Select(static j => j.Job))}): delete the exemption");
+                problems.Add($"  {lane.Trait} carries CiExempt, but CI runs it ({string.Join(", ", jobs)}): delete the exemption");
             }
             else if (jobs.Count == 0 && string.IsNullOrWhiteSpace(lane.CiExempt))
             {
@@ -540,52 +477,8 @@ public sealed class CiProfileLaneTests
             }
         }
 
-        problems.AddRange(GeneratedBlockProblems(AgentsBlockBegin, AgentsBlockEnd, RenderLanesOutsidePrePush(), "where the table belongs"));
-
         Assert.True(problems.Count == 0,
-            "Which lanes pre-push leaves out, and who runs them instead, is the registry's to say:\n" + string.Join("\n", problems));
-    }
-
-    /// <summary>
-    /// <b>AGENTS.md's list of profiles is generated from the registry</b>: every profile, in registry order,
-    /// with the test assemblies it covers when that is not <c>BattleScribeSpec.Tests</c> alone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// It was a hand-kept sentence of backticked names, and that is the one place a deleted profile is
-    /// most likely to linger and a reference lint is least able to see: a bare <c>`nr-live-visible`</c>
-    /// carries no <c>TestProfile=</c> to recognise it by, and this layer had to take two names out of it
-    /// by hand. Generated, the list cannot name a profile the registry lacks, and it cannot leave one out —
-    /// which is also the orphan rule: a profile nothing documents is a lane nobody can find, and this list
-    /// documents every one where AGENTS.md says they are listed.
-    /// </para>
-    /// <para>
-    /// Mutation-checked when written: a deleted profile's name put back in the list; and a new profile
-    /// added to the registry (an orphan) — each goes red, printing the block to paste.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public void AgentsMd_ProfileList_IsGeneratedFromTheRegistry()
-    {
-        var problems = GeneratedBlockProblems(AgentsProfilesBegin, AgentsProfilesEnd, RenderProfileList(), "where the profiles are listed");
-        Assert.True(problems.Count == 0,
-            "Which profiles exist is the registry's to say (tests/TestProfiles/TestProfiles.cs):\n" + string.Join("\n", problems));
-    }
-
-    /// <summary>What is wrong with the generated block between <paramref name="begin"/> and <paramref name="end"/> in AGENTS.md: absent, or not <paramref name="expected"/>.</summary>
-    private static List<string> GeneratedBlockProblems(string begin, string end, string expected, string where)
-    {
-        var agents = File.ReadAllText(Path.Combine(CiWorkflows.Root, "AGENTS.md")).ReplaceLineEndings("\n");
-        var from = agents.IndexOf(begin, StringComparison.Ordinal);
-        var to = agents.IndexOf(end, StringComparison.Ordinal);
-        if (from < 0 || to < from)
-        {
-            return [$"  AGENTS.md lacks a generated block, or one of its markers; put these lines {where}:\n{begin}\n{expected}{end}"];
-        }
-
-        return agents[(from + begin.Length + 1)..to] == expected
-            ? []
-            : [$"  AGENTS.md's generated block differs from the registry; replace the lines between the markers with:\n{expected}"];
+            "Which lanes CI runs, and why the others are not, is the registry's to say:\n" + string.Join("\n", problems));
     }
 
     /// <summary>
@@ -604,10 +497,8 @@ public sealed class CiProfileLaneTests
     /// </para>
     /// <para>
     /// A bare <c>`x`</c> is not a reference: it carries nothing that tells a profile from a spec id or a
-    /// job name, so a recipe names a profile the way it is run. The one place that lists profiles by bare
-    /// name is AGENTS.md's list, which is generated (<see cref="AgentsMd_ProfileList_IsGeneratedFromTheRegistry"/>)
-    /// and so can neither name a deleted profile nor leave a new one out — the orphan rule this lint once
-    /// carried, a profile nothing documents being a lane nobody can find.
+    /// job name, so a recipe names a profile the way it is run. Every profile is documented by the test app
+    /// itself (<c>--list-test-profiles</c>), so no document has to list them all.
     /// </para>
     /// <para>
     /// Mutation-checked when written: <c>-p:TestProfile=nr-live-visible</c> put back in a doc goes red
@@ -655,7 +546,7 @@ public sealed class CiProfileLaneTests
         Assert.True(problems.Count == 0,
             "Profile references and the registry disagree:\n" + string.Join("\n", problems) + "\n\n"
             + "A recipe that names a deleted profile fails when someone follows it. Point the reference at a profile that "
-            + "exists (tests/TestProfiles/TestProfiles.cs; AGENTS.md lists them all).");
+            + "exists (tests/TestProfiles/TestProfiles.cs; --list-test-profiles lists them all).");
     }
 
     /// <summary>
@@ -997,87 +888,6 @@ public sealed class CiProfileLaneTests
     [InlineData("${{…}}", null)]
     public void CiProfileRuns_ReadAProfileNameOutOfProse(string token, string? name) =>
         Assert.Equal(name, CiProfileRuns.AsProfileName(token));
-
-    /// <summary>The CI jobs in ci.yml whose steps run a profile that claims <paramref name="lane"/>, in job order, with those profiles.</summary>
-    private static List<(string Job, IReadOnlyList<string> Profiles)> CiJobsRunning(EngineLane lane)
-    {
-        var order = CiWorkflows.Ci.Jobs.Select(static (j, i) => (j.Id, i)).ToDictionary(static x => x.Id, static x => x.i, StringComparer.Ordinal);
-        var jobs = CiProfileRuns.All
-            .Where(r => r.Step.Job.Workflow == CiFile && r.Lanes.Contains(lane))
-            .GroupBy(static r => r.Step.Job.Id)
-            .OrderBy(g => order[g.Key]);
-        return [.. jobs.Select(static g => (g.Key, (IReadOnlyList<string>)[.. g.Select(static r => r.Profile!.Name).Distinct(StringComparer.Ordinal)]))];
-    }
-
-    /// <summary>
-    /// The generated table: one row per lane not in pre-push, each line ending in a newline. The CI cell
-    /// names every job that runs the lane — through a profile, or through a <c>bs-spec</c> step that drives
-    /// its driver — in job order, with what each job runs and the gate output that turns it on.
-    /// </summary>
-    internal static string RenderLanesOutsidePrePush()
-    {
-        var gate = CiGateConfig.Load();
-        var order = CiWorkflows.Ci.Jobs.Select(static (j, i) => (j.Id, i)).ToDictionary(static x => x.Id, static x => x.i, StringComparer.Ordinal);
-        var sb = new StringBuilder();
-        sb.Append("| Not in `pre-push` | Why | Run it with | Run in CI by |\n");
-        sb.Append("|---|---|---|---|\n");
-        foreach (var lane in EngineLanes.All.Where(static l => !l.InPrePush))
-        {
-            var profiles = TestProfiles.All
-                .Where(p => p.Selection.Claims.Contains(lane.Trait, StringComparer.Ordinal) && !p.MaySkip.Any(m => m.Engine == lane.Trait))
-                .Select(static p => $"`-p:TestProfile={p.Name}`");
-            var driving = CiJobsRunning(lane)
-                .Select(static j => (j.Job, Runs: j.Profiles.Select(static p => $"`{p}`")))
-                .Concat(CiProfileRuns.CliUi
-                    .Where(r => r.Step.Job.Workflow == CiFile && r.Lane == lane)
-                    .GroupBy(static r => r.Step.Job.Id)
-                    .Select(static g => (Job: g.Key, Runs: g.Select(static r => $"`bs-spec {string.Join(" ", r.Arguments)}`").Distinct(StringComparer.Ordinal))))
-                .GroupBy(static j => j.Job)
-                .OrderBy(g => order[g.Key])
-                .Select(g => $"`{g.Key}` ({string.Join(", ", g.SelectMany(static j => j.Runs))}; "
-                    + (gate.ThoroughJobs.Contains(g.Key) ? "thorough" : gate.LiveJobs.Contains(g.Key) ? "live" : "every push") + ")")
-                .ToList();
-            var ci = (lane.CiExempt, driving.Count) switch
-            {
-                (null, _) => string.Join("; ", driving),
-                (var exempt, 0) => $"not in CI: {exempt}",
-                (var exempt, _) => $"not in CI: {exempt} Its driver alone: {string.Join("; ", driving)}",
-            };
-            sb.Append($"| `{lane.Trait}` | {Cell(lane.Why)} | {string.Join(", ", profiles)} | {Cell(ci)} |\n");
-        }
-
-        return sb.ToString();
-
-        static string Cell(string text) => text.Replace("|", "\\|", StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The generated profile list: every profile in registry order, with the assemblies it covers when
-    /// that is not <see cref="TestProfiles.Tests"/> alone, wrapped as AGENTS.md wraps its prose; each line
-    /// ends in a newline.
-    /// </summary>
-    internal static string RenderProfileList()
-    {
-        var items = TestProfiles.All.Select(static p => p.Assemblies is [TestProfiles.Tests]
-            ? $"`{p.Name}`"
-            : $"`{p.Name}` ({string.Join(" and ", p.Assemblies)}{(p.Assemblies.Count == 1 ? " only" : "")})");
-        var words = $"Every profile ({TestProfiles.All.Count}), in registry order: {string.Join(", ", items)}.".Split(' ');
-
-        var sb = new StringBuilder();
-        var line = new StringBuilder();
-        foreach (var word in words)
-        {
-            if (line.Length > 0 && line.Length + 1 + word.Length > 100)
-            {
-                sb.Append(line).Append('\n');
-                line.Clear();
-            }
-
-            line.Append(line.Length > 0 ? " " : "").Append(word);
-        }
-
-        return sb.Append(line).Append('\n').ToString();
-    }
 
     /// <summary>
     /// Every mention of one of <paramref name="names"/> under <c>.github/</c>: in any YAML scalar, keys

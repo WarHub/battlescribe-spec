@@ -86,8 +86,7 @@ internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, str
 
     /// <summary>
     /// Why no CI job runs this lane, when none does. A lane is either run by a CI step's profile or
-    /// carries this — never both, and never neither — which the generated table in AGENTS.md shows
-    /// and <c>CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry</c> enforces.
+    /// carries this — never both, and never neither (<c>CiProfileLaneTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot</c>).
     /// </summary>
     public string? CiExempt { get; init; }
 

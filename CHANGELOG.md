@@ -1133,6 +1133,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **Post-migration overhead in the test suites** — the selection audit (`ProfileSelectionAuditTests`,
+  `Category=SelectionAudit`), AGENTS.md's generated lanes-outside-`pre-push` table and profile list with
+  their generator tests, the skills inventory and its checks, and all of `BannedSymbolsTests` but one
+  wiring check (nothing shells out to MSBuild). The migration retrospective judged these guards of guards
+  and generated blocks to cost more than they caught; `--list-test-profiles` documents the profiles.
+  AGENTS.md drops machine-specific timings and says to run `pre-push` once per pushed tree.
 - **The `[nr-test]` commit-message trigger** — it forced the thorough and live lanes from a commit
   message, which only a push to `main` carries (a PR's event has no head commit), so it could never
   fire on the PRs it would have been useful for. A manual `workflow_dispatch` run asks for the same

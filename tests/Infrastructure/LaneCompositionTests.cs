@@ -12,7 +12,7 @@ namespace BattleScribeSpec.Tests;
 /// <para>
 /// Each case hands <see cref="TestHost.RunAsync(string[], string, Func{string[], LaneTally, Task{int}}, HostIo)"/>
 /// a platform stand-in that feeds the <see cref="LaneTally"/> it is given, as the real data consumer does while
-/// a session runs; <c>ProfileSelectionAuditTests.TheRealPlatform_FeedsTheLaneTally</c> runs the real one.
+/// a session runs.
 /// </para>
 /// <para>
 /// Mutation-checked when written: the empty-lane rule deleted from <see cref="LaneComposition.Check"/> (the

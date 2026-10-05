@@ -64,7 +64,7 @@ for directly, nothing can tell a profile that was dropped on the way from one th
 **Listing them.** `dotnet run --project tests/BattleScribeSpec.Tests.csproj -- --list-test-profiles`
 prints every profile with its filter, the environment it sets and its purpose; add `--json` for a form that
 also names the lane-defining switches each one decides. `dotnet test` refuses the option, because it
-counts a run that reports no test as a failure. AGENTS.md lists the names, generated from the registry.
+counts a run that reports no test as a failure.
 
 **Which project.** `pre-push` covers both test projects, `cli` the CLI's tests, and every other profile
 the main test project. `dotnet test -p:TestProfile=<name>` with no `--project` starts both projects, and
@@ -254,8 +254,8 @@ In GitHub Actions (`GITHUB_ACTIONS=true`) the app adds, unless the command line 
 - for a profile that claims an aggregate lane, `--show-live-output on`, so the lane streams its `[i/N]`
   progress.
 
-Which lane runs in which job, and when: AGENTS.md's generated table of the lanes outside `pre-push`, and
-[`scripts/ci-gate.json`](../scripts/ci-gate.json) for when a run owes the thorough and live jobs.
+Which lane runs in which job, and when: the CI steps name their profiles (`--list-test-profiles` says what each
+runs), and [`scripts/ci-gate.json`](../scripts/ci-gate.json) says when a run owes the thorough and live jobs.
 `CiProfileLaneTests` holds every test step to one profile that covers its project, with no filter, VSTest
 option or zero-tests policy of its own, and no lane-defining switch anywhere under `.github/`;
 `CiWorkflowDriftTests` holds each to a timeout and one invocation with nothing that could swallow its exit

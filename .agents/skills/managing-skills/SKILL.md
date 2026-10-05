@@ -106,11 +106,11 @@ grep "^name:" .agents/skills/{skill-name}/SKILL.md # matches dir name
 wc -l .agents/skills/{skill-name}/**/*.md
 ```
 
-`SkillInventoryLintTests` checks the structure: every skill directory has a `SKILL.md` whose `name` matches
-it, and the inventory table below lists every skill and exactly its reference files. The test commands and
-profile names a skill quotes are checked with the rest of the docs (`CiProfileLaneTests.DocumentedTestCommands_RunAsWritten`,
-`CiProfileLaneTests.NoDanglingProfileReferences`) — so link to the one-spec command in AGENTS.md rather than
-copying it. Line counts and description wording are manual checks.
+`SkillNameLintTests` checks the structure: every skill directory has a `SKILL.md` whose front-matter `name`
+matches it. The test commands and profile names a skill quotes are checked with the rest of the docs
+(`CiProfileLaneTests.DocumentedTestCommands_RunAsWritten`, `CiProfileLaneTests.NoDanglingProfileReferences`) —
+so link to the one-spec command in AGENTS.md rather than copying it. Line counts, the description and the
+reference files are manual checks; `ls .agents/skills/` lists the skills.
 
 ## Updating an existing skill
 
@@ -158,19 +158,6 @@ are for deep dives, not prerequisites.
 - Language-tagged code blocks: ` ```csharp `, ` ```yaml `, ` ```bash `, ` ```javascript `
 - Tables for APIs, field references, and decision matrices
 - `## Reference files` section at the end, with relative links
-
-## Existing skills inventory
-
-| Skill | Domain | References |
-|-------|--------|-----------|
-| `writing-specs` | Spec YAML authoring | PROTOCOL-TYPES.md, KNOWN-TAGS.md |
-| `debugging-spec-failures` | SpecRunner error diagnosis | ERROR-ASSERTIONS.md |
-| `changing-protocol-types` | Protocol type file sync | COMMON-MISTAKES.md, FILE-MAP.md |
-| `battlescribe-engine` | IKVM Java interop engine | JAVA-MODEL-FACTORY.md |
-| `newrecruit-adapter` | Playwright browser adapter | STATE-EXTRACTION.md |
-| `bsspec-cli` | bs-spec CLI: run/probe/debug specs across all engines | BS-ROSTER-UI.md, NR-ROSTER-UI.md, NR-INTERNALS.md, BS-GAMEDATA-UI.md, NR-GAMEDATA-UI.md |
-| `managing-skills` | This skill — creating/updating skills | SKILL-TEMPLATE.md |
-| `managing-backlog` | Issue triage, labels, hierarchy, grooming | LABEL-TAXONOMY.md, QUERYING-ISSUES.md |
 
 ## Reference files
 
