@@ -138,7 +138,7 @@ that restates a field is a second record that drifts from the first.
 
 ```bash
 dotnet restore && dotnet build                                                     # first time
-dotnet test -p:TestProfile=pre-push                                                # offline gate (~5 min, no app)
+dotnet test -p:TestProfile=pre-push                                                # offline gate (no app), once per pushed tree
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-push --filter "DisplayName~my-spec-id"  # one spec: its lint + every per-spec offline engine (not the aggregate NR lanes)
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs --output Detailed   # a lane, every result as it finishes
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles # what each profile runs
@@ -217,57 +217,33 @@ used to be shadowed by went stale on every Dependabot bump that reached a projec
 `ProjectReference`, and failed CI for it; the comment at the top of that file has the history. A
 package change is a one-line edit there and nothing else.
 
-**Always run `pre-push` before pushing.** It is the **offline** gate: lint, the in-process BattleScribe
-engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR Editor snapshot, and
-the two frozen Playwright UI drivers. No desktop app, and no test reaches any site. The tools send
-usage telemetry of their own by default — the test platform, and the .NET SDK under `dotnet test` or
-`dotnet run`. `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off both, `TESTINGPLATFORM_TELEMETRY_OPTOUT=1`
-(which CI sets) only the platform's. It needs what `setup.ps1` provisions, and says so rather than
-leaving a green run that never ran a lane: a frozen lane that skips whole for want of its snapshot
-fails the run with exit 8, naming the lane and the fix; with no Playwright browsers the browser tests
-fail outright (exit 2), and the lanes that went empty are named with the fix all the same.
-**Measured 2026-10-03 on a 32-core dev box, on Microsoft.Testing.Platform: `total: 3332, failed: 0,
-succeeded: 3293, skipped: 39, duration: 4m 59s`** — `BattleScribeSpec.Tests` 3193 tests in 4m59s and
-`BattleScribeSpec.Cli.Tests` 139 in 2m34s, side by side; 309s for the command after a 25s no-op build.
-The 39 skips are specs that opt out of an engine and the real-world tests whose wh40k data this box had
-not fetched. The critical path is `BsRoster` (every roster spec plus seven addressing scenarios, 252s of
-in-process engine), not any UI lane. It was **11m29s** before #405, and 5m47s on VSTest in August, when
-the suite was 2697 tests.
+**Run `pre-push` once, on the tree you are about to push.** It is the **offline** gate: lint, the
+in-process BattleScribe engines (roster + gamedata), and every frozen NR lane — HAR replay, the local NR
+Editor snapshot, and the two frozen Playwright UI drivers. No desktop app, and no test reaches any site.
+While you iterate, run the `lint` profile, the tests you touched (`--filter`), or a `smoke-*` profile
+instead; an edit to comments or docs alone after a green `pre-push` needs no re-run (`lint` covers the
+docs). The tools send usage telemetry of their own by default — the test platform, and the .NET SDK
+under `dotnet test` or `dotnet run`. `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off both,
+`TESTINGPLATFORM_TELEMETRY_OPTOUT=1` (which CI sets) only the platform's. It needs what `setup.ps1`
+provisions, and says so rather than leaving a green run that never ran a lane: a frozen lane that skips
+whole for want of its snapshot fails the run with exit 8, naming the lane and the fix; with no
+Playwright browsers the browser tests fail outright (exit 2), and the lanes that went empty are named
+with the fix all the same. Its skips are specs that opt an engine out and, without the wh40k data, the
+real-world tests. The critical path is the in-process `BsRoster` lane, not any UI lane.
 
-**What `pre-push` deliberately does NOT cover**, so you know when to run something else yourself
-("thorough" and "live" are the gate outputs that turn a job on — see `scripts/ci-gate.json`):
+**Not in `pre-push`:** the BattleScribe desktop-app lanes (`bs-ui-roster`, `bs-ui-gamedata` — run them
+when you touch the BS UI drivers or `src/bs-ui-java-agent/`), the live lanes that open sessions on
+third-party sites (`nr-live*`, `nr-ui-live`, `nr-editor-live`, `nr-editor-ui-live`), and `Mode=Sequential`
+classes (manual-only, behind `NR_SEQUENTIAL`).
+`dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles` lists every
+profile with its purpose.
 
-<!-- BEGIN GENERATED: lanes outside pre-push. Rendered from tests/TestProfiles/ and ci.yml by CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry; edit those, not this. -->
-| Not in `pre-push` | Why | Run it with | Run in CI by |
-|---|---|---|---|
-| `BsRosterUi` | launches the BattleScribe desktop app; 687.8s across 367 specs, sequential — it WAS the 689.2s run it joined by default (#405) | `-p:TestProfile=bs-ui-roster` | `smoke` (`bs-spec run --engine battlescribe --ui protocol-kitchen-sink`; every push); `thorough-ui-bs` (`bs-ui-roster`; thorough) |
-| `BsGameDataUi` | launches the BattleScribe desktop app (the Data Editor half) | `-p:TestProfile=smoke-bs-gamedata-ui`, `-p:TestProfile=bs-ui-gamedata` | `smoke` (`smoke-bs-gamedata-ui`; every push); `thorough-ui-bs` (`bs-ui-gamedata`; thorough) |
-| `LiveNrRoster` | opens sessions on newrecruit.eu | `-p:TestProfile=nr-live`, `-p:TestProfile=nr-live-smoke`, `-p:TestProfile=nr-live-conformance`, `-p:TestProfile=nr-live-sequential` | `nr-conformance` (`nr-live-smoke`, `nr-live-conformance`; live) |
-| `LiveNrUiRoster` | opens sessions on newrecruit.eu | `-p:TestProfile=nr-ui-live` | not in CI: nr-conformance, the one job that drives newrecruit.eu, runs the store-direct live lane only; the UI driver over every spec would add a browser clicking through the whole suite to a volunteer-run site's load on every scheduled run. Run nr-ui-live by hand when the UI driver changes. |
-| `LiveNrGameData` | opens sessions on the NR Editor deployment | `-p:TestProfile=nr-editor-live` | not in CI: the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether nr-conformance should also drive the live one is an open decision, not an oversight. Run it by hand to check a new deployment against the snapshot. |
-| `LiveNrGameDataUi` | opens sessions on the NR Editor deployment | `-p:TestProfile=nr-editor-ui-live` | not in CI: the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether nr-conformance should also drive the live one is an open decision, not an oversight. Run it by hand to check a new deployment against the snapshot. |
-<!-- END GENERATED: lanes outside pre-push -->
-
-`Mode=Sequential` classes are out too: manual-only, they skip unless `NR_SEQUENTIAL=true`, which
-`-p:TestProfile=nr-frozen-sequential` / `-p:TestProfile=nr-live-sequential` set. So is
-`Category=SelectionAudit` (`ProfileSelectionAuditTests`): it starts the test app once per profile and holds
-what each really selects to what the registry claims — about 30s of child processes, so CI runs it
-instead, once per push, in the `checks` job's `non-conformance` step (`core` leaves it out too, rather than
-run it a second time). Run it yourself with
-`dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Category=SelectionAudit"`.
-
-That table is generated, not written. Every engine lane is a row in
-`tests/TestProfiles/EngineLanes.cs` saying what it needs and whether `pre-push` runs it, with the
-measured cost behind the answer, and `pre-push`'s filter is derived from that column. The table above is
-rendered from those rows, the profiles that claim each lane and the CI steps that run them, and
-`CiProfileLaneTests.AgentsMd_LanesOutsidePrePush_AreGeneratedFromTheRegistry` fails on any difference
-(printing the block to paste) — and on a lane that no CI step runs and that gives no `CiExempt` reason.
-`TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared` fails if an `Engine` trait appears
-with no row, and `PrePushHonoursItsPromise` fails if a lane that needs the desktop app or a third
-party's site is put in. Adding a lane is therefore a decision, not a default — which it was not when
-`BsRosterUi` arrived and quietly spent 688.8s of a 689.2s run driving the desktop app, in a profile
-advertised here at `~40s` (#405). Note the `~40s` had stopped being true well before that: even with no
-UI lane at all, `BsRoster` alone is over three minutes now.
+Adding a lane is a decision, not a default (`BsRosterUi` once joined the gate by silence, #405). Every
+engine lane is a row in `tests/TestProfiles/EngineLanes.cs` saying what it needs and whether `pre-push`
+runs it, and `pre-push`'s filter is derived from that column. `TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared`
+fails if an `Engine` trait appears with no row, `PrePushHonoursItsPromise` fails if a lane that needs
+the desktop app or a third party's site is put in, and `CiProfileLaneTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot`
+fails on a lane no CI step runs that gives no `CiExempt` reason.
 
 **Test profiles are defined in `tests/TestProfiles/TestProfiles.cs`**, the one record of every lane: its
 selection, the environment it sets, the assemblies it covers. **A profile is a whole lane**: every CI
@@ -287,18 +263,8 @@ run with a different value exported is refused (exit 5) rather than silently nar
 into a snapshot rewrite; to use one, run without a profile and narrow with `--filter`. The one exception
 is `BS_UI_SKIP=true` with `core`, which lets its desktop-app lane skip. A **default** one — a URL,
 headless mode, slow-mo — is yours where you set it: to watch a live lane, set `NR_HEADLESS=false` (and
-`NR_VISUAL=true`), and the run prints `(caller)` beside each value you supplied. The list below is generated from the registry
-(`CiProfileLaneTests.AgentsMd_ProfileList_IsGeneratedFromTheRegistry`), so it can neither name a deleted
-profile nor leave out a new one:
-
-<!-- BEGIN GENERATED: profiles. Rendered from tests/TestProfiles/TestProfiles.cs by CiProfileLaneTests.AgentsMd_ProfileList_IsGeneratedFromTheRegistry; edit that, not this. -->
-Every profile (26), in registry order: `pre-push` (BattleScribeSpec.Tests and
-BattleScribeSpec.Cli.Tests), `core`, `non-conformance`, `cli` (BattleScribeSpec.Cli.Tests only),
-`lint`, `bs`, `smoke-bs`, `smoke-nr-frozen`, `smoke-nr-ui`, `smoke-nr-editor`, `smoke-nr-editor-ui`,
-`smoke-bs-gamedata-ui`, `nr-frozen`, `nr-ui-frozen`, `nr-editor-frozen`, `nr-editor-ui-frozen`,
-`bs-ui-gamedata`, `bs-ui-roster`, `nr-live`, `nr-live-smoke`, `nr-live-conformance`, `nr-ui-live`,
-`nr-editor-live`, `nr-editor-ui-live`, `nr-frozen-sequential`, `nr-live-sequential`.
-<!-- END GENERATED: profiles -->
+`NR_VISUAL=true`), and the run prints `(caller)` beside each value you supplied. `--list-test-profiles`
+(the last command in the block above) lists every profile with its purpose, filter and environment.
 
 ## NR frozen tests and HAR
 
@@ -443,9 +409,8 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
 | `tests/TestProfiles/` | The test-profile registry — every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`) — the test app's entry point that resolves it (`TestHost.cs`), and the engine-composition check every profiled run is held to (`LaneComposition.cs`) |
-| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, the generated AGENTS.md table and profile list, no dangling profile reference, every documented test command runs as written |
+| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, every engine lane run by CI or exempt, no dangling profile reference, every documented test command runs as written |
 | `tests/Infrastructure/TestHostTests.cs`, `TestHostWiringTests.cs`, `LaneCompositionTests.cs` | The entry point's rules, each with the input that trips it; every test project wired through it, one setter of the strict zero-tests policy, no launch profile, testconfig or runsettings feeding the app; the composition check's verdicts |
-| `tests/Infrastructure/ProfileSelectionAuditTests.cs` | What each profile really selects, listed by the test app itself and held to the registry's claims (`Category=SelectionAudit`, run by CI's `checks` job and left out of `pre-push` and `core`) |
 | `tests/Infrastructure/AggregateLaneRun.cs` | The `[lane]` selection line, `[i/N]` progress and stop check every single-test aggregate lane reports through |
 | `tools/format-specs.ps1` | Spec formatter |
 

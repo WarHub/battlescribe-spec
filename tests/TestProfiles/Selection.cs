@@ -74,19 +74,12 @@ internal abstract record Selection
     /// <summary>
     /// The pre-push gate's selection: every engine lane whose <see cref="EngineLane.InPrePush"/> is
     /// <see langword="true"/>, no <c>Mode=Sequential</c> class (manual-only, gated behind
-    /// <c>NR_SEQUENTIAL</c>), and no <c>Category=SelectionAudit</c> test. Derived from
-    /// <see cref="EngineLanes.All"/>, so the filter and the decisions recorded there are one record.
+    /// <c>NR_SEQUENTIAL</c>). Derived from <see cref="EngineLanes.All"/>, so the filter and the decisions
+    /// recorded there are one record.
     /// </summary>
-    /// <remarks>
-    /// <c>SelectionAudit</c> (<c>ProfileSelectionAuditTests</c>) starts the test app once per profile to list what
-    /// it selects: about 30 seconds of child processes on an eight-core box, more under a loaded suite, which is
-    /// over the 20 seconds a gate run before every push can spend on one check. CI's <c>checks</c> job runs it
-    /// (<c>non-conformance</c>) on every push; <c>core</c> leaves it out too, rather than run it twice.
-    /// </remarks>
     public static Selection PrePush() =>
         AllExcept([.. EngineLanes.All.Where(static l => !l.InPrePush).Select(static l => l.Trait)])
-            .Where("Mode!=Sequential")
-            .Where("Category!=SelectionAudit");
+            .Where("Mode!=Sequential");
 
     /// <summary>A hand-written filter, claiming exactly the engines it lists.</summary>
     /// <param name="expression">The filter, in the clause grammar described on <see cref="Selection"/>.</param>

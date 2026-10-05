@@ -685,8 +685,7 @@ public sealed class TestProfileRegistryTests
     /// <para>
     /// Mutation-checked when written: <c>BsRosterUi</c> set <c>InPrePush: true</c>; <c>pre-push</c> as
     /// <c>AllExcept("BsRosterUi")</c>; as <c>Engines(…the six InPrePush lanes…).Where("Mode!=Sequential")</c>;
-    /// <see cref="Selection.PrePush"/> with its <c>Mode!=Sequential</c> dropped; and with its
-    /// <c>Category!=SelectionAudit</c> dropped.
+    /// and <see cref="Selection.PrePush"/> with its <c>Mode!=Sequential</c> dropped.
     /// </para>
     /// </remarks>
     [Fact]
@@ -732,11 +731,6 @@ public sealed class TestProfileRegistryTests
                 broken.Add("  pre-push does not exclude Mode=Sequential (manual-only, gated behind NR_SEQUENTIAL)");
             }
 
-            if (!Selection.ClausesOf(filter).Contains($"Category!={ProfileSelectionAuditTests.Category}", StringComparer.Ordinal))
-            {
-                broken.Add($"  pre-push does not exclude Category={ProfileSelectionAuditTests.Category} (it starts the test app once per "
-                    + "profile, about 30s; CI's checks job runs it)");
-            }
         }
 
         Assert.True(broken.Count == 0,

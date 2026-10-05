@@ -1,9 +1,9 @@
 // Symbols the test projects may not use: Microsoft.CodeAnalysis.BannedApiAnalyzers turns each use into
 // RS0030, an error under TreatWarningsAsErrors, wherever analyzers run (local builds and the CI `checks`
-// job; -p:FunctionalBuild=true turns analyzers off). Both test csprojs reference the analyzer and this file,
-// and BannedSymbolsTests holds them to it and resolves every entry below to a real member, so a renamed
-// API fails a lint instead of leaving its ban matching nothing. One documentation-comment id per line,
-// then `;` and the message the error shows.
+// job; -p:FunctionalBuild=true turns analyzers off). Both test csprojs reference the analyzer and this file
+// (BannedSymbolsTests checks that). An id that matches no member is skipped without a word, so when a banned
+// API is renamed, update its line here. One documentation-comment id per line, then `;` and the message the
+// error shows.
 //
 // THE WORKING DIRECTORY. A test resolves the checkout it was built in from its own binaries
 // (RepoRoot.FromBinaries; TestPaths.Root when it cannot run without one). xunit happens to set the working
