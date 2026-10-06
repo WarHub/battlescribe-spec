@@ -258,6 +258,19 @@ public sealed class TestHostTests
         Assert.Equal($"--zero-tests-policy strict {string.Join(" ", DotnetTestTail)} --report-github --report-github-summary-include-passed false", Args(outcome));
     }
 
+    /// <summary>
+    /// <b>A run ends when its launcher dies</b>: a direct or <c>dotnet test</c> run gets <c>--exit-on-process-exit</c>
+    /// with the launcher's id, an IDE's run does not, and a caller's own is kept.
+    /// </summary>
+    [Theory]
+    [InlineData("--list-tests", "--list-tests --zero-tests-policy strict --exit-on-process-exit 42")]
+    [InlineData("--zero-tests-policy strict --server dotnettestcli --dotnet-test-pipe p",
+        "--zero-tests-policy strict --server dotnettestcli --dotnet-test-pipe p --exit-on-process-exit 42")]
+    [InlineData("--server jsonrpc --client-port 5000", "--server jsonrpc --client-port 5000")]
+    [InlineData("--exit-on-process-exit=7", "--exit-on-process-exit=7 --zero-tests-policy strict")]
+    public void Run_EndsWhenItsLauncherDies(string commandLine, string expected) =>
+        Assert.Equal(expected, Args(TestHost.Resolve(Split(commandLine), TestProfiles.Tests, static _ => null, launcher: 42)));
+
     /// <summary><b><c>--list-test-profiles</c> prints the registry</b>, as JSON with <c>--json</c>: every profile, with the assemblies it covers.</summary>
     [Fact]
     public void ListTestProfiles_PrintsTheRegistry()
@@ -321,7 +334,8 @@ public sealed class TestHostTests
             },
             () => ArtifactBase,
             (path, text) => Files.Add((path, text, true)),
-            (path, text) => Files.Add((path, text, false)));
+            (path, text) => Files.Add((path, text, false)),
+            () => null);
     }
 
     /// <summary>

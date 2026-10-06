@@ -42,6 +42,13 @@ the executables. The path in `CommandLine` names the checkout:
 Get-CimInstance Win32_Process -Filter "Name like 'BattleScribeSpec.%Tests.exe'" | Select-Object ProcessId, CreationDate, CommandLine
 ```
 
+A run ends when whatever started it dies. Outside an IDE the app passes the platform
+`--exit-on-process-exit` with its parent's id — the `dotnet` of `dotnet test` or `dotnet run`, or the
+shell that started the executable — unless you passed one, and exits 11 the moment that process goes,
+taking its browsers and the BattleScribe app with it. Without it a killed `dotnet test` left the app
+running until it next reported a result, a whole aggregate test later, and a killed shell left it running
+to the end.
+
 ## A new worktree
 
 A worktree builds and tests nothing until `setup.ps1` has provisioned it — the `.deps/wham` submodule,
@@ -209,6 +216,7 @@ run less than it says:
 | 5 | the command line was refused; the message says why |
 | 7 | the test process died |
 | 8 | nothing executed: the selection matched nothing, every selected test skipped, or a lane the profile claims executed none of its own tests |
+| 11 | the process that started the run died ([The test app](#the-test-app)) |
 | other | another of the platform's codes (linked below), or the process failing before the platform could report one (an unhandled exception, a signal) |
 
 The platform's own codes are listed at <https://aka.ms/testingplatform/exitcodes>; this app adds no new
