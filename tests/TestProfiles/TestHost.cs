@@ -144,7 +144,7 @@ internal sealed record HostIo(
 /// In GitHub Actions: the GitHub reporter with a failures-only step summary
 /// (<c>--report-github --report-github-summary-include-passed false</c>); a direct run also gets
 /// <c>--output Detailed</c> and the ten slowest tests in its summary (<c>--show-slowest-tests 10</c>), and
-/// a profile that claims a single-test aggregate lane <c>--show-live-output on</c>, so a 27-minute lane
+/// a profile that claims an aggregate lane <c>--show-live-output on</c>, so a 27-minute lane
 /// streams its <c>[i/N]</c> progress instead of being 27 silent minutes.
 /// </description></item>
 /// <item><description>

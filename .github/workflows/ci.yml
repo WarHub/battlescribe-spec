@@ -148,7 +148,7 @@ jobs:
       #     sequential variant, which self-skipped. Total: 1, Passed: 0, exit 0.
       # `dotnet run` rather than `dotnet test` because `dotnet test` withholds the app's output on success:
       # this way the log shows every test as it finishes (the host adds --output Detailed in Actions, and
-      # live output for the single-[Fact] aggregate lanes), and the GitHub reporter annotates failures and
+      # live output for the aggregate lanes), and the GitHub reporter annotates failures and
       # writes a failures-only step summary. The CLI's own tests are the one `dotnet test` step, so CI
       # still exercises that path too: server mode, -p:TestProfile and --zero-tests-policy strict carried
       # by MSBuild (tests/Directory.Build.props), and the host's refusal when they do not arrive.
@@ -160,7 +160,7 @@ jobs:
       # check, tests/TestProfiles/LaneComposition.cs, names each empty lane and the fix, and puts a
       # per-lane table in the step summary); 3 the session was aborted; 7 the test host process died.
       # Any other value is the process itself failing (an unhandled exception, a signal) before the
-      # platform could report one. A single-test aggregate lane streams `[i/N] <spec> <verdict> <secs>s`
+      # platform could report one. An aggregate lane streams `[i/N] <spec> <verdict> <secs>s`
       # as it goes and opens with `[lane] <Engine> mode=… selected=N applicable=M`, so a hang shows how
       # far it got.
       #
@@ -326,7 +326,7 @@ jobs:
       # `Engine=FrozenNrRoster&DisplayName~kitchen-sink` selected exactly ONE test — a since-deleted
       # sequential theory row, SKIPPED on every run (`Skipped! - Failed: 0, Passed: 0, Skipped: 1`,
       # exit 0, green) — and `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` matched ZERO, right
-      # through the frozen NR UI suite breaking on a HAR client change. Each aggregate is split into a
+      # through the frozen NR UI suite breaking on a HAR client change. Each frozen aggregate is split into a
       # KitchenSink and an OtherSpecs test now, and a smoke profile selects its lane without OtherSpecs —
       # the profile lint (TestProfileRegistryTests.EverySelection_ClaimsTheLanesItsFilterReaches) fails a
       # profile whose filter cannot reach the lane it claims, before CI ever runs it. Headless is every

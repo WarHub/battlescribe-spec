@@ -1158,8 +1158,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `bs-spec run --engine newrecruit --ui <spec>`; snapshots are rewritten by the new
   `bs-spec run --update-snapshots` (with `--on-diverge base|override`), never by a test run. The
   never-run `Mode=Sequential` classes and their profiles are gone, and with them `KnobKind.LaneDefining`,
-  the host's environment refusal, the `BS_UI_SKIP`-with-`core` exception, the CI lint that banned the
-  switches under `.github/`, and the aggregates' full-mode shrink check.
+  the host's environment refusal, the `BS_UI_SKIP`-with-`core` exception, the CI lint's ban on the
+  lane-defining switches under `.github/` (it still bans the ones a profile sets), and the aggregates'
+  full-mode shrink check.
 - **Post-migration overhead in the test suites** — the selection audit (`ProfileSelectionAuditTests`,
   `Category=SelectionAudit`), AGENTS.md's generated lanes-outside-`pre-push` table and profile list with
   their generator tests, the skills inventory and its checks, and all of `BannedSymbolsTests` but one

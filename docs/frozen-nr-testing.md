@@ -162,7 +162,7 @@ dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-froz
 ```
 
 `nr-ui-frozen` is the frozen NR UI roster lane (about 27 minutes), and `pre-push` runs both frozen roster
-lanes — the UI one at its kitchen-sink default — with everything else that is offline. The commands for
+lanes — the UI one as its `KitchenSink` test alone — with everything else that is offline. The commands for
 narrowing a run are in [running-tests.md](running-tests.md).
 
 ### In CI
@@ -258,7 +258,7 @@ store-direct roster export.
 | `src/BattleScribeSpec.NewRecruit/HarRecorder.cs` | Recording, post-processing, version extraction |
 | `src/BattleScribeSpec.NewRecruit.HarTool/` | Console app for recording HAR snapshots |
 | `tests/Infrastructure/FrozenNrRosterFixture.cs` | xUnit fixture (browser context pool for parallel execution) |
-| `tests/Conformance/FrozenNrRosterConformanceTests.cs` | The frozen NR roster lane: one `[Fact]` that runs every applicable spec over the pool |
+| `tests/Conformance/FrozenNrRosterConformanceTests.cs` | The frozen NR roster lane: two `[Fact]`s, `KitchenSink` and `OtherSpecs`, that partition the applicable specs over the pool |
 | `tests/Conformance/FrozenNrUiRosterConformanceTests.cs` | The frozen NR UI roster lane, through the UI driver |
 | `tests/TestProfiles/TestProfiles.cs` | The `nr-frozen`, `nr-ui-frozen` and smoke profiles |
 | `.github/workflows/ci.yml` | The `smoke`, `thorough-conformance` and `thorough-nr-ui-roster` jobs |

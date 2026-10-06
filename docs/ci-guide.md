@@ -164,9 +164,10 @@ dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-pus
 dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Tag=constraint&Engine=BsGameData"
 ```
 
-A tag filter never selects the five single-test aggregate lanes — `FrozenNrRoster`, `FrozenNrUiRoster`,
-`FrozenNrGameDataUi`, `LiveNrRoster` and `LiveNrUiRoster`. Each is one `[Fact]` that runs every spec
-itself, so it has no per-spec rows to carry a tag ([running-tests.md](running-tests.md#selecting-tests-by-name)).
+A tag filter never selects the five aggregate lanes — `FrozenNrRoster`, `FrozenNrUiRoster`,
+`FrozenNrGameDataUi`, `LiveNrRoster` and `LiveNrUiRoster`. The frozen three are two `[Fact]`s each,
+`KitchenSink` and `OtherSpecs`, and the live two one `AllSpecs` each; every one runs its specs itself, so
+it has no per-spec rows to carry a tag ([running-tests.md](running-tests.md#selecting-tests-by-name)).
 
 ## Exit Codes
 

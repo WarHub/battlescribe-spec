@@ -249,7 +249,8 @@ selection, the environment it sets, the assemblies it covers. **A profile is a w
 step that runs `BattleScribeSpec.Tests` runs one, with no filter of its own and no `env:` entry that
 changes what runs, so `-p:TestProfile=<name>` on your machine selects what CI selects under that name,
 with the same switches — `nr-ui-frozen` included, which is the full ~27-minute NR UI roster lane
-(`smoke-nr-ui` is its one-spec `KitchenSink` test). `CiProfileLaneTests` holds CI to that. Two things can
+(`smoke-nr-ui` is its one-spec `KitchenSink` test). `CiProfileLaneTests` holds CI to that, and fails if a
+switch a profile sets appears anywhere under `.github/`. Two things can
 still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
 skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
 runners, which do not provision it. And a switch exported in your own shell is yours: every
@@ -405,8 +406,8 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
 | `tests/TestProfiles/` | The test-profile registry — every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`) — the test app's entry point that resolves it (`TestHost.cs`), and the engine-composition check every profiled run is held to (`LaneComposition.cs`) |
-| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no lane switch under `.github/`, xvfb and diagnostics uploads derived from the lanes, every engine lane run by CI or exempt, no dangling profile reference, every documented test command runs as written |
+| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no switch a profile sets under `.github/`, xvfb and diagnostics uploads derived from the lanes, every engine lane run by CI or exempt, no dangling profile reference, every documented test command runs as written |
 | `tests/Infrastructure/TestHostTests.cs`, `TestHostWiringTests.cs`, `LaneCompositionTests.cs` | The entry point's rules, each with the input that trips it; every test project wired through it, one setter of the strict zero-tests policy, no launch profile, testconfig or runsettings feeding the app; the composition check's verdicts |
-| `tests/Infrastructure/AggregateLaneRun.cs` | The `[lane]` selection line, `[i/N]` progress and stop check every single-test aggregate lane reports through |
+| `tests/Infrastructure/AggregateLaneRun.cs` | The `[lane]` selection line, `[i/N]` progress and stop check every aggregate lane reports through |
 | `tools/format-specs.ps1` | Spec formatter |
 

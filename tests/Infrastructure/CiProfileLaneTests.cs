@@ -162,6 +162,43 @@ public sealed class CiProfileLaneTests
     }
 
     /// <summary>
+    /// <b>No switch a profile sets appears anywhere under <c>.github/</c></b> — not in a workflow's, a
+    /// job's or a step's <c>env:</c>, not in a <c>$GITHUB_ENV</c> write, not on a command line, not in a
+    /// composite action.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A switch a profile sets is the profile's — the live lanes' <c>NR_ENGINE_URL</c> and
+    /// <c>NR_EDITOR_URL</c>. Set in CI, it wins over the profile's value, as a caller's value does; set
+    /// where the <c>checks</c> job's <c>non-conformance</c> step sees it, it sends the live smoke and
+    /// integration tests that lane selects to newrecruit.eu on every push. Every YAML scalar is read, keys
+    /// included, and comments are not scalars, so the workflows can still explain the rule.
+    /// </para>
+    /// <para>
+    /// Mutation-checked when written: <c>NR_ENGINE_URL</c> set in the setup action's environment goes
+    /// red naming the file and line.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ProfileSwitches_AppearNowhereInGithub()
+    {
+        var owners = TestProfiles.All
+            .SelectMany(static p => p.Env.Keys.Select(k => (Key: k, p.Name)))
+            .GroupBy(static e => e.Key, StringComparer.Ordinal)
+            .ToDictionary(static g => g.Key, static g => string.Join(", ", g.Select(static e => e.Name)), StringComparer.Ordinal);
+        Assert.True(owners.Count > 0, "No profile sets a switch; this lint checks nothing.");
+
+        var problems = GithubMentions(owners.Keys, nameof(ProfileSwitches_AppearNowhereInGithub))
+            .Select(m => $"  {m.Where}: {m.Name} (set by {owners[m.Name]})")
+            .ToList();
+
+        Assert.True(problems.Count == 0,
+            "These switches belong to the test-profile registry, and CI sets or names them:\n" + string.Join("\n", problems) + "\n\n"
+            + "A lane is its profile: tests/TestProfiles/TestProfiles.cs states every switch the lane depends on, and a value "
+            + "set from CI wins over the profile's. Put the value in the profile the step runs (or a new profile), and delete it here.");
+    }
+
+    /// <summary>
     /// <b>Every CI run of a lane that needs the BattleScribe desktop app is under <c>xvfb-run</c></b> — a
     /// profiled test step, or <c>bs-spec run --ui</c> on the BattleScribe engine.
     /// </summary>

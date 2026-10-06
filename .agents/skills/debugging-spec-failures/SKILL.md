@@ -15,7 +15,7 @@ description: >
    your spec id in place of `my-spec-id`. It narrows `pre-push` to that spec: every offline engine that
    runs specs one by one, plus the spec's lint and schema checks. A spec whose id matches nothing exits 8.
    [docs/running-tests.md](../../../docs/running-tests.md#selecting-tests-by-name) says what a name filter
-   reaches and what it cannot (the single-test NR lanes).
+   reaches and what it cannot (the aggregate NR lanes).
 2. Read the assertion error output — it tells you the step index, field path, and mismatch.
 3. Check the matching rules below to understand *how* actual state was compared to expected.
 4. Fix the spec or the engine adapter and re-run.
