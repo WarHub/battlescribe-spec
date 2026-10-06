@@ -1968,7 +1968,16 @@ worth a split, nor the in-process worker pool a policy-sized one would need.
 `BsRoster` still finishes last here: its first real-world spec runs beside the NR browser lanes (124–137 s
 under server GC, 171–183 s under workstation). On CI it starts later still: in seven `windows-pre-push`
 runs before this change it started 150–206 s into the step, after every frozen NR lane, and was the last
-collection to finish in all seven; the step took 266–358 s (median 324 s) over twelve runs.
+collection to finish in all seven.
+
+**CI gains less than this box, inside a wide runner-to-runner spread** (4 vCPU there, so four GC heaps
+against eight here):
+
+| CI, 4 vCPU | before (workstation GC) | after (server GC), three runs |
+|---|---|---|
+| `windows-pre-push`, `BattleScribeSpec.Tests` step | 266–358 s, median 324 s (12 runs) | 291 / 226 / 308 s |
+| … of which `BsRoster` | 93–170 s, median 118 s (7 runs) | 105 / 85 / 111 s |
+| Linux `core` step, the two real-world specs together | 97–142 s, median 116 s (6 runs) | 83 / 102 / 95 s |
 
 ## 12.6 A shared browser-context budget for the frozen NR pools — measured, not built
 
