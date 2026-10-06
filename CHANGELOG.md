@@ -906,11 +906,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   prompt came from the harness itself, restaging identical game data under the previous spec's open
   roster. Now any failed call, whatever it said, closes the app at the end of its spec, and nothing is
   retried (`BS_UI_MAX_RETRIES` is gone; a removeForce that BattleScribe completed before its own
-  NullPointerException now fails with that error, not as "Force not found"). A warm start refuses an
-  app that is unresponsive or showing anything besides its main window, naming the spec that left it
-  so. `BsUiDataStaging` renames each game system into and out of `data/` whole, writes nothing when
-  the disk already holds the files, and the roster engine starts a fresh app rather than rewrite the
-  data of a roster left open. The retry had also been hiding a driver defect on every run: the
+  NullPointerException now fails with that error, not as "Force not found"). That includes a roster
+  read, which answered an empty roster on any failure — passing a `forces: []` assertion, and sending
+  the next addForce to create a roster over the spec's own; only the agent's "No roster loaded",
+  which a refused load leaves behind, still reads as empty. A warm start refuses an app that is
+  unresponsive or showing anything besides its main window, naming the spec that left it so.
+  `BsUiDataStaging` renames each game system into and out of `data/` whole, writes nothing when the
+  disk already holds the files, and the roster engine starts a fresh app rather than rewrite the data
+  of a roster left open. The retry had also been hiding a driver defect on every run: the
   DELETE key takes one instance off a roster row, not the row, so removing a selection at number 2
   (`boundary-count-zero-below-min`) took the retry's second press. The agent now presses once per
   instance, and each press has to make progress. Tests: `BsUiDataStagingTests` (half-way failure,

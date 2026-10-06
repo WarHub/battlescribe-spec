@@ -637,43 +637,42 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
     }
 
-    private async Task<RosterState> ReadRosterStateAsync()
+    /// <summary>
+    /// Mirrors <c>EngineAccessor.getRosterState</c>'s answer when the app holds no roster.
+    /// </summary>
+    private const string AgentNoRoster = "No roster loaded";
+
+    /// <summary>
+    /// The roster the app holds, or <see cref="EmptyRosterState"/> when there is none to read: no
+    /// app yet, no roster created or loaded by this spec yet, or the agent saying the app holds none
+    /// — which a refused load leaves behind, because BattleScribe closes the open roster before it
+    /// knows the replacement will load (<c>roundtrip-load-unknown-catalogue</c>).
+    /// </summary>
+    /// <remarks>
+    /// Any other failure to read propagates. This used to catch everything and answer the empty
+    /// roster, so a read that timed out or found the agent gone never reached
+    /// <see cref="RunGuardedAsync{T}"/> and handed its app to the next spec. Inside the spec it
+    /// passed a <c>forces: []</c> assertion, and sent the next addForce down the first-force path,
+    /// where <c>rosterCreateRosterAction</c> replaced the spec's own roster.
+    /// </remarks>
+    private async Task<RosterState> ReadRosterStateOrEmptyAsync()
     {
-        EnsureRosterLoaded();
-        var result = await ConnectedClient.GetRosterStateAsync();
-        var json = ExtractJson(result);
-        if (TryExtractError(result, out var error))
+        if (_client is null || _gameSystemId is null || !_engineLocated)
         {
-            throw new InvalidOperationException(error);
+            return EmptyRosterState();
         }
 
-        var dto = JsonSerializer.Deserialize<AgentRosterState>(json, JsonOptions)
+        var result = await ConnectedClient.GetRosterStateAsync();
+        if (TryExtractError(result, out var error))
+        {
+            return error == AgentNoRoster ? EmptyRosterState() : throw new InvalidOperationException(error);
+        }
+
+        var dto = JsonSerializer.Deserialize<AgentRosterState>(ExtractJson(result), JsonOptions)
             ?? throw new InvalidOperationException("Failed to deserialize roster state from agent.");
 
         var validationErrors = await ReadValidationErrorsAsync();
         return MapRosterState(dto, validationErrors);
-    }
-
-    private async Task<RosterState> ReadRosterStateOrEmptyAsync()
-    {
-        if (_client is null || _gameSystemId is null)
-        {
-            return EmptyRosterState();
-        }
-
-        try
-        {
-            if (!_engineLocated)
-            {
-                return EmptyRosterState();
-            }
-
-            return await ReadRosterStateAsync();
-        }
-        catch
-        {
-            return EmptyRosterState();
-        }
     }
 
     private async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync()
@@ -1481,15 +1480,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
         if (_gameSystemId is null || _client is null)
         {
             throw new InvalidOperationException("Engine has not been set up.");
-        }
-    }
-
-    private void EnsureRosterLoaded()
-    {
-        EnsureSetup();
-        if (!_engineLocated)
-        {
-            throw new InvalidOperationException("Roster has not been created yet.");
         }
     }
 
