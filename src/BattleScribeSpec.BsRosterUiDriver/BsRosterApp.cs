@@ -64,6 +64,7 @@ public sealed class BsRosterApp : IAsyncDisposable
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start BattleScribe process.");
         _process = process;
+        AppDomain.CurrentDomain.ProcessExit += KillOnProcessExit;
         // The OS process is alive from here regardless of whether the agent handshake below
         // succeeds — DisposeAsync always tears down _process, so it must always release too.
         ResourceMetrics.Acquired("jvm");
@@ -190,8 +191,26 @@ public sealed class BsRosterApp : IAsyncDisposable
         return new AgentClient(client);
     }
 
+    /// <summary>
+    /// Kills the app if this process exits without disposing it — the test platform ends a run with
+    /// <c>Environment.Exit</c> when the process that launched it dies (<c>--exit-on-process-exit</c>), and no
+    /// fixture is disposed then. Without it the JVM would keep the desktop app open with nobody driving it.
+    /// </summary>
+    private void KillOnProcessExit(object? sender, EventArgs e)
+    {
+        try
+        {
+            _process?.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+            // Best effort during shutdown.
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        AppDomain.CurrentDomain.ProcessExit -= KillOnProcessExit;
         try
         {
             _stderrCts.Cancel();

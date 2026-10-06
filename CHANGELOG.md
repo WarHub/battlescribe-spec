@@ -912,6 +912,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A test run ends when whatever started it dies (#527)** — outside an IDE the test app passes the
+  platform's `--exit-on-process-exit` with its launcher's id (`tests/TestProfiles/Launcher.cs`): the
+  `dotnet` of `dotnet test` or `dotnet run`, or the shell that started the executable, unless the caller
+  passed one. A killed launcher now ends the run at once, exit 11, and the browsers and the BattleScribe
+  app go with it — `BsRosterApp` kills its JVM when the process exits undisposed. Before, a killed
+  `dotnet test` left the app running until it next reported a result, a whole aggregate test later, and
+  a killed shell left it running to the end.
+
 - **One spec's trouble no longer reaches the BattleScribe desktop-app specs after it (#526)** — the
   `BsRosterUi` and `BsGameDataUi` lanes reuse one running app across specs, and a failure could
   cascade: a createRoster cut off by BattleScribe's "Would you like to reload your roster?" prompt

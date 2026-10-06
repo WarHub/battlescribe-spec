@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -81,6 +82,7 @@ internal sealed record HostOutcome(
 /// </param>
 /// <param name="AppendText">Appends text to a file (<c>$GITHUB_STEP_SUMMARY</c>).</param>
 /// <param name="WriteText">Writes a file (the composition record).</param>
+/// <param name="LauncherId">The id of the process that started this one, while it runs (<see cref="Launcher.Id"/>).</param>
 internal sealed record HostIo(
     Func<string, string?> GetEnvironment,
     Action<string, string?> SetEnvironment,
@@ -90,7 +92,8 @@ internal sealed record HostIo(
     Func<string[], Task<int>> RunConsoleRunner,
     Func<string?> TelemetryArtifactBase,
     Action<string, string> AppendText,
-    Action<string, string> WriteText);
+    Action<string, string> WriteText,
+    Func<int?> LauncherId);
 
 /// <summary>
 /// <b>The test app's own entry point: it resolves a test profile, refuses a command line that would
@@ -148,6 +151,10 @@ internal sealed record HostIo(
 /// streams its <c>[i/N]</c> progress instead of being 27 silent minutes.
 /// </description></item>
 /// <item><description>
+/// <c>--exit-on-process-exit</c> with the launcher's id (<see cref="Launcher"/>) unless the caller passed one, so
+/// the run ends, exit 11, when the <c>dotnet test</c>, <c>dotnet run</c> or shell that started it dies.
+/// </description></item>
+/// <item><description>
 /// Sets <see cref="TestProfileContext.Current"/>, applies the environment, and runs, with a
 /// <see cref="LaneTally"/> registered next to the project's own extensions to count each lane's results
 /// as they arrive.
@@ -170,7 +177,7 @@ internal sealed record HostIo(
 /// an option the platform does not know read the same from outside; the message says which. 8 is the
 /// platform's "nothing executed" (with the strict policy, a run whose every selected test skipped counts)
 /// and this host's "a lane the profile claims executed nothing", each with the lane's hint. The rest are
-/// the platform's: 2 a test failed, 3 the session was aborted, 7 the test host process died.
+/// the platform's: 2 a test failed, 3 the session was aborted, 7 the test host process died, 11 its launcher did.
 /// </para>
 /// <para>
 /// <b>Why refuse rather than repair.</b> Each refusal stands for a command line that would otherwise
@@ -233,7 +240,8 @@ internal static class TestHost
                 static a => ConsoleRunner.Run(a),
                 static () => TestProfileContext.TelemetryArtifactBase,
                 File.AppendAllText,
-                File.WriteAllText));
+                File.WriteAllText,
+                Launcher.Id));
     }
 
     /// <summary>
@@ -247,7 +255,7 @@ internal static class TestHost
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(io);
-        var outcome = Resolve(args, assembly, io.GetEnvironment);
+        var outcome = Resolve(args, assembly, io.GetEnvironment, io.LauncherId());
         switch (outcome.Action)
         {
             case HostAction.ConsoleRunner:
@@ -341,7 +349,8 @@ internal static class TestHost
     /// <param name="args">The command line.</param>
     /// <param name="assembly">The test assembly this app is.</param>
     /// <param name="environment">Reads an environment variable (<see cref="Environment.GetEnvironmentVariable(string)"/> in a real run).</param>
-    internal static HostOutcome Resolve(IReadOnlyList<string> args, string assembly, Func<string, string?> environment)
+    /// <param name="launcher">The id of the process that started this one (<see cref="Launcher.Id"/> in a real run), if known.</param>
+    internal static HostOutcome Resolve(IReadOnlyList<string> args, string assembly, Func<string, string?> environment, int? launcher = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(environment);
@@ -510,6 +519,14 @@ internal static class TestHost
             {
                 AddIfAbsent(items, "show-live-output", "on");
             }
+        }
+
+        // 8. The run ends when its launcher dies. Otherwise it runs on with its browser pool or the desktop app: a shell
+        //    that started the executable never takes it down, and `dotnet test` starts it as a plain child that notices
+        //    only when it next reports over the pipe, which a long aggregate test does not do until it finishes.
+        if (launcher is { } id)
+        {
+            AddIfAbsent(items, "exit-on-process-exit", id.ToString(CultureInfo.InvariantCulture));
         }
 
         return new HostOutcome(HostAction.Run, session, [.. items.SelectMany(static i => i.Tokens)], setEnvironment, messages,
