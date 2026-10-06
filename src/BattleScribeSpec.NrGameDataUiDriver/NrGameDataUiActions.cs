@@ -668,7 +668,7 @@ public static class NrGameDataUiActions
     // ===== Internal helpers =====
 
     /// <summary>
-    /// Finds the <c>h3.normalTitle</c> DOM element for an entry in the NR Editor catalogue tree.
+    /// Finds the <c>.title.normalTitle</c> row for an entry in the NR Editor catalogue tree.
     ///
     /// The NR Editor does NOT render <c>data-id</c> attributes on tree nodes — entries can only
     /// be located by their display name. This method:
@@ -677,7 +677,7 @@ public static class NrGameDataUiActions
     ///     collection it belongs to (e.g. <c>selectionEntries</c>).</item>
     ///   <item>Expands every <c>depth-0</c> section whose CSS class matches that collection,
     ///     so entries become visible.</item>
-    ///   <item>Returns a Playwright locator for the <c>h3.normalTitle</c> element inside
+    ///   <item>Returns a Playwright locator for the <c>.title.normalTitle</c> row inside
     ///     a <c>depth-1</c> container whose text matches the entry name.</item>
     /// </list>
     ///
@@ -730,7 +730,7 @@ public static class NrGameDataUiActions
             """, entryId)
             ?? throw new InvalidOperationException(
                 $"NR Editor UI: entry '{entryId}' not found in any catalogue collection via Pinia. " +
-                "Ensure setup ran correctly, NavigateToCatalogueAsync completed, and the entry exists.");
+                "Ensure setup ran correctly, the file was opened, and the entry exists.");
 
         var info = System.Text.Json.JsonSerializer.Deserialize<EntryLocationInfo>(entryJson,
             JsonOptions) ?? throw new InvalidOperationException(
@@ -740,7 +740,7 @@ public static class NrGameDataUiActions
 
         // Step 2: Expand all depth-0 section containers for this collection type so entries
         // become visible. Sections start collapsed and must be expanded before their children
-        // render as h3.normalTitle elements in the DOM.
+        // render as .title.normalTitle rows in the DOM.
         //
         // Vue.js may not have finished rendering when we get here. Wait for the first
         // section element to appear before counting, otherwise CountAsync returns 0.
@@ -789,12 +789,12 @@ public static class NrGameDataUiActions
         }
 
         // Step 2b: Expand collapsed parent entry nodes too, so nested entries (children of
-        // children) render in the DOM. Parent nodes are <h3 class="... arrowTitle collapsed">;
+        // children) render in the DOM. Parent nodes are <div class="title arrowTitle collapsed">;
         // clicking their .arrow-wrap toggles them open. Loop until none remain collapsed (the
         // tree reveals one level per pass) with a bounded pass count as a safety net.
         for (var pass = 0; pass < 8; pass++)
         {
-            var collapsedCount = await page.Locator("h3.arrowTitle.collapsed").CountAsync();
+            var collapsedCount = await page.Locator(".title.arrowTitle.collapsed").CountAsync();
             if (collapsedCount == 0)
             {
                 break;
@@ -802,7 +802,7 @@ public static class NrGameDataUiActions
 
             for (var i = 0; i < collapsedCount; i++)
             {
-                var collapsed = page.Locator("h3.arrowTitle.collapsed").First;
+                var collapsed = page.Locator(".title.arrowTitle.collapsed").First;
                 if (await collapsed.CountAsync() == 0)
                 {
                     break;
@@ -829,12 +829,12 @@ public static class NrGameDataUiActions
         }
 
         // Step 3: Return a locator for the entry title element. Entries render as
-        // collapsible-box divs containing an <h3> element, at any tree depth.
-        // Leaf entries:   <h3 class="title normalTitle">
-        // Parent entries: <h3 class="title arrowTitle collapsed">  (can also be "opened")
+        // collapsible-box divs containing a .title row, at any tree depth.
+        // Leaf entries:   <div class="title normalTitle">
+        // Parent entries: <div class="title arrowTitle collapsed">  (can also be "opened")
         // Both variants are matched with :is(.normalTitle, .arrowTitle); the section-header
-        // h3 (e.g. "Root Selection Entries") is excluded by the entry-name text filter.
-        var nodeLocator = page.Locator($".{collectionCssClass} h3:is(.normalTitle, .arrowTitle)")
+        // title row (e.g. "Root Selection Entries") is excluded by the entry-name text filter.
+        var nodeLocator = page.Locator($".{collectionCssClass} .title:is(.normalTitle, .arrowTitle)")
             .Filter(new LocatorFilterOptions { HasText = entryName });
 
         await nodeLocator.First.WaitForAsync(new LocatorWaitForOptions
@@ -922,7 +922,7 @@ public static class NrGameDataUiActions
     /// NR Editor layout (catalogue editor page):
     /// <list type="bullet">
     ///   <item>Each data array renders as <c>&lt;div class="collapsible-box {sectionClass} depth-0"&gt;</c>.</item>
-    ///   <item>The <c>&lt;h3&gt;</c> inside that div opens a context menu on right-click.</item>
+    ///   <item>The <c>.title</c> row inside that div opens a context menu on right-click.</item>
     ///   <item>Context menu items are <c>&lt;li class="context-menu"&gt;&lt;div&gt;&lt;img src="...{entryType}.png"&gt;&lt;/div&gt;&lt;/li&gt;</c>.</item>
     ///   <item>After clicking add, NR creates "New {Type}" and opens a properties form in the right panel.</item>
     ///   <item>The form is a table where each row is <c>&lt;tr&gt;&lt;td&gt;{Label}&lt;/td&gt;&lt;td&gt;&lt;input&gt;&lt;/td&gt;&lt;/tr&gt;</c>.</item>
@@ -934,9 +934,9 @@ public static class NrGameDataUiActions
         var sectionClass = GetSectionCssClass(entryType);
 
         // Right-click the section header to open the context menu. The header is the depth-0
-        // section box's *direct* child <h3>; once entries exist they add deeper descendant
-        // <h3>s, so scope to the direct child to avoid a strict-mode multi-match.
-        await page.Locator($".{sectionClass}.depth-0 > h3").ClickAsync(
+        // section box's *direct* child title row; once entries exist they add deeper descendant
+        // title rows, so scope to the direct child to avoid a strict-mode multi-match.
+        await page.Locator($".{sectionClass}.depth-0 > .title").ClickAsync(
             new LocatorClickOptions { Button = MouseButton.Right });
         // ContextMenu.show() sets visible=true, so the menu itself is the condition. Do NOT add
         // Force=true to the click that follows: ContextMenu.update() re-positions once in
@@ -991,9 +991,9 @@ public static class NrGameDataUiActions
     {
         var sectionClass = GetSectionCssClass(linkType);
 
-        // Right-click the section header (depth-0 box's direct child <h3> — see
+        // Right-click the section header (depth-0 box's direct child title row — see
         // AddEntryToRootSectionAsync) to open the context menu.
-        await page.Locator($".{sectionClass}.depth-0 > h3").ClickAsync(
+        await page.Locator($".{sectionClass}.depth-0 > .title").ClickAsync(
             new LocatorClickOptions { Button = MouseButton.Right });
         // ContextMenu.show() sets visible=true, so the menu itself is the condition. Do NOT add
         // Force=true to the click that follows: ContextMenu.update() re-positions once in

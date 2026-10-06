@@ -11,10 +11,11 @@ namespace BattleScribeSpec.NewRecruit;
 
 /// <summary>
 /// Engine-agnostic helpers that drive NewRecruit Editor's <b>real</b> Pinia store through Playwright:
-/// serving the frozen static bundle, loading game-system + catalogue XML through NR's own file-upload
-/// pipeline, reading state back from <c>editor.gameSystems[systemId].loadedCatalogues</c>, exporting via
-/// NR's own serializer (<c>saveCatalogueInFiles</c>), reloading, loading additional files, and reading
-/// reference-validation errors.
+/// opening the editor and checking the contracts the drivers depend on, serving the frozen static
+/// bundle, loading game-system + catalogue XML through NR's own file import, reading state back from
+/// <c>editor.gameSystems[systemId].loadedCatalogues</c>, exporting via NR's own serializer
+/// (<c>saveCatalogueInFiles</c>), reloading, loading additional files, and reading reference-validation
+/// errors.
 ///
 /// <para>
 /// Both NewRecruit GameData engines share this code: the store-direct
@@ -39,28 +40,18 @@ public static class NrEditorStore
             : 30_000;
 
     /// <summary>
-    /// How many times <see cref="OpenFileFromListAsync"/> drives the open sequence before giving up.
-    /// Bounded on purpose: the failure it absorbs is a <i>lost interaction</i> (Playwright dispatches the
-    /// double-click, the SPA never acts on it), which one re-dispatch fixes. A larger count would only
-    /// stretch the wall time of a genuinely broken navigation.
+    /// Ceiling for the import view's controls to render — a local view with nothing to fetch, so a
+    /// miss means the control is gone, not slow. It is also the bound on how long a moved app takes
+    /// to fail <see cref="OpenEditorAsync"/>.
     /// </summary>
-    private const int NavAttempts = 3;
+    private const int ImportViewTimeoutMs = 10_000;
 
     /// <summary>
-    /// Per-stage ceiling for the <b>non-final</b> attempts. A lost double-click is observable almost
-    /// immediately — the URL simply never changes — so burning the full <see cref="NavTimeoutMs"/> to
-    /// learn that only delays the retry that actually fixes it. The <b>final</b> attempt still gets the
-    /// full <see cref="NavTimeoutMs"/>, so nothing that passes today can start failing: the last attempt
-    /// is exactly as patient as the single attempt used to be.
+    /// The import page's "add system" menu button. The file input it holds is rendered only while the
+    /// menu is open, and it is the only input on the page once any system is stored; the page's
+    /// empty-state input is gone by then.
     /// </summary>
-    private static readonly int NavProbeTimeoutMs =
-        Math.Min(NavTimeoutMs, Math.Max(5_000, NavTimeoutMs / 3));
-
-    /// <summary>Ceiling for the file-list render — a local, already-parsed view, so it is not the slow part.</summary>
-    private const int ListTimeoutMs = 10_000;
-
-    /// <summary>Selector for the file-list rows (one per uploaded game system / catalogue).</summary>
-    private const string FileListItemSelector = ".item.unselectable:not(.add)";
+    private const string ImportMenuSelector = "button.add";
 
     /// <summary>
     /// How long an import gets to show up in the store before it is read as declined. Generous on
@@ -193,362 +184,245 @@ public static class NrEditorStore
         });
     }
 
-    // ===== Setup / navigation (NR's real upload + open pipeline) =====
+    // ===== Opening the editor, and the contracts the drivers depend on =====
 
     /// <summary>
-    /// Loads game system + catalogue XML into the NR Editor via its file-upload UI, then navigates to
-    /// the catalogue editor view. Feeds data through the hidden <c>&lt;input type="file"&gt;</c> so NR's
-    /// real <c>onChange</c> → <c>BSXmlToJson</c> → <c>uploaded()</c> pipeline runs and populates the
-    /// Pinia stores, exactly as a user's "Add From Folder" does. Returns [] on success.
+    /// Makes the page an ordinary user's session rather than an automated one. A browser that reports
+    /// <c>navigator.webdriver</c> gets the editor's WebMCP bridge switched on without asking, and the
+    /// bridge then probes a range of loopback ports for a local relay — again at intervals for as long
+    /// as the page lives. Each probe that finds no relay is a <c>console.error</c>, which is exactly
+    /// the signal <see cref="LoadFileAsync"/> reads as the importer refusing a file; and a probe that
+    /// does find one hands the page under test to whatever is listening on this machine.
+    /// </summary>
+    private const string OrdinarySessionScript =
+        "Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false });";
+
+    /// <summary>
+    /// Opens the editor at <paramref name="baseUrl"/> and checks it still offers what both GameData
+    /// engines depend on, failing in seconds — once, from the engine's creation — rather than in
+    /// every spec's setup after a navigation timeout.
+    /// <para>
+    /// The editor is a moving target: a deployment replaces the whole app, and nothing obliges it to
+    /// keep a route, a store action or a control. Each contract below is one the drivers use; a
+    /// missing one is named, with the fix, instead of surfacing later as an unexplained timeout.
+    /// </para>
+    /// </summary>
+    public static async Task OpenEditorAsync(IPage page, string baseUrl)
+    {
+        await page.AddInitScriptAsync(OrdinarySessionScript);
+        await page.GotoAsync(baseUrl, new PageGotoOptions { WaitUntil = WaitUntilState.Load, Timeout = 60_000 });
+        await WaitForAppAsync(page, baseUrl);
+
+        var missing = await page.EvaluateAsync<string[]>(
+            """
+            () => {
+                const gp = document.querySelector('#__nuxt').__vue_app__.config.globalProperties;
+                const editor = gp.$pinia._s.get('editor');
+                const routes = new Set(gp.$router.getRoutes().map(r => r.name));
+                const missing = [];
+                if (!editor) missing.push("a Pinia store 'editor'");
+                else {
+                    if (typeof editor.gameSystems !== 'object') missing.push("editor.gameSystems (the loaded files, read by every state read)");
+                    if (typeof editor.goto_catalogue !== 'function') missing.push('editor.goto_catalogue (opens a file)');
+                    if (typeof editor.saveCatalogueInFiles !== 'function') missing.push('editor.saveCatalogueInFiles (the export)');
+                }
+                for (const name of ['index', 'system', 'catalogue']) {
+                    if (!routes.has(name)) missing.push(`a route named '${name}'`);
+                }
+                return missing;
+            }
+            """);
+        if (missing.Length == 0)
+        {
+            try
+            {
+                await GoToImportAsync(page);
+                await PushRouteAsync(page, "index");
+            }
+            catch (Exception ex) when (ex is TimeoutException or PlaywrightException)
+            {
+                missing = [$"a file import on the 'system' route — an input[type=file], or a '{ImportMenuSelector}' menu "
+                    + $"holding one ({Compact(ex.Message)})"];
+            }
+        }
+
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"The NR Editor at {baseUrl} no longer offers what the GameData drivers depend on: "
+                + string.Join("; ", missing) + ". The app has moved: re-pin \"nr-editor\" in testdata.json to the "
+                + "deployment the drivers were ported to, or port NrEditorStore and the NR GameData UI driver to "
+                + "this one (AGENTS.md, \"NR Editor frozen tests\").");
+        }
+    }
+
+    /// <summary>Waits for the editor's Vue app to mount with Pinia — the first contract, and the one every read needs.</summary>
+    private static async Task WaitForAppAsync(IPage page, string baseUrl)
+    {
+        try
+        {
+            await page.WaitForFunctionAsync(
+                "() => !!document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia",
+                null,
+                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
+        }
+        catch (TimeoutException ex)
+        {
+            throw new InvalidOperationException(
+                $"The NR Editor at {baseUrl} never mounted a Vue app with Pinia on #__nuxt: {Compact(ex.Message)}", ex);
+        }
+    }
+
+    /// <summary>Pushes a named route through the editor's own router, client-side, so the in-memory stores survive.</summary>
+    private static Task PushRouteAsync(IPage page, string name) =>
+        page.EvaluateAsync(
+            "(name) => document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$router.push({ name })",
+            name);
+
+    /// <summary>
+    /// Puts the page on the editor's import view (the <c>system</c> route) and returns its file input.
+    /// The input in the add-system menu exists only while the menu is open, and the page is kept alive
+    /// between visits, so the menu may still be open from the last import — it is clicked only when
+    /// no input is there, since a click on an open menu closes it.
+    /// </summary>
+    private static async Task<ILocator> GoToImportAsync(IPage page)
+    {
+        await PushRouteAsync(page, "system");
+        var menu = page.Locator(ImportMenuSelector);
+        await menu.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = ImportViewTimeoutMs });
+
+        var input = page.Locator("input[type=file]");
+        if (await input.CountAsync() == 0)
+        {
+            await menu.ClickAsync(new LocatorClickOptions { Timeout = ImportViewTimeoutMs });
+        }
+
+        await input.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Attached, Timeout = ImportViewTimeoutMs });
+        return input.First;
+    }
+
+    /// <summary>
+    /// Feeds files through the editor's import, so its real parse (<c>convertToJson</c>) and its import
+    /// handler run and populate the stores exactly as a user's import does, and returns once the
+    /// handler has finished: it ends by routing away from the import view, so leaving it is the
+    /// signal. Returns an error when that never happens.
+    /// </summary>
+    private static async Task<string?> ImportAsync(IPage page, IReadOnlyList<FilePayload> payloads)
+    {
+        var input = await GoToImportAsync(page);
+        await input.SetInputFilesAsync(payloads);
+        try
+        {
+            await page.WaitForFunctionAsync(
+                "() => document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$router.currentRoute.value.name !== 'system'",
+                null,
+                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
+            return null;
+        }
+        catch (TimeoutException ex)
+        {
+            return $"NR Editor's import of {string.Join(", ", payloads.Select(p => p.Name))} never finished — "
+                + $"its handler routes away from the import view when it does: {Compact(ex.Message)}";
+        }
+    }
+
+    private static List<FilePayload> ToPayloads(IEnumerable<(string Name, string Xml)> files) =>
+        [.. files.Select(f => new FilePayload { Name = f.Name, MimeType = "application/xml", Buffer = Encoding.UTF8.GetBytes(f.Xml) })];
+
+    // ===== Setup / navigation (NR's real import + open) =====
+
+    /// <summary>
+    /// Loads the spec's game system and catalogues through the editor's import (<see cref="ImportAsync"/>),
+    /// then opens the target file: the last catalogue, or the game system itself when there are none.
+    /// Returns [] on success.
     /// </summary>
     public static async Task<IReadOnlyList<string>> LoadAndOpenCatalogueAsync(
         IPage page,
         ProtocolGameSystem gameSystem,
         ProtocolCatalogue[] catalogues)
     {
-        var errors = new List<string>();
-
         // Generate BattleScribe XML from protocol types. GenerateAllCatalogueXml requires at
         // least one catalogue, so skip it for game-system-only specs.
-        var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-        IReadOnlyList<(string FileName, string Xml)> allCatXml = [];
+        var files = new List<(string, string)> { ("system.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)) };
         if (catalogues.Length > 0)
         {
-            allCatXml = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues);
+            files.AddRange(CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues));
         }
 
-        // Build file payloads: GST first, then all CATs
-        var payloads = new List<FilePayload>
+        var importError = await ImportAsync(page, ToPayloads(files));
+        if (importError is not null)
         {
-            new() { Name = "system.gst", MimeType = "application/xml", Buffer = Encoding.UTF8.GetBytes(gstXml) }
-        };
-        foreach (var (fileName, xml) in allCatXml)
-        {
-            payloads.Add(new() { Name = fileName, MimeType = "application/xml", Buffer = Encoding.UTF8.GetBytes(xml) });
+            return [importError];
         }
 
-        // Set files on the hidden input — triggers onChange → uploaded() pipeline.
-        // Playwright's SetInputFilesAsync on a Locator sets files regardless of visibility.
-        await page.Locator("input[type=file]").SetInputFilesAsync(payloads);
-
-        // Wait for the catalogues Pinia store to be populated.
-        // uploaded() calls updateCatalogue() for each file, which populates catalogues.dict.
-        try
-        {
-            await page.WaitForFunctionAsync(
-                """
-                () => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const cs = pinia?._s?.get('catalogues');
-                    return cs?.dict && Object.keys(cs.dict).length > 0;
-                }
-                """,
-                null,
-                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
-        }
-        catch (TimeoutException ex)
-        {
-            errors.Add($"NR Editor did not populate catalogues store after file upload: {ex.Message}");
-            return errors;
-        }
-
-        // Game-system-only spec: open the game system itself for editing. NR Editor edits a
-        // game system through the same catalogue-editor route, keyed by the system id
-        // (loadedCatalogues[systemId]); ReadStateAsync already surfaces it as state.gameSystem.
-        if (catalogues.Length == 0)
-        {
-            var gsNav = await NavigateToEditableAsync(page, gameSystem.Name);
-            if (gsNav is not null)
-            {
-                errors.Add(gsNav);
-            }
-
-            return errors;
-        }
-
-        // Navigate to the target catalogue (last in the list is the spec's target)
-        var navResult = await NavigateToEditableAsync(page, catalogues[^1].Name);
-        if (navResult is not null)
-        {
-            errors.Add(navResult);
-        }
-
-        return errors;
+        var openError = await OpenAsync(page, gameSystem.Id, catalogues.Length > 0 ? catalogues[^1].Id : gameSystem.Id);
+        return openError is null ? [] : [openError];
     }
 
     /// <summary>
-    /// Switches the editor to a different loaded file (catalogue or game system) by id, driven through
-    /// the UI: returns to the system list and double-clicks the matching item. Used by the spec
-    /// <c>openFile</c> action so multi-catalogue specs can declare the active file.
+    /// Switches the editor to a different loaded file (catalogue or game system) by id. Used by the
+    /// spec <c>openFile</c> action so multi-catalogue specs can declare the active file.
     /// </summary>
     public static async Task NavigateToFileAsync(IPage page, string id)
     {
-        // Already open?
-        var currentId = await page.EvaluateAsync<string?>(
-            "() => new URLSearchParams(location.search).get('id')");
-        if (currentId == id)
-        {
-            return;
-        }
-
-        // Resolve the file's display name (read-only) from the loaded catalogues or systems store.
-        var name = await page.EvaluateAsync<string?>(
+        // The system the file is filed under: the open one when it holds the file, else any that does.
+        var systemId = await page.EvaluateAsync<string?>(
             """
             (id) => {
-                const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia;
-                const ed = pinia?._s?.get('editor');
-                const sId = new URLSearchParams(location.search).get('systemId');
-                const loaded = ed?.gameSystems?.[sId]?.loadedCatalogues ?? {};
-                if (loaded[id]?.name) return loaded[id].name;
-                // Fall back to scanning all systems' catalogue indexes. catalogueFiles is included
-                // because loadedCatalogues only holds files the editor has OPENED — so resolving a
-                // name from the file list, which is where this call starts, found nothing there.
-                for (const gs of Object.values(ed?.gameSystems ?? {})) {
-                    for (const c of Object.values(gs?.cataloguesById ?? gs?.catalogues ?? {})) {
-                        if (c?.id === id && c?.name) return c.name;
-                    }
-                    for (const f of Object.values(gs?.catalogueFiles ?? {})) {
-                        const c = f?.catalogue ?? f;
-                        if (c?.id === id && c?.name) return c.name;
-                    }
-                    const sys = gs?.gameSystem?.gameSystem;
-                    if (sys?.id === id && sys?.name) return sys.name;
-                }
-                return null;
+                const ed = document.querySelector('#__nuxt')?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
+                const holds = (key, sys) => key === id || sys?.gameSystem?.gameSystem?.id === id
+                    || Object.entries(sys?.catalogueFiles ?? {}).some(([k, f]) => k === id || (f?.catalogue ?? f)?.id === id);
+                const open = new URLSearchParams(location.search).get('systemId');
+                if (open && holds(open, ed?.gameSystems?.[open])) return open;
+                return Object.entries(ed?.gameSystems ?? {}).find(([key, sys]) => holds(key, sys))?.[0] ?? null;
             }
             """, id);
 
-        _ = name ?? throw new InvalidOperationException(
-            $"NR Editor UI: cannot resolve a name for file id '{id}' to open it.");
+        _ = systemId ?? throw new InvalidOperationException(
+            $"NR Editor: no loaded game system holds a file with id '{id}', so it cannot be opened.");
 
-        // Return to the system list and double-click the target file. Same interaction — and the same
-        // flake surface — as the setup path, so it goes through the same bounded retry.
-        var navError = await OpenFileFromListAsync(page, name, expectedId: id);
-        if (navError is not null)
+        var error = await OpenAsync(page, systemId, id);
+        if (error is not null)
         {
-            throw new InvalidOperationException(
-                $"NR Editor UI: could not open file id '{id}' ({name}). {navError}");
+            throw new InvalidOperationException($"NR Editor: could not open file id '{id}'. {error}");
         }
-    }
-
-    private static async Task<string?> NavigateToEditableAsync(IPage page, string itemName)
-    {
-        var navError = await OpenFileFromListAsync(page, itemName, expectedId: null);
-        if (navError is not null)
-        {
-            return navError;
-        }
-
-        // Persist Pinia store references for action methods to use later.
-        try
-        {
-            await page.EvaluateAsync("""
-                () => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    window.__bsspec_editor_ui = {
-                        pinia,
-                        storeIds: pinia ? [...pinia._s.keys()] : [],
-                        cataloguesStore: pinia?._s?.get('catalogues'),
-                        editorStore: pinia?._s?.get('editor'),
-                    };
-                }
-                """);
-        }
-        catch (Exception ex)
-        {
-            return $"Navigation to editor reached '{itemName}' but capturing the Pinia store references "
-                + $"failed: {Compact(ex.Message)}";
-        }
-
-        return null;
-    }
-
-    /// <summary>The ordered stages of one open attempt. Named in diagnostics so a CI log says which one lost.</summary>
-    private enum NavStage
-    {
-        /// <summary>Standing on the file-list view the double-click starts from.</summary>
-        FileList,
-
-        /// <summary>Double-clicking the named row to ask the editor to open it.</summary>
-        Activate,
-
-        /// <summary>Waiting for the SPA to route to the catalogue-editor view.</summary>
-        Route,
-
-        /// <summary>Waiting for Vue to populate <c>editor.gameSystems[systemId].loadedCatalogues[id]</c>.</summary>
-        Store,
     }
 
     /// <summary>
-    /// Opens a loaded file (catalogue or game system) in the editor by double-clicking its row in the
-    /// file list, retrying the whole sequence up to <see cref="NavAttempts"/> times.
-    ///
+    /// Opens a loaded file through the editor's own <c>goto_catalogue</c> — the action its links use —
+    /// which routes to the catalogue view and resolves once that view has loaded the file. Returns null
+    /// on success, or what went wrong.
     /// <para>
-    /// <b>Why a retry, and why the whole sequence.</b> The observed CI flake is a navigation that never
-    /// happens: Playwright dispatches the double-click, the SPA never routes, and the fixed wait then
-    /// expires. Nothing is wrong with the page — the interaction was simply lost — so re-dispatching it
-    /// is the only remedy that helps; a longer timeout just fails slower. The later stages are folded
-    /// into the same retry because they share the remedy: whether the route never came or the store
-    /// never populated, the fix is to go back to the list and open the file again.
-    /// </para>
-    /// <para>
-    /// <b>Why it is safe to re-enter.</b> The two failure modes leave the page in different places — a
-    /// lost double-click leaves us on the list, a stalled store wait leaves us half-navigated on the
-    /// catalogue route — so each attempt first re-establishes the list view rather than assuming it.
-    /// Recovery is a client-side <c>GoBack</c>, never a reload: the uploaded files live only in the
-    /// in-memory Pinia stores, and a reload would destroy the very state we are navigating to.
-    /// </para>
-    ///
-    /// <para>Returns null on success, or a message naming the stage that lost on every attempt.</para>
-    /// </summary>
-    /// <param name="page">The editor page, standing on the file list or on a half-navigated editor route.</param>
-    /// <param name="itemName">Display name of the file-list row to double-click.</param>
-    /// <param name="expectedId">
-    /// Id the editor store must have loaded, when the caller knows it (the <c>openFile</c> path). Null
-    /// means "whatever id the resulting URL names" — the setup path, which learns the id from the URL.
-    /// </param>
-    private static async Task<string?> OpenFileFromListAsync(IPage page, string itemName, string? expectedId)
-    {
-        var failures = new List<string>(NavAttempts);
-        var lastStage = NavStage.FileList;
-
-        for (var attempt = 1; attempt <= NavAttempts; attempt++)
-        {
-            // The last attempt keeps the original, generous ceiling; earlier ones are fast probes.
-            var timeout = attempt == NavAttempts ? NavTimeoutMs : NavProbeTimeoutMs;
-            var stage = NavStage.FileList;
-
-            try
-            {
-                // 1. File list, always re-entered so its rows are current — see GoToFileListAsync for
-                //    why being on it already is not the same as it being up to date.
-                await GoToFileListAsync(page, ListTimeoutMs);
-
-                // 2. Activate. Double-click (not single click) is what opens the editor.
-                stage = NavStage.Activate;
-                var item = page.Locator(FileListItemSelector, new PageLocatorOptions { HasText = itemName });
-                await item.First.DblClickAsync(new LocatorDblClickOptions { Timeout = timeout });
-
-                // 3. Route. This is the stage a lost double-click stalls at.
-                stage = NavStage.Route;
-                await page.WaitForURLAsync("**/catalogue**",
-                    new PageWaitForURLOptions { Timeout = timeout });
-
-                // 4. Store. The URL changes before Vue finishes populating
-                //    editor.gameSystems[systemId].loadedCatalogues[id].
-                stage = NavStage.Store;
-                await page.WaitForFunctionAsync(
-                    """
-                    (expectedId) => {
-                        const pinia = document.querySelector('#__nuxt')
-                            ?.__vue_app__?.config?.globalProperties?.$pinia;
-                        const params = new URLSearchParams(window.location.search);
-                        const systemId = params.get('systemId');
-                        const id = expectedId ?? params.get('id');
-                        const editor = pinia?._s?.get('editor');
-                        return !!editor?.gameSystems?.[systemId]?.loadedCatalogues?.[id];
-                    }
-                    """,
-                    expectedId,
-                    new PageWaitForFunctionOptions { Timeout = timeout });
-
-                // A retry that succeeds is still a signal: surface it so a degrading environment
-                // cannot hide behind silent recoveries.
-                if (attempt > 1)
-                {
-                    Console.Error.WriteLine(
-                        $"[nr-editor-nav] Opened '{itemName}' on attempt {attempt}/{NavAttempts}; "
-                        + $"earlier attempts lost at: {string.Join("; ", failures)}");
-                }
-
-                return null;
-            }
-            catch (Exception ex)
-            {
-                lastStage = stage;
-                failures.Add($"[{attempt}/{NavAttempts}] {StageName(stage)}: {Compact(ex.Message)}");
-            }
-        }
-
-        var listReached = lastStage > NavStage.FileList;
-        return $"Navigation to editor failed for '{itemName}' after {NavAttempts} attempts. "
-            + $"Last stage: {StageName(lastStage)} — {StageDescription(lastStage)}. "
-            + $"Last observed state: URL '{page.Url}'; file list found: {(listReached ? "yes" : "no")}; "
-            + $"on catalogue route: {(IsOnEditorRoute(page) ? "yes" : "no")}. "
-            + $"Attempts: {string.Join("; ", failures)}";
-    }
-
-    /// <summary>
-    /// Puts the page on the file-list view with its rows rebuilt, and returns once they have rendered.
-    /// <para>
-    /// <b>The list is built when its route is entered, not from the store.</b> NR's own upload handler
-    /// ends in <c>$router.push('/?id=' + gameSystemIds)</c>, which for a catalogue-only import is a
-    /// push to the route already showing — so no route update fires and the imported catalogue, which
-    /// is in the store, has no row. A driver that then looks for that row waits for something that
-    /// will never appear; this is what read as "mid-spec file load is flaky" (#268). Waiting does not
-    /// help (measured: still absent after twelve seconds) and reloading is worse (the rows collapse to
-    /// the game system alone).
-    /// </para>
-    /// <para>
-    /// So the route is always <em>re-entered</em>, with a query that differs from the last one, which
-    /// is what makes it an update rather than a no-op. Unconditional on purpose: it is correct from
-    /// the editor route and from the list, which is what lets both callers drop the
-    /// "am I on the editor route? then go back" question they used to ask. It also replaces
-    /// <c>GoBackAsync</c>, which navigated by history depth — right only as long as the step before it
-    /// was the one that put us here.
+    /// <c>goto_catalogue</c> decides it is already there from the current route's <c>id</c> query alone,
+    /// and an import leaves <c>/?id=&lt;system&gt;</c> behind — so opening that game system straight after
+    /// importing it was a silent no-op. Leaving for the plain list first keeps the comparison honest.
+    /// Its promise never settles when the load throws, hence the bound.
     /// </para>
     /// </summary>
-    private static async Task GoToFileListAsync(IPage page, int timeoutMs)
+    private static async Task<string?> OpenAsync(IPage page, string systemId, string id)
     {
-        var nonce = Interlocked.Increment(ref _fileListNonce);
-        await page.EvaluateAsync(
+        var outcome = await page.EvaluateAsync<string>(
             """
-            (nonce) => {
-                const router = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$router;
-                if (!router) throw new Error('NR Editor UI: no Vue router on the page.');
-                return router.push({ path: '/', query: { bsspec: String(nonce) } });
+            async ([systemId, id, timeoutMs]) => {
+                const gp = document.querySelector('#__nuxt').__vue_app__.config.globalProperties;
+                const editor = gp.$pinia._s.get('editor');
+                if (gp.$router.currentRoute.value.name !== 'catalogue') await gp.$router.push({ name: 'index' });
+                const opened = Promise.resolve(editor.goto_catalogue(id, systemId)).then(() => 'opened');
+                const late = new Promise(r => setTimeout(() => r('timeout'), timeoutMs));
+                const result = await Promise.race([opened, late]);
+                const params = new URLSearchParams(location.search);
+                if (params.get('id') !== id) return `${result}; the editor is at ${location.href}`;
+                if (!editor.gameSystems?.[systemId]?.loadedCatalogues?.[id]) {
+                    return `${result}; editor.gameSystems['${systemId}'].loadedCatalogues has no '${id}' `
+                        + `(loaded: ${Object.keys(editor.gameSystems?.[systemId]?.loadedCatalogues ?? {}).join(', ') || 'none'})`;
+                }
+                return result;
             }
             """,
-            nonce);
+            new object[] { systemId, id, NavTimeoutMs });
 
-        await page.WaitForSelectorAsync(FileListItemSelector,
-            new PageWaitForSelectorOptions { Timeout = timeoutMs });
+        return outcome == "opened" ? null : $"Opening '{id}' (system '{systemId}') did not finish: {outcome}.";
     }
-
-    /// <summary>
-    /// Makes each <see cref="GoToFileListAsync"/> a different route from the one before it. Shared
-    /// across pages, which costs nothing: it only has to differ from what this page last pushed, and a
-    /// number that never repeats does that.
-    /// </summary>
-    private static int _fileListNonce;
-
-    /// <summary>True when the page is on the catalogue-editor route rather than the file list.</summary>
-    private static bool IsOnEditorRoute(IPage page)
-        => Uri.TryCreate(page.Url, UriKind.Absolute, out var uri)
-            && uri.AbsolutePath.Contains("/catalogue", StringComparison.OrdinalIgnoreCase);
-
-    private static string StageName(NavStage stage) => stage switch
-    {
-        NavStage.FileList => "file-list",
-        NavStage.Activate => "activate",
-        NavStage.Route => "route",
-        NavStage.Store => "store",
-        _ => stage.ToString(),
-    };
-
-    private static string StageDescription(NavStage stage) => stage switch
-    {
-        NavStage.FileList => "the file list never rendered, so there was no row to double-click",
-        NavStage.Activate => "the row was located but the double-click never completed (not actionable)",
-        NavStage.Route => "the double-click was dispatched but the editor never routed to the catalogue "
-            + "view — the click did not register",
-        NavStage.Store => "the catalogue route was reached but "
-            + "editor.gameSystems[systemId].loadedCatalogues[id] never populated",
-        _ => "unknown stage",
-    };
 
     /// <summary>First line of an exception message, length-capped — Playwright appends a long call log.</summary>
     private static string Compact(string message)
@@ -560,98 +434,77 @@ public static class NrEditorStore
     }
 
     /// <summary>
-    /// Clears the NR Editor's loaded state for this spec: resets the Pinia stores and navigates back to
-    /// the home page. Called between test runs and before a reload.
+    /// Clears what the spec left behind and reloads the editor empty. Called between specs and before
+    /// a reload.
+    /// <para>
+    /// <b>The editor persists every import, so a reload alone brings it back.</b> Imports are written to
+    /// the origin's IndexedDB and the imported systems are remembered in its settings, and the list
+    /// page restores them on load — asynchronously, so a restored system from the last spec can land
+    /// on top of the next spec's import of the same id. The origin's storage is cleared before the
+    /// reload; the stores themselves are rebuilt by the reload.
+    /// </para>
     /// </summary>
     public static async Task CleanupCatalogueAsync(IPage page, string editorBaseUrl)
     {
-        // Reset Pinia store state
         await page.EvaluateAsync("""
-            () => {
-                const pinia = document.querySelector('#__nuxt')
-                    ?.__vue_app__?.config?.globalProperties?.$pinia;
-                // Reset catalogues and editor stores to clear loaded data
-                try { pinia?._s?.get('catalogues')?.$reset(); } catch { /* best-effort */ }
-                try { pinia?._s?.get('editor')?.$reset(); } catch { /* best-effort */ }
-                window.__bsspec_editor_ui = null;
+            async () => {
+                // A blocked delete completes once the page's own connection closes, which the reload
+                // below does, and before the reloaded page can open the database again.
+                const dbs = await indexedDB.databases();
+                await Promise.all(dbs.map(d => new Promise(resolve => {
+                    const request = indexedDB.deleteDatabase(d.name);
+                    request.onsuccess = request.onerror = request.onblocked = () => resolve();
+                })));
+                localStorage.clear();
+                sessionStorage.clear();
             }
             """);
 
-        // Navigate back to home page for the next test
         await page.GotoAsync(editorBaseUrl);
-        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await WaitForAppAsync(page, editorBaseUrl);
     }
 
     /// <summary>
     /// Reloads the editor from already-serialized BattleScribe XML — typically the editor's own export
-    /// of the current, mutated state — and reopens the file named <paramref name="reopenName"/>. Resets
-    /// the stores, feeds the XML through the same hidden file input the initial load uses (so NR's real
-    /// <c>BSXmlToJson</c> parse runs), waits for the catalogues store, then navigates back into the
-    /// editor. Used by round-trip specs.
+    /// of the current, mutated state — and reopens the file <paramref name="reopenId"/>. Clears the
+    /// editor, feeds the XML through the same import the initial load uses (so NR's real parse runs),
+    /// then opens the file again. Used by round-trip specs.
     /// </summary>
     public static async Task<IReadOnlyList<string>> ReloadFromXmlAsync(
         IPage page,
         string editorBaseUrl,
         IReadOnlyList<(string Name, string Xml)> files,
-        string reopenName)
+        string reopenId)
     {
-        var errors = new List<string>();
         if (files.Count == 0)
         {
-            errors.Add("Reload: no exported XML files to reload");
-            return errors;
+            return ["Reload: no exported XML files to reload"];
         }
 
-        // Reset stores and return home, exactly as between test runs.
         await CleanupCatalogueAsync(page, editorBaseUrl);
 
         // GST first, then CATs — mirrors the initial upload ordering.
-        var payloads = files
-            .OrderByDescending(f => f.Name.EndsWith(".gst", StringComparison.OrdinalIgnoreCase))
-            .Select(f => new FilePayload
-            {
-                Name = f.Name,
-                MimeType = "application/xml",
-                Buffer = Encoding.UTF8.GetBytes(f.Xml),
-            })
-            .ToList();
-
-        await page.Locator("input[type=file]").SetInputFilesAsync(payloads);
+        var importError = await ImportAsync(page, ToPayloads(
+            files.OrderByDescending(f => f.Name.EndsWith(".gst", StringComparison.OrdinalIgnoreCase))));
+        if (importError is not null)
+        {
+            return [importError];
+        }
 
         try
         {
-            await page.WaitForFunctionAsync(
-                """
-                () => {
-                    const pinia = document.querySelector('#__nuxt')
-                        ?.__vue_app__?.config?.globalProperties?.$pinia;
-                    const cs = pinia?._s?.get('catalogues');
-                    return cs?.dict && Object.keys(cs.dict).length > 0;
-                }
-                """,
-                null,
-                new PageWaitForFunctionOptions { Timeout = NavTimeoutMs });
+            await NavigateToFileAsync(page, reopenId);
+            return [];
         }
-        catch (TimeoutException ex)
+        catch (InvalidOperationException ex)
         {
-            errors.Add($"NR Editor did not populate catalogues store after reload upload: {ex.Message}");
-            return errors;
+            return [ex.Message];
         }
-
-        var navResult = await NavigateToEditableAsync(page, reopenName);
-        if (navResult is not null)
-        {
-            errors.Add(navResult);
-        }
-
-        return errors;
     }
 
     /// <summary>
     /// Load a single additional file (catalogue or game system) from XML WITHOUT resetting existing
-    /// state, then open it. The hidden file input is only actionable on the file-list view, so this
-    /// returns there client-side (preserving the in-memory store) before uploading. Used by
-    /// <c>openFile</c> with a source.
+    /// state, then open it. Used by <c>openFile</c> with a source.
     /// <para>
     /// <b>A file NR declines is reported as a refusal, in NR's own words.</b> Its importer parses
     /// each uploaded file and then keeps only what came back as a catalogue or a game system
@@ -664,18 +517,17 @@ public static class NrEditorStore
     /// Detection is by <em>diffing the file set</em> rather than by looking for the id the caller
     /// expects: a payload broken enough to be refused is usually too broken to have a readable root
     /// id, and asking for one first meant the driver rejected those files before NR ever saw them.
-    /// Before this, a declined file surfaced 30 seconds later as "the row was located but the
-    /// double-click never completed" — our navigation timeout, describing our own driver rather than
-    /// anything NR did, which is why <c>newrecruit-ui</c> could not carry a load-failure spec (#268).
+    /// Before this, a declined file surfaced 30 seconds later as a navigation timeout describing our
+    /// own driver rather than anything NR did, which is why <c>newrecruit-ui</c> could not carry a
+    /// load-failure spec (#268).
     /// </para>
     /// </summary>
     public static async Task<NrImportOutcome> LoadFileAsync(IPage page, string fileName, string xml)
     {
         var errors = new List<string>();
 
-        // The hidden file input lives on the file-list view, so go there (client-side — this does NOT
-        // reset the Pinia store).
-        await GoToFileListAsync(page, ListTimeoutMs);
+        // Client-side, so the in-memory stores are untouched.
+        var input = await GoToImportAsync(page);
 
         var before = await ReadImportedFilesAsync(page);
 
@@ -693,13 +545,7 @@ public static class NrEditorStore
         NrImportedFile? added;
         try
         {
-            var payload = new FilePayload
-            {
-                Name = fileName,
-                MimeType = "application/xml",
-                Buffer = Encoding.UTF8.GetBytes(xml),
-            };
-            await page.Locator("input[type=file]").SetInputFilesAsync([payload]);
+            await input.SetInputFilesAsync(ToPayloads([(fileName, xml)]));
 
             added = await WaitForImportedFileAsync(page, before, consoleErrors);
         }
@@ -714,10 +560,10 @@ public static class NrEditorStore
             return new NrImportOutcome(null, errors);
         }
 
-        var navResult = await NavigateToEditableAsync(page, added.Name);
-        if (navResult is not null)
+        var openError = await OpenAsync(page, added.SystemKey, added.Id);
+        if (openError is not null)
         {
-            errors.Add($"NR Editor could not open loaded file '{added.Id}' ({added.Name}): {navResult}");
+            errors.Add($"NR Editor could not open loaded file '{added.Id}' ({added.Name}): {openError}");
         }
 
         return new NrImportOutcome(added, errors);

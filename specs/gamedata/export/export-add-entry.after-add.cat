@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<catalogue id="cat-1" name="Test Catalogue" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema" type="catalogue">
+<catalogue name="Test Catalogue" id="cat-1" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemRevision="1" library="false" revision="1" type="catalogue" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <selectionEntries>
-    <selectionEntry type="upgrade" import="true" name="Space Marine" hidden="false" id="se-marine"/>
+    <selectionEntry name="Space Marine" id="se-marine" hidden="false" import="true" type="upgrade"/>
   </selectionEntries>
 </catalogue>

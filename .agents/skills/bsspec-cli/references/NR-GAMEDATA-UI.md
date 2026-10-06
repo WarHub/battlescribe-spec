@@ -9,10 +9,12 @@ Pinia `editorStore`. See the parent [SKILL.md](../SKILL.md) for CLI verbs.
 
 ```
 NrGameDataUiEngine (IGameDataEngine)
-├── Setup: NrGameDataUiSetup.LoadAndOpenCatalogueAsync()
+├── Open: NrEditorStore.OpenEditorAsync() — fails at engine creation, naming any
+│   contract (store action, route, import input) the deployment no longer offers
+├── Setup: NrEditorStore.LoadAndOpenCatalogueAsync()
 │   ├── Generate XML via CatXmlGenerator
-│   ├── Inject showDirectoryPicker mock OR call loadSystemFromFs() via Pinia
-│   └── Navigate to the catalogue editor via UI tree click
+│   ├── Import it through the file input on the `system` route
+│   └── Open the target through the editor store's own goto_catalogue
 ├── Mutations: NrGameDataUiActions.*
 │   ├── AddEntry    → right-click tree node → context menu → "Add" → type
 │   ├── RemoveEntry → right-click tree node → "Delete" → confirm
@@ -71,14 +73,14 @@ The NR Editor is a Vue/Nuxt SPA with no test hooks, so several intuitive selecto
 
 | Element | Selector | Trap to avoid |
 |---------|----------|---------------|
-| Tree node by id | resolve in the Pinia store → match `.{collectionClass} h3:is(.normalTitle,.arrowTitle)` by name | no `data-id` / `role=treeitem` in the DOM |
+| Tree node by id | resolve in the Pinia store → match `.{collectionClass} .title:is(.normalTitle,.arrowTitle)` by name | no `data-id` / `role=treeitem` in the DOM |
 | Context-menu items | `.context-menu > div` filtered by **anchored** text (`^\s*Group\s*$`) | not `role=menuitem`; unanchored "Group" also matches "Modifier Group" / "Info Group" |
 | Entry id / name fields | `td:last-child input[type='text']` in the editor-table row | no `name`/`id` attribute on the input |
 | Delete / Save confirm | `GetByRole(Button, Name="Confirm"\|"Delete"\|"Yes")` (`"OK"\|"Save"\|"Close"` for saves) | button label varies by dialog |
 
 Notes baked into `FindTreeNodeByIdAsync` / `AddEntry`:
 - Resolve the entry **recursively** in the store (children of children) to get its name and
-  `collectionClass`, then expand **all** `h3.arrowTitle.collapsed` nodes in a loop — expanding
+  `collectionClass`, then expand **all** `.title.arrowTitle.collapsed` nodes in a loop — expanding
   only depth-0 leaves deeper parents collapsed and their children unrendered.
 - **Add child entry**: right-click the parent, click the text-labelled item — `Entry` for a
   `selectionEntry`, `Group` for a `selectionEntryGroup` (`GetAddChildMenuLabel`), matched by

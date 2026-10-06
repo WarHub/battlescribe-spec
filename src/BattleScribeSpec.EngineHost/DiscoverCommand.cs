@@ -292,7 +292,7 @@ internal static class DiscoverCommand
         try
         {
             probeEntryId = engine.AddEntry(catId, "selectionEntry", "Probe Entry").EntryId;
-            var entryMenu = await engine.RightClickAndDumpMenuJsonAsync("#editor-entries h3.selected");
+            var entryMenu = await engine.RightClickAndDumpMenuJsonAsync("#editor-entries .title.selected");
             results["selectionEntry (child menu)"] = JsonSerializer.Deserialize<object>(entryMenu)!;
         }
         catch (Exception ex)
@@ -308,7 +308,7 @@ internal static class DiscoverCommand
             try
             {
                 create();
-                var menu = await engine.RightClickAndDumpMenuJsonAsync("#editor-entries h3.selected");
+                var menu = await engine.RightClickAndDumpMenuJsonAsync("#editor-entries .title.selected");
                 results[$"{label} (child menu)"] = JsonSerializer.Deserialize<object>(menu)!;
                 Ui.Info($"  {label} child menu");
             }
@@ -328,15 +328,15 @@ internal static class DiscoverCommand
 
         // Right-click each root section header to capture its "add" menu.
         var headerCount = await engine.EvaluateAsync<int>(
-            "() => document.querySelectorAll('.collapsible-box.depth-0 > h3').length");
+            "() => document.querySelectorAll('.collapsible-box.depth-0 > .title').length");
         Ui.Info($"  {headerCount} root section header(s)");
         for (var i = 0; i < headerCount; i++)
         {
             try
             {
-                var header = $".collapsible-box.depth-0 > h3 >> nth={i}";
+                var header = $".collapsible-box.depth-0 > .title >> nth={i}";
                 var headerText = await engine.EvaluateAsync<string>(
-                    $"() => document.querySelectorAll('.collapsible-box.depth-0 > h3')[{i}]?.innerText?.trim() || ''");
+                    $"() => document.querySelectorAll('.collapsible-box.depth-0 > .title')[{i}]?.innerText?.trim() || ''");
                 var menu = await engine.RightClickAndDumpMenuJsonAsync(header);
                 results[$"section[{i}]: {headerText}"] = JsonSerializer.Deserialize<object>(menu)!;
                 Ui.Info($"  section[{i}]: {headerText}");

@@ -103,7 +103,7 @@ public sealed class NrGameDataUiDiagnostics
                     };
                     dump('right panel HTML', '.rightPanel');
                     dump('context menu HTML', '.context-menu');
-                    const selNode = document.querySelector('#editor-entries h3.selected');
+                    const selNode = document.querySelector('#editor-entries .title.selected');
                     if (selNode) parts.push('=== selected tree node ===\n' + clean(selNode));
 
                     if (parts.length === 0) {

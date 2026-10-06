@@ -411,21 +411,17 @@ session to that game system**, which is why `load-missing-required-attribute` ca
   store state; the single place it says anything is a `console.error` from the one `catch` in that
   handler. So the driver detects the refusal structurally — by diffing NR's file set across the
   upload — and describes it with the console error NR emitted. Two traps worth knowing: a file NR
-  *accepts* can take **seconds** to appear (IndexedDB plus Vue reactivity), so a short poll reads
-  acceptance as refusal; and `loadedCatalogues` holds only files the editor has **opened**, so the
-  file list lives in `catalogueFiles`.
+  *accepts* is not in the store the moment the input changes, so a short poll reads acceptance as
+  refusal; and `loadedCatalogues` holds only files the editor has **opened**, so the imported files
+  live in `catalogueFiles`.
 
-**The NR file list is built when its route is entered, not from the store.** NR's upload handler ends
-in `$router.push('/?id=' + gameSystemIds)`, which for a catalogue-only import is a push to the route
-already showing — no route update fires, and the imported file has no row. This is what read for a
-long time as "mid-spec file load through the SPA file-list is flaky"; it is not flaky, it is
-deterministic, and waiting does not help (measured: still absent after twelve seconds) while
-reloading is worse (the rows collapse to the game system alone). The driver now always *re-enters*
-the list route, with a query that differs from the last one so it is an update rather than a no-op.
-That replaced the older "am I on the editor route? then go back" question at both call sites, so
-`GoBackAsync` — which navigated by history depth rather than to a destination — is gone from this
-driver. `export/openfile-inline`, opted out of `newrecruit-ui` since it was written, runs there now
-with no per-engine block at all.
+**The drivers open a file through the editor store's own `goto_catalogue`, not through its file
+list.** The list is drawn from its route's query rather than from the store, so a catalogue-only
+import — whose handler pushes the route already showing — left the imported file with no row, and a
+driver that double-clicked rows waited for one that never came (#268). The store action routes to
+the catalogue view and resolves once that view has loaded the file, so there is no row to wait for.
+`export/openfile-inline`, opted out of `newrecruit-ui` since it was written, runs there with no
+per-engine block at all.
 
 **One spec is still opted out of `newrecruit-ui`, and it is not a skip for convenience.**
 `load-missing-game-system-id` gives NR a catalogue with no `gameSystemId`. NR reads the absent
