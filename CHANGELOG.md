@@ -1136,6 +1136,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- **The test project's own way of loading the IKVM assemblies (#523)** — its `CopyIkvmAssemblies`
+  target and `IkvmAssemblyResolver`, a second record of the six assemblies the IKVM runtime loads
+  reflectively and a load hook needed only because the copy left them out of `deps.json`.
+  `BattleScribeSpec.Tests` imports `BattleScribeIkvmConsumer.targets` as `EngineHost` and
+  `ReferenceAdapter` do, which lists them as runtime dependencies so the host resolves them unaided.
 - **Post-migration overhead in the test suites** — the selection audit (`ProfileSelectionAuditTests`,
   `Category=SelectionAudit`), AGENTS.md's generated lanes-outside-`pre-push` table and profile list with
   their generator tests, the skills inventory and its checks, and all of `BannedSymbolsTests` but one

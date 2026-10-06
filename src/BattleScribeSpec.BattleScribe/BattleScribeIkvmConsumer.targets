@@ -17,9 +17,8 @@
     imports this file.
 
     The list below is the hand-maintained set of reflection-only IKVM assemblies. JetBrainsAnnotations
-    is deliberately NOT listed: it holds compile-time-only annotations and is never runtime-loaded (it
-    is absent from the output and deps.json in both the old copy-target and this world). If a future
-    BattleScribe engine version reflectively loads a new assembly, add it here.
+    is deliberately NOT listed: it holds compile-time-only annotations and is never runtime-loaded. If a
+    future BattleScribe engine version reflectively loads a new assembly, add it here.
   -->
   <Target Name="_AddBattleScribeIkvmRuntimeReferences" BeforeTargets="ResolveAssemblyReferences">
     <PropertyGroup>
