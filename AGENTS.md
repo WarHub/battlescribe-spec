@@ -140,6 +140,7 @@ that restates a field is a second record that drifts from the first.
 dotnet restore && dotnet build                                                     # first time
 dotnet test -p:TestProfile=pre-push                                                # offline gate (no app); CI runs it, locally optional
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-push --filter "DisplayName~my-spec-id"  # one spec: its lint + every per-spec offline engine (not the aggregate NR lanes)
+artifacts/bin/BattleScribeSpec.Tests/debug/BattleScribeSpec.Tests --test-profile pre-push --filter "DisplayName~my-spec-id"  # the same minus dotnet test's restore + build check, most of a small run: re-runs after a spec edit (build after a C# one)
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs --output Detailed   # a lane, every result as it finishes
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles # what each profile runs
 node tools/mutate.mjs <mutations.json>                                             # prove C# guards can fail: break each, see it red, restore
