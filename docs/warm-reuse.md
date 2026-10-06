@@ -122,7 +122,7 @@ abandoned responses:
   simply wasn't checked.
 
 The **timeout hierarchy** was also inverted and is now fixed: the CLI's per-request timeout (3 min)
-must exceed any host-side operation (BS-UI actions can legitimately run ~122s), so a timeout means
+must exceed any host-side operation (a BS-UI action can legitimately run until its 60s action timeout), so a timeout means
 "the adapter is genuinely dead," never "the adapter is still working."
 
 The BS-UI Java agent additionally **reports unexpected modal dialogs** (with the dialog's text and a
@@ -140,9 +140,10 @@ warm roster benchmark reproduced no crash at all, and the crash cause has never 
 a dump.
 
 Warm-reuse is still enabled because it is measured correct and ~1.8–2.2× faster. Mitigations:
-`BsUiRosterEngine` self-heals (poisons itself and cold-restarts the app) on an unexpected modal or a
-timeout, so an engine-level failure costs one restart rather than corrupting later specs. The gap is
-that a **host-process** death still fails the rest of that worker's batch — see **#304**. Suppressing
+both BattleScribe UI engines close the app after any failed call, and refuse to reuse one a passing
+spec left a dialog open in (`docs/bs-ui-driver.md`, "Warm Start"), so an engine-level failure costs
+one restart rather than corrupting later specs. The gap is that a **host-process** death still
+fails the rest of that worker's batch — see **#304**. Suppressing
 the app's phone-home from the Java agent (we hold `Instrumentation` and run before its `main`) is the
 obvious next step if the crash proves recurrent.
 

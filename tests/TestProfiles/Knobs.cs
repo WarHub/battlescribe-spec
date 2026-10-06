@@ -132,8 +132,6 @@ internal static class Knobs
             "where bs-spec's engine host finds the Java agent jar"),
         new("BS_UI_ACTION_TIMEOUT", KnobKind.Default, ["BsRosterUi"],
             "the roster UI driver's per-action timeout"),
-        new("BS_UI_MAX_RETRIES", KnobKind.Default, ["BsRosterUi"],
-            "how many times the roster UI driver retries an action the app dropped"),
         new("BSUI_AGENT_STDERR_LOG", KnobKind.Default, DesktopAppEngines,
             "a file to copy the Java agent's stderr into"),
         new("BS_UI_PANEL_TRACE", KnobKind.Default, ["BsRosterUi"],

@@ -18,9 +18,8 @@ public sealed class JsonProtocolEngine : IRosterEngine
     /// unresponsive" — never "the adapter is still working":
     /// <list type="bullet">
     ///   <item>CLI per-request (this, 3 min)</item>
-    ///   <item>&gt; BS-UI action worst case (~122s: 60s ActionTimeout × (1 + MaxRetries) + retry delay)</item>
     ///   <item>&gt; AgentClient.CallTimeout (90s for actions)</item>
-    ///   <item>&gt; Java agent FX-thread dispatch (60s)</item>
+    ///   <item>&gt; BS-UI ActionTimeout and the Java agent's FX-thread dispatch (60s each)</item>
     /// </list>
     /// It was previously 30s — SHORTER than a legitimate BS-UI roster action — so the CLI abandoned
     /// in-flight requests, whose late responses then desynced the stream (see the corrId correlation

@@ -46,21 +46,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// Java-side wait and fails the next action loudly.
     /// </remarks>
     private const int StartupDialogCeilingMs = 3_000;
-
-    /// <summary>
-    /// Poll interval for window-state questions. Matches the Java agent's own POLL_INTERVAL_MS.
-    /// </summary>
-    /// <remarks>
-    /// Do not shrink this casually: every iteration is an FX-thread round trip contending with
-    /// BattleScribe's own dialog handling on that single thread — an observer effect DialogInspector's
-    /// javadoc records as measurably slowing real dialog transitions.
-    /// </remarks>
-    private const int StartupDialogPollMs = 200;
     private const int WindowWaitMs = 30_000;
 
     /// <summary>
-    /// How long one <see cref="AgentClient.ProbeFxThreadAsync"/> call is given before the instance
-    /// is called wedged — both to gate warm-start reuse and to end the retry backoff.
+    /// How long each question the warm-start gate asks is given before the instance is called
+    /// wedged and not reused.
     /// </summary>
     private static readonly TimeSpan FxProbeTimeout = TimeSpan.FromSeconds(2);
 
@@ -121,18 +111,24 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private string? _gameSystemId;
     private string? _gameSystemName;
     private string? _specId;
+
+    /// <summary>The spec before this one — the one that handed a warm-reused app over.</summary>
+    private string? _previousSpecId;
     private bool _engineLocated;
     private bool _disposed;
 
     /// <summary>
-    /// Set when an action fails in a way that leaves the running app in an unknown state (an
-    /// unexpected-modal <see cref="AgentException"/>, or any <see cref="TimeoutException"/>) — see
-    /// <see cref="MarkPoisonedIfUnsafe"/>. A poisoned engine's next <see cref="CleanupAsync"/> tears
-    /// the app down even under <see cref="KeepAlive"/>, so the NEXT spec cold-starts a fresh JVM
-    /// instead of risking a warm-reused app that might still have a dialog open or be mid-corruption.
-    /// One bad spec costs one cold restart; it cannot cascade into later specs.
+    /// Which spec and call failed against the running app, set by ANY failure there (see
+    /// <see cref="RunGuardedAsync{T}"/>). While set, <see cref="CleanupAsync"/> closes the app even
+    /// under <see cref="KeepAlive"/>, so the spec that failed is the last one that runs on it.
     /// </summary>
-    private bool _poisoned;
+    /// <remarks>
+    /// Keyed on the fact of a failure, not on what it said. It used to be set by two message patterns
+    /// — an unexpected modal, a timeout — and every other failure handed its app to the next spec,
+    /// which is how one createRoster cut off behind a prompt left a New Roster dialog that failed the
+    /// specs after it (#526).
+    /// </remarks>
+    private string? _poisonedBy;
 
     /// <summary>
     /// When true, <see cref="Cleanup"/> preserves the running app and agent connection
@@ -146,7 +142,11 @@ public sealed class BsUiRosterEngine : IRosterEngine
         _options = options;
     }
 
-    public void SetTestContext(string specId) => _specId = specId;
+    public void SetTestContext(string specId)
+    {
+        _previousSpecId = _specId;
+        _specId = specId;
+    }
 
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
         => RunAsync(() => SetupAsync(gameSystem, catalogues));
@@ -396,48 +396,42 @@ public sealed class BsUiRosterEngine : IRosterEngine
     private async Task StartOrReuseAsync(
         IReadOnlyList<(string FileName, string Content)> files)
     {
-        // Warm start: reuse running app if available
         if (KeepAlive && _app is not null && _client is not null)
         {
-            try
+            var refusal = await WhyNotReuseAsync(files);
+            if (refusal is null)
             {
-                // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
-                // undrivable instances reusable and every action against them then failed.
-                await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
-                Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
-
-                // No roster-close step here. There used to be a call to
-                // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
-                // is set false a few lines above, and that method's first act is a state read
-                // which short-circuits on exactly that flag and returns an EMPTY roster — so it
-                // always saw zero forces and returned before touching the app.
-                //
-                // Warm-start roster closing is really handled on the Java side, by
-                // RosterActions.waitForNewRosterWindowDismissingContinuePrompt, which answers
-                // BattleScribe's "Continue? Roster has not been saved" prompt with NO.
-                //
-                // If this is ever reinstated here it MUST end in a throw, never a return: a
-                // close that silently fails leaves the previous spec's roster open, and
-                // CallActionAsync then skips rosterCreateRosterAction because forces already
-                // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
-                // asserting only on its own selection would pass on polluted data.
-
-                // Restage data files for the new run.
-                // NOTE: The app's loaded game data is from the previous startup.
-                // Warm start is only reliable for re-running the same game system.
-                await _dataStaging.StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
-
-                return;
+                try
+                {
+                    // No roster-close step here. There used to be a call to
+                    // CloseCurrentRosterIfOpenAsync(), and it could never do anything: `_engineLocated`
+                    // is set false a few lines above, and that method's first act is a state read
+                    // which short-circuits on exactly that flag and returns an EMPTY roster — so it
+                    // always saw zero forces and returned before touching the app.
+                    //
+                    // The previous spec's roster stays open, by design: rosterCreateRosterAction
+                    // replaces it, answering BattleScribe's "Continue? Roster has not been saved"
+                    // with NO, and until this spec creates or loads its own every state read is
+                    // gated on `_engineLocated` and never sees it. WhyNotReuseAsync keeps the one
+                    // thing that roster makes dangerous — its game data rewritten under it.
+                    //
+                    // If a close is ever reinstated here it MUST end in a throw, never a return: a
+                    // close that silently fails leaves the previous spec's roster open, and
+                    // CallActionAsync then skips rosterCreateRosterAction because forces already
+                    // exist — appending this spec's force to the PREVIOUS spec's roster. A spec
+                    // asserting only on its own selection would pass on polluted data.
+                    await _dataStaging.StageDataFilesAsync(_app.DataDirectoryPath, _gameSystemId!, files);
+                    Console.Error.WriteLine("[bs-ui] Warm start: reusing existing BattleScribe instance.");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    refusal = $"staging spec '{_specId}' into it failed ({ex.Message})";
+                }
             }
-            catch
-            {
-                Console.Error.WriteLine("[bs-ui] Warm start: existing instance unresponsive, starting fresh.");
-                // Fall through to cold start
-                ConnectedClient.Dispose();
-                _client = null;
-                await _app.DisposeAsync();
-                _app = null;
-            }
+
+            Console.Error.WriteLine($"[bs-ui] Not reusing the running BattleScribe instance: {refusal}. Starting a fresh one.");
+            await CloseAppAsync();
         }
 
         _app = new BsRosterApp(
@@ -461,6 +455,51 @@ public sealed class BsUiRosterEngine : IRosterEngine
     }
 
     /// <summary>
+    /// Why the running instance cannot be handed to this spec, naming the spec that left it so — or
+    /// null when it is where a warm start assumes: answering, its main window the only one showing,
+    /// and this spec's data stageable without rewriting what it has loaded.
+    /// </summary>
+    /// <remarks>
+    /// A failed spec never gets here: <see cref="CleanupAsync"/> closed its app. This is for what a
+    /// spec that PASSED can still leave behind — and when it does, the spec that pays is named after
+    /// the one that caused it, instead of failing on its leftovers.
+    /// <para>
+    /// The game-data question is about the roster the previous spec left open (see the comment in
+    /// <see cref="StartOrReuseAsync"/>). Rewriting the files it was built on makes BattleScribe ask
+    /// "A file was modified outside of BattleScribe. Would you like to reload your roster?", at a
+    /// moment of its own choosing — and a prompt landing inside this spec's first action failed it
+    /// (#526). Identical data is not rewritten at all (<see cref="BsUiDataStaging"/>); different data
+    /// under the same id, which the corpus's many explicit <c>gs-1</c> setups make routine, gets a
+    /// fresh app.
+    /// </para>
+    /// </remarks>
+    private async Task<string?> WhyNotReuseAsync(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        var leftBy = $"spec '{_previousSpecId}'";
+        string? leftovers;
+        try
+        {
+            // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
+            // undrivable instances reusable and every action against them then failed.
+            await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
+            leftovers = await ConnectedClient.DescribeWindowsBesidesAsync(MainWindowTitle, FxProbeTimeout);
+        }
+        catch (Exception ex)
+        {
+            return $"{leftBy} left it unresponsive ({ex.GetType().Name}: {ex.Message})";
+        }
+
+        if (leftovers is not null)
+        {
+            return $"{leftBy} left {leftovers} open";
+        }
+
+        return await BsUiDataStaging.WouldReplaceAsync(_app!.DataDirectoryPath, _gameSystemId!, files)
+            ? $"game system '{_gameSystemId}' is staged with other content, and {leftBy} left a roster open on it"
+            : null;
+    }
+
+    /// <summary>
     /// Runs a setup phase so that ANY failure in it is reported the way <c>Setup</c> promises —
     /// returned errors, with the app torn down — instead of an exception escaping the engine.
     /// </summary>
@@ -468,9 +507,10 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// <para>
     /// <c>force: true</c> — a setup-phase failure leaves no usable app (it may have died mid-start,
     /// or never reached a stable window), so KeepAlive/warm-reuse is meaningless here. Without
-    /// force, <c>CleanupAsync</c> would no-op (KeepAlive defaults to true and <c>_poisoned</c> is
-    /// only set by action-phase failures), <c>_app</c> would be silently overwritten by the next
-    /// cold-start attempt, and the orphaned JVM process would leak.
+    /// force, <c>CleanupAsync</c> would no-op (KeepAlive defaults to true, and the failure stops in
+    /// this catch, so it never reaches the <c>_poisonedBy</c> that would close the app), <c>_app</c>
+    /// would be silently overwritten by the next cold-start attempt, and the orphaned JVM process
+    /// would leak.
     /// </para>
     /// <para>
     /// This wraps the WHOLE phase rather than app startup alone, and that is the point. It used to
@@ -512,17 +552,22 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         _engineLocated = false;
 
-        if (KeepAlive && !force && !_poisoned)
+        if (KeepAlive && !force && _poisonedBy is null)
         {
             // Warm start: keep app/_client alive, just reset engine state
             return;
         }
 
-        if (_poisoned)
+        if (_poisonedBy is not null && _app is not null)
         {
-            Console.Error.WriteLine("[bs-ui] Engine poisoned by a prior failure — tearing down for a fresh cold start.");
+            Console.Error.WriteLine($"[bs-ui] {_poisonedBy} — closing that BattleScribe instance so no later spec runs on it.");
         }
 
+        await CloseAppAsync();
+    }
+
+    private async Task CloseAppAsync()
+    {
         _client?.Dispose();
         _client = null;
 
@@ -532,9 +577,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
             _app = null;
         }
 
-        // The upcoming (re)start is a fresh instance — clear the flag so it isn't
-        // needlessly torn down again if it warm-reuses successfully afterwards.
-        _poisoned = false;
+        // A failure belongs to the instance it happened in, and that instance is gone.
+        _poisonedBy = null;
     }
 
 
@@ -593,43 +637,42 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
     }
 
-    private async Task<RosterState> ReadRosterStateAsync()
+    /// <summary>
+    /// Mirrors <c>EngineAccessor.getRosterState</c>'s answer when the app holds no roster.
+    /// </summary>
+    private const string AgentNoRoster = "No roster loaded";
+
+    /// <summary>
+    /// The roster the app holds, or <see cref="EmptyRosterState"/> when there is none to read: no
+    /// app yet, no roster created or loaded by this spec yet, or the agent saying the app holds none
+    /// — which a refused load leaves behind, because BattleScribe closes the open roster before it
+    /// knows the replacement will load (<c>roundtrip-load-unknown-catalogue</c>).
+    /// </summary>
+    /// <remarks>
+    /// Any other failure to read propagates. This used to catch everything and answer the empty
+    /// roster, so a read that timed out or found the agent gone never reached
+    /// <see cref="RunGuardedAsync{T}"/> and handed its app to the next spec. Inside the spec it
+    /// passed a <c>forces: []</c> assertion, and sent the next addForce down the first-force path,
+    /// where <c>rosterCreateRosterAction</c> replaced the spec's own roster.
+    /// </remarks>
+    private async Task<RosterState> ReadRosterStateOrEmptyAsync()
     {
-        EnsureRosterLoaded();
-        var result = await ConnectedClient.GetRosterStateAsync();
-        var json = ExtractJson(result);
-        if (TryExtractError(result, out var error))
+        if (_client is null || _gameSystemId is null || !_engineLocated)
         {
-            throw new InvalidOperationException(error);
+            return EmptyRosterState();
         }
 
-        var dto = JsonSerializer.Deserialize<AgentRosterState>(json, JsonOptions)
+        var result = await ConnectedClient.GetRosterStateAsync();
+        if (TryExtractError(result, out var error))
+        {
+            return error == AgentNoRoster ? EmptyRosterState() : throw new InvalidOperationException(error);
+        }
+
+        var dto = JsonSerializer.Deserialize<AgentRosterState>(ExtractJson(result), JsonOptions)
             ?? throw new InvalidOperationException("Failed to deserialize roster state from agent.");
 
         var validationErrors = await ReadValidationErrorsAsync();
         return MapRosterState(dto, validationErrors);
-    }
-
-    private async Task<RosterState> ReadRosterStateOrEmptyAsync()
-    {
-        if (_client is null || _gameSystemId is null)
-        {
-            return EmptyRosterState();
-        }
-
-        try
-        {
-            if (!_engineLocated)
-            {
-                return EmptyRosterState();
-            }
-
-            return await ReadRosterStateAsync();
-        }
-        catch
-        {
-            return EmptyRosterState();
-        }
     }
 
     private async Task<IReadOnlyList<ValidationErrorState>> ReadValidationErrorsAsync()
@@ -679,7 +722,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// in-process (any <c>new RosterRunner(engine)</c>, not just via <c>bs-engine-host</c>) would
     /// otherwise fail every <c>expectedFile</c> byte-compare with "engine reports no export".
     /// </summary>
-    public string ExportRosterXml() => ExportRosterXmlAsync().GetAwaiter().GetResult();
+    public string ExportRosterXml() => RunAsync(ExportRosterXmlAsync);
 
     /// <summary>
     /// Exports the current roster as BattleScribe XML (.ros format).
@@ -842,32 +885,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// </remarks>
     private Task HandleStartupDialogsAsync()
         => ConnectedClient.DismissStartupConfirmAsync(ConfirmWindowTitle, StartupDialogCeilingMs);
-
-    /// <summary>
-    /// Waits until the agent's FX thread is pumping again, instead of assuming a fixed backoff.
-    /// </summary>
-    /// <remarks>
-    /// The transient failures this backs off from are mostly "the FX thread was wedged", so the
-    /// real condition is that it drains a queued task again — see
-    /// <see cref="AgentClient.ProbeFxThreadAsync"/> for why that is asked with `getWindows` and
-    /// not `ping`.
-    /// </remarks>
-    private async Task WaitForAgentResponsiveAsync(TimeSpan ceiling)
-    {
-        var deadline = DateTime.UtcNow + ceiling;
-        while (DateTime.UtcNow < deadline)
-        {
-            try
-            {
-                await ConnectedClient.ProbeFxThreadAsync(FxProbeTimeout);
-                return;
-            }
-            catch
-            {
-                await Task.Delay(StartupDialogPollMs);
-            }
-        }
-    }
 
     /// <summary>
     /// The value to put in the New Roster dialog's cost-limit spinner, or null to leave it alone —
@@ -1466,15 +1483,6 @@ public sealed class BsUiRosterEngine : IRosterEngine
         }
     }
 
-    private void EnsureRosterLoaded()
-    {
-        EnsureSetup();
-        if (!_engineLocated)
-        {
-            throw new InvalidOperationException("Roster has not been created yet.");
-        }
-    }
-
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -1576,10 +1584,8 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// control for what was asked.
     /// </para>
     /// <para>
-    /// Both are thrown straight out, past the retry in <see cref="RunWithRetryAsync{T}"/>: neither
-    /// is transient, and re-running a lookup miss only doubles the wait for the same answer. The
-    /// agent's own-expectation failures are translated there instead, after the retry, so the
-    /// retry budget for them is exactly what it was.
+    /// The agent's own-expectation failures are translated in <see cref="RunGuardedAsync{T}"/>
+    /// instead, after its diagnostic dump.
     /// </para>
     /// </summary>
     private async Task<JsonNode?> CallAgentAsync(string method, JsonObject parameters)
@@ -1622,86 +1628,59 @@ public sealed class BsUiRosterEngine : IRosterEngine
     /// </remarks>
     private static readonly TimeSpan ActionCallTimeout = TimeSpan.FromSeconds(90);
 
-    /// <summary>
-    /// Maximum number of retry attempts for transient failures (timeout, agent communication).
-    /// Set to 0 to disable retries. Default is 1 (one retry after initial failure).
-    /// </summary>
-    public static int MaxRetries { get; set; } =
-        int.TryParse(Environment.GetEnvironmentVariable("BS_UI_MAX_RETRIES"), out var envRetries) && envRetries >= 0
-            ? envRetries
-            : 1;
-
-    /// <summary>Delay between retry attempts.</summary>
-    public static TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(2);
-
     private T RunAsync<T>(Func<Task<T>> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
     {
-        return RunWithRetryAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
+        return RunGuardedAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
     }
 
     private void RunAsync(Func<Task> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
     {
-        RunWithRetryAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
+        RunGuardedAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
     }
-
-    private async Task<T> RunWithRetryAsync<T>(Func<Task<T>> func, string actionName)
-    {
-        // NOTE: Retries are only safe because a timeout/transient failure typically means
-        // the app is unresponsive and needs restart. The full setup flow will re-initialize
-        // if the connection is lost. Non-transient errors (InvalidOperationException) are
-        // never retried.
-        var attempts = MaxRetries + 1;
-        for (var attempt = 1; attempt <= attempts; attempt++)
-        {
-            try
-            {
-                return await RunWithTimeoutAsync(func, actionName);
-            }
-            catch (Exception ex) when (IsTransient(ex) && attempt < attempts)
-            {
-                MarkPoisonedIfUnsafe(ex);
-                Console.Error.WriteLine(
-                    $"[bs-ui] Action '{actionName}' failed (attempt {attempt}/{attempts}): " +
-                    $"{ex.GetType().Name}: {ex.Message}. Retrying in {RetryDelay.TotalSeconds:F0}s...");
-                await WaitForAgentResponsiveAsync(RetryDelay);
-            }
-            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
-            {
-                MarkPoisonedIfUnsafe(ex);
-                CaptureAndRethrow(ex, actionName);
-
-                // The agent's own expectation failed — it waited for a roster state the app never
-                // reached. That is never BattleScribe refusing, and left as an AgentException the
-                // classifier would call it exactly that. Translated here, after the retry, so what
-                // is retried is unchanged. See CallAgentAsync.
-                if (ex is AgentException gap && gap.Message.Contains(AgentGapMarker, StringComparison.Ordinal))
-                {
-                    throw new HarnessFaultException($"[bs-ui] {actionName}: {StripAgentTrace(gap.Message)}", gap);
-                }
-
-                throw; // unreachable but required
-            }
-        }
-        throw new InvalidOperationException("Unreachable");
-    }
-
-    private static bool IsTransient(Exception ex) =>
-        ex is TimeoutException or OperationCanceledException or AgentException;
 
     /// <summary>
-    /// Marks the engine poisoned (see <see cref="_poisoned"/>) when <paramref name="ex"/> signals
-    /// the app was left in an unknown state: any <see cref="TimeoutException"/> (the UI thread may
-    /// be wedged/deadlocked — see the class-level timeout architecture docs), or an
-    /// <see cref="AgentException"/> whose message reports an unexpected modal dialog left open by
-    /// <c>DialogInspector.assertNoUnexpectedModals</c> on the Java side. Both mean the running app's
-    /// state can no longer be trusted for warm-reuse by a later, unrelated spec.
+    /// Runs one call against the app, once. Any failure, whatever its type or message, marks the
+    /// app as one no later spec may run on (<see cref="_poisonedBy"/>).
     /// </summary>
-    private void MarkPoisonedIfUnsafe(Exception ex)
+    /// <remarks>
+    /// There used to be a retry here, for "transient" failures — any timeout or agent error — and it
+    /// ran on the instance the failure had just made untrustworthy, turning one failure into two. A
+    /// createRoster cut off behind a prompt left its New Roster dialog open, and the retry opened a
+    /// second on top of it (#526); a removeForce that BattleScribe completed before throwing its own
+    /// NullPointerException ran again and failed as "Force not found", hiding the app's error behind
+    /// a lookup miss. A failure now reports what happened the first time.
+    /// <para>
+    /// The app is not replaced mid-spec: the runner stops a spec at its first unexpected failure,
+    /// and an expected one (<c>expectFailure</c>) leaves the roster the next step asserts on. The
+    /// spec's own <see cref="Cleanup"/> closes it.
+    /// </para>
+    /// </remarks>
+    private async Task<T> RunGuardedAsync<T>(Func<Task<T>> func, string actionName)
     {
-        if (ex is TimeoutException ||
-            (ex is AgentException && ex.Message.Contains("Unexpected modal dialog", StringComparison.Ordinal)))
+        try
         {
-            _poisoned = true;
+            return await RunWithTimeoutAsync(func, actionName);
+        }
+        catch (Exception ex)
+        {
+            _poisonedBy ??= $"spec '{_specId}' failed in {actionName} ({ex.GetType().Name})";
+
+            // With no app connected there is nothing to dump but the exception being rethrown.
+            if (_client is not null
+                && ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
+            {
+                CaptureAndRethrow(ex, actionName);
+            }
+
+            // The agent's own expectation failed — it waited for a roster state the app never
+            // reached. That is never BattleScribe refusing, and left as an AgentException the
+            // classifier would call it exactly that. See CallAgentAsync.
+            if (ex is AgentException gap && gap.Message.Contains(AgentGapMarker, StringComparison.Ordinal))
+            {
+                throw new HarnessFaultException($"[bs-ui] {actionName}: {StripAgentTrace(gap.Message)}", gap);
+            }
+
+            throw;
         }
     }
 

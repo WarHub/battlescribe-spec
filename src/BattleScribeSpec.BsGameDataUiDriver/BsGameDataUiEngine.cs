@@ -50,10 +50,12 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     private const int WindowWaitMs = 30_000;
 
     /// <summary>
-    /// How long one <see cref="AgentClient.ProbeFxThreadAsync"/> call is given before the instance
-    /// is called wedged and warm-start reuse is refused.
+    /// How long each question the warm-start gate asks is given before the instance is called
+    /// wedged and not reused.
     /// </summary>
     private static readonly TimeSpan FxProbeTimeout = TimeSpan.FromSeconds(2);
+
+    private const string MainWindowTitle = "Data Editor";
 
     private readonly BsUiOptions _options;
 
@@ -63,8 +65,18 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
     private BsRosterApp? _app;
     private AgentClient? _client;
     private string? _specId;
+
+    /// <summary>The spec before this one — the one that handed a warm-reused app over.</summary>
+    private string? _previousSpecId;
     private string? _gameSystemId;
     private bool _disposed;
+
+    /// <summary>
+    /// Which spec and call failed against the running app — any failure, of any kind. While set,
+    /// <see cref="CleanupAsync"/> closes the app even under <see cref="KeepAlive"/>; the roster
+    /// engine's field of the same name says why.
+    /// </summary>
+    private string? _poisonedBy;
 
     /// <summary>
     /// Names the staged file for a mid-spec load whose payload is too broken to carry a root id.
@@ -97,7 +109,11 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         _options = options;
     }
 
-    public void SetTestContext(string specId) => _specId = specId;
+    public void SetTestContext(string specId)
+    {
+        _previousSpecId = _specId;
+        _specId = specId;
+    }
 
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
         => RunAsync(() => SetupAsync(gameSystem, catalogues));
@@ -333,33 +349,29 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
         try
         {
-            // Warm start: reuse running app if available
             if (KeepAlive && _app is not null && _client is not null)
             {
-                try
+                var refusal = await WhyNotReuseAsync(_client);
+                if (refusal is null)
                 {
-                    // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
-                    // undrivable instances reusable and every action against them then failed.
-                    await _client.ProbeFxThreadAsync(FxProbeTimeout);
-                    Console.Error.WriteLine("[bs-gamedata-ui] Warm start: reusing existing BattleScribe instance.");
-                    var warmFiles = BuildXmlFiles(gameSystem, catalogues);
-                    await _dataStaging.StageDataFilesAsync(
-                        _app.DataDirectoryPath, gameSystem.Id, warmFiles);
-                    await LoadStagedFilesAsync(gameSystem, warmFiles);
-                    Console.Error.WriteLine("[bs-gamedata-ui] Warm start: loaded new game data into existing instance.");
-                    return [];
-                }
-                catch
-                {
-                    Console.Error.WriteLine("[bs-gamedata-ui] Warm start: unresponsive, restarting.");
-                    _client?.Dispose();
-                    _client = null;
-                    if (_app is not null)
+                    try
                     {
-                        await _app.DisposeAsync();
-                        _app = null;
+                        var warmFiles = BuildXmlFiles(gameSystem, catalogues);
+                        await _dataStaging.StageDataFilesAsync(
+                            _app.DataDirectoryPath, gameSystem.Id, warmFiles);
+                        await LoadStagedFilesAsync(gameSystem, warmFiles);
+                        Console.Error.WriteLine("[bs-gamedata-ui] Warm start: loaded new game data into existing instance.");
+                        return [];
+                    }
+                    catch (Exception ex)
+                    {
+                        refusal = $"loading spec '{_specId}' into it failed ({ex.Message})";
                     }
                 }
+
+                Console.Error.WriteLine(
+                    $"[bs-gamedata-ui] Not reusing the running BattleScribe instance: {refusal}. Starting a fresh one.");
+                await CloseAppAsync();
             }
 
             _app = new BsRosterApp(
@@ -399,6 +411,29 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             await CleanupAsync(force: true);
             return [ex.Message];
         }
+    }
+
+    /// <summary>
+    /// Why the running instance cannot be handed to this spec, naming the spec that left it so — or
+    /// null when it answers and its main window is the only one showing. A failed spec never gets
+    /// here: <see cref="CleanupAsync"/> closed its app.
+    /// </summary>
+    private async Task<string?> WhyNotReuseAsync(AgentClient client)
+    {
+        string? leftovers;
+        try
+        {
+            // Not PingAsync: a wedged FX thread still answers `ping`, so that gate declared
+            // undrivable instances reusable and every action against them then failed.
+            await client.ProbeFxThreadAsync(FxProbeTimeout);
+            leftovers = await client.DescribeWindowsBesidesAsync(MainWindowTitle, FxProbeTimeout);
+        }
+        catch (Exception ex)
+        {
+            return $"spec '{_previousSpecId}' left it unresponsive ({ex.GetType().Name}: {ex.Message})";
+        }
+
+        return leftovers is null ? null : $"spec '{_previousSpecId}' left {leftovers} open";
     }
 
     private async Task LoadStagedFilesAsync(
@@ -536,11 +571,22 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
 
     private async Task CleanupAsync(bool force = false)
     {
-        if (!force && KeepAlive)
+        if (!force && KeepAlive && _poisonedBy is null)
         {
             return;
         }
 
+        if (_poisonedBy is not null && _app is not null)
+        {
+            Console.Error.WriteLine(
+                $"[bs-gamedata-ui] {_poisonedBy} — closing that BattleScribe instance so no later spec runs on it.");
+        }
+
+        await CloseAppAsync();
+    }
+
+    private async Task CloseAppAsync()
+    {
         _client?.Dispose();
         _client = null;
         if (_app is not null)
@@ -548,6 +594,9 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
             await _app.DisposeAsync();
             _app = null;
         }
+
+        // A failure belongs to the instance it happened in, and that instance is gone.
+        _poisonedBy = null;
     }
 
     private static IReadOnlyList<(string FileName, string Content)> BuildXmlFiles(
@@ -583,11 +632,28 @@ public sealed class BsGameDataUiEngine : IGameDataEngine
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
-    private static T RunAsync<T>(Func<Task<T>> func)
-        => func().GetAwaiter().GetResult();
+    private T RunAsync<T>(Func<Task<T>> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
+        => RunGuardedAsync(func, actionName ?? "unknown").GetAwaiter().GetResult();
 
-    private static void RunAsync(Func<Task> func)
-        => func().GetAwaiter().GetResult();
+    private void RunAsync(Func<Task> func, [System.Runtime.CompilerServices.CallerMemberName] string? actionName = null)
+        => RunGuardedAsync(async () => { await func(); return 0; }, actionName ?? "unknown").GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Runs one call against the app. Any failure marks the app as one no later spec may run on
+    /// (<see cref="_poisonedBy"/>); the spec's own <see cref="Cleanup"/> closes it.
+    /// </summary>
+    private async Task<T> RunGuardedAsync<T>(Func<Task<T>> func, string actionName)
+    {
+        try
+        {
+            return await func();
+        }
+        catch (Exception ex)
+        {
+            _poisonedBy ??= $"spec '{_specId}' failed in {actionName} ({ex.GetType().Name})";
+            throw;
+        }
+    }
 
     // ─── Static factory methods ───────────────────────────────────────────────
 
