@@ -46,11 +46,11 @@ internal static class NrUiTimeouts
     /// select, filling a field.
     /// </summary>
     /// <remarks>
-    /// Slightly tighter than <see cref="Condition"/> because Playwright's actionability check is
-    /// already retrying underneath, so a long stall here usually means the element is wrong rather
-    /// than slow.
+    /// The same ceiling as <see cref="Condition"/>: the interaction MUST happen. It was 20s, tighter on
+    /// the theory that a long stall here meant the element was wrong rather than slow, and a loaded
+    /// pre-push run stalled a right one past it (#525).
     /// </remarks>
-    internal const int Interaction = 20_000;
+    internal const int Interaction = Condition;
 
     /// <summary>
     /// Work whose duration NR does not bound — a catalogue reload that re-parses and recurses

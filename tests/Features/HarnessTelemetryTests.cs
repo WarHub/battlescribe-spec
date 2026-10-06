@@ -9,21 +9,13 @@ public sealed class HarnessTelemetryTests
     [Fact]
     public void StartSpec_EmitsTestSemanticConventions()
     {
-        var captured = new List<Activity>();
-        using var listener = new ActivityListener
-        {
-            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = captured.Add,
-        };
-        ActivitySource.AddActivityListener(listener);
+        using var listener = ListenToHarness();
 
-        using (var activity = HarnessTelemetry.StartSpec("entry/entry-basic", "entry", "roster"))
-        {
-            HarnessTelemetry.SetVerdict(activity, "expected-failure");
-        }
+        using var span = HarnessTelemetry.StartSpec("entry/entry-basic", "entry", "roster");
+        Assert.NotNull(span);
+        HarnessTelemetry.SetVerdict(span, "expected-failure");
+        span.Stop();
 
-        var span = Assert.Single(captured);
         Assert.Equal("entry/entry-basic", span.GetTagItem("test.case.name"));
         Assert.Equal("entry", span.GetTagItem("test.suite.name"));
 
@@ -41,21 +33,12 @@ public sealed class HarnessTelemetryTests
     [InlineData("unexpected-pass", "fail", true)]
     public void SetVerdict_MapsAllFourVerdicts(string verdict, string expectedStatus, bool shouldHaveError)
     {
-        var captured = new List<Activity>();
-        using var listener = new ActivityListener
-        {
-            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = captured.Add,
-        };
-        ActivitySource.AddActivityListener(listener);
+        using var listener = ListenToHarness();
 
-        using (var activity = HarnessTelemetry.StartSpec("test/case", "category", "domain"))
-        {
-            HarnessTelemetry.SetVerdict(activity, verdict);
-        }
-
-        var span = Assert.Single(captured);
+        using var span = HarnessTelemetry.StartSpec("test/case", "category", "domain");
+        Assert.NotNull(span);
+        HarnessTelemetry.SetVerdict(span, verdict);
+        span.Stop();
 
         // Verify the standard OTel attribute is mapped correctly (only "pass" or "fail").
         Assert.Equal(expectedStatus, span.GetTagItem("test.case.result.status"));
@@ -77,12 +60,7 @@ public sealed class HarnessTelemetryTests
     [Fact]
     public void StartOp_WithTraceparent_NestsUnderTheGivenParent()
     {
-        using var listener = new ActivityListener
-        {
-            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-        };
-        ActivitySource.AddActivityListener(listener);
+        using var listener = ListenToHarness();
 
         // A well-formed W3C traceparent: version-traceid-spanid-flags.
         const string Traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
@@ -97,12 +75,7 @@ public sealed class HarnessTelemetryTests
     [Fact]
     public void CurrentTraceparent_RoundTripsThroughStartOp()
     {
-        using var listener = new ActivityListener
-        {
-            ShouldListenTo = s => s.Name == HarnessTelemetry.SourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-        };
-        ActivitySource.AddActivityListener(listener);
+        using var listener = ListenToHarness();
 
         using var parent = HarnessTelemetry.StartOp("run");
         var traceparent = HarnessTelemetry.CurrentTraceparent();
@@ -113,5 +86,22 @@ public sealed class HarnessTelemetryTests
         Assert.NotNull(child);
         Assert.Equal(parent!.TraceId, child.TraceId);
         Assert.Equal(parent.SpanId, child.ParentSpanId);
+    }
+
+    /// <summary>
+    /// Makes the harness source sample, so its spans exist. It collects nothing: each test asserts on
+    /// the span it started. An <see cref="ActivityListener"/> is process-wide, so a list it fills also
+    /// receives every harness span the other test classes stop on their own threads — reading one is
+    /// what failed with "Collection was modified" under load (#525).
+    /// </summary>
+    private static ActivityListener ListenToHarness()
+    {
+        var listener = new ActivityListener
+        {
+            ShouldListenTo = static s => s.Name == HarnessTelemetry.SourceName,
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(listener);
+        return listener;
     }
 }
