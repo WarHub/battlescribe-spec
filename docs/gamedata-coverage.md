@@ -58,8 +58,8 @@ Covered (9 specs, all green on both NR engines):
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
   mutations go through rendered widgets (context menus + submenus, property tables, selects,
   checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read.
-  **All but one GameData spec run on the real NR Editor UI** (only `export/openfile-inline` skips —
-  mid-spec file load via the SPA file-list is flaky). Covered families: every basic
+  **All but one GameData spec run on the real NR Editor UI** (only `load-missing-game-system-id` is
+  opted out — see Load failures). Covered families: every basic
   entry/group/force/category spec; constraints; root fields; publication; costs; profiles +
   characteristics; **the full query-editor tier** (modifier types incl. the list/category types,
   conditions incl. condition groups, repeats, modifier groups, modifier-on-rule); info groups; type
@@ -486,7 +486,7 @@ field is created and asserted on both the in-process reference engine and the Da
   file picker is substituted. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by
   `setup.ps1`, to build the agent jar.)
 - **`newrecruit-ui`: all but one GameData spec run on the real NR Editor UI** (only
-  `export/openfile-inline` skips — mid-spec file load via the SPA file-list is flaky). The driver
+  `load-missing-game-system-id` is opted out — see Load failures). The driver
   covers every family via pure UI (context menus + submenus, the right-panel
   property table incl. contenteditable rows, cost/characteristic widgets, the query/modifier
   editors incl. category-modifier value autocompletes, link "Link Type" selects, and reference

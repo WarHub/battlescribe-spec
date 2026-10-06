@@ -63,9 +63,8 @@ ed.catalogue?.selectionEntries?.map(e => ({ id: e.id, name: e.name }))
 The REPL is drivable non-interactively for DOM discovery:
 `echo '<js>' | dotnet run --project src/BattleScribeSpec.Cli -- probe --engine newrecruit --ui <spec>`.
 
-State is read from the Pinia `editorStore` (the path tries multiple store/property names for
-version compatibility); `window.__bsspec_editor_ui` holds references set during Setup, available
-in all subsequent `EvaluateAsync` calls.
+State is read from the Pinia `editor` store (`NrEditorStore.ReadStateAsync`), for the catalogue the
+`catalogue` route's query names. `window.__bsspec_editor_ui` carries only the spec id, for diagnostics.
 
 ## Selectors & traps (verified against the pinned snapshot)
 
@@ -121,7 +120,7 @@ they can drift between snapshots.
 |------|---------|
 | `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiEngine.cs` | Main engine class |
 | `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiActions.cs` | All mutations + state |
-| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiSetup.cs` | File loading + routing |
+| `src/BattleScribeSpec.NewRecruit/NrEditorStore.cs` | Opening the editor, import on the `system` route, open via `goto_catalogue`, static routing, state reads (shared with `newrecruit`) |
 | `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiDiagnostics.cs` | Failure diagnostics |
 | `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiProbe.cs` | Interactive probe REPL |
 | `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | Non-UI reference implementation |
