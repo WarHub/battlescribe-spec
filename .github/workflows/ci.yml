@@ -724,7 +724,8 @@ jobs:
     needs: [gate]
     if: needs.gate.outputs.live == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The five step bounds (32 minutes) plus room for setup and build (2 minutes in run 37495035242).
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - name: Set up
@@ -767,13 +768,14 @@ jobs:
           path: artifacts/battlescribe-conformance-report.json
       # The frozen NR Editor lanes replay a pinned snapshot; only these notice when the deployment
       # (giloushaker.github.io/nr-editor/, a volunteer's) drifts from it. One session each, from that
-      # host's LiveLoadBudget. After the report, so a drifted deployment does not cost it.
+      # host's LiveLoadBudget. After the report, so a drifted deployment does not cost it. Both bounds
+      # are the 5-minute floor: 34s and 93s in run 37495035242, the first green one.
       - name: Run NR Editor conformance tests
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-live
       # NR_GAMEDATA_UI_DIAGNOSTICS: same switch, and same reason it is CI's, as smoke's step.
       - name: Run NR Editor UI conformance tests
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-ui-live
         env:
           NR_GAMEDATA_UI_DIAGNOSTICS: 1
