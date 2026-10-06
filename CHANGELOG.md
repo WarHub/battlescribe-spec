@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **`setup.ps1 -LinkFrom <checkout>`: a new worktree provisioned in seconds (#530)** — takes what
+  `setup.ps1` downloads (the test data, the BattleScribe app, ASM, the Liberica JDK) from a checkout that
+  already has it, as hard links, with no GitHub token; the Java agent and the engine-patch tool are still
+  built from the worktree's own sources. Each item must first pass, in the other checkout, the check that
+  lets a download already on disk stand — `testdata.json`'s tag and `sha256`, as `TestDataPinDriftTests`
+  holds a working copy to — and one it lacks or holds at another pin is refused, by name: since #519 the
+  fixture lookups stop at the worktree root, and an unverified link would replay a snapshot the worktree
+  does not pin. Hard links, not junctions: `git worktree remove` follows a junction and empties the
+  directory it points to. The patched engine jar the build makes moves from `lib/battlescribe/lib/` to
+  `src/bs-engine-patch/out/`, so `lib/` holds only downloads — the patch rewrites its output in place, and
+  through a link it would have rewritten the other checkout's jar.
 - **An MIT licence (#528).** The README pointed at a `LICENSE` file the repository did not have, so
   nobody had been granted any right to use the suite; `LICENSE` now grants MIT, as `wham` does.
 

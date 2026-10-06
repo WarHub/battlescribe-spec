@@ -42,6 +42,28 @@ the executables. The path in `CommandLine` names the checkout:
 Get-CimInstance Win32_Process -Filter "Name like 'BattleScribeSpec.%Tests.exe'" | Select-Object ProcessId, CreationDate, CommandLine
 ```
 
+## A new worktree
+
+A worktree builds and tests nothing until `setup.ps1` has provisioned it — the `.deps/wham` submodule,
+`lib/` and `.testdata/` — and the fixture lookups stop at its own root, so it never borrows the main
+checkout's. To take what `setup.ps1` downloads from a checkout that already has it:
+
+```powershell
+./setup.ps1 -LinkFrom <provisioned checkout>
+```
+
+The test data, the BattleScribe app, ASM and the Liberica JDK come from the same place in that checkout,
+as hard links: seconds, and no GitHub token. Each must first pass, there, the check that lets a download
+already on disk stand, against this worktree's pins — `testdata.json`'s tag and `sha256`, which
+`TestDataPinDriftTests` holds a working copy to — and one the other checkout lacks or holds at another
+pin is refused, by name: linked unverified, it would replay a snapshot this worktree does not pin. The Java
+agent and the engine-patch tool are built from this worktree's sources, as always.
+
+Hard links rather than junctions, because `git worktree remove` follows a junction and empties the
+directory it points to; deleting a hard link deletes only its name. They share their bytes with the other
+checkout, so write nothing into `lib/` or `.testdata/` — what the build makes goes under `src/` and
+`artifacts/` — and run `./setup.ps1` without `-LinkFrom` to replace them with downloads of your own.
+
 ## Test profiles
 
 A **test profile** is a whole lane: a test filter, the environment the lane depends on, and the test
