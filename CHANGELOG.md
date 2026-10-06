@@ -404,16 +404,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- **The test app runs on server GC, which takes a quarter off a local `pre-push` (#534).**
-  The `BsRoster` lane — `pre-push`'s critical path — is its two real-world specs, and they spend their
-  time allocating inside the BattleScribe engine: about a third less under server GC on an 8-thread
-  laptop, idle or loaded, and less on CI's 4-vCPU runners. Running the lane's specs in parallel was
-  measured and is not done: it is safe (every verdict identical at 1–8 workers, in one process and
+- **The test app runs on server GC, which takes about a fifth off `pre-push` on an 8-thread laptop
+  (#534).** The `BsRoster` lane — `pre-push`'s critical path — is its two real-world specs, and they
+  spend their time allocating inside the BattleScribe engine: run serially in one process, the lane
+  drops from 130–136 s to 85–89 s. On CI's 4-vCPU runners the change is inside the run-to-run
+  spread. Running the lane's specs in parallel was measured and is not done: it is safe (every verdict
+  identical at 1–8 workers, in one process and
   across processes), but splitting the lane only takes an xUnit thread from another lane, and
   `pre-push` did not get faster. A shared browser-context budget for the frozen NR pools was measured
   and is not built either: the pools barely overlap, and no NR UI interaction timed out under load even
   at the old 20 s ceiling. `battlescribe`'s process-axis sweep and memory are recorded in
   `docs/concurrency-policy-measurements.md` §12 and deliberately not transcribed into its profile.
+
+- **A small test run re-runs without the build step (#531)** — AGENTS.md's one-spec command has a twin
+  that starts the built test executable directly. Of a one-test `dotnet test`, about 70% is the restore
+  and no-op build check that precede the run; discovering all 4,231 test cases is most of the rest. Specs
+  are read from the checkout, so a re-run after a spec edit needs no build. Splitting the lint tests into
+  a project of their own was measured too: it could cut at most part of discovery and of compiling, not
+  the build check, so the lint tests stay where they are. The numbers are on #531.
 
 - **The NR Editor snapshot is re-pinned to the redesigned app, and the drivers fail fast on the next
   move (#543).** The pin was 194 commits behind a deployment that moved its import from `/` to the
