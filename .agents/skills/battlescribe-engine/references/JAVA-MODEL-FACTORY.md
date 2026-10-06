@@ -112,7 +112,7 @@ was added later), ALL callers must be checked. `CreateConstraint` is called from
 1. Add optional parameter at end of parameter list (with default)
 2. Add `setXxx()` call in method body
 3. Update `CreateXxxFromProtocol()` mapping method to pass the new Protocol field
-4. Build, then run the offline gate (`pre-push`; the command is in [AGENTS.md, "Build & test"](../../../../AGENTS.md#build--test))
+4. Build, then run the tests the change reaches; CI runs the offline gate, `pre-push` (the commands are in [AGENTS.md, "Build & test"](../../../../AGENTS.md#build--test))
 
 ## Common pitfalls
 

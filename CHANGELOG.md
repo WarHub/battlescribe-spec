@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **An MIT licence (#528).** The README pointed at a `LICENSE` file the repository did not have, so
   nobody had been granted any right to use the suite; `LICENSE` now grants MIT, as `wham` does.
 
+- **CI runs `pre-push` on Windows (#535)** — a required `windows-pre-push` job runs the offline
+  `pre-push` profile whole on `windows-latest` on every PR, a step per test project, beside the Linux
+  jobs. Development happens on Windows and CI ran only on Linux, so the one Windows check was a local
+  `pre-push`, run several times per layer of a stack. Local `pre-push` is now optional: run the tests
+  you touched, `lint` or a smoke profile, and CI gives the Linux and Windows verdict. The setup
+  action's cache keys carry `runner.os`, and its Playwright cache follows the OS's browser path.
+
 - **What the engines do with invalid and edge-of-range input (#25)** — the spike #25 was rescoped
   into, and the specs and harness fixes it turned up. Every roster mutation was probed on all four
   lanes with inputs at or past the edge of what it takes (counts past a max, below a min, zero,

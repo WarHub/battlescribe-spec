@@ -545,7 +545,7 @@ if ($SkipPlaywright) {
 Write-Host ""
 Write-Host "Setup complete. All dependencies are ready." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "To run the offline gate every push needs (both test projects):" -ForegroundColor White
+Write-Host "To run the offline gate CI runs on every PR (both test projects):" -ForegroundColor White
 Write-Host "  dotnet test -p:TestProfile=pre-push" -ForegroundColor White
 Write-Host "To run all tests (including real-world data tests):" -ForegroundColor White
 Write-Host "  dotnet test" -ForegroundColor White

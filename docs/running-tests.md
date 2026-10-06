@@ -256,6 +256,8 @@ In GitHub Actions (`GITHUB_ACTIONS=true`) the app adds, unless the command line 
 
 Which lane runs in which job, and when: the CI steps name their profiles (`--list-test-profiles` says what each
 runs), and [`scripts/ci-gate.json`](../scripts/ci-gate.json) says when a run owes the thorough and live jobs.
+Every job runs on Linux except `windows-pre-push`, which runs `pre-push` whole on every PR, a step per test
+project — so a local `pre-push` is optional.
 `CiProfileLaneTests` holds every test step to one profile that covers its project, with no filter, VSTest
 option or zero-tests policy of its own, and no lane-defining switch anywhere under `.github/`;
 `CiWorkflowDriftTests` holds each to a timeout and one invocation with nothing that could swallow its exit

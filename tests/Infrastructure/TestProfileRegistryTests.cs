@@ -413,8 +413,8 @@ public sealed class TestProfileRegistryTests
             + (undeclared.Count > 0 ? $"  Carried by a test, with no lane: {string.Join(", ", undeclared)}\n" : "")
             + (phantom.Count > 0 ? $"  A lane no test carries: {string.Join(", ", phantom)}\n" : "")
             + (duplicates.Count > 0 ? $"  Declared twice: {string.Join(", ", duplicates)}\n" : "")
-            + "\npre-push is a deny-list: a lane with no row is a lane that joined the gate every contributor runs "
-            + "before every push without anyone choosing that. It is how BsRosterUi came to spend 688.8s of a 689.2s run "
+            + "\npre-push is a deny-list: a lane with no row is a lane that joined the gate CI runs on every PR "
+            + "without anyone choosing that. It is how BsRosterUi came to spend 688.8s of a 689.2s run "
             + "launching the desktop app in a profile documented as offline and fast (#405). Add a row to EngineLanes.All "
             + "saying what the lane needs and whether pre-push runs it, with the measured cost that justifies the answer.");
     }
@@ -734,8 +734,8 @@ public sealed class TestProfileRegistryTests
         }
 
         Assert.True(broken.Count == 0,
-            "pre-push is the gate AGENTS.md tells every contributor to run before every push, and calls offline: no network, "
-            + "no desktop app. It runs on every push by every contributor, which is the last traffic profile a third party's "
+            "pre-push is the offline gate: no network, no desktop app. CI runs it on every PR and contributors run it "
+            + "locally, which is the last traffic profile a third party's "
             + "site should see, and a desktop-app lane is what made it cost 11m29s instead of seconds (#405):\n"
             + string.Join("\n", broken));
     }
