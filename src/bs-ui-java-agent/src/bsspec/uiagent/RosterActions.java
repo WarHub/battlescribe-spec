@@ -1674,22 +1674,29 @@ public class RosterActions {
      *
      * <p>Both FX calls block until their task completes and JavaFX applies a tree selection
      * synchronously, so the key press already lands on the intended row.
+     *
+     * <p>One press takes ONE instance off the row, not the row: a selection at number 2 comes back
+     * at number 1 ({@code boundary-count-zero-below-min}). So it presses until the selection is
+     * gone, and each press must take something away or the wait fails — which bounds the loop by
+     * the number it started at. It used to press once, and the driver's retry pressed again, on
+     * every run, until the retry was removed (#526).
      */
     private void removeSelectionEntirely(String selectionId) {
-        runOnFx(() -> selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW));
-        runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
+        JsonObject remaining = findSelectionById(readRosterState(), selectionId);
+        while (remaining != null) {
+            final int before = getIntField(remaining, "number", 1);
+            runOnFx(() -> selectTreeItemById("#treeRoster", selectionId, MAIN_WINDOW));
+            runOnFx(() -> pressKey(KeyCode.DELETE, "#treeRoster", MAIN_WINDOW, false));
 
-        // Disappearance is the whole postcondition here — unlike a decrement, DELETE has no partial
-        // outcome to accept.
-        waitForStateChange(
-                s -> findSelectionById(s, selectionId) == null,
-                s -> {
-                    JsonObject still = findSelectionById(s, selectionId);
-                    return still == null
-                            ? "(it is gone — the predicate and this message disagree)"
-                            : "DELETE left selection " + selectionId + " in the roster at number "
-                                    + getIntField(still, "number", -1);
-                });
+            JsonObject after = waitForStateChange(
+                    s -> {
+                        JsonObject now = findSelectionById(s, selectionId);
+                        return now == null || getIntField(now, "number", 1) < before;
+                    },
+                    s -> "DELETE left selection " + selectionId + " in the roster at number "
+                            + getIntField(findSelectionById(s, selectionId), "number", -1));
+            remaining = findSelectionById(after, selectionId);
+        }
     }
 
     /** {@code scope}'s first child selection for {@code entryId}, or null. */

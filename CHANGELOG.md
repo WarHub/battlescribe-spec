@@ -910,8 +910,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   app that is unresponsive or showing anything besides its main window, naming the spec that left it
   so. `BsUiDataStaging` renames each game system into and out of `data/` whole, writes nothing when
   the disk already holds the files, and the roster engine starts a fresh app rather than rewrite the
-  data of a roster left open. Tests: `BsUiDataStagingTests` (half-way failure, identical staging,
-  `WouldReplaceAsync`) and `BsUiWarmReuseTests`.
+  data of a roster left open. The retry had also been hiding a driver defect on every run: the
+  DELETE key takes one instance off a roster row, not the row, so removing a selection at number 2
+  (`boundary-count-zero-below-min`) took the retry's second press. The agent now presses once per
+  instance, and each press has to make progress. Tests: `BsUiDataStagingTests` (half-way failure,
+  identical staging, `WouldReplaceAsync`) and `BsUiWarmReuseTests`.
 
 - **Redirected stdio is UTF-8 at both ends, whatever the console code page** — on Windows .NET encodes a
   pipe with the console's code page, and the two ends of one pipe need not share a console: an adapter

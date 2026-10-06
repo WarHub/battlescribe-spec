@@ -1145,8 +1145,8 @@ The `BsUiRosterEngine` is now a thin dispatcher. Most UI workflow logic lives in
 | `RemoveForce(forceId)` | `removeForceAction` | Edit Roster → click cell button (X) → confirm YES |
 | `SelectEntry(forceId, entryId)` | `selectEntryAction` | Select force in roster tree → double-click entry in catalogue tree → poll for new selection |
 | `SelectChildEntry(forceId, parentId, entryId)` | `selectChildEntryAction` | Select parent in roster tree → `clickControlByLabel` in edit panel → poll for new selection |
-| `DeselectSelection(forceId, selId)` | `deselectSelectionAction` | Select parent in tree → decrement via `clickControlByLabel`. Fallback: select in tree → DELETE key |
-| `SetSelectionCount(forceId, selId, count)` | `setSelectionCountAction` | Select parent in tree → `setSpinnerValueByLabel` → poll for count match |
+| `DeselectSelection(forceId, selId)` | `deselectSelectionAction` | Select parent in tree → decrement via `clickControlByLabel`. Fallback: select in tree → DELETE key, once per instance until gone |
+| `SetSelectionCount(forceId, selId, count)` | `setSelectionCountAction` | Select parent in tree → `setSpinnerValueByLabel` → poll for count match. Count 0: DELETE key, once per instance until gone |
 | `DuplicateSelection(forceId, selId)` | `duplicateSelectionAction` | Select in roster tree → Ctrl+D → poll for new selection |
 | `DuplicateForce(forceId)` | `duplicateForceAction` | Select force in roster tree → Ctrl+D → poll for new force |
 | `SetCostLimit(costTypeId, value)` | `setCostLimitAction` | Edit Roster → `setSpinnerValueByLabel` for cost name → Done |
