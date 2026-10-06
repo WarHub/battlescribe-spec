@@ -141,14 +141,11 @@ public sealed class ToolchainPinDriftTests
     /// <c>Microsoft.NET.Test.Sdk</c> generates an entry point of its own. A pin with no reference is the
     /// other half: invisible to Dependabot, and ready to hold a transitive version back.
     /// </para>
-    /// <para>Mutation-checked when written: <c>Microsoft.NET.Test.Sdk</c> re-added to Cli.Tests goes red naming the file.</para>
+    /// <para><see cref="EveryVsTestPackageForm_IsFound"/> holds the forms it must recognise.</para>
     /// </remarks>
     [Fact]
     public void NoVsTestPackage_IsReferencedOrPinned()
     {
-        var package = new Regex(
-            @"<Package(?:Reference|Version)\s+(?:Include|Update)=""(Microsoft\.NET\.Test\.Sdk|xunit\.runner\.visualstudio|xunit\.v3\.mtp-off|coverlet\.collector|Microsoft\.TestPlatform[^""]*)""",
-            RegexOptions.IgnoreCase);
         // The repository's own MSBuild files: the root, and the source trees. The vendored .deps/ and the
         // downloaded lib/ and artifacts/ are not this repository's projects.
         string[] extensions = [".csproj", ".props", ".targets"];
@@ -166,7 +163,7 @@ public sealed class ToolchainPinDriftTests
         Assert.Contains(files, static f => f.Relative.StartsWith("tests/", StringComparison.Ordinal) && f.Relative.EndsWith(".csproj", StringComparison.Ordinal));
 
         var offenders = files
-            .SelectMany(f => package.Matches(File.ReadAllText(f.Path)).Select(m => $"  {f.Relative}: {m.Groups[1].Value}"))
+            .SelectMany(f => VsTestPackage.Matches(File.ReadAllText(f.Path)).Select(m => $"  {f.Relative}: {m.Groups[1].Value}"))
             .ToList();
 
         Assert.True(offenders.Count == 0,
@@ -174,6 +171,27 @@ public sealed class ToolchainPinDriftTests
             + "The suites run on Microsoft.Testing.Platform with xunit.v3's own runner; a VSTest adapter or test SDK in a test "
             + "project is a second runner with its own entry point. Remove it, and its pin from Directory.Packages.props.");
     }
+
+    /// <summary>A reference or a central pin of a VSTest package, in any casing; group 1 is the package.</summary>
+    private static readonly Regex VsTestPackage = new(
+        @"<Package(?:Reference|Version)\s+(?:Include|Update)=""(Microsoft\.NET\.Test\.Sdk|xunit\.runner\.visualstudio|xunit\.v3\.mtp-off|coverlet\.collector|Microsoft\.TestPlatform[^""]*)""",
+        RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// <b>Every VSTest package is found</b>, referenced or pinned, by <c>Include</c> or <c>Update</c>, in any
+    /// casing, and xunit.v3 itself is not.
+    /// </summary>
+    [Fact]
+    public void EveryVsTestPackageForm_IsFound() => LintSamples.AssertEachBreakIsRejected(
+        "<PackageReference Include=\"xunit.v3\" />\n<PackageVersion Include=\"xunit.v3\" Version=\"4.0.1\" />\n",
+        [
+            ("<PackageReference Include=\"xunit.v3\"", "<PackageReference Include=\"Microsoft.NET.Test.Sdk\"", "Microsoft.NET.Test.Sdk"),
+            ("<PackageVersion Include=\"xunit.v3\"", "<PackageVersion Update=\"xunit.runner.visualstudio\"", "xunit.runner.visualstudio"),
+            ("<PackageReference Include=\"xunit.v3\"", "<PackageReference Include=\"xunit.v3.mtp-off\"", "xunit.v3.mtp-off"),
+            ("<PackageReference Include=\"xunit.v3\"", "<PackageReference Include=\"coverlet.collector\"", "coverlet.collector"),
+            ("<PackageVersion Include=\"xunit.v3\"", "<packageversion include=\"microsoft.testplatform.objectmodel\"", "microsoft.testplatform.objectmodel"),
+        ],
+        static text => [.. VsTestPackage.Matches(text).Select(static m => m.Groups[1].Value)]);
 
     /// <summary>
     /// <b>A Dockerfile's SDK tag is the same decision, spelled somewhere Dependabot's dotnet-sdk
@@ -188,9 +206,9 @@ public sealed class ToolchainPinDriftTests
     /// this test says nothing about it; <c>sdk:10.0.400</c> does not, and this test says so by name.
     /// </para>
     /// <para>
-    /// Falsifiable: change the tag in <c>docker/bs-spec.Dockerfile</c> to a different feature band
-    /// (<c>10.0.400</c>) and this fails with both values — which is the same failure the
-    /// <c>docker</c> CI job would produce, several minutes later.
+    /// A tag in another band fails here with both values — the failure the <c>docker</c> CI job would
+    /// produce, several minutes later. <see cref="EveryBrokenSdkTag_IsReported"/> holds the ways a tag
+    /// can leave the band.
     /// </para>
     /// </remarks>
     [Fact]
@@ -207,26 +225,10 @@ public sealed class ToolchainPinDriftTests
 
         Assert.NotEmpty(dockerfiles);
 
-        var mismatched = new List<string>();
-        var checkedAny = false;
-
-        foreach (var file in dockerfiles)
-        {
-            foreach (var match in Regex.Matches(
-                File.ReadAllText(file),
-                @"mcr\.microsoft\.com/dotnet/sdk:(?<tag>[^\s]+)").Cast<Match>())
-            {
-                checkedAny = true;
-                var tag = match.Groups["tag"].Value;
-                if (FeatureBandOf(tag) != pinnedBand)
-                {
-                    mismatched.Add($"  {Path.GetFileName(file)}: sdk:{tag}");
-                }
-            }
-        }
+        var (read, mismatched) = SdkTagsOutsideTheBand(pinned, dockerfiles.Select(static f => (Path.GetFileName(f), File.ReadAllText(f))));
 
         Assert.True(
-            checkedAny,
+            read > 0,
             "No `mcr.microsoft.com/dotnet/sdk` tag found under docker/. Either the images stopped using "
             + "the .NET SDK image or the tag was written in a form this gate cannot read — check before "
             + "assuming the pin still holds.");
@@ -239,6 +241,50 @@ public sealed class ToolchainPinDriftTests
             + "\n\nThe Dockerfiles COPY global.json, so this is a build failure, not a nuance: the "
             + "SDK in the image cannot satisfy the pin. Move both together — Dependabot's dotnet-sdk "
             + "updater rewrites global.json and does not know these files exist.");
+    }
+
+    /// <summary>
+    /// <b>A tag outside the band is reported</b>, whichever way it leaves it: another feature band, another
+    /// major version, or no band at all. Pinned to <c>10.0.400</c>, the sample asks for <c>10.0.402</c>.
+    /// </summary>
+    [Fact]
+    public void EveryBrokenSdkTag_IsReported() => LintSamples.AssertEachBreakIsRejected(
+        "FROM mcr.microsoft.com/dotnet/sdk:10.0.402 AS build\nFROM mcr.microsoft.com/dotnet/aspnet:10.0\n",
+        [
+            ("sdk:10.0.402", "sdk:10.0.300", "sdk:10.0.300"),
+            ("sdk:10.0.402", "sdk:11.0.400", "sdk:11.0.400"),
+            ("sdk:10.0.402", "sdk:10.0", "sdk:10.0"),
+            ("dotnet/sdk:10.0.402", "dotnet/sdk-preview:10.0.402", "read no sdk tag"),
+        ],
+        text =>
+        {
+            var (read, mismatched) = SdkTagsOutsideTheBand("10.0.400", [("sample.Dockerfile", text)]);
+            return read == 0 ? ["read no sdk tag"] : mismatched;
+        });
+
+    /// <summary>
+    /// How many <c>mcr.microsoft.com/dotnet/sdk</c> tags the Dockerfiles ask for, and each one outside the
+    /// feature band of <paramref name="pinned"/>, as <c>  &lt;file&gt;: sdk:&lt;tag&gt;</c>.
+    /// </summary>
+    private static (int Read, List<string> Mismatched) SdkTagsOutsideTheBand(string pinned, IEnumerable<(string Name, string Text)> dockerfiles)
+    {
+        var pinnedBand = FeatureBandOf(pinned);
+        var read = 0;
+        var mismatched = new List<string>();
+        foreach (var (name, text) in dockerfiles)
+        {
+            foreach (var match in Regex.Matches(text, @"mcr\.microsoft\.com/dotnet/sdk:(?<tag>[^\s]+)").Cast<Match>())
+            {
+                read++;
+                var tag = match.Groups["tag"].Value;
+                if (FeatureBandOf(tag) != pinnedBand)
+                {
+                    mismatched.Add($"  {name}: sdk:{tag}");
+                }
+            }
+        }
+
+        return (read, mismatched);
     }
 
     /// <summary>

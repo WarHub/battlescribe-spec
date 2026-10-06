@@ -72,9 +72,28 @@ public sealed class SpecLintTests
     {
         // Look up the cached spec (loaded once per test session)
         var entry = SpecsByName.Value[specName];
-        var specPath = entry.Path;
-        var text = File.ReadAllText(specPath);
-        var lines = File.ReadAllLines(specPath);
+        var violations = Lint(File.ReadAllText(entry.Path), Path.GetFileNameWithoutExtension(entry.Path),
+            Path.GetFileName(Path.GetDirectoryName(entry.Path))!, entry.Spec, entry.LoadError);
+
+        Assert.True(violations.Count == 0,
+            $"{entry.RelPath}:\n  {string.Join("\n  ", violations)}");
+    }
+
+    /// <summary>
+    /// Every per-spec check over one spec: its text, the file name and directory it must match, and the
+    /// model it loaded to (or why it did not). <see cref="EveryBrokenSample_IsRejected"/> feeds it samples.
+    /// </summary>
+    private static List<string> Lint(string text, string filename, string dirName, SpecFile? spec, string? loadError)
+    {
+        // The lines File.ReadAllLines would give: the same line breaks, and no empty line after the last one.
+        var read = new List<string>();
+        using var reader = new StringReader(text);
+        while (reader.ReadLine() is { } line)
+        {
+            read.Add(line);
+        }
+
+        string[] lines = [.. read];
 
         // Run text-only checks first (don't need a successfully loaded model)
         var violations = new List<string>();
@@ -90,34 +109,30 @@ public sealed class SpecLintTests
         violations.AddRange(CheckNoLegacyErrorFields(text));
         violations.AddRange(CheckNoEmptyTagFields(lines));
 
-        if (entry.LoadError is not null)
+        if (loadError is not null)
         {
-            violations.Add($"Failed to load spec: {entry.LoadError}");
+            violations.Add($"Failed to load spec: {loadError}");
         }
 
-        if (entry.Spec is not null)
+        if (spec is not null)
         {
-            var filename = Path.GetFileNameWithoutExtension(specPath);
-            var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
-
-            violations.AddRange(CheckRequiredFields(entry.Spec));
-            violations.AddRange(CheckIdMatchesFilename(entry.Spec, filename));
-            violations.AddRange(CheckCategoryMatchesDirectory(entry.Spec, dirName!));
-            violations.AddRange(CheckKnownActions(entry.Spec));
-            violations.AddRange(CheckKnownTags(entry.Spec));
-            violations.AddRange(CheckEngineExpectations(entry.Spec));
-            violations.AddRange(CheckStepsAreActionOrExpectedState(entry.Spec));
-            violations.AddRange(CheckSetSelectionCountHasSelectionId(entry.Spec));
-            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(entry.Spec));
-            violations.AddRange(CheckEverySpecHasSetup(entry.Spec));
-            violations.AddRange(CheckLastStepIsExpectedState(entry.Spec));
-            violations.AddRange(CheckAllErrorAssertionsHaveFrom(entry.Spec));
-            violations.AddRange(CheckErrorAssertionAddressShape(entry.Spec));
-            violations.AddRange(CheckNoRedundantCountAssertions(entry.Spec));
+            violations.AddRange(CheckRequiredFields(spec));
+            violations.AddRange(CheckIdMatchesFilename(spec, filename));
+            violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName));
+            violations.AddRange(CheckKnownActions(spec));
+            violations.AddRange(CheckKnownTags(spec));
+            violations.AddRange(CheckEngineExpectations(spec));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
+            violations.AddRange(CheckSetSelectionCountHasSelectionId(spec));
+            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(spec));
+            violations.AddRange(CheckEverySpecHasSetup(spec));
+            violations.AddRange(CheckLastStepIsExpectedState(spec));
+            violations.AddRange(CheckAllErrorAssertionsHaveFrom(spec));
+            violations.AddRange(CheckErrorAssertionAddressShape(spec));
+            violations.AddRange(CheckNoRedundantCountAssertions(spec));
         }
 
-        Assert.True(violations.Count == 0,
-            $"{entry.RelPath}:\n  {string.Join("\n  ", violations)}");
+        return violations;
     }
 
     // ── No duplicate IDs (cross-spec check) ─────────────────────────
@@ -133,6 +148,105 @@ public sealed class SpecLintTests
             .ToList();
         Assert.True(duplicates.Count == 0,
             $"Duplicate spec IDs found:\n  {string.Join("\n  ", duplicates)}");
+    }
+
+    // ── The rules can fail ───────────────────────────────────────────
+
+    /// <summary>A spec every rule accepts, which each of <see cref="BrokenSamples"/> breaks in one place.</summary>
+    private const string Sample = """
+        id: sample
+        category: sample
+        description: Every rule accepts this spec
+
+        setup:
+          gameSystem:
+            categoryEntries:
+              - id: cat-troops
+                name: Troops
+            forceEntries:
+              - id: fe-patrol
+                name: Patrol
+                categoryLinks:
+                  - id: cl-fe-troops
+                    targetId: cat-troops
+                    name: Troops
+          catalogues:
+            - id: cat-1
+              selectionEntries:
+                - id: se-unit-a
+                  name: Unit A
+                  type: unit
+                  constraints:
+                    - id: con-min-1
+                      type: min
+                      value: 1
+                      field: selections
+                      scope: parent
+
+        steps:
+          - action: addForce
+            id: add-patrol
+            forceEntryId: fe-patrol
+
+          - expectedState:
+              errors:
+                - on: category ${{ steps.add-patrol.categories.cat-troops }}
+                  from: se-unit-a/con-min-1
+              forces:
+                - selections:
+                    - name: Unit A
+              engines:
+                newrecruit:
+                  errors:
+                    - on: force ${{ steps.add-patrol.forceId }}
+                      from: fe-patrol/con-min-1
+        """ + "\n";
+
+    /// <summary>
+    /// One rule broken per row: the text of <see cref="Sample"/> replaced, its replacement, and what the
+    /// lint must say. Sampled are the rules that read positions, indentation or nesting, where a rule
+    /// can stop seeing what it looks for and still pass every spec.
+    /// </summary>
+    private static readonly (string Text, string BrokenBy, string Says)[] BrokenSamples =
+    [
+        ("forceEntryId: fe-patrol\n\n", "forceEntryId: fe-patrol\n", "missing blank line before '- expectedState:'"),
+        ("forceEntryId: fe-patrol\n\n", "forceEntryId: fe-patrol\n", "file is not correctly formatted"),
+        ("      errors:\n        - on: category ${{ steps.add-patrol.categories.cat-troops }}\n          from: se-unit-a/con-min-1\n"
+            + "      forces:\n        - selections:\n            - name: Unit A\n",
+            "      forces:\n        - selections:\n            - name: Unit A\n"
+            + "      errors:\n        - on: category ${{ steps.add-patrol.categories.cat-troops }}\n          from: se-unit-a/con-min-1\n",
+            "'errors' (zone 0) must come before 'forces'"),
+        ("            name: Troops\n  catalogues:", "            name: Troops\n            primary: false\n  catalogues:", "'primary: false'"),
+        ("\n\nsetup:", "\ntags:\n\nsetup:", "remove empty 'tags' field"),
+        ("              from: fe-patrol/con-min-1\n", "",
+            "engines.newrecruit.errors: error assertion on='force ${{ steps.add-patrol.forceId }}' is missing 'from:'"),
+        ("on: category ${{ steps.add-patrol.categories.cat-troops }}", "on: category cat-troops", "names a catalogue entry, not a roster node"),
+        ("            - name: Unit A\n", "            - name: Unit A\n          selectionCount: 1\n",
+            "expectedState.forces[1]: 'selectionCount' is redundant when 'selections' is also asserted"),
+    ];
+
+    /// <summary>
+    /// <b>Every sampled rule can fail.</b> <see cref="AllLintChecks"/> passing every spec says nothing about
+    /// a rule that no longer matches what it looks for, so each row breaks <see cref="Sample"/> in one place
+    /// and the lint must name the break. The sample itself must pass, so what a row sees is its own break.
+    /// </summary>
+    [Fact]
+    public void EveryBrokenSample_IsRejected() => LintSamples.AssertEachBreakIsRejected(Sample, BrokenSamples, LintSample);
+
+    private static List<string> LintSample(string yaml)
+    {
+        SpecFile? spec = null;
+        string? loadError = null;
+        try
+        {
+            spec = SpecLoader.LoadFromYaml(yaml);
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+
+        return Lint(yaml, "sample", "sample", spec, loadError);
     }
 
     // ── Formatting ───────────────────────────────────────────────────

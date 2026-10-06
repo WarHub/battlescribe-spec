@@ -250,6 +250,24 @@ such a machine. To run only them, unprofiled:
 `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "FullyQualifiedName~RealWorld"`;
 without the data every row skips, and the run exits 8.
 
+## Proving a guard can fail
+
+A guard — a test or lint meant to go red when something breaks — passing the repository says nothing about
+whether it can fail. Prove it once, and keep the proof where it is cheap:
+
+- **A text guard keeps broken samples.** A lint over YAML, JSON, MSBuild or Dockerfiles applies the same
+  function to a clean sample, which must pass, and to one break of it per row, each of which it must reject
+  (`tests/Infrastructure/LintSamples.cs`; `SpecLintTests`, `GameDataSpecLintTests`, `TestDataPinDriftTests`
+  and `ToolchainPinDriftTests` keep samples). The proof is a test in `lint`, re-run free on every change.
+- **C# guard logic gets `tools/mutate.mjs`** (the AGENTS.md line; its usage heads the script). Each
+  mutation is a text replacement and the `--filter` of the tests that must fail. It runs a green baseline
+  first, builds only for a mutation the build reads, restores every file from a byte copy — never from git,
+  so uncommitted work survives — and names every mutation that was not killed.
+
+Stryker.NET does not reach these guards (#529): it mutates only projects that are not test projects, and
+the guards are compiled into the test apps, `tests/TestProfiles/` included. Against a `src/` project it
+drives `BattleScribeSpec.Cli.Tests` as it is.
+
 ## Parallelism
 
 Each test assembly declares its xunit parallelism once, in its `xunit.runner.json`

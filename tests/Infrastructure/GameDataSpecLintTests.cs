@@ -68,33 +68,40 @@ public sealed class GameDataSpecLintTests
     {
         // Look up the cached spec (loaded once per test session)
         var entry = SpecsByName.Value[specName];
-        var specPath = entry.Path;
-
-        var violations = new List<string>();
-        violations.AddRange(CheckFormatting(File.ReadAllText(specPath)));
-
-        if (entry.LoadError is not null)
-        {
-            violations.Add($"Failed to load spec: {entry.LoadError}");
-        }
-
-        if (entry.Spec is not null)
-        {
-            var filename = Path.GetFileNameWithoutExtension(specPath);
-            var dirName = Path.GetFileName(Path.GetDirectoryName(specPath));
-
-            violations.AddRange(CheckRequiredFields(entry.Spec));
-            violations.AddRange(CheckIdMatchesFilename(entry.Spec, filename));
-            violations.AddRange(CheckCategoryMatchesDirectory(entry.Spec, dirName!));
-            violations.AddRange(CheckKnownActions(entry.Spec));
-            violations.AddRange(CheckStepsAreActionOrExpectedState(entry.Spec));
-            violations.AddRange(CheckSetupHasGameSystem(entry.Spec));
-            violations.AddRange(CheckSetupHasEdit(entry.Spec));
-            violations.AddRange(CheckActionParameters(entry.Spec));
-        }
+        var violations = Lint(File.ReadAllText(entry.Path), Path.GetFileNameWithoutExtension(entry.Path),
+            Path.GetFileName(Path.GetDirectoryName(entry.Path))!, entry.Spec, entry.LoadError);
 
         Assert.True(violations.Count == 0,
             $"{entry.RelPath}:\n  {string.Join("\n  ", violations)}");
+    }
+
+    /// <summary>
+    /// Every per-spec check over one spec: its text, the file name and directory it must match, and the
+    /// model it loaded to (or why it did not). <see cref="EveryBrokenSample_IsRejected"/> feeds it samples.
+    /// </summary>
+    private static List<string> Lint(string text, string filename, string dirName, GameDataSpecFile? spec, string? loadError)
+    {
+        var violations = new List<string>();
+        violations.AddRange(CheckFormatting(text));
+
+        if (loadError is not null)
+        {
+            violations.Add($"Failed to load spec: {loadError}");
+        }
+
+        if (spec is not null)
+        {
+            violations.AddRange(CheckRequiredFields(spec));
+            violations.AddRange(CheckIdMatchesFilename(spec, filename));
+            violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName));
+            violations.AddRange(CheckKnownActions(spec));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
+            violations.AddRange(CheckSetupHasGameSystem(spec));
+            violations.AddRange(CheckSetupHasEdit(spec));
+            violations.AddRange(CheckActionParameters(spec));
+        }
+
+        return violations;
     }
 
     // ── No duplicate IDs (cross-spec check) ─────────────────────────
@@ -110,6 +117,77 @@ public sealed class GameDataSpecLintTests
             .ToList();
         Assert.True(duplicates.Count == 0,
             $"Duplicate GameData spec IDs found:\n  {string.Join("\n  ", duplicates)}");
+    }
+
+    // ── The rules can fail ───────────────────────────────────────────
+
+    /// <summary>A spec every rule accepts, which each of <see cref="BrokenSamples"/> breaks in one place.</summary>
+    private const string Sample = """
+        id: sample
+        category: sample
+        description: Every rule accepts this spec
+
+        setup:
+          edit: cat-1
+          gameSystem:
+            id: gs-1
+            name: Test System
+          catalogues:
+            - id: cat-1
+              name: Test Catalogue
+              gameSystemId: gs-1
+              sharedSelectionEntries:
+                - id: sse-bolter
+                  name: Bolter
+                  type: upgrade
+
+        steps:
+          - action: addLink
+            id: add-link
+            parentId: cat-1
+            linkType: entryLink
+            targetId: sse-bolter
+
+          - expectedState:
+              catalogues:
+                - id: cat-1
+                  entryLinks:
+                    - entryType: entryLink
+                      fields:
+                        targetId: sse-bolter
+        """ + "\n";
+
+    /// <summary>One rule broken per row: the text of <see cref="Sample"/> replaced, its replacement, and what the lint must say.</summary>
+    private static readonly (string Text, string BrokenBy, string Says)[] BrokenSamples =
+    [
+        ("targetId: sse-bolter\n\n", "targetId: sse-bolter\n", "file is not correctly formatted"),
+        ("edit: cat-1", "edit: cat-2", "setup.edit 'cat-2' must be the game system id or one of the catalogue ids"),
+        ("action: addLink", "action: addLinks", "unknown action 'addLinks'"),
+        ("linkType: entryLink\n    targetId: sse-bolter\n", "linkType: entryLink\n", "step 1: addLink requires 'targetId'"),
+    ];
+
+    /// <summary>
+    /// <b>Every sampled rule can fail.</b> <see cref="AllLintChecks"/> passing every spec says nothing about
+    /// a rule that no longer matches what it looks for, so each row breaks <see cref="Sample"/> in one place
+    /// and the lint must name the break. The sample itself must pass, so what a row sees is its own break.
+    /// </summary>
+    [Fact]
+    public void EveryBrokenSample_IsRejected() => LintSamples.AssertEachBreakIsRejected(Sample, BrokenSamples, LintSample);
+
+    private static List<string> LintSample(string yaml)
+    {
+        GameDataSpecFile? spec = null;
+        string? loadError = null;
+        try
+        {
+            spec = SpecLoader.LoadGameDataFromYaml(yaml);
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+
+        return Lint(yaml, "sample", "sample", spec, loadError);
     }
 
     // ── Formatting ───────────────────────────────────────────────────
