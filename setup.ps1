@@ -232,8 +232,8 @@ function Get-PinMismatch {
 
     $marker = Join-Path $Destination '.tag'
     if (-not (Test-Path $marker)) { return "'$Destination' has no .tag marker" }
-    $actual = (Get-Content $marker -Raw).Trim()
-    if ($actual -ne $Pin) { return "'$Destination' holds '$actual', the pin is '$Pin'" }
+    $actual = "$(Get-Content $marker -Raw)".Trim()
+    if ($actual -cne $Pin) { return "'$Destination' holds '$actual', the pin is '$Pin'" }
     if ($Sha256) { return Get-ContentPinMismatch $Sha256 $Destination }
     return $null
 }
@@ -250,14 +250,16 @@ function Install-FromLinkSource {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Destination,
-        [Parameter(Mandatory)][scriptblock]$Mismatch
+        [Parameter(Mandatory)][scriptblock]$Mismatch,
+        [string]$SkipWith
     )
 
     $source = Join-Path $LinkFrom ([IO.Path]::GetRelativePath($repoRoot, $Destination))
     $why = if (Test-Path $source) { & $Mismatch $source } else { "'$source' does not exist" }
     if ($why) {
         throw "[$Name] refusing to link from ${LinkFrom}: $why. Link from a checkout provisioned at " +
-            "this checkout's pin, or run ./setup.ps1 without -LinkFrom to download it."
+            "this checkout's pin, or run ./setup.ps1 without -LinkFrom to download it" +
+            $(if ($SkipWith) { ", or pass $SkipWith to do without it." } else { "." })
     }
 
     if (Test-Path $Destination) { Remove-Item $Destination -Recurse -Force }
@@ -269,6 +271,7 @@ function Install-FromLinkSource {
             else { New-Item -ItemType HardLink -Path $path -Target $item.FullName | Out-Null }
         }
     } catch {
+        Remove-Item $Destination -Recurse -Force -ErrorAction SilentlyContinue   # a partial copy may already carry a valid .tag
         throw "[$Name] could not hard-link $source into ${Destination} (both checkouts must be on one volume): $_"
     }
     Write-Host "  [OK] Linked from $source" -ForegroundColor Green
@@ -301,7 +304,7 @@ if ($SkipWh40k) {
 } elseif (-not $Force -and -not (& $wh40kMismatch $wh40kDir)) {
     Write-Host "[OK] wh40k-9e already cloned ($wh40kTag)" -ForegroundColor Green
 } elseif ($LinkFrom) {
-    Install-FromLinkSource 'wh40k-9e' $wh40kDir $wh40kMismatch
+    Install-FromLinkSource 'wh40k-9e' $wh40kDir $wh40kMismatch -SkipWith '-SkipWh40k'
 } else {
     if (Test-Path $wh40kDir) { Remove-Item $wh40kDir -Recurse -Force }
     Write-Host "Cloning wh40k-9e (shallow, tag $wh40kTag)..." -ForegroundColor Yellow
@@ -496,7 +499,7 @@ if ($SkipJavaAgent -or $env:CI -eq 'true') {
     if (-not $Force -and -not (& $libericaMismatch $libericaDir)) {
         Write-Host "  [OK] Already downloaded ($libericaVersion)" -ForegroundColor Green
     } elseif ($LinkFrom) {
-        Install-FromLinkSource 'liberica-jdk' $libericaDir $libericaMismatch
+        Install-FromLinkSource 'liberica-jdk' $libericaDir $libericaMismatch -SkipWith '-SkipJavaAgent'
     } else {
         if (Test-Path $libericaDir) { Remove-Item $libericaDir -Recurse -Force }
         $staging = Join-Path $libericaDir '.staging'
