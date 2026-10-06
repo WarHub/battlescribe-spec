@@ -7,8 +7,15 @@ namespace BattleScribeSpec.Tests;
 /// <summary>
 /// Runs declarative YAML spec files against a frozen New Recruit snapshot (HAR replay).
 /// Fully offline and deterministic. Uses parallel execution with a browser context pool.
-/// Skipped when the HAR file doesn't exist or NR_FROZEN_SKIP=true.
+/// Skipped when the HAR file doesn't exist.
 /// </summary>
+/// <remarks>
+/// The suite is two <c>[Fact]</c> aggregates that partition it: <see cref="KitchenSink"/>, the every-push
+/// smoke (<c>smoke-nr-frozen</c>), and <see cref="OtherSpecs"/>. An aggregate's name carries no spec id, so
+/// <c>--filter DisplayName~kitchen-sink</c> cannot narrow it — that clause once selected nothing here and
+/// the smoke step reported green — but a filter on the test's own name can, and selecting the engine runs
+/// both, each spec once.
+/// </remarks>
 [Collection("FrozenNrRoster")]
 [Trait("Category", "Conformance")]
 [Trait("Engine", "FrozenNrRoster")]
@@ -25,11 +32,18 @@ public sealed class FrozenNrRosterConformanceTests
         _fixture = fixture;
     }
 
+    /// <summary>The kitchen-sink spec: proves the engine wires up, on every push.</summary>
     [Fact]
-    public async Task AllSpecs()
+    public Task KitchenSink() => RunAsync(AggregateMode.KitchenSink);
+
+    /// <summary>Every other applicable spec: with <see cref="KitchenSink"/>, the whole lane.</summary>
+    [Fact]
+    public Task OtherSpecs() => RunAsync(AggregateMode.OtherSpecs);
+
+    private async Task RunAsync(AggregateMode part)
     {
         Assert.SkipWhen(!_fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
 
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var pool = _fixture.EnginePool!;
@@ -39,29 +53,14 @@ public sealed class FrozenNrRosterConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
 
-        // NR_FROZEN_SMOKE=1 restricts the run to kitchen-sink — the fast CI lane proves the engine
-        // wires up without running the full suite (which the thorough `nr-frozen` lane covers).
-        //
-        // This knob exists because THIS CLASS IS A [Fact] AGGREGATE: every spec collapses into one
-        // test named `…FrozenNrRosterConformanceTests.AllSpecs`, whose display name contains no spec
-        // id, so `--filter DisplayName~kitchen-sink` cannot narrow it — it selects nothing here and
-        // silently fell through to the NR_SEQUENTIAL-gated Sequential theory, which skipped. The
-        // smoke lane's "kitchen-sink" step therefore executed ZERO tests and reported green. Same
-        // knob shape, and same reason, as NR_UI_SMOKE in FrozenNrGameDataUiConformanceTests.
-        var smoke = Environment.GetEnvironmentVariable("NR_FROZEN_SMOKE") == "1";
-
         // Load all specs upfront and pre-resolve datasources before parallel execution. The whole corpus
-        // is read even in smoke mode: it is what the [lane] line counts `applicable` from.
+        // is read for either part: it is what the [lane] line counts `applicable` from.
         var resolver = new DataSourceResolver();
         var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
-        var loadedSpecs = corpus
-            .Where(s => !smoke || s.Name.Contains("kitchen-sink", StringComparison.Ordinal))
-            .ToList();
+        var loadedSpecs = corpus.Where(s => AggregateLaneRun.Drives(part, s.Name)).ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
-        // A smoke lane that selected no spec is the same silent pass this knob was added to fix; Start fails a
-        // run that selected none, in every mode.
-        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrRoster", smoke ? AggregateMode.Smoke : AggregateMode.Full,
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrRoster", part,
             selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
             applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
         var stop = TestContext.Current.CancellationToken;
@@ -145,7 +144,7 @@ public sealed class FrozenNrRosterConformanceTests
     public async Task AnIdTheRosterDoesNotHave_IsAnAddressingFailure()
     {
         Assert.SkipWhen(!_fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
 
         var wrong = new List<string>();
         foreach (var scenario in AddressingScenarios.All)

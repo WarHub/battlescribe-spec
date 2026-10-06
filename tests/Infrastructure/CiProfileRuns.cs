@@ -122,8 +122,7 @@ internal static class CiProfileRuns
     /// Which lane each of the CLI's built-in UI drivers is, by base engine name (the <c>-ui</c> suffix
     /// stripped) and domain. The CLI's engine names are not trait values, so this one map says it. A
     /// <c>newrecruit</c> roster run is the frozen lane: it goes live only with <c>NR_ENGINE_URL</c> set,
-    /// and that switch belongs to the live profiles, so <see cref="CiProfileLaneTests.LaneDefiningKnobs_AppearNowhereInGithub"/>
-    /// keeps it out of CI. Its gamedata side is always this machine.
+    /// which only the live profiles do. Its gamedata side is always this machine.
     /// </summary>
     private static readonly Dictionary<(string Engine, bool GameData), string> CliUiLanes = new()
     {

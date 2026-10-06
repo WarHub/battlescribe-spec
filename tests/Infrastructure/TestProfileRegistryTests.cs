@@ -20,8 +20,8 @@ namespace BattleScribeSpec.Tests;
 /// Asking xunit for the traits it assigns (<see cref="ExtensibilityPointFactory"/>, as discovery does)
 /// has neither problem: a comment is not an attribute. Assembly, class and method traits are read
 /// that way; a data source or a row can carry traits too, and
-/// <see cref="NoDataSourceOrRow_CarriesAnEngineCategoryOrModeTrait"/> keeps the three properties
-/// profiles select by off them, so the method-level values are the whole story for those three.
+/// <see cref="NoDataSourceOrRow_CarriesAnEngineOrCategoryTrait"/> keeps the two properties
+/// profiles select by off them, so the method-level values are the whole story for those two.
 /// </para>
 /// <para>
 /// Mutation-checked when written; each of these turns the named test red: a
@@ -41,12 +41,12 @@ public sealed class TestProfileRegistryTests
     /// filter too — it means <c>FullyQualifiedName~word</c> — so a typo does not fail; it selects
     /// something else.
     /// </summary>
-    internal static readonly Regex ClauseShape = new(@"^(Engine|Category|Mode|Tag|DisplayName|FullyQualifiedName)(=|!=|~|!~)[^&|()]+$");
+    internal static readonly Regex ClauseShape = new(@"^(Engine|Category|Tag|DisplayName|FullyQualifiedName)(=|!=|~|!~)[^&|()]+$");
 
     private static readonly Regex KebabCase = new("^[a-z0-9]+(?:-[a-z0-9]+)*$");
 
     /// <summary>Properties whose values are trait values this assembly carries, checked exactly.</summary>
-    private static readonly string[] ReflectedProperties = ["Engine", "Category", "Mode"];
+    private static readonly string[] ReflectedProperties = ["Engine", "Category"];
 
     [Fact]
     public void EveryProfileName_IsUniqueKebabCase()
@@ -73,7 +73,7 @@ public sealed class TestProfileRegistryTests
 
     /// <summary>
     /// Every clause of every profile's filter is <c>Property Operator Value</c> with an explicit
-    /// operator, and an <c>Engine</c>, <c>Category</c> or <c>Mode</c> clause compares exactly against
+    /// operator, and an <c>Engine</c> or <c>Category</c> clause compares exactly against
     /// a value some test in this assembly carries.
     /// </summary>
     [Fact]
@@ -99,7 +99,7 @@ public sealed class TestProfileRegistryTests
                 if (!match.Success)
                 {
                     problems.Add($"  {profile.Name}: '{clause}' is not Property(=|!=|~|!~)Value over "
-                        + "Engine, Category, Mode, Tag, DisplayName or FullyQualifiedName");
+                        + "Engine, Category, Tag, DisplayName or FullyQualifiedName");
                     continue;
                 }
 
@@ -158,14 +158,14 @@ public sealed class TestProfileRegistryTests
     /// <para>
     /// Every live fixture skips whole when its URL is unset, so a live profile without one passes
     /// having run nothing. Two were like that: <c>nr-editor-ui-live</c> left <c>NR_EDITOR_URL</c> to
-    /// the caller for its whole life, and <c>nr-live-sequential</c> needed the URL added when it was
+    /// the caller for its whole life, and a sequential live profile needed the URL added when it was
     /// written. A <c>MaySkip</c> engine is exempt (it may skip whole by definition), and so is a lane a
     /// <c>Raw</c> filter reaches only incidentally: <c>non-conformance</c> reaches
     /// <c>LiveNrRosterSmokeTests</c> and must not drive the live site from the <c>checks</c> job, which
     /// is why it declares the lane incidental rather than claiming it.
     /// </para>
     /// <para>
-    /// Mutation-checked when written: <c>NR_ENGINE_URL</c> removed from <c>nr-live-sequential</c>, and
+    /// Mutation-checked when written: <c>NR_ENGINE_URL</c> removed from a live profile, and
     /// <c>RequiredEnv</c> naming an unclassified switch, each turn this red.
     /// </para>
     /// </remarks>
@@ -421,13 +421,18 @@ public sealed class TestProfileRegistryTests
 
     /// <summary>
     /// <b>A lane is marked <see cref="EngineLane.Aggregate"/> exactly when one of its own classes runs the
-    /// spec suite as a single <c>[Fact] AllSpecs()</c>.</b> The mark is what puts live output on such a
-    /// lane in CI (<c>TestHost</c>), so a new aggregate that is not marked runs 27 silent minutes, and
-    /// a mark left on a lane that became a theory asks for output nobody needs.
+    /// spec suite inside single tests — a <c>[Fact] AllSpecs()</c>, or a <c>KitchenSink</c> and an
+    /// <c>OtherSpecs</c> <c>[Fact]</c> — and a lane's <see cref="EngineLane.OtherSpecs"/> names such a
+    /// <c>[Fact]</c> of one of its classes.</b> The mark is what puts live output on such a lane in CI
+    /// (<c>TestHost</c>), so a new aggregate that is not marked runs 27 silent minutes, and a mark left on a
+    /// lane that became a theory asks for output nobody needs.
     /// </summary>
     /// <remarks>
-    /// Mutation-checked when written: <c>Aggregate</c> removed from <c>FrozenNrUiRoster</c>, and set on
-    /// <c>BsRoster</c>, each go red naming the lane.
+    /// <see cref="EngineLane.OtherSpecs"/> is excluded by name (<c>FullyQualifiedName!=…</c>), and a clause that
+    /// names nothing excludes nothing: renamed without it, <c>pre-push</c> and the smoke lanes would quietly run
+    /// the whole of their lanes, the NR UI roster's ~27 minutes included. Mutation-checked when written:
+    /// <c>Aggregate</c> removed from <c>FrozenNrUiRoster</c>, and set on <c>BsRoster</c>, each go red naming the
+    /// lane.
     /// </remarks>
     [Fact]
     public void EveryAggregateLane_IsDeclared()
@@ -437,33 +442,44 @@ public sealed class TestProfileRegistryTests
         var aggregates = 0;
         foreach (var lane in EngineLanes.All)
         {
-            var allSpecs = lane.LaneTests
-                .Select(n => assembly.GetType(n, throwOnError: false))
-                .OfType<Type>()
-                .Where(static t => t.GetMethod("AllSpecs")?.GetCustomAttributes(typeof(FactAttribute), inherit: true).Any(static a => a is not TheoryAttribute) == true)
-                .Select(static t => t.Name)
-                .ToList();
-            aggregates += allSpecs.Count > 0 ? 1 : 0;
-            if (allSpecs.Count > 0 && !lane.Aggregate)
+            var classes = lane.LaneTests.Select(n => assembly.GetType(n, throwOnError: false)).OfType<Type>().ToList();
+            var aggregateClasses = classes.Where(IsAggregateClass).Select(static t => t.Name).ToList();
+            aggregates += aggregateClasses.Count > 0 ? 1 : 0;
+            if (aggregateClasses.Count > 0 && !lane.Aggregate)
             {
-                problems.Add($"  {lane.Trait}: {string.Join(", ", allSpecs)} runs the suite as one [Fact] AllSpecs(), and the lane is not marked Aggregate");
+                problems.Add($"  {lane.Trait}: {string.Join(", ", aggregateClasses)} runs the suite inside single [Fact]s, and the lane is not marked Aggregate");
             }
-            else if (allSpecs.Count == 0 && lane.Aggregate)
+            else if (aggregateClasses.Count == 0 && lane.Aggregate)
             {
-                problems.Add($"  {lane.Trait} is marked Aggregate, and none of its own classes has a [Fact] AllSpecs()");
+                problems.Add($"  {lane.Trait} is marked Aggregate, and none of its own classes has a [Fact] {string.Join(", ", AggregateFacts)}");
+            }
+
+            if (lane.OtherSpecs is { } otherSpecs
+                && !classes.Any(t => $"{t.FullName}.OtherSpecs" == otherSpecs && IsFact(t.GetMethod("OtherSpecs")) && IsFact(t.GetMethod("KitchenSink"))))
+            {
+                problems.Add($"  {lane.Trait}'s OtherSpecs '{otherSpecs}' is not the [Fact] OtherSpecs of a lane class that also has a [Fact] KitchenSink, "
+                    + "so the selections that exclude it by name exclude nothing");
             }
         }
 
-        Assert.True(aggregates > 0, "No lane class has a [Fact] AllSpecs(); the scan has stopped finding the aggregates.");
+        Assert.True(aggregates > 0, "No lane class has an aggregate [Fact]; the scan has stopped finding the aggregates.");
         Assert.True(problems.Count == 0,
-            "EngineLane.Aggregate must say which lanes run their spec suite as one test (tests/TestProfiles/EngineLanes.cs):\n"
-            + string.Join("\n", problems));
+            "EngineLane.Aggregate must say which lanes run their spec suite inside single tests, and EngineLane.OtherSpecs "
+            + "must name a split lane's OtherSpecs test (tests/TestProfiles/EngineLanes.cs):\n" + string.Join("\n", problems));
     }
+
+    /// <summary>The <c>[Fact]</c>s an aggregate lane class runs its suite in: one <c>AllSpecs</c>, or a <c>KitchenSink</c> and an <c>OtherSpecs</c>.</summary>
+    private static readonly string[] AggregateFacts = ["AllSpecs", "KitchenSink", "OtherSpecs"];
+
+    private static bool IsAggregateClass(Type type) => AggregateFacts.Any(name => IsFact(type.GetMethod(name)));
+
+    private static bool IsFact(MethodInfo? method) =>
+        method?.GetCustomAttributes(typeof(FactAttribute), inherit: true).Any(static a => a is not TheoryAttribute) == true;
 
     /// <summary>
     /// <b>Every aggregate lane class reports through <see cref="AggregateLaneRun"/></b>: it starts one under its own
-    /// lane's name (the <c>[lane] &lt;Engine&gt; mode=… selected=N applicable=M</c> line, and the full-mode check that
-    /// the two match), reports each spec as it completes (<c>[i/N]</c>), and checks for a stop between specs.
+    /// lane's name (the <c>[lane] &lt;Engine&gt; mode=… selected=N applicable=M</c> line, and the check that it
+    /// selected a spec), reports each spec as it completes (<c>[i/N]</c>), and checks for a stop between specs.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -472,8 +488,8 @@ public sealed class TestProfileRegistryTests
     /// 1 passed for one spec or for 378, and to 27 silent minutes.
     /// </para>
     /// <para>
-    /// Read from source, because what matters is the call: the declaring file of each class's
-    /// <c>[Fact] AllSpecs()</c>. Every lane marked <see cref="EngineLane.Aggregate"/> must have one such class here,
+    /// Read from source, because what matters is the call: the declaring file of each class with an aggregate
+    /// <c>[Fact]</c>. Every lane marked <see cref="EngineLane.Aggregate"/> must have one such class here,
     /// so an aggregate whose method was renamed does not leave the check while it stays green. The stop is checked
     /// on the run <c>Start</c> returned, in the form that actually stops: <c>lane.ThrowIfStopped(token)</c> in a
     /// sequential loop, and for a <c>Parallel.ForEachAsync</c> lane both the token in its <c>ParallelOptions</c> (what
@@ -499,11 +515,11 @@ public sealed class TestProfileRegistryTests
         foreach (var lane in aggregateLanes)
         {
             var classes = lane.LaneTests.Select(n => assembly.GetType(n, throwOnError: false)).OfType<Type>()
-                .Where(static t => t.GetMethod("AllSpecs")?.GetCustomAttributes(typeof(FactAttribute), inherit: true).Any(static a => a is not TheoryAttribute) == true)
+                .Where(IsAggregateClass)
                 .ToList();
             if (classes.Count == 0)
             {
-                problems.Add($"  {lane.Trait} is marked Aggregate, and none of its own classes has a [Fact] AllSpecs() for this check to read");
+                problems.Add($"  {lane.Trait} is marked Aggregate, and none of its own classes has an aggregate [Fact] for this check to read");
             }
 
             foreach (var type in classes)
@@ -667,8 +683,9 @@ public sealed class TestProfileRegistryTests
 
     /// <summary>
     /// <b>No lane that needs the desktop app or a third party's site runs in <c>pre-push</c>,</b> and
-    /// <c>pre-push</c>'s selection is <see cref="Selection.PrePush"/> itself: a deny-list of the lanes not
-    /// marked <see cref="EngineLane.InPrePush"/>, plus <c>Mode=Sequential</c>.
+    /// <c>pre-push</c>'s selection is <see cref="Selection.PrePush"/> itself: a deny-list of the lanes whose
+    /// <see cref="EngineLane.InPrePush"/> is <see cref="PrePushPart.None"/>, and of the <c>OtherSpecs</c> test of
+    /// each <see cref="PrePushPart.KitchenSink"/> lane.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -684,16 +701,15 @@ public sealed class TestProfileRegistryTests
     /// </para>
     /// <para>
     /// Mutation-checked when written: <c>BsRosterUi</c> set <c>InPrePush: true</c>; <c>pre-push</c> as
-    /// <c>AllExcept("BsRosterUi")</c>; as <c>Engines(…the six InPrePush lanes…).Where("Mode!=Sequential")</c>;
-    /// and <see cref="Selection.PrePush"/> with its <c>Mode!=Sequential</c> dropped.
+    /// <c>AllExcept("BsRosterUi")</c>; and as <c>Engines(…the six InPrePush lanes…)</c>.
     /// </para>
     /// </remarks>
     [Fact]
     public void PrePushHonoursItsPromise()
     {
         var broken = EngineLanes.All
-            .Where(static l => l.InPrePush && (l.Needs & (Needs.DesktopApp | Needs.ThirdPartySite)) != 0)
-            .Select(static l => $"  {l.Trait} needs {l.Needs} but is marked InPrePush ({l.Why})")
+            .Where(static l => l.InPrePush != PrePushPart.None && (l.Needs & (Needs.DesktopApp | Needs.ThirdPartySite)) != 0)
+            .Select(static l => $"  {l.Trait} needs {l.Needs} but is marked InPrePush: {l.InPrePush} ({l.Why})")
             .ToList();
 
         var prePush = TestProfiles.Find("pre-push");
@@ -706,7 +722,7 @@ public sealed class TestProfileRegistryTests
                 + "the InPrePush column: its selection must be Selection.PrePush() itself");
         }
 
-        var expected = EngineLanes.All.Where(static l => l.InPrePush).Select(static l => l.Trait).ToHashSet(StringComparer.Ordinal);
+        var expected = EngineLanes.All.Where(static l => l.InPrePush != PrePushPart.None).Select(static l => l.Trait).ToHashSet(StringComparer.Ordinal);
         if (!expected.SetEquals(derived.Claims))
         {
             broken.Add($"  Selection.PrePush() claims [{string.Join(", ", derived.Claims)}], but the lanes marked InPrePush are "
@@ -725,12 +741,6 @@ public sealed class TestProfileRegistryTests
                 broken.Add($"  Selection.PrePush() renders '{filter}', which is not a deny-list (every clause a negation, no '|'): "
                     + "the tests that carry no Engine trait — unit, lint, protocol — are only in the gate because nothing excludes them");
             }
-
-            if (!Selection.ClausesOf(filter).Contains("Mode!=Sequential", StringComparer.Ordinal))
-            {
-                broken.Add("  pre-push does not exclude Mode=Sequential (manual-only, gated behind NR_SEQUENTIAL)");
-            }
-
         }
 
         Assert.True(broken.Count == 0,
@@ -747,7 +757,7 @@ public sealed class TestProfileRegistryTests
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Literals, not call sites: a switch read through a constant (<c>FullVariable = "NR_UI_ROSTER_FULL"</c>)
+    /// Literals, not call sites: a switch read through a constant (<c>EnableVariable = "NR_TRACE_STORE"</c>)
     /// or set on a child process (<c>psi.Environment["BSSPEC_WORKER_INDEX"]</c>) is still one, and
     /// <c>GetEnvironmentVariable(</c> sees neither. C#, the Java agent's sources and PowerShell are
     /// scanned; build output is not.
@@ -758,14 +768,13 @@ public sealed class TestProfileRegistryTests
     /// <i>other</i> code names its switch: a hit inside <c>tests/TestProfiles/</c>, in a file that
     /// declares a <c>Category=Lint</c> test, or on a comment line does not count, because each of those
     /// keeps naming a switch after the code that read it has gone. The profile table names
-    /// <c>NR_FROZEN_SMOKE</c> as an environment key, this test's own remarks quote two switches, and
-    /// <c>CiProfileLaneTests</c> asserts the <c>nr-ui-frozen</c> profile sets <c>NR_UI_ROSTER_FULL</c>;
-    /// counted, any of them would keep a row green forever once its reader was renamed.
+    /// <c>NR_ENGINE_URL</c> as an environment key and this test's own remarks quote two switches;
+    /// counted, either would keep a row green forever once its reader was renamed.
     /// </para>
     /// <para>
-    /// Mutation-checked when written: an unclassified <c>NR_FOO</c> literal; a row no file names; and
-    /// <c>FrozenNrUiRosterConformanceTests</c>' <c>FullVariable</c> renamed, which leaves
-    /// <c>NR_UI_ROSTER_FULL</c> named only by the profile table and a drift test, and turns it red.
+    /// Mutation-checked when written: an unclassified <c>NR_FOO</c> literal; a row no file names; and a
+    /// switch's only reader renamed, which leaves it named only by the profile table and a drift test, and
+    /// turns it red.
     /// </para>
     /// </remarks>
     [Fact]
@@ -825,15 +834,14 @@ public sealed class TestProfileRegistryTests
             .Select(e => $"  {k.Name} names '{e}', which is not an engine lane")));
 
         Assert.True(problems.Count == 0,
-            "Every NR_*/BS_*/BSSPEC_*/BSUI_* switch must be classified in tests/TestProfiles/Knobs.cs as LaneDefining (it "
-            + "changes which tests run, or whether a lane runs at all), Default (it tunes how a lane runs), Internal (the "
-            + "harness sets it) or Retired. A lane-defining switch exported in someone's shell silently shrinks or skips a "
-            + "profiled run that shows nothing on success, which is why each one has to be a decision:\n"
-            + string.Join("\n", problems));
+            "Every NR_*/BS_*/BSSPEC_*/BSUI_* switch must be classified in tests/TestProfiles/Knobs.cs as Default (it tunes how "
+            + "a lane runs), Internal (the harness sets it) or Retired. None may change which tests a lane runs: that is a "
+            + "test or a profile, never a variable exported in someone's shell that shrinks or skips a run showing nothing on "
+            + "success:\n" + string.Join("\n", problems));
     }
 
     /// <summary>
-    /// <b>No data source and no theory row carries an <c>Engine</c>, <c>Category</c> or <c>Mode</c>
+    /// <b>No data source and no theory row carries an <c>Engine</c> or <c>Category</c>
     /// trait.</b> Those are what profiles select by and what lanes are classified by, and both are read
     /// at the method level (<see cref="SuiteTraits"/>); a row-level one would be selected by a filter
     /// while every check here looked straight past it.
@@ -845,7 +853,7 @@ public sealed class TestProfileRegistryTests
     /// and a <c>Traits = ["Engine", …]</c> on an <c>[InlineData]</c>, each turn this red.
     /// </remarks>
     [Fact]
-    public async Task NoDataSourceOrRow_CarriesAnEngineCategoryOrModeTrait()
+    public async Task NoDataSourceOrRow_CarriesAnEngineOrCategoryTrait()
     {
         var problems = new List<string>();
         var rows = 0;
@@ -872,7 +880,7 @@ public sealed class TestProfileRegistryTests
 
         Assert.True(rows > 0, "Asked every data source in the assembly for its rows and got none, so this check checked nothing.");
         Assert.True(problems.Count == 0,
-            "Engine, Category and Mode belong on the class or the method, where every registry check reads them. Set on a "
+            "Engine and Category belong on the class or the method, where every registry check reads them. Set on a "
             + "data source or a row, the trait still selects the test under a profile's filter, but lane classification, "
             + "the clause-value check and the claims check never see it:\n"
             + string.Join("\n", problems.Take(40)) + (problems.Count > 40 ? $"\n  … and {problems.Count - 40} more" : ""));
@@ -939,9 +947,9 @@ internal sealed record SuiteTest(
 /// The traits xunit assigns in this assembly, read the way discovery reads them — through
 /// <see cref="ExtensibilityPointFactory"/> — so a trait in a comment is not one. This reads the
 /// assembly, class and method attributes. Traits a data source or a theory row adds are not read
-/// here: for <c>Engine</c>, <c>Category</c> and <c>Mode</c>,
-/// <c>TestProfileRegistryTests.NoDataSourceOrRow_CarriesAnEngineCategoryOrModeTrait</c> keeps there
-/// from being any, so the method-level values are exact for those three.
+/// here: for <c>Engine</c> and <c>Category</c>,
+/// <c>TestProfileRegistryTests.NoDataSourceOrRow_CarriesAnEngineOrCategoryTrait</c> keeps there
+/// from being any, so the method-level values are exact for those two.
 /// </summary>
 internal static class SuiteTraits
 {
@@ -1004,8 +1012,8 @@ internal enum Reach
 /// three-valued logic (<see cref="Reach"/>).
 /// </summary>
 /// <remarks>
-/// <c>Engine</c>, <c>Category</c> and <c>Mode</c> are settled by the method-level traits, which are the
-/// whole story for those three (no data source or row may carry them). <c>FullyQualifiedName</c> is
+/// <c>Engine</c> and <c>Category</c> are settled by the method-level traits, which are the
+/// whole story for those two (no data source or row may carry them). <c>FullyQualifiedName</c> is
 /// settled by the method's name. <c>DisplayName</c> is settled for a fact, whose display name is its
 /// fully qualified name, and for a theory only where that prefix already decides it. <c>Tag</c> is
 /// settled for a fact; a theory's rows carry their own. A clause outside the grammar evaluates to

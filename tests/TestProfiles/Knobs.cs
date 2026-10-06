@@ -9,15 +9,6 @@ internal enum KnobKind
     /// </summary>
     Default,
 
-    /// <summary>
-    /// Changes which specs or tests run, or whether a lane runs at all — or, like
-    /// <c>BSSPEC_UPDATE_SNAPSHOTS</c>, turns what a lane checks into something it writes. A profile
-    /// states the value it needs; every lane-defining switch a profile does not list must be unset
-    /// in it. Exported in someone's shell, a switch of this kind silently shrinks, skips or disarms
-    /// a lane that shows nothing on success.
-    /// </summary>
-    LaneDefining,
-
     /// <summary>Set by the harness or by a test on a child process; never the caller's to set.</summary>
     Internal,
 
@@ -50,11 +41,14 @@ internal sealed record Knob(string Name, KnobKind Kind, IReadOnlyList<string> En
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The rule for <see cref="KnobKind.LaneDefining"/>:</b> a switch that changes which specs or tests
-/// run, or whether a lane runs at all. <c>NR_UI_ROSTER_FILTER</c> exported in a shell narrows the full
-/// NR UI roster lane to a handful of specs; <c>NR_FROZEN_SKIP=true</c> skips two frozen lanes whole;
-/// <c>NR_FROZEN_SMOKE=1</c> turns the frozen NR roster lane into its kitchen-sink smoke. Each of those
-/// leaves a run green that checked a fraction of what its profile names.
+/// <b>No switch changes which tests a lane runs.</b> There used to be a kind for those — smoke, full,
+/// filter, skip, sequential and snapshot-update switches — and a host that refused one exported in a
+/// shell, because each could leave a run green that checked a fraction of what its profile names. They
+/// were pruned instead (#532): a lane's selection is its profile's filter over test identity (a split
+/// aggregate's <c>KitchenSink</c> and <c>OtherSpecs</c> tests), a lane sits out with
+/// <c>--filter "Engine!=X"</c> or a narrower profile, and snapshots are rewritten by
+/// <c>bs-spec run --update-snapshots</c>, never by a test run. A new switch that would select tests is
+/// a test or a profile instead.
 /// </para>
 /// <para>
 /// Endpoint URLs are <see cref="KnobKind.Default"/> although a live lane skips without one: pointing
@@ -75,28 +69,6 @@ internal static class Knobs
     /// <summary>Every classified switch, grouped by kind.</summary>
     public static IReadOnlyList<Knob> All { get; } =
     [
-        // ── Lane-defining: a profile states the value, or the switch must be unset.
-        new("NR_FROZEN_SMOKE", KnobKind.LaneDefining, ["FrozenNrRoster"],
-            "1 narrows FrozenNrRosterConformanceTests to the kitchen-sink spec(s): the every-push smoke lane (smoke-nr-frozen)"),
-        new("NR_UI_SMOKE", KnobKind.LaneDefining, ["FrozenNrGameDataUi"],
-            "1 narrows the frozen NR Editor GameData UI aggregate to the kitchen-sink spec(s) (smoke-nr-editor-ui)"),
-        new("NR_UI_ROSTER_FULL", KnobKind.LaneDefining, ["FrozenNrUiRoster"],
-            "1 or true runs every applicable spec through FrozenNrUiRosterConformanceTests; unset, it runs kitchen-sink alone"),
-        new("NR_UI_ROSTER_FILTER", KnobKind.LaneDefining, ["FrozenNrUiRoster"],
-            "narrows the full NR UI roster lane to the specs whose names start with one of its comma-separated prefixes"),
-        new("NR_SEQUENTIAL", KnobKind.LaneDefining, ["FrozenNrRoster", "LiveNrRoster"],
-            "true un-skips the Mode=Sequential classes (one engine, the specs one after another); otherwise every row skips"),
-        new("NR_FROZEN_SKIP", KnobKind.LaneDefining, ["FrozenNrRoster", "FrozenNrGameData"],
-            "true skips every frozen NR roster and frozen NR Editor GameData test"),
-        new("NR_UI_FROZEN_SKIP", KnobKind.LaneDefining, ["FrozenNrUiRoster"],
-            "true skips the frozen NR UI roster lane"),
-        new("NR_EDITOR_UI_FROZEN_SKIP", KnobKind.LaneDefining, ["FrozenNrGameDataUi"],
-            "true skips the frozen NR Editor GameData UI lane"),
-        new("BS_UI_SKIP", KnobKind.LaneDefining, DesktopAppEngines,
-            "true skips both BattleScribe desktop-app lanes (the documented way to sit out the app in core)"),
-        new("BSSPEC_UPDATE_SNAPSHOTS", KnobKind.LaneDefining, [],
-            "1 or true makes every expectedFile assertion rewrite its side-file instead of comparing it, in every engine: a gate run with it set passes by rewriting what it was meant to check"),
-
         // ── Default: tunes how a lane runs; a profile may supply a value where the caller has none.
         new("NR_ENGINE_URL", KnobKind.Default, ["LiveNrRoster", "LiveNrUiRoster"],
             "the New Recruit deployment the live roster lanes drive; they skip without it"),
@@ -142,8 +114,6 @@ internal static class Knobs
             "1 makes the Java agent dump both roster trees around a selectEntry"),
         new("BS_UI_VALIDATION_TRACE", KnobKind.Default, ["BsRosterUi"],
             "1 makes the Java agent print every validation error with each id source that could name it"),
-        new("BSSPEC_SNAPSHOT_ON_DIVERGE", KnobKind.Default, [],
-            "base or override: where a snapshot update writes when an engine diverges from the base file"),
         new("BSSPEC_DATASOURCE_CACHE_DIR", KnobKind.Default, [],
             "where the TestKit caches cloned real-world data sources"),
 

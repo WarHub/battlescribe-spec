@@ -4,53 +4,48 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// <b>What an aggregate lane prints and refuses (<see cref="AggregateLaneRun"/>)</b>: the machine-readable
-/// selection line, the full-mode check that it selected every applicable spec, one progress line per spec, and
-/// where it stopped when its run was cancelled.
+/// selection line, one progress line per spec, and where it stopped when its run was cancelled.
 /// </summary>
 /// <remarks>
-/// Mutation-checked when written: the full-mode check deleted, the empty-selection check deleted, and the stop
-/// check made a no-op, each turn this red. <c>TestProfileRegistryTests.EveryAggregateLane_ReportsItsSelectionAndProgress</c> holds the five lane
+/// Mutation-checked when written: the empty-selection check deleted, and the stop check made a no-op, each turn
+/// this red. <c>TestProfileRegistryTests.EveryAggregateLane_ReportsItsSelectionAndProgress</c> holds the lane
 /// classes to calling it.
 /// </remarks>
 [Trait("Category", "Unit")]
 public sealed class AggregateLaneRunTests
 {
     [Fact]
-    public void Start_PrintsTheSelectionLine_AndAFullLaneMustSelectEveryApplicableSpec()
+    public void Start_PrintsTheSelectionLine()
     {
         var output = new Recorder();
-        AggregateLaneRun.Start(output, "[X] ", "FrozenNrRoster", AggregateMode.Smoke, selected: 1, applicable: 401);
-        AggregateLaneRun.Start(output, "[X] ", "FrozenNrUiRoster", AggregateMode.Filtered, selected: 12, applicable: 400);
+        AggregateLaneRun.Start(output, "[X] ", "FrozenNrRoster", AggregateMode.KitchenSink, selected: 1, applicable: 401);
+        AggregateLaneRun.Start(output, "[X] ", "FrozenNrUiRoster", AggregateMode.OtherSpecs, selected: 399, applicable: 400);
         AggregateLaneRun.Start(output, "[X] ", "LiveNrRoster", AggregateMode.Full, selected: 401, applicable: 401);
         Assert.Equal(
             [
-                "[lane] FrozenNrRoster mode=smoke selected=1 applicable=401",
-                "[lane] FrozenNrUiRoster mode=filtered selected=12 applicable=400",
+                "[lane] FrozenNrRoster mode=kitchen-sink selected=1 applicable=401",
+                "[lane] FrozenNrUiRoster mode=other-specs selected=399 applicable=400",
                 "[lane] LiveNrRoster mode=full selected=401 applicable=401",
             ],
             output.Lines);
-
-        var shrunk = Assert.ThrowsAny<XunitException>(() =>
-            AggregateLaneRun.Start(output, "[X] ", "FrozenNrUiRoster", AggregateMode.Full, selected: 1, applicable: 378));
-        Assert.Contains("[lane] FrozenNrUiRoster ran in full mode but selected 1 of the 378 specs", shrunk.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// <b>A lane that selected no spec fails, in every mode</b> — an empty corpus included, where <c>selected</c> and
-    /// <c>applicable</c> are both 0 and so agree: its one test would pass having driven nothing, and the
-    /// engine-composition check would count that pass as the lane having run.
+    /// <b>A test that selected no spec fails, in every mode</b> — an empty corpus included, where <c>selected</c> and
+    /// <c>applicable</c> are both 0 and so agree: it would pass having driven nothing, and the engine-composition
+    /// check would count that pass as the lane having run.
     /// </summary>
     [Theory]
-    [InlineData("full", 0, "selected no spec in full mode, and no spec in the corpus applies to it: the spec corpus (specs/) was not found")]
-    [InlineData("smoke", 401, "selected no spec in smoke mode of the 401 that apply to it.")]
-    [InlineData("filtered", 400, "selected no spec in filtered mode of the 400 that apply to it.")]
-    public void Start_ALaneThatSelectedNothing_Fails(string mode, int applicable, string expected)
+    [InlineData(nameof(AggregateMode.Full), "full", 0, "selected no spec in full mode, and no spec in the corpus applies to it: the spec corpus (specs/) was not found")]
+    [InlineData(nameof(AggregateMode.KitchenSink), "kitchen-sink", 401, "selected no spec in kitchen-sink mode of the 401 that apply to it.")]
+    [InlineData(nameof(AggregateMode.OtherSpecs), "other-specs", 400, "selected no spec in other-specs mode of the 400 that apply to it.")]
+    public void Start_ALaneThatSelectedNothing_Fails(string mode, string printed, int applicable, string expected)
     {
         var output = new Recorder();
         var empty = Assert.ThrowsAny<XunitException>(() =>
-            AggregateLaneRun.Start(output, "[X] ", "FrozenNrRoster", Enum.Parse<AggregateMode>(mode, ignoreCase: true), selected: 0, applicable: applicable));
+            AggregateLaneRun.Start(output, "[X] ", "FrozenNrRoster", Enum.Parse<AggregateMode>(mode), selected: 0, applicable: applicable));
         Assert.Contains($"[lane] FrozenNrRoster {expected}", empty.Message, StringComparison.Ordinal);
-        Assert.Equal($"[lane] FrozenNrRoster mode={mode} selected=0 applicable={applicable}", Assert.Single(output.Lines));
+        Assert.Equal($"[lane] FrozenNrRoster mode={printed} selected=0 applicable={applicable}", Assert.Single(output.Lines));
     }
 
     [Fact]

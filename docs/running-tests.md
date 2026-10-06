@@ -51,7 +51,7 @@ assemblies it covers. Every profile, every engine lane and every environment swi
 | File | What it records |
 |---|---|
 | `TestProfiles.cs` | every profile: its name, its purpose, its selection, the environment it sets, the assemblies it covers, and the lanes it lets skip whole |
-| `EngineLanes.cs` | every engine lane (each `Engine` trait value): what it needs, whether `pre-push` runs it and the measured cost behind that decision, its own test classes, and the hint printed when it comes up empty |
+| `EngineLanes.cs` | every engine lane (each `Engine` trait value): what it needs, how much of it `pre-push` runs and the measured cost behind that decision, its own test classes, and the hint printed when it comes up empty |
 | `Knobs.cs` | every `NR_*`, `BS_*`, `BSSPEC_*` and `BSUI_*` environment variable the code reads, classified by what it does to a run |
 | `Selection.cs` | how a selection becomes a filter, and which lanes it claims |
 
@@ -62,9 +62,9 @@ or on the executable's command line — pass `--test-profile <name>`. The proper
 for directly, nothing can tell a profile that was dropped on the way from one that was never given.
 
 **Listing them.** `dotnet run --project tests/BattleScribeSpec.Tests.csproj -- --list-test-profiles`
-prints every profile with its filter, the environment it sets and its purpose; add `--json` for a form that
-also names the lane-defining switches each one decides. `dotnet test` refuses the option, because it
-counts a run that reports no test as a failure.
+prints every profile with its filter, the environment it sets and its purpose; add `--json` for a
+machine-readable form. `dotnet test` refuses the option, because it counts a run that reports no test as a
+failure.
 
 **Which project.** `pre-push` covers both test projects, `cli` the CLI's tests, and every other profile
 the main test project. `dotnet test -p:TestProfile=<name>` with no `--project` starts both projects, and
@@ -73,30 +73,29 @@ the one outside the profile refuses the run (exit 5), naming the `--project` to 
 **What the app does with a profile**, printing a `[test-profile]` line for each decision:
 
 1. it refuses a command line the profile cannot be combined with ([below](#refused-command-lines-exit-5));
-2. it applies each environment switch that concerns the lane, by its kind ([next](#environment-switches)),
-   and prints it with `(profile)` or `(caller)`;
+2. it applies each environment switch that concerns the lane ([next](#environment-switches)), and prints
+   it with `(profile)` or `(caller)`;
 3. it builds the filter: the profile's, ANDed with yours when you pass `--filter` — `(P)&(U)` — so a
    `--filter` **narrows** a profile and never replaces it;
 4. it runs under the strict zero-tests policy, and afterwards holds the run to the profile's claims
    ([below](#when-a-run-fails-although-no-test-did)).
 
-**Without a profile** a run is your own `--filter`, under the strict policy, with no claims to meet and
-no switch held to anything. That is how to use a lane-defining switch.
+**Without a profile** a run is your own `--filter`, under the strict policy, with no claims to meet.
 
 ## Environment switches
 
 `Knobs.cs` classifies every switch the code reads, and
-`TestProfileRegistryTests.EveryKnobLiteral_IsClassified` fails on a literal it does not list. The kind
-decides what a profiled run does with a value exported in your shell:
+`TestProfileRegistryTests.EveryKnobLiteral_IsClassified` fails on a literal it does not list. **No switch
+changes which tests a lane runs** — that is the profile's filter, over test names and traits — so a value
+exported in your shell tunes a run and never shrinks it:
 
 | Kind | What it does | In a profiled run |
 |---|---|---|
-| Lane-defining | changes which tests run or whether a lane runs at all, or turns a check into a rewrite — `NR_UI_ROSTER_FULL`, `NR_UI_ROSTER_FILTER`, `NR_SEQUENTIAL`, the smoke and `*_SKIP` switches, `BSSPEC_UPDATE_SNAPSHOTS` among them | takes the profile's value, or must be unset; a different value from your shell is refused (exit 5) rather than silently shrinking, skipping or disarming the lane. The one exception is a `*_SKIP` for a lane the profile lets skip: `BS_UI_SKIP=true` with `core` |
 | Default | tunes how a lane runs — endpoint URLs (`NR_ENGINE_URL`, `NR_EDITOR_URL`), `NR_HEADLESS`, `NR_VISUAL`, `NR_SLOW_MO`, timeouts, paths, diagnostics | your value wherever you set one, printed `(caller)`; otherwise the profile's, if it gives one |
 | Internal | set by the harness, on itself or on a child process it starts | not yours to set |
 | Retired | read by nothing; `ConcurrencyPolicy` answers what each one used to | — |
 
-`Knobs.cs` says what each switch does. Some uses:
+`Knobs.cs` says what each switch does. Some uses, and what replaced the switches that used to select tests:
 
 - **Watch a live lane:** export `NR_HEADLESS=false` (and `NR_VISUAL=true` to open the roster editor after
   setup; `NR_SLOW_MO=<ms>` slows each browser action down). No profile sets them, so your values reach the
@@ -107,20 +106,19 @@ decides what a profiled run does with a value exported in your shell:
   dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-live
   ```
 
-- **Sit out the desktop app in `core`:** `BS_UI_SKIP=true`, or narrow the run with
-  `--filter "Engine!=BsRosterUi"`.
-- **Reproduce a warm-session failure of the full NR UI roster lane in minutes**, keeping its one-browser
-  shape but only some of its specs. `NR_UI_ROSTER_FILTER` is lane-defining, so the run is unprofiled:
-
-  ```powershell
-  $env:NR_UI_ROSTER_FULL = "1"; $env:NR_UI_ROSTER_FILTER = "category/,constraint/"
-  dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "Engine=FrozenNrUiRoster"
-  ```
-
-- **Rewrite snapshot side-files:** `BSSPEC_UPDATE_SNAPSHOTS=1` with an unprofiled run (or with
-  `bs-spec run`). A profiled run refuses it: a gate that rewrites what it checks passes by construction.
-- **Run the sequential classes:** `-p:TestProfile=nr-frozen-sequential` or
-  `-p:TestProfile=nr-live-sequential`, which set `NR_SEQUENTIAL=true`. Their rows skip without it.
+- **Sit out a lane:** narrow the profile with `--filter "Engine!=<lane>"` — `--filter "Engine!=BsRosterUi"`
+  keeps `core` off the desktop app — or run a narrower profile. A run you narrow with `--filter` is not held
+  to the lanes its profile claims ([below](#the-engine-composition-check)). A lane whose snapshot or app is
+  missing skips by itself, as before.
+- **Put a few specs through the NR UI roster driver:** `bs-spec run --engine newrecruit --ui <spec>` replays
+  the frozen HAR when `NR_ENGINE_URL` is unset, one spec per run. The one-browser shape over every spec is
+  the `nr-ui-frozen` lane.
+- **Rewrite snapshot side-files:** `bs-spec run --update-snapshots <spec>` on each engine — the base engine
+  first, then the family-canonical engine, then variants; `--on-diverge base|override` answers the
+  base-or-override question without a prompt. No test run rewrites a snapshot: a gate that rewrites what it
+  checks passes by construction.
+- **Debug one spec step by step:** `bs-spec run` ([AGENTS.md, "Debugging specs"](../AGENTS.md#debugging-specs)),
+  which replaced the per-spec sequential NR classes.
 
 ## When a run fails although no test did
 
@@ -174,7 +172,6 @@ run less than it says:
 | a `dotnet test` run without the MSBuild-carried arguments — `--test-modules`, or a `.dll` named in place of a project | name the project: `--project <csproj>` |
 | an unknown profile, or one that does not cover the project | the message lists the profiles, or names the project |
 | with a profile: `--ignore-exit-code`, `--config-file`, `--xunit-config-filename`, a response file (`@file`), the `--filter-*` options, a zero-tests policy other than strict | each overrides the lane's verdict or its selection; narrow with `--filter "<expression>"` |
-| with a profile: a lane-defining switch the profile does not allow | unset it, or run without a profile |
 | `--list-test-profiles` under `dotnet test` | ask the app: `dotnet run --project <csproj> -- --list-test-profiles` |
 | `--test-profile` with `-automated` or `@@` | those start xunit's own console runner, which knows no profiles |
 
@@ -200,20 +197,21 @@ one, and uses 5 and 8 for its own refusals and its composition check.
 A per-spec theory row is named `<Namespace>.<Class>.<Method> [<category>/<id>]` and carries the spec's tags
 as `Tag` traits, so `--filter "DisplayName~<id>"` and `--filter "Tag=cost"` select a spec's rows in every
 per-spec lane. Five lanes are not per-spec: `FrozenNrRoster`, `FrozenNrUiRoster`, `FrozenNrGameDataUi`,
-`LiveNrRoster` and `LiveNrUiRoster` are each one `[Fact]`, `AllSpecs`, that runs every applicable spec itself —
-in parallel over a pool of browser contexts, or one after another in one warm browser for the two roster UI
-drivers. Their names carry no spec id and they carry no `Tag`, so neither filter can narrow them: the
-smoke profiles narrow them through their own switches (`NR_FROZEN_SMOKE`, `NR_UI_SMOKE`, and
-`NR_UI_ROSTER_FULL` unset). Each reports what it ran on a
-`[lane] <Engine> mode=<full|smoke|filtered> selected=N applicable=M` line, then on an
+`LiveNrRoster` and `LiveNrUiRoster` run their specs inside single `[Fact]`s — in parallel over a pool of
+browser contexts, or one after another in one warm browser for the two roster UI drivers. The live two are
+one `AllSpecs` each. The frozen three are split in two tests that partition the specs: `KitchenSink` and
+`OtherSpecs`, so selecting the engine runs the lane whole, each spec once, and a smoke profile selects its
+lane without `OtherSpecs` (`Selection.KitchenSink`, a `FullyQualifiedName!=` clause). `pre-push` takes
+`FrozenNrUiRoster` the same way, because the whole of it is ~27 minutes. These names carry no spec id and
+no `Tag`, so neither spec filter can narrow them. Each test reports what it ran on a
+`[lane] <Engine> mode=<full|kitchen-sink|other-specs> selected=N applicable=M` line, then on an
 `[i/N] <spec> <verdict> <secs>s` line per spec, which a run you start directly shows with
-`--show-live-output on`. A full run that selects fewer specs than apply fails, and a cancelled one says how
-far it got.
+`--show-live-output on`. One that selects no spec fails, and a cancelled one says how far it got.
 
 A bare `--filter "DisplayName~<id>"` reaches more than the spec's offline lanes: the desktop-app lane
-(`BsRosterUi`, which launches the BattleScribe app wherever `setup.ps1` provisioned it), the live rows, and the
-sequential rows, which skip without their switches. Narrowing `pre-push` instead — AGENTS.md's one-spec
-line — runs the spec through every offline per-spec engine, plus its lint and schema rows.
+(`BsRosterUi`, which launches the BattleScribe app wherever `setup.ps1` provisioned it) and the live rows,
+which skip without their URL. Narrowing `pre-push` instead — AGENTS.md's one-spec line — runs the spec
+through every offline per-spec engine, plus its lint and schema rows.
 
 The **real-world tests** (`RealWorld*` classes, 21 tests) load the Warhammer 40k 9th edition data that
 `./setup.ps1` clones into `.testdata/wh40k-9e` unless told `-SkipWh40k` (`WH40K_DATA_DIR` points them at
@@ -259,8 +257,7 @@ runs), and [`scripts/ci-gate.json`](../scripts/ci-gate.json) says when a run owe
 Every job runs on Linux except `windows-pre-push`, which runs `pre-push` whole on every PR, a step per test
 project — so a local `pre-push` is optional.
 `CiProfileLaneTests` holds every test step to one profile that covers its project, with no filter, VSTest
-option or zero-tests policy of its own, and no lane-defining switch anywhere under `.github/`;
-`CiWorkflowDriftTests` holds each to a timeout and one invocation with nothing that could swallow its exit
+option or zero-tests policy of its own; `CiWorkflowDriftTests` holds each to a timeout and one invocation with nothing that could swallow its exit
 code. The same command rules apply to every test command in AGENTS.md, README.md, `docs/` and the skills
 (`CiProfileLaneTests.DocumentedTestCommands_RunAsWritten`), and every profile they name must exist
 (`CiProfileLaneTests.NoDanglingProfileReferences`).
@@ -292,7 +289,7 @@ The suites ran on VSTest until the move to Microsoft.Testing.Platform. What repl
 | On VSTest | Now |
 |---|---|
 | one runsettings file per profile, which `-p:TestProfile` named | the registry in `tests/TestProfiles/`; `-p:TestProfile=<name>` still works, as `--test-profile <name>` |
-| a profile's environment variables overrode your shell | lane-defining switches are refused in a profiled run, and defaults are yours ([above](#environment-switches)) |
+| a profile's environment variables overrode your shell | your values win, and none of them changes which tests run ([above](#environment-switches)) |
 | CI ran `dotnet test` through a wrapper script, with inline filters | each step runs a profile through the app with `dotnet run` |
 | `--logger trx`, `--logger "console;verbosity=detailed"` | `--report-xunit-trx`; `--output Detailed` |
 | tests ran in `testhost.exe` | tests run in `BattleScribeSpec.Tests.exe` and `BattleScribeSpec.Cli.Tests.exe` |

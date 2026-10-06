@@ -334,7 +334,7 @@ public sealed class FrozenNrRaisedOnNodeTests(ITestOutputHelper output, FrozenNr
     public async Task EveryValidationError_NamesTheRosterNodeItWasRaisedOn()
     {
         Assert.SkipWhen(!fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
 
         using var handle = await fixture.AcquireAsync(TestContext.Current.CancellationToken);
         var engine = handle.Engine;
@@ -424,7 +424,7 @@ public sealed class FrozenNrRaisedOnIdentityTests(ITestOutputHelper output, Froz
     public async Task RaisedOnId_IsNewRecruitsOwnParentReference_AndNotTheHashPrefix()
     {
         Assert.SkipWhen(!fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
 
         using var handle = await fixture.AcquireAsync(TestContext.Current.CancellationToken);
         var engine = handle.Engine;
@@ -497,7 +497,7 @@ public sealed class FrozenNrUiRaisedOnNodeTests(ITestOutputHelper output, Frozen
     public void EveryValidationError_NamesTheRosterNodeItWasRaisedOn()
     {
         Assert.SkipWhen(!fixture.Available,
-            "Frozen HAR file not found, NR_UI_FROZEN_SKIP=true, or Playwright browsers missing "
+            "Frozen HAR file or Playwright browsers missing (run setup.ps1) "
             + "— skipping frozen NR UI tests");
 
         var engine = fixture.Engine!;

@@ -25,13 +25,16 @@ public sealed class GameDataRunner
 
     /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected side-file from the actual
-    /// export instead of comparing. Defaults to the <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var, which is
-    /// the only switch: it is read here, so the xUnit conformance harness and <c>bs-spec run</c>
-    /// alike honor it. There is deliberately no <c>--update-snapshots</c> flag (see
-    /// <c>CommandFactory</c> for the verbs that do exist).
+    /// export instead of comparing. Off unless the caller sets it: <c>bs-spec run --update-snapshots</c>
+    /// does, and no test run can, so a gate never passes by rewriting what it checks.
     /// </summary>
     public bool UpdateSnapshots { get; set; }
-        = Environment.GetEnvironmentVariable("BSSPEC_UPDATE_SNAPSHOTS") is "1" or "true";
+
+    /// <summary>
+    /// In <see cref="UpdateSnapshots"/> mode, where a non-base engine's diverging export is written when it
+    /// has no override yet; <see langword="null"/> is <see cref="ExportSnapshotAssertion.DefaultOnDiverge"/>.
+    /// </summary>
+    public Func<ExportSnapshotAssertion.SnapshotDivergence, ExportSnapshotAssertion.SnapshotWriteTarget>? OnDiverge { get; set; }
 
     /// <summary>
     /// Called after each step completes (for debug dumping).
@@ -215,7 +218,8 @@ public sealed class GameDataRunner
             step.Id,
             stepIndex,
             UpdateSnapshots,
-            _exprResolver.Resolve);
+            _exprResolver.Resolve,
+            OnDiverge);
         if (error is not null)
         {
             _errors.Add(error);

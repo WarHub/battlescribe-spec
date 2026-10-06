@@ -139,46 +139,10 @@ public sealed class TestHostTests
         Assert.Contains(replacement, refused.Error, StringComparison.Ordinal);
     }
 
-    /// <summary><b>A lane-defining switch the profile does not allow is refused</b>: one it requires unset, or one it sets to another value.</summary>
-    [Theory]
-    [InlineData("pre-push", "NR_UI_ROSTER_FILTER", "x", "needs it unset")]
-    [InlineData("pre-push", "NR_FROZEN_SKIP", "true", "needs it unset")]
-    [InlineData("nr-frozen-sequential", "NR_SEQUENTIAL", "false", "sets NR_SEQUENTIAL=true")]
-    [InlineData("nr-frozen-sequential", "NR_SEQUENTIAL", "TRUE", "sets NR_SEQUENTIAL=true")]
-    [InlineData("nr-frozen-sequential", "NR_SEQUENTIAL", "1", "sets NR_SEQUENTIAL=true")]
-    [InlineData("nr-ui-frozen", "NR_UI_ROSTER_FULL", "true", "sets NR_UI_ROSTER_FULL=1")]
-    [InlineData("bs-ui-roster", "BS_UI_SKIP", "true", "needs it unset")]
-    [InlineData("lint", "BSSPEC_UPDATE_SNAPSHOTS", "1", "needs it unset")]
-    public void LaneDefiningConflict_IsRefused(string profile, string name, string value, string message)
-    {
-        var refused = Resolve($"--test-profile {profile}", (name, value));
-        Assert.Equal(HostAction.Refuse, refused.Action);
-        Assert.Contains($"{name}={value} is set, and this profile {message}", refused.Error, StringComparison.Ordinal);
-    }
-
     /// <summary>
-    /// <b>The switches a profile does not decide pass through</b>: a lane-defining one of an engine it does not
-    /// claim, the same value it sets, and a <c>*_SKIP</c> for an engine it lets skip (<c>BS_UI_SKIP</c> with <c>core</c>).
+    /// <b>A profile's values are applied, and a default switch the caller set wins over the profile's</b>, saying so;
+    /// a switch of an engine the profile does not claim is not mentioned.
     /// </summary>
-    [Theory]
-    [InlineData("bs", "NR_UI_ROSTER_FILTER", "x", null)]
-    [InlineData("smoke-nr-frozen", "NR_FROZEN_SMOKE", "1", "NR_FROZEN_SMOKE=1 (profile)")]
-    [InlineData("core", "BS_UI_SKIP", "true", "BS_UI_SKIP=true (caller: the profile lets BsRosterUi skip)")]
-    public void LaneDefiningSwitch_TheProfileAllows_PassesThrough(string profile, string name, string value, string? line)
-    {
-        var outcome = Resolve($"--test-profile {profile}", (name, value));
-        Assert.Equal(HostAction.Run, outcome.Action);
-        if (line is null)
-        {
-            Assert.DoesNotContain(outcome.Messages, m => m.Contains(name, StringComparison.Ordinal));
-        }
-        else
-        {
-            Assert.Contains($"{TestHost.Prefix} {profile}: {line}", outcome.Messages);
-        }
-    }
-
-    /// <summary><b>A profile's values are applied, and a default switch the caller set wins over the profile's</b>, saying so.</summary>
     [Fact]
     public void ProfileEnvironment_IsApplied_AndTheCallersDefaultWins()
     {
@@ -191,8 +155,9 @@ public sealed class TestHostTests
         Assert.False(caller.Environment.ContainsKey("NR_ENGINE_URL"));
         Assert.Contains($"{TestHost.Prefix} nr-live-smoke: NR_ENGINE_URL=https://example.invalid (caller)", caller.Messages);
 
-        var lane = Resolve("--test-profile nr-ui-frozen");
-        Assert.Equal("1", lane.Environment["NR_UI_ROSTER_FULL"]);
+        var unclaimed = Resolve("--test-profile bs", ("NR_UI_TIMINGS", "1"));
+        Assert.Equal(HostAction.Run, unclaimed.Action);
+        Assert.DoesNotContain(unclaimed.Messages, static m => m.Contains("NR_UI_TIMINGS", StringComparison.Ordinal));
 
         // An empty value is no value: the profile's applies.
         Assert.Equal("https://www.newrecruit.eu", Resolve("--test-profile nr-live-smoke", ("NR_ENGINE_URL", "")).Environment["NR_ENGINE_URL"]);
@@ -305,7 +270,7 @@ public sealed class TestHostTests
         Assert.Equal(TestProfiles.All.Count, profiles.Count);
         var prePush = profiles.Single(static p => p.GetProperty("name").GetString() == "pre-push");
         Assert.Equal([TestProfiles.Tests, TestProfiles.Cli], prePush.GetProperty("assemblies").EnumerateArray().Select(static a => a.GetString()));
-        Assert.Contains("\nnr-ui-frozen — BattleScribeSpec.Tests\n  filter: Engine=FrozenNrUiRoster\n  sets:   NR_UI_ROSTER_FULL=1\n",
+        Assert.Contains("\nnr-live-smoke — BattleScribeSpec.Tests\n  filter: Engine=LiveNrRoster&Category=Smoke\n  sets:   NR_ENGINE_URL=https://www.newrecruit.eu\n",
             TestHost.RenderProfilesText(), StringComparison.Ordinal);
     }
 
@@ -363,7 +328,7 @@ public sealed class TestHostTests
     /// <b>A run applies its decision before the platform starts</b>: the profile's environment is set and the
     /// profile context named by the time <c>run</c> is called, which gets the resolved arguments, and the
     /// profile's lines are printed. A profile's switches reaching the lane depend on exactly this — a host that
-    /// resolved them and set nothing would run <c>nr-ui-frozen</c> as its one-spec smoke.
+    /// resolved them and set nothing would run a live profile with no URL, every test skipped.
     /// </summary>
     /// <remarks>
     /// Mutation-checked when written: the loop that sets the environment deleted, and the profile context left
@@ -373,24 +338,24 @@ public sealed class TestHostTests
     public async Task RunAsync_AppliesTheProfileBeforeTheRun()
     {
         var world = new RecordingIo();
-        string? smokeAtStart = null;
+        string? urlAtStart = null;
         string? contextAtStart = null;
         string[]? ran = null;
 
-        var exit = await TestHost.RunAsync(["--test-profile", "smoke-nr-frozen", "--list-tests"], TestProfiles.Tests, (args, _) =>
+        var exit = await TestHost.RunAsync(["--test-profile", "nr-live-smoke", "--list-tests"], TestProfiles.Tests, (args, _) =>
         {
-            smokeAtStart = world.Environment.GetValueOrDefault("NR_FROZEN_SMOKE");
+            urlAtStart = world.Environment.GetValueOrDefault("NR_ENGINE_URL");
             contextAtStart = world.ProfileContext;
             ran = args;
             return Task.FromResult(0);
         }, world.Io);
 
         Assert.Equal(0, exit);
-        Assert.Equal("1", smokeAtStart);
-        Assert.Equal("smoke-nr-frozen", contextAtStart);
+        Assert.Equal("https://www.newrecruit.eu", urlAtStart);
+        Assert.Equal("nr-live-smoke", contextAtStart);
         Assert.NotNull(ran);
-        Assert.Equal(["--list-tests", "--filter", "Engine=FrozenNrRoster&Mode!=Sequential", "--zero-tests-policy", "strict"], ran);
-        Assert.Contains($"{TestHost.Prefix} smoke-nr-frozen ({TestProfiles.Tests}): --filter Engine=FrozenNrRoster&Mode!=Sequential", world.Out.ToString(), StringComparison.Ordinal);
+        Assert.Equal(["--list-tests", "--filter", "Engine=LiveNrRoster&Category=Smoke", "--zero-tests-policy", "strict"], ran);
+        Assert.Contains($"{TestHost.Prefix} nr-live-smoke ({TestProfiles.Tests}): --filter Engine=LiveNrRoster&Category=Smoke", world.Out.ToString(), StringComparison.Ordinal);
         Assert.Equal("", world.Error.ToString());
 
         var unprofiled = new RecordingIo();
@@ -411,11 +376,11 @@ public sealed class TestHostTests
         static Task<int> Unreachable(string[] _, LaneTally __) => throw new InvalidOperationException("the platform was started");
 
         var refused = new RecordingIo();
-        refused.Environment["NR_UI_ROSTER_FILTER"] = "x";
-        Assert.Equal(TestHost.InvalidCommandLine, await TestHost.RunAsync(["--test-profile", "pre-push"], TestProfiles.Tests, Unreachable, refused.Io));
-        Assert.StartsWith($"{TestHost.Prefix} profile pre-push and your environment disagree", refused.Error.ToString(), StringComparison.Ordinal);
+        refused.Environment["TESTINGPLATFORM_EXITCODE_IGNORE"] = "8";
+        Assert.Equal(TestHost.InvalidCommandLine, await TestHost.RunAsync(["--test-profile", "nr-live-smoke"], TestProfiles.Tests, Unreachable, refused.Io));
+        Assert.StartsWith($"{TestHost.Prefix} TESTINGPLATFORM_EXITCODE_IGNORE=8 is set", refused.Error.ToString(), StringComparison.Ordinal);
         Assert.Null(refused.ProfileContext);
-        Assert.Equal(["NR_UI_ROSTER_FILTER"], refused.Environment.Keys);
+        Assert.Equal(["TESTINGPLATFORM_EXITCODE_IGNORE"], refused.Environment.Keys);
 
         var listed = new RecordingIo();
         Assert.Equal(0, await TestHost.RunAsync(["--list-test-profiles"], TestProfiles.Tests, Unreachable, listed.Io));

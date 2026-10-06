@@ -53,30 +53,19 @@ public static class ExportSnapshotAssertion
     }
 
     /// <summary>
-    /// Default divergence policy: honor <c>BSSPEC_SNAPSHOT_ON_DIVERGE=base|override</c>; otherwise
+    /// Default divergence policy, when the caller names none (<c>bs-spec run --on-diverge</c> does):
     /// prompt on an interactive console, or fall back to creating an override (with a warning) when
-    /// input is redirected (CI / the xUnit harness). Never silently rewrites the base for a non-base
-    /// engine.
+    /// input is redirected. Never silently rewrites the base for a non-base engine.
     /// </summary>
     public static SnapshotWriteTarget DefaultOnDiverge(SnapshotDivergence d)
     {
-        var env = Environment.GetEnvironmentVariable("BSSPEC_SNAPSHOT_ON_DIVERGE");
-        if (string.Equals(env, "base", StringComparison.OrdinalIgnoreCase))
-        {
-            return SnapshotWriteTarget.Base;
-        }
-        if (string.Equals(env, "override", StringComparison.OrdinalIgnoreCase))
-        {
-            return SnapshotWriteTarget.Override;
-        }
-
         var baseName = Path.GetFileName(d.BasePath);
         var overrideName = Path.GetFileName(d.OverridePath);
         if (Console.IsInputRedirected)
         {
             Console.Error.WriteLine(
                 $"[snapshot] '{d.Engine}' export for '{d.Key}' diverges from base '{baseName}' and has no " +
-                $"override; writing override '{overrideName}'. Set BSSPEC_SNAPSHOT_ON_DIVERGE=base to move the base instead.");
+                $"override; writing override '{overrideName}'. Pass --on-diverge base to move the base instead.");
             return SnapshotWriteTarget.Override;
         }
 
@@ -146,7 +135,7 @@ public static class ExportSnapshotAssertion
         if (path is null)
         {
             return $"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engineName}', .{ext}); " +
-                "set BSSPEC_UPDATE_SNAPSHOTS=1 to create it";
+                "create it with `bs-spec run --update-snapshots <spec>` on this engine";
         }
 
         var expected = NormalizeNewlines(File.ReadAllText(path));

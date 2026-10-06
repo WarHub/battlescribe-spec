@@ -4,8 +4,8 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// Shared base class for running declarative YAML spec files against any IRosterEngine.
-/// The per-spec roster lanes derive from it (BsRoster, BsRosterUi and the Mode=Sequential NR classes), and the
-/// single-test aggregate lanes take their spec list from it.
+/// The per-spec roster lanes derive from it (BsRoster, BsRosterUi), and the single-test aggregate lanes take their
+/// spec list from it.
 /// </summary>
 public abstract class ConformanceTestBase
 {
@@ -68,10 +68,9 @@ public abstract class ConformanceTestBase
     /// <b>Why a row that does not run is a skip, never a quiet return.</b> xunit records a test that
     /// returns as Passed. The strict zero-tests policy counts a Passed row as executed, and the
     /// engine-composition check counts it as the lane having run (<c>LaneComposition</c>) — so a row that
-    /// returned without driving an engine was a phantom pass in both. That is not hypothetical: with
-    /// <c>NR_SEQUENTIAL</c> unset, <c>--filter "Engine=FrozenNrRoster&amp;Mode=Sequential"</c> selected 403 rows
-    /// whose engine was gated off, and exited 0 on the two specs that opt out of <c>newrecruit</c>, which
-    /// returned before the gate was ever asked. Every not-applicable spec and every missing engine is now
+    /// returned without driving an engine was a phantom pass in both. That is not hypothetical: a filter for
+    /// the since-deleted per-spec frozen NR roster class selected 403 rows whose engine was gated off, and
+    /// exited 0 on the two specs that opt out of <c>newrecruit</c>, which returned before the gate was ever asked. Every not-applicable spec and every missing engine is now
     /// <c>Assert.Skip</c> with its reason.
     /// </para>
     /// </remarks>

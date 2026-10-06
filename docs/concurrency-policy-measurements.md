@@ -1499,8 +1499,8 @@ Two things make the 2 load-bearing rather than decorative:
   src/BattleScribeSpec.NewRecruit/` → **zero hits.** No pause between specs, no retry, no backoff, no
   429 handling. The pool size is the only brake this harness has.
 - **`SequentialLiveNrRosterFixture` was launching a second browser against newrecruit.eu that no test
-  used.** All 363 of its specs skip unless `NR_SEQUENTIAL=true` (nothing sets it), but the lane's
-  filter still selected them, so xUnit built the fixture and it eagerly called
+  used.** All 363 specs of the sequential class it served skipped behind a switch nothing set (both are
+  deleted since, #532), but the lane's filter still selected them, so xUnit built the fixture and it eagerly called
   `NewRecruitRosterEngine.CreateAsync` — a separate browser from the pool's, loading a third party's
   site for zero benefit. It is now lazy: the engine is created on first *use*.
 

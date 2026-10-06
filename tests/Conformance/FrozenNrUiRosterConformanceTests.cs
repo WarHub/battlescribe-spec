@@ -5,11 +5,40 @@ using BattleScribeSpec.Roster;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Runs the kitchen-sink spec against the NR UI driver in frozen (HAR replay) mode.
-/// Actions are executed through Playwright UI interactions; state is read via JS.
-/// Skipped when the HAR file doesn't exist or NR_UI_FROZEN_SKIP=true.
+/// Runs every applicable roster spec through the NR UI driver in frozen (HAR replay) mode, one after
+/// another in one browser. Actions are executed through Playwright UI interactions; state is read via JS.
+/// Skipped when the HAR file or the Playwright browsers are missing.
 /// Sequential by design — UI interactions cannot run concurrently in one browser context.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Two tests partition the suite.</b> <see cref="KitchenSink"/> is the fast half — kitchen-sink exercises
+/// core protocol conformance, and its trailing <c>expectedFile</c> step drives the UI export path (Export
+/// button → .ros) inside the same flow — which <c>smoke-nr-ui</c> and <c>pre-push</c> select alone.
+/// <see cref="OtherSpecs"/> is everything else, ~27 minutes, which only <c>nr-ui-frozen</c> (CI's thorough
+/// <c>Full frozen NR UI roster</c> step) adds. Both share this class's fixture, so the full lane is still
+/// one browser running every spec in turn.
+/// </para>
+/// <para>
+/// The full set used to be opt-in through an environment switch, and the obvious hazard of an opt-in is
+/// that the thorough lane silently stops opting in and nobody notices a suite shrinking from 363 specs to 1
+/// — which is the exact failure this lane already had once (<c>docs/warm-reuse.md</c>: "CI never caught the
+/// original bug because the NR-UI roster lane runs a single spec"). Which half a run drives is now the test
+/// it selected, printed as <c>[lane] FrozenNrUiRoster mode=… selected=N applicable=M</c>
+/// (<see cref="AggregateLaneRun"/>), and <c>CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c>
+/// fails if CI's thorough step stops selecting <see cref="OtherSpecs"/> or a fast lane starts to.
+/// </para>
+/// <para>
+/// The full set is every applicable roster spec. It used to be a hand-maintained category allow-list,
+/// because running everything selected 28 failures in categories nobody had classified, and shipping those
+/// as expected-failures would have been inventing declarations rather than earning them. Every one of them
+/// has since been classified: all remaining failures carry an <c>engines: {newrecruit-ui: …}</c>
+/// declaration in the spec itself saying which NR-UI limitation or driver gap they are
+/// (docs/nr-ui-roster-coverage.md), so a new spec is covered the day it lands. The declarations are
+/// <c>fail</c> rather than <c>skip</c> wherever a future NR release could plausibly lift the limitation, so
+/// the spec still RUNS and an unexpected pass is reported.
+/// </para>
+/// </remarks>
 [Collection("FrozenNrUiRoster")]
 [Trait("Category", "Conformance")]
 [Trait("Engine", "FrozenNrUiRoster")]
@@ -19,98 +48,6 @@ public sealed class FrozenNrUiRosterConformanceTests
     private readonly FrozenNrUiRosterFixture _fixture;
     private const string EngineName = "newrecruit";
     private const string LogPrefix = "[FROZEN-UI] ";
-
-    /// <summary>
-    /// The spec(s) the fast lane runs. Kitchen-sink alone: it exercises core protocol conformance and
-    /// its trailing <c>expectedFile</c> step drives the UI export path (Export button → .ros) inside
-    /// the same flow.
-    /// </summary>
-    /// <remarks>
-    /// This used to be the ONLY set, justified as "the frozen HAR supports a single roster-creation
-    /// flow per run". That limit no longer exists — <c>NewRecruitBrowser</c>'s HAR fallback
-    /// benign-fulfills <c>/api/</c> calls precisely so the SPA stops hanging across repeated roster
-    /// flows, and 363 consecutive roster creations in one session are now measured
-    /// (docs/nr-ui-roster-coverage.md). Set <see cref="FullVariable"/> for the full set.
-    /// </remarks>
-    private static readonly string[] SmokeSpecs = ["protocol/protocol-kitchen-sink"];
-
-    /// <summary>
-    /// Opt in to running every applicable roster spec instead of just kitchen-sink.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Opt-IN rather than opt-out, deliberately. The full set is 363 specs and 47 minutes — right
-    /// for the thorough suite, and wrong for the every-push lane and for <c>pre-push</c>, which
-    /// exist to be fast. This keeps every lane exactly as quick as it is today unless it asks
-    /// otherwise.
-    /// </para>
-    /// <para>
-    /// The obvious hazard of an opt-in is that the thorough lane silently stops opting in and nobody
-    /// notices a suite shrinking from 363 specs to 1 — which is the exact failure this lane already
-    /// had once (<c>docs/warm-reuse.md</c>: "CI never caught the original bug because the NR-UI
-    /// roster lane runs a single spec"). Three things guard it: the run prints
-    /// <c>[lane] FrozenNrUiRoster mode=… selected=N applicable=M</c>, and in full mode fails unless it
-    /// selected every applicable spec (<see cref="AggregateLaneRun"/>);
-    /// <c>CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c> fails if the
-    /// <c>nr-ui-frozen</c> profile stops setting this, if CI's thorough step stops running that
-    /// profile, or if a fast lane starts setting it.
-    /// </para>
-    /// </remarks>
-    internal const string FullVariable = "NR_UI_ROSTER_FULL";
-
-    private static bool RunFullSet =>
-        Environment.GetEnvironmentVariable(FullVariable) is "1" or "true";
-
-    /// <summary>
-    /// The full set is now every applicable roster spec — 363 of them, 47 minutes.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This used to be a hand-maintained category allow-list, because running everything selected 28
-    /// failures in categories nobody had classified, and shipping those as expected-failures would
-    /// have been inventing declarations rather than earning them.
-    /// </para>
-    /// <para>
-    /// Every one of them has since been classified: 340 pass, and all 23 remaining failures carry an
-    /// <c>engines: {newrecruit-ui: …}</c> declaration in the spec itself saying which NR-UI
-    /// limitation or driver gap they are (docs/nr-ui-roster-coverage.md). With nothing left
-    /// unexplained, an allow-list would only hide future specs from the lane — the silent-narrowing
-    /// shape this whole effort exists to remove. So the filter is gone, and a new spec is covered the
-    /// day it lands.
-    /// </para>
-    /// <para>
-    /// The declarations are <c>fail</c> rather than <c>skip</c> wherever a future NR release could
-    /// plausibly lift the limitation, so the spec still RUNS and an unexpected pass is reported.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Optional comma-separated spec-name prefixes narrowing the full set, e.g.
-    /// <c>NR_UI_ROSTER_FILTER=force/,roundtrip/</c>.
-    /// <para>
-    /// This lane's distinguishing feature is that one browser runs every spec in order, and some
-    /// failures exist only in that condition — a spec that passes alone and fails here is the whole
-    /// point of running it. Reproducing one used to cost the entire 378-spec run, which is half an
-    /// hour per attempt and makes bisecting "which earlier spec poisons this one" impractical. The
-    /// filter keeps the lane's execution shape and narrows only what it selects, so a warm-session
-    /// failure can be reproduced in a few minutes.
-    /// </para>
-    /// <para>
-    /// Deliberately not a substitute for the full set: the lane's own guard against a "full" run
-    /// that silently shrank stays on whenever the filter is unset, which is how CI runs it.
-    /// </para>
-    /// </summary>
-    internal const string FilterVariable = "NR_UI_ROSTER_FILTER";
-
-    private static string[] FullSetFilters =>
-        (Environment.GetEnvironmentVariable(FilterVariable) ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    private static bool InFullSet(string name)
-    {
-        var filters = FullSetFilters;
-        return filters.Length == 0
-            || filters.Any(f => name.StartsWith(f, StringComparison.Ordinal));
-    }
 
     /// <summary>The concrete engine this lane drives, as specs address it.</summary>
     private const string EngineIdentity = "newrecruit-ui";
@@ -135,42 +72,35 @@ public sealed class FrozenNrUiRosterConformanceTests
         _fixture = fixture;
     }
 
+    /// <summary>The kitchen-sink spec: the fast half, on every push and in <c>pre-push</c>.</summary>
     [Fact]
-    public async Task AllSpecs()
+    public Task KitchenSink() => RunAsync(AggregateMode.KitchenSink);
+
+    /// <summary>Every other applicable spec, in the same browser: with <see cref="KitchenSink"/>, the whole lane.</summary>
+    [Fact]
+    public Task OtherSpecs() => RunAsync(AggregateMode.OtherSpecs);
+
+    private async Task RunAsync(AggregateMode part)
     {
         Assert.SkipWhen(!_fixture.Available,
-            "Frozen HAR file not found, Playwright browsers not installed (run setup.ps1), or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
+            "Frozen HAR file or Playwright browsers missing (run setup.ps1) — skipping frozen NR UI tests");
 
         var engine = _fixture.Engine!;
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
-        var full = RunFullSet;
         static bool Applies(SpecFile spec) => !string.Equals(ExpectationFor(spec), "skip", StringComparison.OrdinalIgnoreCase);
 
-        // The whole corpus is read in every mode: it is what the [lane] line counts `applicable` from.
+        // The whole corpus is read for either part: it is what the [lane] line counts `applicable` from.
         var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
         var loadedSpecs = corpus
-            .Where(s => full
-                ? InFullSet(s.Name)
-                : SmokeSpecs.Contains(s.Name))
+            .Where(s => AggregateLaneRun.Drives(part, s.Name))
             .Where(s => Applies(s.spec))
             .ToList();
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
-        // Say which mode ran and how big it was against what applies — `[lane] FrozenNrUiRoster mode=full
-        // selected=N applicable=N` — fail a run that selected nothing, and in full mode require the two to
-        // match. A lane that quietly stops opting in shows up as mode=smoke next to a step called "Full frozen
-        // NR UI roster", and one that narrows without saying so fails, instead of either being silence.
-        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrUiRoster",
-            !full ? AggregateMode.Smoke : FullSetFilters.Length > 0 ? AggregateMode.Filtered : AggregateMode.Full,
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrUiRoster", part,
             selected: loadedSpecs.Count, applicable: corpus.Count(s => Applies(s.spec)));
-
-        // A "full" run that selected a single spec is the shrink this guard exists to catch. It does
-        // not apply to a deliberately filtered run, which is allowed to select exactly one.
-        Assert.False(full && FullSetFilters.Length == 0 && loadedSpecs.Count < 2,
-            $"{FullVariable} is set but only {loadedSpecs.Count} spec(s) were selected — the full set "
-            + "should be the whole applicable suite, not kitchen-sink.");
 
         var passed = 0;
         var skipped = 0;
@@ -251,7 +181,7 @@ public sealed class FrozenNrUiRosterConformanceTests
 
     /// <summary>
     /// A stale or foreign id is an addressing failure on this lane — see
-    /// <see cref="AddressingScenarios"/>. Runs in every mode, not only the full set: it is seven
+    /// <see cref="AddressingScenarios"/>. Runs in the fast lanes too, not only the full set: it is seven
     /// short rosters, and it is the only check that this driver's lookups say what they are.
     /// </summary>
     /// <remarks>
@@ -263,7 +193,7 @@ public sealed class FrozenNrUiRosterConformanceTests
     public void AnIdTheRosterDoesNotHave_IsAnAddressingFailure()
     {
         Assert.SkipWhen(!_fixture.Available,
-            "Frozen HAR file not found, Playwright browsers not installed (run setup.ps1), or NR_UI_FROZEN_SKIP=true — skipping frozen NR UI tests");
+            "Frozen HAR file or Playwright browsers missing (run setup.ps1) — skipping frozen NR UI tests");
 
         var engine = _fixture.Engine!;
         var wrong = new List<string>();

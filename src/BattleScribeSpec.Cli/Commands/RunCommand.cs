@@ -36,7 +36,9 @@ internal static class RunCommand
         string? TimelinePath,
         string? RecordPath,
         string? SaveRosterDir,
-        int? BreakAt)
+        int? BreakAt,
+        bool UpdateSnapshots,
+        ExportSnapshotAssertion.SnapshotWriteTarget? OnDiverge)
     {
         public bool Headless => !Headed;
     }
@@ -130,6 +132,24 @@ internal static class RunCommand
         {
             Description = "Pause before step <n> and drop into a REPL / inspection prompt.",
         };
+        var updateSnapshots = new Option<bool>("--update-snapshots")
+        {
+            Description = "(Re)write the spec's expectedFile side-files from this engine's exports instead of comparing them. "
+                + "Generate the base engine's first, then the family-canonical engine's, then variants. Single-spec only.",
+        };
+        var onDiverge = new Option<string?>("--on-diverge")
+        {
+            Description = "With --update-snapshots: where a non-base engine's export goes when it diverges from the base file "
+                + "and has no override yet — base (move the shared base) or override (pin a per-engine override). "
+                + "Default: ask on an interactive console, else override.",
+        };
+        onDiverge.Validators.Add(result =>
+        {
+            if (result.GetValueOrDefault<string>() is { } value && value is not ("base" or "override"))
+            {
+                result.AddError($"'{value}' is not a valid value for --on-diverge. Expected one of: base, override.");
+            }
+        });
 
         var command = new Command("run", "Execute a spec end-to-end against an engine and report pass/fail.");
         command.Arguments.Add(spec);
@@ -137,7 +157,7 @@ internal static class RunCommand
         foreach (var option in new Option[]
         {
             output, json, all, matrix, specs, filter, tags, report, expectedFailures, assertionEngine, policy,
-            allSteps, screenshots, timeline, record, saveRoster, breakAt,
+            allSteps, screenshots, timeline, record, saveRoster, breakAt, updateSnapshots, onDiverge,
         })
         {
             command.Options.Add(option);
@@ -161,6 +181,19 @@ internal static class RunCommand
                 if (modeCount > 1)
                 {
                     throw new CliInputException("<spec>, --all, and --matrix are mutually exclusive; choose exactly one.");
+                }
+
+                // Snapshot rewriting is a single-spec act: one spec's side-files, from one engine, in the order
+                // the base/override tiers need. Refused elsewhere rather than ignored.
+                var onDivergeValue = parseResult.GetValue(onDiverge);
+                if (parseResult.GetValue(updateSnapshots) && specInput is null)
+                {
+                    throw new CliInputException("--update-snapshots rewrites one spec's side-files from one engine; run it on a single spec.");
+                }
+
+                if (onDivergeValue is not null && !parseResult.GetValue(updateSnapshots))
+                {
+                    throw new CliInputException("--on-diverge decides where --update-snapshots writes a diverging export; it does nothing without it.");
                 }
 
                 if (matrixDir is not null)
@@ -255,7 +288,14 @@ internal static class RunCommand
                     TimelinePath: parseResult.GetValue(timeline),
                     RecordPath: parseResult.GetValue(record),
                     SaveRosterDir: parseResult.GetValue(saveRoster),
-                    BreakAt: parseResult.GetValue(breakAt));
+                    BreakAt: parseResult.GetValue(breakAt),
+                    UpdateSnapshots: parseResult.GetValue(updateSnapshots),
+                    OnDiverge: onDivergeValue switch
+                    {
+                        "base" => ExportSnapshotAssertion.SnapshotWriteTarget.Base,
+                        "override" => ExportSnapshotAssertion.SnapshotWriteTarget.Override,
+                        _ => null,
+                    });
                 return ExecuteAsync(options);
             }
             catch (CliInputException ex)
@@ -504,7 +544,11 @@ internal static class RunCommand
                 engine,
                 new DataSourceResolver(),
                 options.Engine.AssertionEngineName,
-                options.Engine.EngineName);
+                options.Engine.EngineName)
+            {
+                UpdateSnapshots = options.UpdateSnapshots,
+                OnDiverge = DivergencePolicy(options.OnDiverge),
+            };
             var lastStepIndex = spec.Steps.Count - 1;
 
             runner.OnStepCompleted = (stepIndex, step, state, errors) =>
@@ -745,6 +789,8 @@ internal static class RunCommand
             // through as-is rather than coercing to "".
             var runner = new GameDataRunner(engine, options.Engine.EngineName)
             {
+                UpdateSnapshots = options.UpdateSnapshots,
+                OnDiverge = DivergencePolicy(options.OnDiverge),
                 OnStepCompleted = (index, step, state) =>
                 {
                     Ui.Info($"  step {index}: {step.Action ?? "assert"}");
@@ -778,6 +824,11 @@ internal static class RunCommand
             return 1;
         }
     }
+
+    /// <summary><c>--on-diverge</c> as the runners take it: a fixed answer, or <see langword="null"/> for the default policy.</summary>
+    private static Func<ExportSnapshotAssertion.SnapshotDivergence, ExportSnapshotAssertion.SnapshotWriteTarget>? DivergencePolicy(
+        ExportSnapshotAssertion.SnapshotWriteTarget? target) =>
+        target is { } fixedTarget ? _ => fixedTarget : null;
 
     /// <summary>Disable an artifact option the engine can't support, warning once.</summary>
     private static string? Gate(string? value, bool supported, EngineSelection engine, string flag)

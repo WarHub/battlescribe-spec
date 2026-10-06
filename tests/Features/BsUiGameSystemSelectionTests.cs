@@ -50,12 +50,6 @@ public sealed class BsUiGameSystemSelectionTests
             $"'{DecoyGameSystemId}' must sort before '{TargetGameSystemId}', or a first-hit match " +
             "would find the target first and this test would prove nothing.");
 
-        if (Environment.GetEnvironmentVariable("BS_UI_SKIP") == "true")
-        {
-            Assert.Skip("BS_UI_SKIP=true — skipping BS Roster UI test");
-            return;
-        }
-
         BsUiOptions options;
         try
         {

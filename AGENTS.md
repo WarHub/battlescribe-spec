@@ -160,8 +160,7 @@ and the executable run the same lane. What to know before reading a result:
   lanes.
 - **A command line that would run less than it says is refused with exit 5, saying why**: an unknown
   profile; a profile that does not cover the project (a solution-wide `dotnet test` starts both test
-  projects, so name the project for a profile that covers one); a VSTest option; or a lane-defining
-  variable exported in your shell that the profile does not allow.
+  projects, so name the project for a profile that covers one); or a VSTest option.
 - **A `--filter` you add narrows a profile** (the two are ANDed); it never replaces it.
 - **`dotnet test` shows a test's output only when it fails.** `dotnet run` shows what the app prints — the
   profile it resolved, every failure, the composition verdict — and every result with `--output Detailed`.
@@ -233,14 +232,14 @@ wh40k data, the real-world tests. The critical path is the in-process `BsRoster`
 
 **Not in `pre-push`:** the BattleScribe desktop-app lanes (`bs-ui-roster`, `bs-ui-gamedata` — run them
 when you touch the BS UI drivers or `src/bs-ui-java-agent/`), the live lanes that open sessions on
-third-party sites (`nr-live*`, `nr-ui-live`, `nr-editor-live`, `nr-editor-ui-live`), and `Mode=Sequential`
-classes (manual-only, behind `NR_SEQUENTIAL`).
+third-party sites (`nr-live*`, `nr-ui-live`, `nr-editor-live`, `nr-editor-ui-live`), and all but the
+kitchen-sink half of the NR UI roster lane (`nr-ui-frozen` runs it whole, ~27 minutes).
 `dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles` lists every
 profile with its purpose.
 
 Adding a lane is a decision, not a default (`BsRosterUi` once joined the gate by silence, #405). Every
-engine lane is a row in `tests/TestProfiles/EngineLanes.cs` saying what it needs and whether `pre-push`
-runs it, and `pre-push`'s filter is derived from that column. `TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared`
+engine lane is a row in `tests/TestProfiles/EngineLanes.cs` saying what it needs and how much of it
+`pre-push` runs, and `pre-push`'s filter is derived from that column. `TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared`
 fails if an `Engine` trait appears with no row, `PrePushHonoursItsPromise` fails if a lane that needs
 the desktop app or a third party's site is put in, and `CiProfileLaneTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot`
 fails on a lane no CI step runs that gives no `CiExempt` reason.
@@ -249,22 +248,18 @@ fails on a lane no CI step runs that gives no `CiExempt` reason.
 selection, the environment it sets, the assemblies it covers. **A profile is a whole lane**: every CI
 step that runs `BattleScribeSpec.Tests` runs one, with no filter of its own and no `env:` entry that
 changes what runs, so `-p:TestProfile=<name>` on your machine selects what CI selects under that name,
-with the same switches — `nr-ui-frozen` included, which is the full ~27-minute NR UI roster lane (it
-sets `NR_UI_ROSTER_FULL`; `smoke-nr-ui` is the one-spec smoke). `CiProfileLaneTests` holds CI to that,
-and fails if a lane-defining or profile-owned switch appears anywhere under `.github/`. Two things can
+with the same switches — `nr-ui-frozen` included, which is the full ~27-minute NR UI roster lane
+(`smoke-nr-ui` is its one-spec `KitchenSink` test). `CiProfileLaneTests` holds CI to that. Two things can
 still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
 skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
-runners, which do not provision it. A switch exported in your own shell is held to its kind
-([docs/running-tests.md](docs/running-tests.md#environment-switches)). Every
+runners, which do not provision it. And a switch exported in your own shell is yours: every
 `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names is classified in `tests/TestProfiles/Knobs.cs`
-(`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`): a **lane-defining** one — `NR_UI_ROSTER_FILTER`,
-`NR_FROZEN_SKIP`, `BSSPEC_UPDATE_SNAPSHOTS`, … — takes the profile's value or must be unset, and a profiled
-run with a different value exported is refused (exit 5) rather than silently narrowed, skipped or turned
-into a snapshot rewrite; to use one, run without a profile and narrow with `--filter`. The one exception
-is `BS_UI_SKIP=true` with `core`, which lets its desktop-app lane skip. A **default** one — a URL,
-headless mode, slow-mo — is yours where you set it: to watch a live lane, set `NR_HEADLESS=false` (and
-`NR_VISUAL=true`), and the run prints `(caller)` beside each value you supplied. `--list-test-profiles`
-(the last command in the block above) lists every profile with its purpose, filter and environment.
+(`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`), and none changes which tests a lane runs — a
+URL, headless mode, slow-mo. To watch a live lane, set `NR_HEADLESS=false` (and `NR_VISUAL=true`); the run
+prints `(caller)` beside each value you supplied. To sit out a lane, narrow the profile with
+`--filter "Engine!=<lane>"`; to rewrite snapshot side-files, `bs-spec run --update-snapshots <spec>`
+([docs/running-tests.md](docs/running-tests.md#environment-switches)). `--list-test-profiles` (the last
+command in the block above) lists every profile with its purpose, filter and environment.
 
 ## NR frozen tests and HAR
 
@@ -358,7 +353,8 @@ Verbs: `run` (execute + assert), `probe` (open a UI engine for inspection), `exp
 drive the real app, and the domain (roster/gamedata) is inferred from the spec path
 (override with `--gamedata`/`--roster`). `run` options include `--all-steps`,
 `--output {tree,json}` (or `--json`), `--headed`, `--screenshots <dir>`, `--timeline <file>`,
-`--record <file>`, `--save-roster <dir>`, and `--break <n>`. Concurrency and engine reuse are not
+`--record <file>`, `--save-roster <dir>`, `--break <n>`, and `--update-snapshots` (rewrite the spec's
+`expectedFile` side-files from this engine; `--on-diverge base|override`). Concurrency and engine reuse are not
 flags: `ConcurrencyPolicy` derives them from the machine, the engine, and where the engine's traffic
 lands. `--policy reuse=on|off,reuse-roster=…,reuse-gamedata=…` overrides the reuse decisions for
 diagnosis; `--policy workers=N` applies to `run --all` (a batch has workers) and is **rejected** on a

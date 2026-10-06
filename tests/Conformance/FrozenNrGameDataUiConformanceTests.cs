@@ -15,7 +15,10 @@ namespace BattleScribeSpec.Tests;
 /// suite scales with the pool size <c>ConcurrencyPolicy</c> assigns to the <c>newrecruit-ui</c>
 /// engine, instead of running serially on one page.
 ///
-/// Skipped when .testdata/nr-editor/ is missing (run setup.ps1) or NR_EDITOR_UI_FROZEN_SKIP=true.
+/// Skipped when .testdata/nr-editor/ or the Playwright browsers are missing (run setup.ps1).
+///
+/// Two <c>[Fact]</c> aggregates partition the suite: <see cref="KitchenSink"/>, which the every-push smoke
+/// (<c>smoke-nr-editor-ui</c>) selects alone, and <see cref="OtherSpecs"/>; selecting the engine runs both.
 /// </summary>
 [Collection("FrozenNrGameDataUi")]
 [Trait("Category", "Conformance")]
@@ -35,11 +38,18 @@ public sealed class FrozenNrGameDataUiConformanceTests
         _fixture = fixture;
     }
 
+    /// <summary>The kitchen-sink spec: proves the driver wires up, on every push.</summary>
     [Fact]
-    public async Task AllSpecs()
+    public Task KitchenSink() => RunAsync(AggregateMode.KitchenSink);
+
+    /// <summary>Every other applicable spec: with <see cref="KitchenSink"/>, the whole lane.</summary>
+    [Fact]
+    public Task OtherSpecs() => RunAsync(AggregateMode.OtherSpecs);
+
+    private async Task RunAsync(AggregateMode part)
     {
         Assert.SkipWhen(!_fixture.Available,
-            "NR Editor static files not found or Playwright browsers not installed (run setup.ps1), or NR_EDITOR_UI_FROZEN_SKIP=true " +
+            "NR Editor static files not found or Playwright browsers not installed (run setup.ps1) " +
             "— skipping frozen NR Editor GameData UI tests");
 
         var specsDir = SpecLoader.FindGameDataSpecsDirectory();
@@ -52,23 +62,17 @@ public sealed class FrozenNrGameDataUiConformanceTests
         var skipped = 0;
         var expectedFailures = 0;
 
-        // NR_UI_SMOKE=1 restricts the run to kitchen-sink spec(s) — the fast CI lane proves the
-        // engine wires up without running the full suite (which the thorough lane covers).
-        var smoke = Environment.GetEnvironmentVariable("NR_UI_SMOKE") == "1";
-
-        // Load every spec upfront so parsing happens before parallel execution — the whole corpus even in
-        // smoke mode, since it is what the [lane] line counts `applicable` from.
+        // Load every spec upfront so parsing happens before parallel execution — the whole corpus for either
+        // part, since it is what the [lane] line counts `applicable` from.
         var corpus = SpecLoader.DiscoverGameDataSpecs(specsDir!)
             .Select(s => (
                 s.Path,
                 Name: $"{s.Category}/{s.Id}",
                 spec: SpecLoader.LoadGameData(s.Path)
             )).ToList();
-        var loadedSpecs = corpus
-            .Where(s => !smoke || s.Name.Contains("kitchen-sink", StringComparison.Ordinal))
-            .ToList();
+        var loadedSpecs = corpus.Where(s => AggregateLaneRun.Drives(part, s.Name)).ToList();
 
-        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrGameDataUi", smoke ? AggregateMode.Smoke : AggregateMode.Full,
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrGameDataUi", part,
             selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
             applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
         var stop = TestContext.Current.CancellationToken;

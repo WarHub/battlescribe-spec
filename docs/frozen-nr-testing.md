@@ -44,7 +44,7 @@ immune to site downtime or breaking changes.
              ▼
 ┌──────────────────────────┐
 │  Frozen NR test lanes    │  FrozenNrRoster, FrozenNrUiRoster
-│  (offline Playwright)    │  (and the Sequential class)
+│  (offline Playwright)    │
 └──────────────────────────┘
 ```
 
@@ -178,12 +178,11 @@ Each job sets up through the repository's composite action (`.github/actions/set
 
 ### Skipping
 
-Without the HAR the frozen NR roster tests skip — the store-direct lane's and the UI driver's — and
-`NR_FROZEN_SKIP=true` (`NR_UI_FROZEN_SKIP=true` for the UI driver) skips them on purpose. Only an
+Without the HAR the frozen NR roster tests skip — the store-direct lane's and the UI driver's. Only an
 unprofiled run takes that quietly. A profile that runs one of those lanes — `pre-push`, `nr-frozen`,
-`nr-ui-frozen`, the smoke profiles — refuses its skip switch (exit 5), and when the HAR is missing it exits
-8, naming the lane and `setup.ps1`, instead of passing on nothing ([running-tests.md](running-tests.md#the-engine-composition-check)).
-To leave the frozen lanes out of a run, narrow it: `--filter "Engine!=FrozenNrRoster&Engine!=FrozenNrUiRoster"`.
+`nr-ui-frozen`, the smoke profiles — exits 8 when the HAR is missing, naming the lane and `setup.ps1`,
+instead of passing on nothing ([running-tests.md](running-tests.md#the-engine-composition-check)).
+To leave the frozen lanes out of a run on purpose, narrow it: `--filter "Engine!=FrozenNrRoster&Engine!=FrozenNrUiRoster"`.
 
 ## Automated Daily Updates
 

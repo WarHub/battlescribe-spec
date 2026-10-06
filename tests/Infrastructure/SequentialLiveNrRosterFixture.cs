@@ -3,29 +3,23 @@ using BattleScribeSpec.NewRecruit;
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Single-engine fixture for sequential live NR tests and smoke tests.
-/// Gated by NR_ENGINE_URL env var (same as before).
-/// Shared by <see cref="SequentialLiveNrRosterConformanceTests"/>,
-/// <see cref="LiveNrRosterSmokeTests"/> and <see cref="LiveNrRosterIntegrationTests"/>.
+/// Single-engine fixture for the live NR smoke and integration tests.
+/// Gated by NR_ENGINE_URL env var.
+/// Shared by <see cref="LiveNrRosterSmokeTests"/> and <see cref="LiveNrRosterIntegrationTests"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The engine is created on first use, not in <see cref="InitializeAsync"/>.</b> This fixture's
-/// largest consumer by far is <see cref="SequentialLiveNrRosterConformanceTests"/> — 363 specs, every
-/// one of which <c>Assert.Skip</c>s unless <c>NR_SEQUENTIAL=true</c>, which nothing in CI sets. But
-/// those 363 tests are <c>Category=Conformance, Engine=LiveNrRoster</c>, so the
-/// <c>nr-live-conformance</c> lane selects them, xUnit constructs their collection fixture, and an
-/// eager <c>InitializeAsync</c> then launched a whole second browser against <b>newrecruit.eu</b> —
-/// separate from <see cref="LiveNrRosterFixture"/>'s pool, and additional to it — loaded a third
-/// party's site with it, and skipped every test that could have used it. Lazy construction means the
-/// live site sees traffic only from tests that actually run.
+/// <b>The engine is created on first use, not in <see cref="InitializeAsync"/>.</b> xUnit constructs a
+/// collection fixture for every lane that selects one of its tests, whether or not any of them goes on
+/// to use the engine. An eager <c>InitializeAsync</c> once launched a whole second browser against
+/// <b>newrecruit.eu</b> — separate from <see cref="LiveNrRosterFixture"/>'s pool, and additional to it —
+/// for 363 rows that all skipped. Lazy construction means the live site sees traffic only from tests
+/// that actually run.
 /// </para>
 /// <para>
 /// <b><see cref="Available"/> therefore means "a live NR site is configured", not "a browser is
 /// already running".</b> That is the question its callers were really asking — each pairs
-/// <c>Assert.SkipWhen(!Available, "NR_ENGINE_URL not set")</c> with a use of <see cref="Engine"/> — and
-/// <see cref="SequentialLiveNrRosterConformanceTests"/> checks its <c>NR_SEQUENTIAL</c> skip
-/// <em>before</em> it touches <see cref="Engine"/>, which is what makes the laziness worth anything.
+/// <c>Assert.SkipWhen(!Available, "NR_ENGINE_URL not set")</c> with a use of <see cref="Engine"/>.
 /// </para>
 /// </remarks>
 public sealed class SequentialLiveNrRosterFixture : IAsyncLifetime

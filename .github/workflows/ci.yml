@@ -142,10 +142,10 @@ jobs:
       # the assemblies it covers — and runs it under the strict zero-tests policy: a step that EXECUTED NO
       # TEST fails with exit 8, and a step whose every selected test skipped is one that executed none.
       # Both silent greens this file has had were exactly that:
-      #   * `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` matched 0 tests — that class is a single
-      #     [Fact] AllSpecs(), so no display name carries a spec id and the clause can never match.
-      #   * `Engine=FrozenNrRoster&DisplayName~kitchen-sink` matched exactly 1 — the Mode=Sequential
-      #     variant, gated behind NR_SEQUENTIAL, which self-skips. Total: 1, Passed: 0, exit 0.
+      #   * `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` matched 0 tests — that class runs its specs
+      #     inside [Fact]s, so no display name carries a spec id and the clause can never match.
+      #   * `Engine=FrozenNrRoster&DisplayName~kitchen-sink` matched exactly 1 — a since-deleted
+      #     sequential variant, which self-skipped. Total: 1, Passed: 0, exit 0.
       # `dotnet run` rather than `dotnet test` because `dotnet test` withholds the app's output on success:
       # this way the log shows every test as it finishes (the host adds --output Detailed in Actions, and
       # live output for the single-[Fact] aggregate lanes), and the GitHub reporter annotates failures and
@@ -154,23 +154,23 @@ jobs:
       # by MSBuild (tests/Directory.Build.props), and the host's refusal when they do not arrive.
       #
       # WHAT A RED STEP'S EXIT CODE SAYS (https://aka.ms/testingplatform/exitcodes): 2 a test failed;
-      # 5 the command line was refused — the host prints why (an unknown profile, a lane-defining switch
-      # the profile does not allow, a VSTest option, …); 8 nothing executed — the step selected nothing or
-      # skipped everything, or a lane its profile claims executed none of its own tests while the rest
-      # passed (the host's engine-composition check, tests/TestProfiles/LaneComposition.cs, names each
-      # empty lane and the fix, and puts a per-lane table in the step summary); 3 the session was aborted;
-      # 7 the test host process died. Any other value is the process itself failing (an unhandled
-      # exception, a signal) before the platform could report one. A single-test aggregate lane streams
-      # `[i/N] <spec> <verdict> <secs>s` as it goes and opens with `[lane] <Engine> mode=… selected=N
-      # applicable=M`, so a hang shows how far it got.
+      # 5 the command line was refused — the host prints why (an unknown profile, a VSTest option, …);
+      # 8 nothing executed — the step selected nothing or skipped everything, or a lane its profile
+      # claims executed none of its own tests while the rest passed (the host's engine-composition
+      # check, tests/TestProfiles/LaneComposition.cs, names each empty lane and the fix, and puts a
+      # per-lane table in the step summary); 3 the session was aborted; 7 the test host process died.
+      # Any other value is the process itself failing (an unhandled exception, a signal) before the
+      # platform could report one. A single-test aggregate lane streams `[i/N] <spec> <verdict> <secs>s`
+      # as it goes and opens with `[lane] <Engine> mode=… selected=N applicable=M`, so a hang shows how
+      # far it got.
       #
       # CiProfileLaneTests.EveryCiTestRun_NamesAProfile holds every test step to that: one registry
       # profile that covers the project the step runs; `--test-profile` after `--` on a `dotnet run`
       # line, `-p:TestProfile=` on the `dotnet test` one; and no --filter, --zero-tests-policy,
       # --settings, --logger or --test-modules, because each would make the step run something other
-      # than the lane its profile names, under that name. No env: entry that changes what a lane runs
-      # either (CiProfileLaneTests.LaneDefiningKnobs_AppearNowhereInGithub): a profile is the whole lane,
-      # so the same command on a laptop runs what this file runs.
+      # than the lane its profile names, under that name. No environment switch changes what a lane
+      # runs (tests/TestProfiles/Knobs.cs): a profile is the whole lane, so the same command on a laptop
+      # runs what this file runs.
       #
       # AND EVERY TEST STEP CARRIES THE SAME TWO KEYS — CiWorkflowDriftTests checks both, in every job:
       #   * `if: !cancelled() && steps.build.outcome == 'success'` — test steps are independent of each
@@ -323,15 +323,14 @@ jobs:
         run: dotnet build -p:FunctionalBuild=true
       # Each smoke lane is a smoke-* profile (tests/TestProfiles/TestProfiles.cs), whose Purpose keeps
       # the history this block used to: a [Fact] AGGREGATE CANNOT BE NARROWED BY DisplayName.
-      # `Engine=FrozenNrRoster&DisplayName~kitchen-sink` selected exactly ONE test — the Mode=Sequential
-      # theory row, gated behind NR_SEQUENTIAL and so SKIPPED on every run (`Skipped! - Failed: 0,
-      # Passed: 0, Skipped: 1`, exit 0, green) — and `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink`
-      # matched ZERO, right through the frozen NR UI suite breaking on a HAR client change. The aggregates
-      # are narrowed from the engine side instead (NR_FROZEN_SMOKE, NR_UI_SMOKE, or the class itself),
-      # and those switches are the profiles' now, not these steps' env: — the profile lint
-      # (TestProfileRegistryTests.EverySelection_ClaimsTheLanesItsFilterReaches) fails a profile whose
-      # filter cannot reach the lane it claims, before CI ever runs it. Headless is every fixture's
-      # default, so no step sets NR_HEADLESS.
+      # `Engine=FrozenNrRoster&DisplayName~kitchen-sink` selected exactly ONE test — a since-deleted
+      # sequential theory row, SKIPPED on every run (`Skipped! - Failed: 0, Passed: 0, Skipped: 1`,
+      # exit 0, green) — and `Engine=FrozenNrUiRoster&DisplayName~kitchen-sink` matched ZERO, right
+      # through the frozen NR UI suite breaking on a HAR client change. Each aggregate is split into a
+      # KitchenSink and an OtherSpecs test now, and a smoke profile selects its lane without OtherSpecs —
+      # the profile lint (TestProfileRegistryTests.EverySelection_ClaimsTheLanesItsFilterReaches) fails a
+      # profile whose filter cannot reach the lane it claims, before CI ever runs it. Headless is every
+      # fixture's default, so no step sets NR_HEADLESS.
       - name: NR frozen roster — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
@@ -597,15 +596,16 @@ jobs:
       - name: Build
         id: build
         run: dotnet build -p:FunctionalBuild=true
-      # The nr-ui-frozen profile is the FULL lane: it sets NR_UI_ROSTER_FULL, without which the class
-      # runs kitchen-sink only — which is what it did for its whole life, and is why docs/warm-reuse.md
-      # records "CI never caught the original bug because the NR-UI roster lane runs a single spec". The
-      # switch used to be this step's env:, so `-p:TestProfile=nr-ui-frozen` ran one spec everywhere
-      # but here; it is the profile's now, and the same command runs this lane on a laptop.
-      # CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this step stops running a
-      # profile that sets it, because a lane silently shrinking from ~378 specs to 1 still exits 0. This
-      # step is the long one: ~27 minutes (1606s in run 36772377382), so its own ceiling is 60 rather
-      # than 2.5x — enough for a snapshot that costs more than the last, and a hang ends here with the
+      # The nr-ui-frozen profile is the FULL lane: it selects the class's OtherSpecs test as well as its
+      # KitchenSink — kitchen-sink alone is what the lane ran for its whole life, and is why
+      # docs/warm-reuse.md records "CI never caught the original bug because the NR-UI roster lane runs a
+      # single spec". The full set used to be switched on by this step's env:, so
+      # `-p:TestProfile=nr-ui-frozen` ran one spec everywhere but here; it is the profile's selection now,
+      # and the same command runs this lane on a laptop.
+      # CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this step stops selecting
+      # OtherSpecs, because a lane silently shrinking from ~378 specs to 1 still exits 0. This step is
+      # the long one: ~27 minutes (1606s in run 36772377382), so its own ceiling is 60 rather than
+      # 2.5x — enough for a snapshot that costs more than the last, and a hang ends here with the
       # diagnostics upload still to run, not at the job's 75.
       - name: Full frozen NR UI roster
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

@@ -190,7 +190,7 @@ public sealed class BsRosterUiLinkReachedErrorTests(ITestOutputHelper output, Bs
     public void LinkReachedError_NamesTheLinkReachedSelection_AndItsCompositeEntry()
     {
         Assert.SkipWhen(!fixture.Available,
-            "BS UI artifacts not found (run setup.ps1) or BS_UI_SKIP=true — skipping BS Roster UI tests");
+            "BS UI artifacts not found (run setup.ps1) — skipping BS Roster UI tests");
 
         var engine = fixture.Engine!;
         engine.SetTestContext(nameof(LinkReachedError_NamesTheLinkReachedSelection_AndItsCompositeEntry));

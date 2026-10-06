@@ -15,11 +15,6 @@ public sealed class FrozenNrRosterFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        if (Environment.GetEnvironmentVariable("NR_FROZEN_SKIP") == "true")
-        {
-            return;
-        }
-
         var harFile = HarRecorder.FindFrozenHarFile(RepoRoot.FromBinaries);
         if (harFile is null)
         {

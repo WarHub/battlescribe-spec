@@ -38,7 +38,7 @@ namespace BattleScribeSpec.Tests;
 /// </para>
 /// <para>
 /// Skipped when the fixture is unavailable (BattleScribe artifacts or the agent JAR absent — run
-/// <c>setup.ps1</c>) or <c>BS_UI_SKIP=true</c>.
+/// <c>setup.ps1</c>).
 /// </para>
 /// </remarks>
 [Collection("BsRosterUi")]
@@ -67,8 +67,7 @@ public sealed class BsRosterUiConformanceTests : ConformanceTestBase
         if (!_fixture.Available)
         {
             Assert.Skip(
-                "BS UI artifacts not found (run setup.ps1) or BS_UI_SKIP=true "
-                + "— skipping BS Roster UI tests");
+                "BS UI artifacts not found (run setup.ps1) — skipping BS Roster UI tests");
             return null;
         }
 

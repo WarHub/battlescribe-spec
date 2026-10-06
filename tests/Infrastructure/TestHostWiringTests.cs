@@ -156,7 +156,7 @@ public sealed class TestHostWiringTests
     /// <para>
     /// The strict policy is what fails a run that executed nothing — the lane that matched no test, and
     /// the lane whose only selected test skipped (<c>Engine=FrozenNrRoster&amp;DisplayName~kitchen-sink</c>
-    /// once selected exactly one self-skipping <c>Mode=Sequential</c> row: <c>Passed: 0, Skipped: 1</c>,
+    /// once selected exactly one self-skipping sequential row: <c>Passed: 0, Skipped: 1</c>,
     /// exit 0, green on every PR while that suite had no coverage). It used to be a wrapper script that
     /// read TRX counters; now it is the platform's own exit 8, from exactly two places: this property for
     /// <c>dotnet test</c> and <c>dotnet run</c>, and the host for a run started any other way. A second
@@ -301,7 +301,7 @@ public sealed class TestHostWiringTests
     /// <remarks>
     /// <para>
     /// <c>dotnet test</c> and <c>dotnet run</c> apply a launch profile's arguments and environment unless
-    /// told not to, so a <c>launchSettings.json</c> would set a lane-defining variable — or a filter — on
+    /// told not to, so a <c>launchSettings.json</c> would set a variable — or a filter — on
     /// every local run with nothing on the command line to show it. The platform reads
     /// <c>&lt;assembly&gt;.testconfig.json</c> (built from a project's <c>testconfig.json</c>), which can carry
     /// platform and xunit options a profile does not know about. A <c>.runsettings</c> file is read by
