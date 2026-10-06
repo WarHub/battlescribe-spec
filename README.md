@@ -301,10 +301,10 @@ dotnet artifacts/bin/BattleScribeSpec.Cli/debug/bs-spec.dll run --all --engine b
 The project includes a [New Recruit](https://newrecruit.eu) adapter that tests NR's conformance
 via Playwright browser automation. Two testing modes are available:
 
-- **Live** (`nr-conformance` CI job) — Tests against the live NR website. Runs on a manual
-  `workflow_dispatch`, the weekly schedule, a `thorough-ci` label, or a PR to `main` that edits one of
-  the inputs in [`scripts/ci-gate.json`](scripts/ci-gate.json). Locally, the live profiles set
-  `NR_ENGINE_URL=https://www.newrecruit.eu` for you.
+- **Live** (`nr-conformance` CI job) — Tests against the live NR website and the live NR Editor
+  deployment. Runs on a manual `workflow_dispatch`, the weekly schedule, a `thorough-ci` label, or a PR
+  to `main` that edits one of the inputs in [`scripts/ci-gate.json`](scripts/ci-gate.json). Locally, the
+  live profiles set `NR_ENGINE_URL=https://www.newrecruit.eu` (or `NR_EDITOR_URL`) for you.
 - **Frozen** — Tests against a pre-recorded HAR snapshot, fully offline. `pre-push` runs the frozen
   lanes locally; in CI the `smoke` job runs their kitchen-sink smoke on every push, and the thorough jobs
   (`thorough-conformance`, `thorough-nr-ui-roster`) run them whole when the gate owes them. Run

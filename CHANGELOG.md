@@ -27,6 +27,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directory it points to. The patched engine jar the build makes moves from `lib/battlescribe/lib/` to
   `src/bs-engine-patch/out/`, so `lib/` holds only downloads — the patch rewrites its output in place, and
   through a link it would have rewritten the other checkout's jar.
+
+- **The live NR Editor lanes run in CI (#522)** — `nr-conformance` now runs `nr-editor-live` and
+  `nr-editor-ui-live` after its newrecruit.eu lanes, sequentially and one session each, and uploads the
+  UI driver's diagnostics on failure. They were the only engine lanes no CI job ran; the frozen lanes
+  replay a pinned snapshot, and only a live run notices when the deployment drifts from it. Their
+  `CiExempt` rows are gone.
+
 - **An MIT licence (#528).** The README pointed at a `LICENSE` file the repository did not have, so
   nobody had been granted any right to use the suite; `LICENSE` now grants MIT, as `wham` does.
 

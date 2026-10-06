@@ -249,7 +249,6 @@ internal static class EngineLanes
         {
             EmptyHint = NrEditorUnreachable,
             RequiredEnv = ["NR_EDITOR_URL"],
-            CiExempt = NrEditorLiveNotInCi,
         },
         new("LiveNrGameDataUi", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: PrePushPart.None,
             "opens sessions on the NR Editor deployment",
@@ -259,7 +258,6 @@ internal static class EngineLanes
             RequiredEnv = ["NR_EDITOR_URL"],
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
-            CiExempt = NrEditorLiveNotInCi,
         },
     ];
 
@@ -299,11 +297,6 @@ internal static class EngineLanes
     private const string NrEditorUnreachable =
         "NR_EDITOR_URL is unset, or another live fixture in this process holds the NR Editor deployment's session budget "
         + "(the skip reason says which); Playwright browsers come from ./setup.ps1.";
-
-    private const string NrEditorLiveNotInCi =
-        "the frozen NR Editor lanes replay a pinned snapshot of the deployment on every thorough run; whether "
-        + "nr-conformance should also drive the live one is an open decision, not an oversight. Run it by hand to check "
-        + "a new deployment against the snapshot.";
 
     /// <summary>
     /// Classes that carry an <c>Engine</c> trait — so a lane's filter selects them — but are not the
