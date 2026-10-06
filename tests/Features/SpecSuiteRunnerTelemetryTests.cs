@@ -40,8 +40,14 @@ public sealed class SpecSuiteRunnerTelemetryTests
         // HarnessTelemetry.StartSpec names each span for its spec ID (e.g. "protocol-kitchen-sink"),
         // not a fixed literal — "the span is named for the spec so a trace list is readable" (Task 2).
         // So "the spec span" is identified by parentage plus the verdict tag SetVerdict attaches,
-        // not by name.
-        var specSpans = spans
+        // not by name. Copied under the lock: other test classes' threads are still adding to `spans`.
+        List<Activity> snapshot;
+        lock (spans)
+        {
+            snapshot = [.. spans];
+        }
+
+        var specSpans = snapshot
             .Where(s => s.ParentSpanId == testRoot.SpanId && s.GetTagItem("test.case.result.status") is not null)
             .ToList();
         Assert.Equal(result.Results.Count, specSpans.Count);

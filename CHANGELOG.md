@@ -922,14 +922,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Tests that failed only on a loaded machine (#525)**, each fixed where it broke rather than by
   running less at once. `AgentClientTests`' late-response test gives its 10ms timeout to the slow call
   alone; the next call used to inherit it. `HarnessTelemetryTests` assert on the span they started, not
-  on a list a process-wide listener fills from other tests' threads ("Collection was modified").
+  on a list a process-wide listener fills from other tests' threads ("Collection was modified"), and
+  `SpecSuiteRunnerTelemetryTests` copies that list under its lock before reading it.
   **`describe` no longer mistakes a slow adapter for a legacy one**: it had a 10s ceiling of its own,
   and a timeout fell through to the legacy default, a nameless roster-only adapter whose gamedata specs
   the run then skipped (`EngineHostServeTests`, `SpecSuiteRunnerTests.MixedDomains_…`). It now has the
   3-minute ceiling every request has, and running out of it is an error. `CompareCommandTests` asserts
   the warm-up pass that fixed `compare`'s arm-order bias instead of a wall-clock ratio, which read 1.7
   for identical arms on a loaded machine. The NR UI roster driver's `NrUiTimeouts.Interaction` is the
-  30s `Condition` ceiling (was 20s).
+  30s `Condition` ceiling (was 20s), for interactions that must happen. The one whose timeout is
+  handled, the real click `ClickWhenReadyAsync` tries before it dispatches the event, gets its own
+  short ceiling again, `NrUiTimeouts.BeforeFallback` (8s, its value before the timeouts were named).
 - **Redirected stdio is UTF-8 at both ends, whatever the console code page** — on Windows .NET encodes a
   pipe with the console's code page, and the two ends of one pipe need not share a console: an adapter
   started with `CreateNoWindow` gets a hidden console on the OEM code page, while its parent follows

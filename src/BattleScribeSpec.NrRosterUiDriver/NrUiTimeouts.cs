@@ -46,9 +46,16 @@ internal static class NrUiTimeouts
     /// select, filling a field.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The same ceiling as <see cref="Condition"/>: the interaction MUST happen. It was 20s, tighter on
     /// the theory that a long stall here meant the element was wrong rather than slow, and a loaded
-    /// pre-push run stalled a right one past it (#525).
+    /// pre-push run stalled a right one past it (#525). Raising it does not make that run less loaded;
+    /// it stops the bound turning a slow but correct step into a failure.
+    /// </para>
+    /// <para>
+    /// Not for an interaction whose timeout the caller handles: that takes
+    /// <see cref="BeforeFallback"/>, because its ceiling is paid in full every time the fallback runs.
+    /// </para>
     /// </remarks>
     internal const int Interaction = Condition;
 
@@ -59,12 +66,24 @@ internal static class NrUiTimeouts
     internal const int UnboundedWork = 60_000;
 
     /// <summary>
+    /// A real interaction tried FIRST, whose timeout hands the step to a fallback that does it
+    /// another way — <c>ClickWhenReadyAsync</c>'s real click, before it dispatches the event.
+    /// </summary>
+    /// <remarks>
+    /// Short, because a target that never settles pays it in full before the fallback runs; but not
+    /// <see cref="OptionalProbe"/>, because a real click that lands is the normal path. NR's "New"
+    /// list button takes about 5s to accept one on half the roster creations of a smoke run, and a 3s
+    /// bound sent every one of those to the fallback.
+    /// </remarks>
+    internal const int BeforeFallback = 8_000;
+
+    /// <summary>
     /// A probe whose failure is ACCEPTABLE and handled — "is this popup still open?", "did the
     /// overlay close?". The caller tolerates a timeout and proceeds.
     /// </summary>
     /// <remarks>
-    /// Must stay short. Unlike the ceilings above, this one is paid in full on every run where the
-    /// thing legitimately is not there, so a generous value here is a pure tax.
+    /// Must stay short. Unlike the must-hold ceilings above, this one is paid in full on every run
+    /// where the thing legitimately is not there, so a generous value here is a pure tax.
     /// </remarks>
     internal const int OptionalProbe = 3_000;
 
