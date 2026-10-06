@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Proof that a guard can fail, kept instead of rewritten (#529).** The MTP migration proved each new
+  guard by hand: 22 one-off mutation scripts, and three agents who restored with `git checkout --` and
+  lost uncommitted work. Now the spec, GameData-spec, test-data-pin and SDK-pin lints keep broken samples
+  — a clean input, and one break per row they must reject — run through the function each lint applies to
+  the repository, so the proof is a test in `lint`. For C# guard logic, `tools/mutate.mjs` applies a list
+  of mutations, expects each named test red, restores from a byte copy and builds only when a mutation
+  needs it. Stryker.NET was tried first: it mutates only projects that are not test projects, and the
+  guards are compiled into the test apps.
 - **`setup.ps1 -LinkFrom <checkout>`: a new worktree provisioned in seconds (#530)** — takes what
   `setup.ps1` downloads (the test data, the BattleScribe app, ASM, the Liberica JDK) from a checkout that
   already has it, as hard links, with no GitHub token; the Java agent and the engine-patch tool are still

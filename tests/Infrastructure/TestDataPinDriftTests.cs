@@ -34,8 +34,73 @@ public sealed class TestDataPinDriftTests
     public void EveryDownloadedFixtureIsAtThePinTestDataJsonDeclares()
     {
         var repoRoot = TestPaths.Root;
-        using var pins = JsonDocument.Parse(File.ReadAllText(Path.Combine(repoRoot, "testdata.json")));
+        var (drifted, checkedAny) = Drift(File.ReadAllText(Path.Combine(repoRoot, "testdata.json")), repoRoot);
 
+        Assert.True(drifted.Count == 0,
+            "Fixtures on disk do not match testdata.json — the frozen suites are replaying something "
+            + "other than the pin, and a pass proves nothing about it. Run './setup.ps1' (add -Force "
+            + "if a marker is missing) to re-download.\n  " + string.Join("\n  ", drifted));
+
+        // A run where every fixture directory was absent asserted nothing. Say so rather than
+        // reporting a pass: this gate is only meaningful where the fixtures actually are.
+        Assert.SkipUnless(checkedAny,
+            "No pinned fixture directories are present, so there was nothing to compare.");
+    }
+
+    /// <summary>
+    /// <b>Every way a fixture can drift is reported.</b> A checkout whose fixtures match their pins passes
+    /// <see cref="EveryDownloadedFixtureIsAtThePinTestDataJsonDeclares"/> whether or not the comparison
+    /// works, so a sample checkout holds one fixture per kind of pin, all at their pins, and each break
+    /// moves one pin away from what is on disk.
+    /// </summary>
+    [Fact]
+    public void EveryBrokenPin_IsReported()
+    {
+        var root = Directory.CreateTempSubdirectory("bsspec-testdata-pins-").FullName;
+        try
+        {
+            var har = Path.Combine(root, ".testdata", "har");
+            Directory.CreateDirectory(har);
+            File.WriteAllText(Path.Combine(har, ".tag"), "v1\n");
+            File.WriteAllText(Path.Combine(har, "app.har"), "replayed");
+            var editor = Path.Combine(root, "lib", "editor");
+            Directory.CreateDirectory(editor);
+            File.WriteAllText(Path.Combine(editor, ".tag"), "abc123");
+            Directory.CreateDirectory(Path.Combine(root, ".testdata", "unmarked"));
+            var digest = Convert.ToHexStringLower(SHA256.HashData("replayed"u8));
+
+            // "editor" lives at the path it declares, so its breaks are reported only if that path is
+            // read; "absent" has no directory, which is not drift: lanes download only what they need.
+            var sample = $$"""
+                {
+                  "har": { "tag": "v1", "sha256": { "app.har": "{{digest}}" } },
+                  "editor": { "commit": "abc123", "path": "lib/editor" },
+                  "absent": { "tag": "v1" }
+                }
+                """;
+            LintSamples.AssertEachBreakIsRejected(sample,
+            [
+                ("\"tag\": \"v1\", \"sha256\"", "\"tag\": \"v2\", \"sha256\"", "har: on disk 'v1', testdata.json pins 'v2'"),
+                (digest, new string('0', 64), "har: 'app.har' is sha256"),
+                ("\"app.har\":", "\"gone.har\":", "har: testdata.json content-pins 'gone.har'"),
+                ("\"commit\": \"abc123\"", "\"commit\": \"def456\"", "editor: on disk 'abc123', testdata.json pins 'def456'"),
+                ("\"commit\": \"abc123\"", "\"url\": \"abc123\"", "editor: testdata.json declares neither 'tag' nor 'commit'"),
+                ("\"absent\":", "\"unmarked\":", "exists with no .tag marker"),
+            ], json => Drift(json, root).Drifted);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// What is on disk under <paramref name="repoRoot"/> that is not what <paramref name="testDataJson"/>
+    /// pins, and whether any pinned fixture was there to compare.
+    /// </summary>
+    private static (List<string> Drifted, bool CheckedAny) Drift(string testDataJson, string repoRoot)
+    {
+        using var pins = JsonDocument.Parse(testDataJson);
         var drifted = new List<string>();
         var checkedAny = false;
 
@@ -105,14 +170,6 @@ public sealed class TestDataPinDriftTests
             }
         }
 
-        Assert.True(drifted.Count == 0,
-            "Fixtures on disk do not match testdata.json — the frozen suites are replaying something "
-            + "other than the pin, and a pass proves nothing about it. Run './setup.ps1' (add -Force "
-            + "if a marker is missing) to re-download.\n  " + string.Join("\n  ", drifted));
-
-        // A run where every fixture directory was absent asserted nothing. Say so rather than
-        // reporting a pass: this gate is only meaningful where the fixtures actually are.
-        Assert.SkipUnless(checkedAny,
-            "No pinned fixture directories are present, so there was nothing to compare.");
+        return (drifted, checkedAny);
     }
 }

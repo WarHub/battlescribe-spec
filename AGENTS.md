@@ -142,6 +142,7 @@ dotnet test -p:TestProfile=pre-push                                             
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=pre-push --filter "DisplayName~my-spec-id"  # one spec: its lint + every per-spec offline engine (not the aggregate NR lanes)
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile bs --output Detailed   # a lane, every result as it finishes
 dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles # what each profile runs
+node tools/mutate.mjs <mutations.json>                                             # prove C# guards can fail: break each, see it red, restore
 ```
 
 **This block is the one home for these commands** — the skills and the other docs link here rather than
