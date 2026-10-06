@@ -1,6 +1,3 @@
-using System.Globalization;
-using System.Text.RegularExpressions;
-
 namespace BattleScribeSpec.Cli.Tests;
 
 /// <summary>
@@ -37,7 +34,7 @@ public sealed class CompareCommandTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task Compare_IdenticalConfigs_ExitsZero_AndReportsSpeedupNearOne()
+    public async Task Compare_IdenticalConfigs_ExitsZero_AndTimesNeitherArmCold()
     {
         var adapterDll = CliProcess.ReferenceAdapterDll;
 
@@ -53,24 +50,22 @@ public sealed class CompareCommandTests
         Assert.Contains("Verdicts identical", combined, StringComparison.Ordinal);
         Assert.DoesNotContain("DIVERGENCE", combined, StringComparison.Ordinal);
 
-        // Identical configs run the identical arm twice, so the reported speedup (B/A wall time)
-        // is genuinely expected to be near 1.0 — this is what the test's name promises, so assert
-        // the actual value rather than just the literal word "speedup" appearing somewhere.
-        //
-        // This assertion is the thing that caught a real bug: `compare` used to run arm A first
-        // with no warm-up, so arm A ate the process's first-run costs (JIT, cold OS file cache,
-        // first AV scan of freshly built DLLs) that arm B then got for free — an intermittent
-        // ~1-in-6 failure with speedup as low as 0.29 for two IDENTICAL arms. CompareCommand now
-        // runs a discarded warm-up pass (same spec set, neither config) before timing either arm,
-        // which removes that systematic bias. Post-fix, 40 consecutive local runs of this exact
-        // scenario landed in [0.94, 1.02]. [0.6, 1.6] keeps real headroom for slower/noisier CI
-        // runners while still being far tighter than the old [0.5, 2.0] — which was only wide
-        // enough to let the bug slip through, not to describe a fair instrument's real variance.
-        var speedupMatch = Regex.Match(
-            combined, @"speedup \(B/A\):\s*([0-9]+\.[0-9]+)x", RegexOptions.IgnoreCase);
-        Assert.True(speedupMatch.Success, $"Expected a 'speedup (B/A): N.NNx' line in output:\n{combined}");
-        var speedup = double.Parse(speedupMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-        Assert.InRange(speedup, 0.6, 1.6);
+        Assert.Matches(@"speedup \(B/A\):\s*[0-9]+\.[0-9]+x", combined);
+
+        // Neither timed arm runs cold. `compare` used to time arm A first with no warm-up, so arm A
+        // ate the process's first-run costs (JIT, cold OS file cache, first AV scan of freshly built
+        // DLLs) that arm B then got for free: two IDENTICAL arms measured a speedup as low as 0.29,
+        // about one run in six. The fix is a discarded warm-up pass over the same spec set before
+        // either arm is timed, so this asserts that pass, in order, rather than the ratio that found
+        // the bug. That ratio was asserted in [0.6, 1.6], and a wall-clock ratio of two arms a second
+        // or two long is a property of a quiet machine: pre-push runs this module beside the other
+        // one, and identical arms read 1.69 and 1.7 there with the warm-up in place (#525).
+        var warmUp = combined.IndexOf("Warm-up (untimed, discarded)", StringComparison.Ordinal);
+        var warmUpRan = combined.IndexOf("Running 1 specs", warmUp + 1, StringComparison.Ordinal);
+        var armA = combined.IndexOf("Arm A", StringComparison.Ordinal);
+        var armB = combined.IndexOf("Arm B", StringComparison.Ordinal);
+        Assert.True(warmUp >= 0 && warmUp < warmUpRan && warmUpRan < armA && armA < armB,
+            $"Expected a warm-up pass that runs the spec before arm A and arm B are timed:\n{combined}");
     }
 
     /// <summary>

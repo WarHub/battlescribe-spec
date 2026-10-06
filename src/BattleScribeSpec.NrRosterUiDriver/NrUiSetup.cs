@@ -922,9 +922,11 @@ public static class NrUiSetup
     /// </para>
     /// <para>
     /// The normal path stays first and stays honest: a real click, with its full actionability
-    /// checks, just bounded to 8s so a moving target costs seconds rather than half a minute. The
-    /// dispatch is the fallback, not the default, because a real click is what a user does and it
-    /// catches things a synthetic event cannot — an element covered by an overlay, for one.
+    /// checks, bounded by <see cref="NrUiTimeouts.BeforeFallback"/> because its failure is handled —
+    /// the dispatch takes over — so a moving target costs seconds rather than the full
+    /// <see cref="NrUiTimeouts.Interaction"/> ceiling. The dispatch is the fallback, not the default,
+    /// because a real click is what a user does and it catches things a synthetic event cannot — an
+    /// element covered by an overlay, for one.
     /// </para>
     /// </remarks>
     private static async Task ClickWhenReadyAsync(IPage page, ILocator locator, string what)
@@ -932,7 +934,7 @@ public static class NrUiSetup
         await WaitForTransitionsAsync(page);
         try
         {
-            await locator.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+            await locator.ClickAsync(new() { Timeout = NrUiTimeouts.BeforeFallback });
             return;
         }
         catch (TimeoutException)
@@ -960,13 +962,13 @@ public static class NrUiSetup
         {
             throw new InvalidOperationException(
                 $"NR UI: '{what}' did not come back after the click failed — it was visible a moment "
-                + $"earlier and is now gone for 10s (page: {page.Url}). This is NR re-rendering the "
-                + "page out from under the step, not a slow animation.");
+                + $"earlier and is now gone for {NrUiTimeouts.Interaction / 1000}s (page: {page.Url}). "
+                + "This is NR re-rendering the page out from under the step, not a slow animation.");
         }
 
         Console.Error.WriteLine(
-            $"[nr-ui] '{what}' would not hold still for a real click within 8s — dispatching the "
-            + "event directly.");
+            $"[nr-ui] '{what}' would not take a real click within {NrUiTimeouts.BeforeFallback / 1000}s "
+            + "— dispatching the event directly.");
 
         // Bounded too. DispatchEventAsync carries the same 30s default as ClickAsync, so leaving it
         // open turned an element that was genuinely absent into 8s + 30s = 38s of waiting rather

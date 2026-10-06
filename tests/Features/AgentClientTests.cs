@@ -20,11 +20,13 @@ public sealed class AgentClientTests
         // can lose to the 200ms, or the settle below can land in the wrong order — and it spent
         // ~700ms of every run proving something that should be true by construction.
         //
-        // Gating the reply on a TaskCompletionSource makes "slow" INFINITELY slow, so the client's
-        // own CallTimeout is the only clock left and can be tiny. Every line of the real path still
+        // Gating the reply on a TaskCompletionSource makes "slow" INFINITELY slow, so the slow call's
+        // own timeout is the only clock left and can be tiny. Every line of the real path still
         // runs: the WaitAsync on the linked token, the exception filter that distinguishes a
         // timeout from a caller cancellation, the real TimeoutException, the pending-call removal,
         // and the read loop's discard-an-abandoned-response branch. Nothing is faked or bypassed.
+        // Tiny for the slow call ONLY: set as the client's CallTimeout it also bound the fast call
+        // below, which then had 10ms to round-trip and failed on a loaded machine (#525).
         var slowRequestReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseSlowReply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var slowReplyWritten = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -46,9 +48,9 @@ public sealed class AgentClientTests
             }
         });
 
-        using var client = new AgentClient(server.Connect()) { CallTimeout = TimeSpan.FromMilliseconds(10) };
+        using var client = new AgentClient(server.Connect());
 
-        var slowCall = client.CallAsync("slow", cancellationToken: ct);
+        var slowCall = client.CallAsync("slow", timeout: TimeSpan.FromMilliseconds(10), cancellationToken: ct);
 
         // Wait for the FACT that the request reached the server — and is therefore registered as
         // pending — rather than for a duration. Without it the assertion below could pass vacuously.

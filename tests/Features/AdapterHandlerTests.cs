@@ -106,6 +106,25 @@ public sealed class AdapterHandlerTests
         Assert.Equal("1.0", described.ProtocolVersion);
     }
 
+    /// <summary>
+    /// An adapter that has not answered is slow or stuck, not legacy: falling back made a loaded
+    /// machine's slow start a roster-only adapter whose gamedata specs were skipped (#525).
+    /// </summary>
+    [Fact]
+    public async Task AdapterDescriber_Throws_WhenTheAdapterDoesNotAnswer()
+    {
+        // Reads every command and answers none.
+        await using var silent = new InMemoryAdapterConnection(async (input, _, ct) =>
+        {
+            while (await input.ReadLineAsync(ct) is not null)
+            {
+            }
+        });
+
+        await Assert.ThrowsAsync<TimeoutException>(
+            () => AdapterDescriber.DescribeAsync(silent, TimeSpan.FromMilliseconds(50)));
+    }
+
     [Fact]
     public async Task AdapterDescriber_ReturnsRealDescription_OnV11Adapter()
     {
