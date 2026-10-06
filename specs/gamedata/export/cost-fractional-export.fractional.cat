@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<catalogue id="cat-1" name="Test Catalogue" revision="1" battleScribeVersion="2.03" library="false" gameSystemId="gs-1" gameSystemRevision="1" xmlns="http://www.battlescribe.net/schema/catalogueSchema" type="catalogue">
+<catalogue name="Test Catalogue" id="cat-1" battleScribeVersion="2.03" gameSystemId="gs-1" gameSystemRevision="1" library="false" revision="1" type="catalogue" xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <selectionEntries>
-    <selectionEntry id="se-1" name="Fractional Unit" hidden="false" collective="false" import="true" type="unit">
+    <selectionEntry name="Fractional Unit" id="se-1" collective="false" hidden="false" import="true" type="unit">
       <costs>
         <cost name="Half" typeId="half" value="0.5"/>
         <cost name="Tenth" typeId="tenth" value="0.1"/>

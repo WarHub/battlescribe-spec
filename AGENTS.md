@@ -394,9 +394,9 @@ pwsh -File tools/format-specs.ps1                                               
 | `src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs` | GameData YAML spec model classes |
 | `src/BattleScribeSpec.TestKit/GameData/GameDataRunner.cs` | GameData assertion engine |
 | `src/BattleScribeSpec.NewRecruit/NewRecruitGameDataEngine.cs` | NR Editor GameData adapter (live + frozen) |
+| `src/BattleScribeSpec.NewRecruit/NrEditorStore.cs` | What both NR GameData engines share: opening the editor, import on the `system` route, open via `goto_catalogue`, static routing, state reads |
 | `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiEngine.cs` | NR Editor GameData UI driver (Playwright UI) |
 | `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiActions.cs` | NR GameData UI mutations + state reads |
-| `src/BattleScribeSpec.NrGameDataUiDriver/NrGameDataUiSetup.cs` | NR GameData UI file loading + static routing |
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiEngine.cs` | BS Data Editor UI driver (Java agent RPC) |
 | `src/BattleScribeSpec.BsGameDataUiDriver/BsGameDataUiDiagnostics.cs` | BS GameData UI diagnostics |
 | `src/bs-ui-java-agent/src/bsspec/uiagent/DataEditorActions.java` | BS Data Editor Java agent stubs (need probing) |

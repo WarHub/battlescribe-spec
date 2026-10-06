@@ -58,8 +58,8 @@ Covered (9 specs, all green on both NR engines):
 - **`newrecruit-ui` (real NR Editor, Playwright): pure-UI driven, no store writes.** All data
   mutations go through rendered widgets (context menus + submenus, property tables, selects,
   checkboxes, contenteditable fields, autocompletes) — the Pinia store is only ever read.
-  **All but one GameData spec run on the real NR Editor UI** (only `export/openfile-inline` skips —
-  mid-spec file load via the SPA file-list is flaky). Covered families: every basic
+  **All but one GameData spec run on the real NR Editor UI** (only `load-missing-game-system-id` is
+  opted out — see Load failures). Covered families: every basic
   entry/group/force/category spec; constraints; root fields; publication; costs; profiles +
   characteristics; **the full query-editor tier** (modifier types incl. the list/category types,
   conditions incl. condition groups, repeats, modifier groups, modifier-on-rule); info groups; type
@@ -411,21 +411,17 @@ session to that game system**, which is why `load-missing-required-attribute` ca
   store state; the single place it says anything is a `console.error` from the one `catch` in that
   handler. So the driver detects the refusal structurally — by diffing NR's file set across the
   upload — and describes it with the console error NR emitted. Two traps worth knowing: a file NR
-  *accepts* can take **seconds** to appear (IndexedDB plus Vue reactivity), so a short poll reads
-  acceptance as refusal; and `loadedCatalogues` holds only files the editor has **opened**, so the
-  file list lives in `catalogueFiles`.
+  *accepts* is not in the store the moment the input changes, so a short poll reads acceptance as
+  refusal; and `loadedCatalogues` holds only files the editor has **opened**, so the imported files
+  live in `catalogueFiles`.
 
-**The NR file list is built when its route is entered, not from the store.** NR's upload handler ends
-in `$router.push('/?id=' + gameSystemIds)`, which for a catalogue-only import is a push to the route
-already showing — no route update fires, and the imported file has no row. This is what read for a
-long time as "mid-spec file load through the SPA file-list is flaky"; it is not flaky, it is
-deterministic, and waiting does not help (measured: still absent after twelve seconds) while
-reloading is worse (the rows collapse to the game system alone). The driver now always *re-enters*
-the list route, with a query that differs from the last one so it is an update rather than a no-op.
-That replaced the older "am I on the editor route? then go back" question at both call sites, so
-`GoBackAsync` — which navigated by history depth rather than to a destination — is gone from this
-driver. `export/openfile-inline`, opted out of `newrecruit-ui` since it was written, runs there now
-with no per-engine block at all.
+**The drivers open a file through the editor store's own `goto_catalogue`, not through its file
+list.** The list is drawn from its route's query rather than from the store, so a catalogue-only
+import — whose handler pushes the route already showing — left the imported file with no row, and a
+driver that double-clicked rows waited for one that never came (#268). The store action routes to
+the catalogue view and resolves once that view has loaded the file, so there is no row to wait for.
+`export/openfile-inline`, opted out of `newrecruit-ui` since it was written, runs there with no
+per-engine block at all.
 
 **One spec is still opted out of `newrecruit-ui`, and it is not a skip for convenience.**
 `load-missing-game-system-id` gives NR a catalogue with no `gameSystemId`. NR reads the absent
@@ -490,7 +486,7 @@ field is created and asserted on both the in-process reference engine and the Da
   file picker is substituted. (Requires the JavaFX JDK in `lib/liberica-jdk`, provisioned by
   `setup.ps1`, to build the agent jar.)
 - **`newrecruit-ui`: all but one GameData spec run on the real NR Editor UI** (only
-  `export/openfile-inline` skips — mid-spec file load via the SPA file-list is flaky). The driver
+  `load-missing-game-system-id` is opted out — see Load failures). The driver
   covers every family via pure UI (context menus + submenus, the right-panel
   property table incl. contenteditable rows, cost/characteristic widgets, the query/modifier
   editors incl. category-modifier value autocompletes, link "Link Type" selects, and reference

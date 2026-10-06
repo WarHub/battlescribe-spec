@@ -34,9 +34,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
     private bool _browserAcquired;
     private bool _contextAcquired;
 
-    // Loaded-file tracking (id -> display name) and the active file id, so export/reload can pick and
-    // reopen the right file — mirrors NrGameDataUiEngine.
-    private readonly Dictionary<string, string> _idToName = new(StringComparer.Ordinal);
+    // The active file's id, so export/reload pick and reopen the right file — mirrors NrGameDataUiEngine.
     private string? _openId;
 
     public string BaseUrl { get; }
@@ -150,12 +148,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         ResourceMetrics.Acquired("browser");
         _browserAcquired = true;
         _page = await _browser.NewPageAsync();
-        await _page.GotoAsync(BaseUrl, new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.Load,
-            Timeout = 60_000,
-        });
-        await WaitForAppReadyAsync();
+        await NrEditorStore.OpenEditorAsync(_page, BaseUrl);
     }
 
     private async Task InitializeFrozenAsync(string staticDir, float? slowMo)
@@ -181,28 +174,7 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
         await NrEditorStore.SetupStaticFileRoutingAsync(_page, staticDir);
 
         // Navigate to the app — all network requests will be served from local files
-        await _page.GotoAsync(BaseUrl, new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.Load,
-            Timeout = 60_000,
-        });
-        await WaitForAppReadyAsync();
-    }
-
-    private async Task WaitForAppReadyAsync()
-    {
-        if (_page is null)
-        { return; }
-
-        // NR Editor may use #app or #__nuxt as the Vue mount point.
-        await _page.WaitForFunctionAsync("""
-            () => {
-                const nuxt = document.querySelector('#__nuxt')?.__vue_app__;
-                const app = document.querySelector('#app')?.__vue_app__;
-                const vueApp = nuxt || app;
-                return !!vueApp?.config?.globalProperties?.$pinia;
-            }
-            """, null, new() { Timeout = 30_000 });
+        await NrEditorStore.OpenEditorAsync(_page, BaseUrl);
     }
 
     public void SetTestContext(string specId)
@@ -226,12 +198,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             if (errors.Count > 0)
             { return errors; }
 
-            // Track loaded files (id -> display name) and the active one, so export/reload pick/reopen
-            // correctly. Setup opens the last catalogue, or the game system itself when there are none.
-            _idToName.Clear();
-            _idToName[gameSystem.Id] = gameSystem.Name;
-            foreach (var cat in catalogues)
-            { _idToName[cat.Id] = cat.Name; }
+            // Track the active file, so export/reload pick/reopen correctly. Setup opens the last
+            // catalogue, or the game system itself when there are none.
             _openId = catalogues.Length > 0 ? catalogues[^1].Id : gameSystem.Id;
 
             return [];
@@ -338,10 +306,9 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                     const id = declaredId || (crypto.randomUUID ? crypto.randomUUID()
                         : 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)));
 
-                    // Build the entry in NR's shape. NR's serializer emits attributes in object-key
-                    // insertion order, so mirror the UI-created node's field order (type, import, name,
-                    // hidden, id) — selectionEntry/group also get NR's type + import defaults — to make
-                    // the exported XML byte-for-byte identical to the UI driver's.
+                    // Build the entry in NR's shape: the fields a UI-created node carries, with NR's
+                    // type + import defaults for selectionEntry/group, so the exported XML is
+                    // byte-for-byte the UI driver's. (NR's serializer orders attributes itself.)
                     const data = {};
                     if (entryType === 'selectionEntry') { data.type = 'upgrade'; data.import = true; }
                     else if (entryType === 'selectionEntryGroup') { data.type = 'group'; data.import = true; }
@@ -693,8 +660,6 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
             throw new InvalidOperationException(result?[6..] ?? "LoadFile: null result");
         }
 
-        var (_, name, _) = NrEditorStore.ParseRoot(xml);
-        _idToName[result] = name;
         _openId = result;
         return result;
     }
@@ -713,12 +678,8 @@ public sealed class NewRecruitGameDataEngine : IGameDataEngine
                 "Reload: the NR Editor export produced no text XML files to reload.");
         }
 
-        var reopenName = _openId is not null && _idToName.TryGetValue(_openId, out var name)
-            ? name
-            : _idToName.Values.FirstOrDefault()
-                ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
-
-        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
+        var reopenId = _openId ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
+        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenId);
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));

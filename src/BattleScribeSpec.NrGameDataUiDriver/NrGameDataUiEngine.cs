@@ -12,7 +12,7 @@ namespace BattleScribeSpec.NrGameDataUiDriver;
 /// real Playwright UI interactions rather than direct store/JS manipulation.
 ///
 /// Architecture:
-///   - Setup: loads XML files via NR Editor's "Add From Folder" file picker UI
+///   - Setup: loads XML files through NR Editor's file import
 ///   - Actions: drives the editor's catalogue tree, context menus, and property panels
 ///   - State: reads from NR Editor's Pinia editorStore after each mutation
 ///
@@ -45,9 +45,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
     private bool _browserAcquired;
     private bool _contextAcquired;
 
-    // Open-file tracking, so Reload can reopen whatever file was active. Maps each loaded file's
-    // id to its display name (NavigateToEditableAsync matches on the name shown in the file list).
-    private readonly Dictionary<string, string> _idToName = new(StringComparer.Ordinal);
+    // The active file's id, so Reload can reopen whatever file was active.
     private string? _openId;
 
     /// <summary>Base URL of the NR Editor being tested.</summary>
@@ -161,12 +159,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         _page = await _browser.NewPageAsync();
         _diagnostics = new NrGameDataUiDiagnostics(_page);
         _ui = new NrGameDataUiDriver(_page);
-        await _page.GotoAsync(BaseUrl, new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.Load,
-            Timeout = 60_000,
-        });
-        await WaitForAppReadyAsync();
+        await NrEditorStore.OpenEditorAsync(_page, BaseUrl);
     }
 
     private async Task InitializeFrozenAsync(string staticDir, float? slowMo)
@@ -201,30 +194,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         _diagnostics = new NrGameDataUiDiagnostics(_page);
         _ui = new NrGameDataUiDriver(_page);
         await NrEditorStore.SetupStaticFileRoutingAsync(_page, staticDir);
-        await _page.GotoAsync(BaseUrl, new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.Load,
-            Timeout = 60_000,
-        });
-        await WaitForAppReadyAsync();
-    }
-
-    private async Task WaitForAppReadyAsync()
-    {
-        if (_page is null)
-        { return; }
-
-        await _page.WaitForFunctionAsync(
-            """
-            () => {
-                const nuxt = document.querySelector('#__nuxt')?.__vue_app__;
-                const app = document.querySelector('#app')?.__vue_app__;
-                const vueApp = nuxt || app;
-                return !!vueApp?.config?.globalProperties?.$pinia;
-            }
-            """,
-            null,
-            new() { Timeout = 30_000 });
+        await NrEditorStore.OpenEditorAsync(_page, BaseUrl);
     }
 
     // ===== IGameDataEngine =====
@@ -250,13 +220,9 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
             if (errors.Count > 0)
             { return errors; }
 
-            // Remember the loaded files (id -> display name) and which one is open, so Reload can
-            // round-trip through the editor's export and reopen the same file. Setup opens the last
-            // catalogue, or the game system itself when there are none.
-            _idToName.Clear();
-            _idToName[gameSystem.Id] = gameSystem.Name;
-            foreach (var cat in catalogues)
-            { _idToName[cat.Id] = cat.Name; }
+            // Remember which file is open, so Reload can round-trip through the editor's export and
+            // reopen the same file. Setup opens the last catalogue, or the game system itself when
+            // there are none.
             _openId = catalogues.Length > 0 ? catalogues[^1].Id : gameSystem.Id;
 
             // Store spec context for diagnostics
@@ -404,7 +370,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         var outcome = await NrEditorStore.LoadFileAsync(_page, fileName, xml);
         if (outcome.Errors.Count > 0)
         {
-            // Uploading has to happen from the file list, so a refusal leaves the editor there rather
+            // Uploading has to happen from the import view, so a refusal leaves the editor there rather
             // than on the file it had open. Put it back before raising: what a rejected load left
             // behind is the half of a load-failure spec that comes after the refusal, and it cannot
             // be asserted from a page with no open catalogue.
@@ -414,7 +380,6 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         var imported = outcome.Imported
             ?? throw new InvalidOperationException("LoadFile: NR reported no error and no imported file.");
-        _idToName[imported.Id] = imported.Name;
         _openId = imported.Id;
         return imported.Id;
     }
@@ -461,12 +426,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
                 "Reload: the NR Editor export produced no text XML files to reload.");
         }
 
-        var reopenName = _openId is not null && _idToName.TryGetValue(_openId, out var name)
-            ? name
-            : _idToName.Values.FirstOrDefault()
-                ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
-
-        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenName);
+        var reopenId = _openId ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
+        var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenId);
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));

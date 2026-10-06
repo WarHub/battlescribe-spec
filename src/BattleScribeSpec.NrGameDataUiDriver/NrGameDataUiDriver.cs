@@ -214,7 +214,7 @@ public sealed class NrGameDataUiDriver
         // as the first tree node inside `#editor-entries .head`.
         if (await IsRootAsync(token))
         {
-            var rootNode = _page.Locator("#editor-entries .head h3:is(.normalTitle, .arrowTitle)").First;
+            var rootNode = _page.Locator("#editor-entries .head .title:is(.normalTitle, .arrowTitle)").First;
             await rootNode.ClickAsync();
             // Selecting the root selects the catalogue itself, so assert THAT id rather than that
             // some panel is on screen — `CataloguePanel` renders the same Basics fieldset an entry
@@ -240,7 +240,7 @@ public sealed class NrGameDataUiDriver
 
     private async Task RightClickSelectedAsync()
     {
-        var selected = _page.Locator("#editor-entries h3.selected");
+        var selected = _page.Locator("#editor-entries .title.selected");
         await selected.First.ScrollIntoViewIfNeededAsync();
         await selected.First.ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
         // Reactive: wait for the context menu to render rather than a fixed delay.

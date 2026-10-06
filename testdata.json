@@ -10,7 +10,7 @@
     "type": "archive",
     "repo": "giloushaker/nr-editor",
     "ref": "gh-pages",
-    "commit": "6165dbb860168490120405b95f05dd6a57d845d7"
+    "commit": "d756d17e737665042f31c823b2d4e7b88a4825b5"
   },
   "battlescribe-app": {
     "repo": "WarHub/battlescribe-archive",

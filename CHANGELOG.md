@@ -389,6 +389,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The NR Editor snapshot is re-pinned to the redesigned app, and the drivers fail fast on the next
+  move (#543).** The pin was 194 commits behind a deployment that moved its import from `/` to the
+  Systems page, so every live NR Editor spec waited 30 s for an `input[type=file]` that was not
+  there. `NrEditorStore` now imports on the `system` route, opens files through the store's own
+  `goto_catalogue` instead of double-clicking file-list rows (the retry machinery for lost
+  double-clicks is gone with them), clears the origin's storage between specs so a restored import
+  cannot land on the next spec's, and hides `navigator.webdriver` so the editor's WebMCP bridge does
+  not probe loopback ports for a relay. Opening the editor checks the store actions, routes and import
+  it depends on and throws once, from the engine's creation, naming what moved. The UI driver's tree
+  selectors follow the rows from `h3` to `div.title`. NR's exporter now writes attributes and child
+  containers in its own canonical order, so the three NewRecruit base export snapshots were
+  re-recorded — order only, the same nodes and values.
+
 - **One home for running the tests, and the docs stop describing a runner the suites left** — the
   commands live in AGENTS.md's "Build & test", and the model behind them in a new
   `docs/running-tests.md`: the test app and its one entry point, test profiles and the registry, how a
