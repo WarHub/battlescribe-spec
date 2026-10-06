@@ -15,7 +15,7 @@ description: >-
 # the Build step keeps `id: build` in the job because every test step's condition reads
 # `steps.build.outcome` — a step id inside a composite action is not visible to the job that uses it.
 # The build's flags are the job's to state as well: `checks` is the analyzer gate and builds plain,
-# every other job builds with -p:FunctionalBuild=true (CiWorkflowDriftTests holds both).
+# every other job builds with -p:FunctionalBuild=true.
 #
 # THE INPUTS ARE CHECKED, NOT TRUSTED. A composite action ignores an input it does not declare, and
 # the two places below that read an input disagree about case: an `if:` expression compares strings
@@ -29,10 +29,10 @@ description: >-
 # step is what refuses an omission.)
 #
 # The scans that hold CI to its rules read this file as well as the workflows (CiDefinitionFiles):
-# ToolchainPinDriftTests (no SDK chosen outside global.json), the retired-knob scan, the
-# step-reference lint, the test-step classifier and the ban on spelling out FunctionalBuild's
-# properties. Dependabot watches it through `directories` in .github/dependabot.yml, which
-# EveryActionDirectory_IsWatchedByDependabot keeps true.
+# ToolchainPinDriftTests (no SDK chosen outside global.json), the retired-knob scan, and
+# CiWorkflowTests, whose step shapes no step here can take — a composite action's `run` step carries
+# `shell:`, which a test step may not — so tests run in the job, never here. Dependabot watches this
+# file through `directories` in .github/dependabot.yml.
 
 inputs:
   app-client-id:

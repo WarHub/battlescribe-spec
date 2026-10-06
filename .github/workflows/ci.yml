@@ -24,9 +24,9 @@ jobs:
   # (env context is not available in job-level `if:`, so we expose boolean outputs.)
   #
   # THE DECISION IS scripts/thorough-inputs.mjs, AND WHAT FORCES IT IS scripts/ci-gate.json. Both are
-  # unit-tested (node --test, in `checks`), and the same data file is read by ci-gate and by
-  # CiWorkflowDriftTests — so the list of inputs, the jobs they turn on and the jobs ci-gate excuses
-  # when skipped are one record, not three that drift. Each entry carries the reason it is there, and
+  # unit-tested (node --test, in `checks`), and the same data file is read by ci-gate — so the list
+  # of inputs, the jobs they turn on and the jobs ci-gate excuses when skipped are one record, not
+  # copies that drift. Each entry carries the reason it is there, and
   # the gate writes the reasons that fired to the job summary.
   #
   # The history that built the list: #301 (a testdata.json bump, v34.93 → v35.12) was green for three
@@ -82,8 +82,8 @@ jobs:
   checks:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
-    # Four 5-minute step bounds plus room for setup, build and formatting: the job must outlive its
-    # steps' own timeouts, or a hang ends here and takes the uploads with it (CiWorkflowDriftTests).
+    # Four 5-minute step bounds plus room for setup, build and formatting: the job outlives its steps'
+    # own timeouts, so a hang ends at a step and the uploads after it still run.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -106,10 +106,10 @@ jobs:
       # THE ANALYZER GATE IS THIS BUILD, AND ONLY THIS ONE. Analyzers, code style
       # (EnforceCodeStyleInBuild) and XML doc generation run here; every other job in this file builds
       # with -p:FunctionalBuild=true (Directory.Build.props), which turns the three off and produces the
-      # same binaries ~25s sooner. CiWorkflowDriftTests.Checks_BuildsWithAnalyzers fails if this step —
-      # or an env: block it inherits — ever sets the switch, a property it controls, or another that
-      # turns a gate off (TreatWarningsAsErrors, RunAnalyzersDuringBuild, AnalysisLevel, …), because
-      # then no job in CI would be checking what TreatWarningsAsErrors exists to check.
+      # same binaries ~25s sooner. Keep this step — and any env: block it inherits — free of the switch,
+      # a property it controls, or another that turns a gate off (TreatWarningsAsErrors,
+      # RunAnalyzersDuringBuild, AnalysisLevel, …): then no job in CI would be checking what
+      # TreatWarningsAsErrors exists to check.
       - name: Build
         id: build
         run: dotnet build
@@ -164,29 +164,27 @@ jobs:
       # as it goes and opens with `[lane] <Engine> mode=… selected=N applicable=M`, so a hang shows how
       # far it got.
       #
-      # CiProfileLaneTests.EveryCiTestRun_NamesAProfile holds every test step to that: one registry
-      # profile that covers the project the step runs; `--test-profile` after `--` on a `dotnet run`
-      # line, `-p:TestProfile=` on the `dotnet test` one; and no --filter, --zero-tests-policy,
-      # --settings, --logger or --test-modules, because each would make the step run something other
-      # than the lane its profile names, under that name. No environment switch changes what a lane
-      # runs (tests/TestProfiles/Knobs.cs): a profile is the whole lane, so the same command on a laptop
-      # runs what this file runs.
+      # A STEP THAT RUNS A TEST PROJECT OR bs-spec IS ONE OF FOUR FIXED LINES (CiWorkflowTests): the
+      # `dotnet run` line above, optionally after `xvfb-run -a`; the CLI tests'
+      # `dotnet test --project <csproj> --no-build -p:TestProfile=cli --output Detailed`; and the two
+      # bs-spec forms below. Nothing can be added to a line — no --filter, which would make the step run
+      # less than the lane its profile names, under that name, and no pipe or `|| true` that could
+      # swallow its exit code — and a wrapper (`pwsh -c "…"`) matches none of them. The profile must
+      # exist and cover the project. No environment switch changes what a lane runs
+      # (tests/TestProfiles/Knobs.cs): a profile is the whole lane, so the same command on a laptop runs
+      # what this file runs.
       #
-      # AND EVERY TEST STEP CARRIES THE SAME TWO KEYS — CiWorkflowDriftTests checks both, in every job:
+      # AND EVERY SUCH STEP CARRIES THE SAME TWO KEYS, beside name, run and env and nothing else (so no
+      # continue-on-error, working-directory or shell):
       #   * `if: !cancelled() && steps.build.outcome == 'success'` — test steps are independent of each
       #     other (a red lint step must not hide whether the CLI tests pass), yet all of them skip when
-      #     there is nothing built to test (IndependentTestSteps_RunOnASuccessfulBuild). The one
-      #     exception is `nr-conformance`, sequential on purpose (see that job); there the lint requires
-      #     the default instead. A separate lint checks every `steps.<id>` resolves: a renamed
-      #     `id: build` would evaluate to null and skip every test step in a job that still reports
-      #     success.
-      #   * `timeout-minutes` of about 2.5x the step's duration in run 36772377382, and never under 5
-      #     (runner variance on a 2-vCPU box). A hang becomes a failed step, so the `failure()` and
-      #     `always()` uploads after it still run, instead of a job that burns its budget and names no
-      #     step. The job's own bound must hold all its steps' bounds plus setup, or the job timeout
-      #     fires first and the point is lost (EveryJob_OutlastsItsStepBounds).
-      # Each test step is also exactly one invocation (optionally under `xvfb-run -a`), with no pipe,
-      # `;`, `&&` or `||` that could swallow its exit code — the lint parses the run line for that.
+      #     there is nothing built to test. The one exception is `nr-conformance`, sequential on purpose
+      #     (see that job). Keep `id: build` on each Build step: a renamed one evaluates to null and
+      #     skips every test step in a job that still reports success.
+      #   * `timeout-minutes` below the job's, of about 2.5x the step's duration in run 36772377382, and
+      #     never under 5 (runner variance on a 2-vCPU box). A hang becomes a failed step, so the
+      #     `failure()` and `always()` uploads after it still run, instead of a job that burns its budget
+      #     and names no step.
       - name: Unit / protocol / lint (offline)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
@@ -297,7 +295,7 @@ jobs:
     runs-on: ubuntu-latest
     # Six 5-minute step bounds plus room for setup and build (~3 min measured, more on cold caches).
     # Lower than this and a hang across the NR steps would hit the job timeout before the later steps'
-    # own bounds, taking the diagnostics upload with it (CiWorkflowDriftTests.EveryJob_OutlastsItsStepBounds).
+    # own bounds, taking the diagnostics upload with it.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -347,7 +345,7 @@ jobs:
       # it is set — without it the upload below collects nothing for this lane. It costs nothing on a
       # passing run: the capture runs in the driver's catch block. It stays a CI setting rather than the
       # profile's: it changes what is recorded, not what runs, and locally it would write a capture for
-      # every expected failure too (CiProfileLaneTests.EveryUiLane_UploadsTheDiagnosticsItWrites).
+      # every expected failure too (CiWorkflowTests.EveryUiLane_UploadsTheDiagnosticsItWrites).
       - name: NR Editor GameData UI — kitchen-sink
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
@@ -376,9 +374,10 @@ jobs:
       # This job drives all four UI drivers over kitchen-sink on every push, and it was the one job
       # that uploaded nothing: a smoke failure left the exception text and no screenshot, DOM, store
       # dump or trace — and a smoke failure is the one every PR author meets first.
-      # CiProfileLaneTests.EveryUiLane_UploadsTheDiagnosticsItWrites derives what each job must upload
+      # CiWorkflowTests.EveryUiLane_UploadsTheDiagnosticsItWrites derives what each job must upload
       # from the lanes its steps' profiles run and the directory each lane's driver writes
-      # (tests/TestProfiles/EngineLanes.cs, DiagnosticsDir), plus the bs-spec --ui step below.
+      # (tests/TestProfiles/EngineLanes.cs, DiagnosticsDir). The bs-spec --ui step above runs no
+      # profile, so its driver's directory is listed here by hand.
       # Three drivers write here today (the NR Editor GameData UI one only with the switch set above).
       # The BS GameData UI driver writes nothing yet — its capture has no caller, as in thorough-ui-bs
       # — so its path is here for the day it does.
@@ -413,8 +412,7 @@ jobs:
     if: github.event.pull_request.draft != true
     runs-on: windows-latest
     # The two step bounds plus room for setup and build (7 minutes on cold caches in run 37390926910,
-    # the first green one; 14 minutes in all), above their sum plus the setup allowance
-    # (EveryJob_OutlastsItsStepBounds).
+    # the first green one; 14 minutes in all).
     timeout-minutes: 30
     # Bash, as on the Linux runners (Git Bash here), so every run line reads the same in every job.
     defaults:
@@ -483,8 +481,7 @@ jobs:
     # 360-minute default: three of the four lanes drive a browser against a replayed snapshot, and a
     # hung SPA is a realistic failure mode that would otherwise burn six hours of runner time before
     # anyone saw it. The margin to 45 is for a slower runner and for a snapshot that costs more than
-    # the last one, not for a hang — and it must hold the steps' own bounds plus setup
-    # (CiWorkflowDriftTests.EveryJob_OutlastsItsStepBounds).
+    # the last one, not for a hang — and it holds the steps' own bounds plus setup.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -602,8 +599,8 @@ jobs:
       # single spec". The full set used to be switched on by this step's env:, so
       # `-p:TestProfile=nr-ui-frozen` ran one spec everywhere but here; it is the profile's selection now,
       # and the same command runs this lane on a laptop.
-      # CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet fails if this step stops selecting
-      # OtherSpecs, because a lane silently shrinking from ~378 specs to 1 still exits 0. This step is
+      # Keep it on nr-ui-frozen: smoke-nr-ui claims the same lane, and a lane silently shrinking from
+      # ~378 specs to 1 still exits 0. This step is
       # the long one: ~27 minutes (1606s in run 36772377382), so its own ceiling is 60 rather than
       # 2.5x — enough for a snapshot that costs more than the last, and a hang ends here with the
       # diagnostics upload still to run, not at the job's 75.
@@ -641,8 +638,8 @@ jobs:
   #
   #    A matrix axis and not a second job: the two halves need identical artifacts, JDK, agent build
   #    and xvfb, and a copy of fifty lines of setup is a copy that drifts. Only the profile and the
-  #    artifact names differ. The CI lints read each leg with its own matrix values, so both legs'
-  #    profiles, display and upload are checked (CiProfileLaneTests).
+  #    artifact names differ. CiWorkflowTests resolves `${{ matrix.suite.profile }}` to both legs'
+  #    profiles, so both lanes count as run and both directories must be uploaded.
   #
   #    UNSHARDED, deliberately. Each half reuses one warm app across its specs, so what a spec leaves
   #    behind is what the next one starts from — and splitting the lane splits exactly the chain the
@@ -667,8 +664,8 @@ jobs:
       fail-fast: false
       matrix:
         suite:
-          - { name: gamedata, profile: bs-ui-gamedata, diagnostics: artifacts/bs-gamedata-ui-diagnostics/ }
-          - { name: roster, profile: bs-ui-roster, diagnostics: artifacts/bs-ui-diagnostics/ }
+          - { name: gamedata, profile: bs-ui-gamedata }
+          - { name: roster, profile: bs-ui-roster }
     steps:
       - uses: actions/checkout@v7
         with:
@@ -695,13 +692,16 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 21
         run: xvfb-run -a dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile ${{ matrix.suite.profile }}
+      # Both drivers' directories on both legs, as in smoke: a leg collects only what its own driver
+      # wrote, and the path stays one the lint can read without expanding the matrix.
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: thorough-ui-bs-diagnostics-${{ matrix.suite.name }}
           path: |
-            ${{ matrix.suite.diagnostics }}
+            artifacts/bs-ui-diagnostics*/
+            artifacts/bs-gamedata-ui-diagnostics*/
           # The gamedata half writes none today — BsGameDataUiDiagnostics has no caller — so an empty
           # upload there is a fact about that driver, not a broken step.
           if-no-files-found: ignore
@@ -718,9 +718,8 @@ jobs:
   # Gated on `live`, not `thorough` (scripts/thorough-inputs.mjs has the reasoning): every stack PR
   # owes the thorough suites, but ten of them must not drive newrecruit.eu at once on every restack.
   # The steps stay sequential — default `success()` — so a site that is down is not hammered by the
-  # lanes after the one that found out; CiWorkflowDriftTests.IndependentTestSteps_RunOnASuccessfulBuild
-  # holds this job to that, the inverse of every other job's rule. Live durations are the site's, not
-  # ours, hence the margin.
+  # lanes after the one that found out — the one job whose steps CiWorkflowTests does not hold to the
+  # independent condition. Live durations are the site's, not ours, hence the margin.
   nr-conformance:
     needs: [gate]
     if: needs.gate.outputs.live == 'true'
@@ -784,7 +783,7 @@ jobs:
   #    the gate said thorough=false, a live job only when it said live=false, and the gate's outputs
   #    must be exactly "true" or "false" — "true" on a scheduled or manual run. A draft is RED ("draft:
   #    nothing ran"): every job skips on a draft, and a required check whose inputs all skipped used
-  #    to read as a pass. CiWorkflowDriftTests.CiGate_NeedsEveryOtherJob keeps `needs` complete. ──
+  #    to read as a pass. CiWorkflowTests.CiGate_NeedsEveryOtherJob keeps `needs` complete. ──
   ci-gate:
     if: always()
     needs: [gate, checks, docker, smoke, windows-pre-push, thorough-conformance, thorough-nr-ui-roster, thorough-ui-bs, nr-conformance]

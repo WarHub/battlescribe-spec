@@ -1845,8 +1845,8 @@ safe). An adapter under an **unknown** name is still undeclared, and undeclared 
 
 **11.5 And the tests now run.** `tests/BattleScribeSpec.Cli.Tests` — which holds *every* gate on the
 CLI's load target — had **never been executed by CI**: all fifteen `dotnet test` steps named the other
-project. `EveryTestProject_IsRunBySomeCiStep` enumerates `tests/**/*.csproj` and requires each to appear
-in a `dotnet test` command line. A gate nobody invokes is a gate nobody has, and that was true of the
+project. `CiWorkflowTests.EveryTestProject_IsRunByCi` now requires every test project to be run by a CI
+step. A gate nobody invokes is a gate nobody has, and that was true of the
 gates protecting the number at the top of this document.
 
 ## 11.6 THE CI RUNNER IS NOT THE MACHINE THIS DOCUMENT DESCRIBES — measured

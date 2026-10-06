@@ -44,13 +44,11 @@
     rides on the submodule's layout (a root Directory.Build.targets applies only while wham has none
     of its own) for those few seconds, so it stays out.
 
-    CI uses it for every build except the `checks` job, which IS the analyzer gate; a lint
-    (CiWorkflowDriftTests.Checks_BuildsWithAnalyzers) fails if `checks` ever sets it, and another
-    (OtherCiBuilds_UseFunctionalBuild) if any other ci.yml build does not. It replaces three raw
-    `-p:` flags that one job spelled out and the others did not, and the properties below are the
-    one record of what it turns off: the lint that bans the raw flags in CI reads them from here, and
-    fails if any of these three is missing from it. Locally it is a faster inner loop; run a plain
-    `dotnet build` before pushing, because the analyzers are part of what `checks` will hold you to.
+    CI uses it for every build except the `checks` job, which IS the analyzer gate, so `checks` must
+    never set it. It replaces three raw `-p:` flags that one job spelled out and the others did not,
+    and the properties below are the one record of what it turns off. Locally it is a faster inner
+    loop; run a plain `dotnet build` before pushing, because the analyzers are part of what `checks`
+    will hold you to.
   -->
   <PropertyGroup Condition="'$(FunctionalBuild)' == 'true'">
     <RunAnalyzers>false</RunAnalyzers>

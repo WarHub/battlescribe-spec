@@ -107,10 +107,9 @@ wc -l .agents/skills/{skill-name}/**/*.md
 ```
 
 `SkillNameLintTests` checks the structure: every skill directory has a `SKILL.md` whose front-matter `name`
-matches it. The test commands and profile names a skill quotes are checked with the rest of the docs
-(`CiProfileLaneTests.DocumentedTestCommands_RunAsWritten`, `CiProfileLaneTests.NoDanglingProfileReferences`) —
-so link to the one-spec command in AGENTS.md rather than copying it. Line counts, the description and the
-reference files are manual checks; `ls .agents/skills/` lists the skills.
+matches it. Nothing checks the test commands and profile names a skill quotes, so link to the one-spec
+command in AGENTS.md rather than copying it. Line counts, the description and the reference files are manual
+checks; `ls .agents/skills/` lists the skills.
 
 ## Updating an existing skill
 

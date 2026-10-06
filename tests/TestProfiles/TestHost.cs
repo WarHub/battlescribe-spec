@@ -577,14 +577,6 @@ internal static class TestHost
     private static (string Spelling, string Why)? RefusedOption(List<Item> items) =>
         RefusedOptions(items).Select(static r => ((string, string)?)r).FirstOrDefault();
 
-    /// <summary>
-    /// How each option a profile refuses (<see cref="RefusedWithAProfile"/>) is spelled on
-    /// <paramref name="args"/>, read as the host reads a command line — for the lints that hold CI steps and
-    /// documented commands to the host's rules without a second copy of them.
-    /// </summary>
-    internal static IReadOnlyList<string> OptionsRefusedWithAProfile(IReadOnlyList<string> args) =>
-        [.. RefusedOptions(Parse(args)).Select(static r => r.Spelling)];
-
     private static IEnumerable<(string Spelling, string Why)> RefusedOptions(List<Item> items)
     {
         foreach (var item in items)

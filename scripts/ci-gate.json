@@ -1,11 +1,11 @@
 {
   "$comment": [
     "The one record of what makes CI run its thorough and live lanes, and which jobs those are.",
-    "Read by scripts/thorough-inputs.mjs (the `gate` job), scripts/ci-gate.mjs (the `ci-gate` job) and",
-    "tests/Infrastructure/CiWorkflowDriftTests.cs. thoroughInputs: an entry ending in `/` is a prefix,",
-    "one containing `*` is a glob (`**` spans directories), anything else is an exact path; every entry",
-    "must match a tracked file, which scripts/thorough-inputs.test.mjs asserts, so a renamed input cannot",
-    "leave a dead entry behind. A layer that creates a new input adds it here in the same change."
+    "Read by scripts/thorough-inputs.mjs (the `gate` job) and scripts/ci-gate.mjs (the `ci-gate` job).",
+    "thoroughInputs: an entry ending in `/` is a prefix, one containing `*` is a glob (`**` spans",
+    "directories), anything else is an exact path; every entry must match a tracked file, which",
+    "scripts/thorough-inputs.test.mjs asserts, so a renamed input cannot leave a dead entry behind. A",
+    "layer that creates a new input adds it here in the same change."
   ],
   "thoroughInputs": [
     {

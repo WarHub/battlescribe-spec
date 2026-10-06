@@ -278,11 +278,11 @@ Which lane runs in which job, and when: the CI steps name their profiles (`--lis
 runs), and [`scripts/ci-gate.json`](../scripts/ci-gate.json) says when a run owes the thorough and live jobs.
 Every job runs on Linux except `windows-pre-push`, which runs `pre-push` whole on every PR, a step per test
 project — so a local `pre-push` is optional.
-`CiProfileLaneTests` holds every test step to one profile that covers its project, with no filter, VSTest
-option or zero-tests policy of its own; `CiWorkflowDriftTests` holds each to a timeout and one invocation with nothing that could swallow its exit
-code. The same command rules apply to every test command in AGENTS.md, README.md, `docs/` and the skills
-(`CiProfileLaneTests.DocumentedTestCommands_RunAsWritten`), and every profile they name must exist
-(`CiProfileLaneTests.NoDanglingProfileReferences`).
+`CiWorkflowTests` holds every CI step that runs a test project to one of three fixed lines — the
+`dotnet run … -- --test-profile <name>` above, the same after `xvfb-run -a`, or the one `dotnet test` line —
+naming a profile that covers its project, with a step timeout and nothing added: no filter, VSTest option
+or zero-tests policy of its own, and nothing that could swallow its exit code. A command in a document is
+not linted; following one that the host refuses gets exit 5 with the reason.
 
 ## Reporting and telemetry
 

@@ -20,7 +20,7 @@
 // forgotten, and ci-gate accepts a skipped thorough job whenever this script says false — so before
 // this rule, a forgotten label was a green stack that had never run the suites it changes.
 //
-// The input list lives in scripts/ci-gate.json, not here: the gate, ci-gate and the C# lints all read
+// The input list lives in scripts/ci-gate.json, not here: the gate and ci-gate both read
 // the same file, and the node test asserts every entry still matches a tracked file.
 
 import { appendFileSync, readFileSync } from "node:fs";

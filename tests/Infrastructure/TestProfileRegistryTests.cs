@@ -220,7 +220,7 @@ public sealed class TestProfileRegistryTests
     [Fact]
     public void EveryProfileAssembly_IsASolutionTestProject()
     {
-        var testAssemblies = CiTestInvocations.TestProjects.Select(static p => p.AssemblyName).ToHashSet(StringComparer.Ordinal);
+        var testAssemblies = SolutionProjects.Tests.Select(static p => p.AssemblyName).ToHashSet(StringComparer.Ordinal);
         Assert.NotEmpty(testAssemblies);
         Assert.Contains(EngineLanes.Assembly, testAssemblies);
 
@@ -253,7 +253,7 @@ public sealed class TestProfileRegistryTests
             .Where(a => !prePush.Assemblies.Contains(a, StringComparer.Ordinal))
             .Select(static a => $"  pre-push does not cover {a}; the gate runs every test project"));
 
-        var solution = CiTestInvocations.TestProjects.ToDictionary(static p => p.AssemblyName, static p => p.RelativePath, StringComparer.Ordinal);
+        var solution = SolutionProjects.Tests.ToDictionary(static p => p.AssemblyName, static p => p.RelativePath, StringComparer.Ordinal);
         problems.AddRange(solution
             .Where(p => TestProfiles.Projects.GetValueOrDefault(p.Key) != p.Value)
             .Select(p => $"  TestProfiles.Projects maps {p.Key} to '{TestProfiles.Projects.GetValueOrDefault(p.Key)}'; the solution's project is '{p.Value}'"));

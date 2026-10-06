@@ -1219,6 +1219,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the host's environment refusal, the `BS_UI_SKIP`-with-`core` exception, the CI lint's ban on the
   lane-defining switches under `.github/` (it still bans the ones a profile sets), and the aggregates'
   full-mode shrink check.
+- **The CI-workflow lint's shell parser, and every CI rule no incident backed (#533)** — a CI step that
+  runs a test project or `bs-spec` must now be one of four fixed lines
+  (`dotnet run … -- --test-profile <name>`, the same under `xvfb-run -a`, the CLI tests' one
+  `dotnet test` line, a `bs-spec` run) with fixed keys, a step timeout below its job's and the
+  independent `if:`; anything else that mentions a test run is refused, so nothing has to understand
+  shell. The classifier, tokeniser, MSBuild-property
+  parser and matrix expander went with 37 of the 42 tests (`CiWorkflowDriftTests`, `CiProfileLaneTests`
+  and their helpers, about 3,300 lines). Six remain, in `CiWorkflowTests`: the step shapes; `ci-gate`
+  needs every job; every test project and every engine lane is run by CI (or exempt); every UI lane's
+  diagnostics are uploaded; and #532's ban on profile switches under `.github/`. `thorough-ui-bs`
+  uploads both desktop-app diagnostics directories on each leg instead of a path from its matrix.
 - **Post-migration overhead in the test suites** — the selection audit (`ProfileSelectionAuditTests`,
   `Category=SelectionAudit`), AGENTS.md's generated lanes-outside-`pre-push` table and profile list with
   their generator tests, the skills inventory and its checks, and all of `BannedSymbolsTests` but one

@@ -27,7 +27,7 @@ public sealed class BannedSymbolsTests
         Assert.True(File.ReadLines(list).Any(static l => l.Trim() is { Length: > 0 } t && !t.StartsWith("//", StringComparison.Ordinal)),
             $"{ListPath} bans nothing.");
 
-        var projects = CiTestInvocations.TestProjects;
+        var projects = SolutionProjects.Tests;
         Assert.NotEmpty(projects);
         var problems = new List<string>();
         foreach (var project in projects)

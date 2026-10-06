@@ -12,8 +12,7 @@ updates:
   # `directories`, not `directory: "/"`: the root entry reads .github/workflows and a root
   # action.yml, nothing under .github/actions — and the composite action there pins actions of its
   # own (setup-dotnet, setup-java, cache, the app token) that it would never offer to bump, the same
-  # blind spot a central-only NuGet pin is. CiWorkflowDriftTests.EveryActionDirectory_IsWatchedByDependabot fails if an action
-  # directory falls outside this list.
+  # blind spot a central-only NuGet pin is. The glob covers every action directory, a new one included.
   - package-ecosystem: "github-actions"
     directories: ["/", "/.github/actions/*"]
     schedule:

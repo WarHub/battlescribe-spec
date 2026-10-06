@@ -24,9 +24,8 @@ internal sealed record CiDefinitionFile(string Path, CiDefinitionKind Kind, stri
 /// <summary>
 /// <b>Every file that defines what CI runs: the workflows and the composite actions they call.</b> The
 /// one enumerator behind every scan of the CI definition — <see cref="CiWorkflows"/> (and so
-/// <see cref="CiTestInvocations"/>, the step-reference lint and the functional-build flag ban), the
-/// setup-dotnet scan in <see cref="ToolchainPinDriftTests"/> and the retired-knob scan in
-/// <see cref="ConcurrencyConfigurationDriftTests"/>.
+/// <see cref="CiWorkflowTests"/>), the setup-dotnet scan in <see cref="ToolchainPinDriftTests"/> and the
+/// retired-knob scan in <see cref="ConcurrencyConfigurationDriftTests"/>.
 /// </summary>
 /// <remarks>
 /// <para>

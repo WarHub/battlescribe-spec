@@ -25,8 +25,8 @@ namespace BattleScribeSpec.Tests;
 /// — which is the exact failure this lane already had once (<c>docs/warm-reuse.md</c>: "CI never caught the
 /// original bug because the NR-UI roster lane runs a single spec"). Which half a run drives is now the test
 /// it selected, printed as <c>[lane] FrozenNrUiRoster mode=… selected=N applicable=M</c>
-/// (<see cref="AggregateLaneRun"/>), and <c>CiProfileLaneTests.ThoroughNrUiRosterStep_RunsTheFullSpecSet</c>
-/// fails if CI's thorough step stops selecting <see cref="OtherSpecs"/> or a fast lane starts to.
+/// (<see cref="AggregateLaneRun"/>), and the full lane is a profile name of its own on CI's step, where a
+/// reviewer sees it change.
 /// </para>
 /// <para>
 /// The full set is every applicable roster spec. It used to be a hand-maintained category allow-list,
