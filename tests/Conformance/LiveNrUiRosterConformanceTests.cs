@@ -38,7 +38,7 @@ public sealed class LiveNrUiRosterConformanceTests
         var resolver = new DataSourceResolver();
 
         // The whole corpus is read: it is what the [lane] line counts `applicable` from. This lane drives
-        // its target specs only, so it always runs in smoke mode.
+        // its target specs only, so it always runs in kitchen-sink mode.
         var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
         var loadedSpecs = corpus
             .Where(s => TargetSpecs.Contains(s.Name))
@@ -48,7 +48,7 @@ public sealed class LiveNrUiRosterConformanceTests
         Assert.SkipWhen(loadedSpecs.Count == 0,
             $"No matching specs found for targets: {string.Join(", ", TargetSpecs)}");
 
-        var lane = AggregateLaneRun.Start(_output, LogPrefix, "LiveNrUiRoster", AggregateMode.Smoke,
+        var lane = AggregateLaneRun.Start(_output, LogPrefix, "LiveNrUiRoster", AggregateMode.KitchenSink,
             selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
             applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
         var stop = TestContext.Current.CancellationToken;

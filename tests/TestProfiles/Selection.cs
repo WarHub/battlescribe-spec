@@ -12,7 +12,7 @@ namespace BattleScribeSpec.Tests.Profiles;
 /// <c>Property Operator Value</c> with an explicit operator. That matters because a bare word is also a
 /// valid filter — VSTest reads it as <c>FullyQualifiedName~word</c> — so a typo in a hand-written
 /// filter does not fail, it silently selects something else. The registry lint checks each clause
-/// with <see cref="ClausesOf"/>, and the values of <c>Engine</c>, <c>Category</c> and <c>Mode</c>
+/// with <see cref="ClausesOf"/>, and the values of <c>Engine</c> and <c>Category</c>
 /// against the traits the assembly actually carries.
 /// </para>
 /// <para>
@@ -72,14 +72,26 @@ internal abstract record Selection
     public static Selection AllExcept(params string[] engines) => new AllExceptSelection(engines);
 
     /// <summary>
-    /// The pre-push gate's selection: every engine lane whose <see cref="EngineLane.InPrePush"/> is
-    /// <see langword="true"/>, no <c>Mode=Sequential</c> class (manual-only, gated behind
-    /// <c>NR_SEQUENTIAL</c>). Derived from <see cref="EngineLanes.All"/>, so the filter and the decisions
-    /// recorded there are one record.
+    /// The pre-push gate's selection: every engine lane as much as its <see cref="EngineLane.InPrePush"/>
+    /// says — a <see cref="PrePushPart.None"/> lane excluded, a <see cref="PrePushPart.KitchenSink"/> lane
+    /// without its <see cref="EngineLane.OtherSpecs"/> test. Derived from <see cref="EngineLanes.All"/>, so
+    /// the filter and the decisions recorded there are one record.
     /// </summary>
     public static Selection PrePush() =>
-        AllExcept([.. EngineLanes.All.Where(static l => !l.InPrePush).Select(static l => l.Trait)])
-            .Where("Mode!=Sequential");
+        EngineLanes.All.Where(static l => l.InPrePush == PrePushPart.KitchenSink).Aggregate(
+            AllExcept([.. EngineLanes.All.Where(static l => l.InPrePush == PrePushPart.None).Select(static l => l.Trait)]),
+            static (selection, lane) => selection.Where(WithoutOtherSpecs(lane)));
+
+    /// <summary>
+    /// What a smoke profile runs of a split aggregate lane: the lane's tests without its
+    /// <see cref="EngineLane.OtherSpecs"/> test — its kitchen-sink half, and its contract checks with it.
+    /// </summary>
+    public static Selection KitchenSink(string engine) =>
+        Engines(engine).Where(WithoutOtherSpecs(EngineLanes.Find(engine)
+            ?? throw new ArgumentException($"'{engine}' is not an engine lane.", nameof(engine))));
+
+    private static string WithoutOtherSpecs(EngineLane lane) =>
+        $"FullyQualifiedName!={lane.OtherSpecs ?? throw new ArgumentException($"{lane.Trait} is not split into KitchenSink and OtherSpecs (EngineLane.OtherSpecs).", nameof(lane))}";
 
     /// <summary>A hand-written filter, claiming exactly the engines it lists.</summary>
     /// <param name="expression">The filter, in the clause grammar described on <see cref="Selection"/>.</param>

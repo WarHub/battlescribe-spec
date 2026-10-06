@@ -808,10 +808,11 @@ the step `id`. Side-files resolve in three tiers (`ext` ∈ `cat`/`gst`, from th
    so it matches `battlescribe-ui` byte-for-byte rather than carrying its own snapshot.
 
 Resolution prefers exact → family → base; the writer keeps each tier minimal (no override is written
-when an engine matches the tier above it). `BSSPEC_UPDATE_SNAPSHOTS=1` (re)writes the side-files —
-it is the only switch, honored by `bs-spec run` and by an unprofiled test run (a profiled one refuses it,
-exit 5: a gate that rewrites what it checks passes by construction), and there is no
-`--update-snapshots` flag; generate the base first, then the family-canonical engine, then variants.
+when an engine matches the tier above it). `bs-spec run --update-snapshots <spec>` (re)writes the
+side-files from the engine it runs — one spec at a time, and never a test run: a gate that rewrites what
+it checks passes by construction. Generate the base first, then the family-canonical engine, then
+variants; when a non-base engine diverges from the base and has no override yet, the run asks whether to
+move the base or pin an override (`--on-diverge base|override` answers without asking).
 
 ### Open / load mid-spec
 

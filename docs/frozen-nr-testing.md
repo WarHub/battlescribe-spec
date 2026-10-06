@@ -44,7 +44,7 @@ immune to site downtime or breaking changes.
              ▼
 ┌──────────────────────────┐
 │  Frozen NR test lanes    │  FrozenNrRoster, FrozenNrUiRoster
-│  (offline Playwright)    │  (and the Sequential class)
+│  (offline Playwright)    │
 └──────────────────────────┘
 ```
 
@@ -162,7 +162,7 @@ dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=nr-froz
 ```
 
 `nr-ui-frozen` is the frozen NR UI roster lane (about 27 minutes), and `pre-push` runs both frozen roster
-lanes — the UI one at its kitchen-sink default — with everything else that is offline. The commands for
+lanes — the UI one as its `KitchenSink` test alone — with everything else that is offline. The commands for
 narrowing a run are in [running-tests.md](running-tests.md).
 
 ### In CI
@@ -178,12 +178,11 @@ Each job sets up through the repository's composite action (`.github/actions/set
 
 ### Skipping
 
-Without the HAR the frozen NR roster tests skip — the store-direct lane's and the UI driver's — and
-`NR_FROZEN_SKIP=true` (`NR_UI_FROZEN_SKIP=true` for the UI driver) skips them on purpose. Only an
+Without the HAR the frozen NR roster tests skip — the store-direct lane's and the UI driver's. Only an
 unprofiled run takes that quietly. A profile that runs one of those lanes — `pre-push`, `nr-frozen`,
-`nr-ui-frozen`, the smoke profiles — refuses its skip switch (exit 5), and when the HAR is missing it exits
-8, naming the lane and `setup.ps1`, instead of passing on nothing ([running-tests.md](running-tests.md#the-engine-composition-check)).
-To leave the frozen lanes out of a run, narrow it: `--filter "Engine!=FrozenNrRoster&Engine!=FrozenNrUiRoster"`.
+`nr-ui-frozen`, the smoke profiles — exits 8 when the HAR is missing, naming the lane and `setup.ps1`,
+instead of passing on nothing ([running-tests.md](running-tests.md#the-engine-composition-check)).
+To leave the frozen lanes out of a run on purpose, narrow it: `--filter "Engine!=FrozenNrRoster&Engine!=FrozenNrUiRoster"`.
 
 ## Automated Daily Updates
 
@@ -259,7 +258,7 @@ store-direct roster export.
 | `src/BattleScribeSpec.NewRecruit/HarRecorder.cs` | Recording, post-processing, version extraction |
 | `src/BattleScribeSpec.NewRecruit.HarTool/` | Console app for recording HAR snapshots |
 | `tests/Infrastructure/FrozenNrRosterFixture.cs` | xUnit fixture (browser context pool for parallel execution) |
-| `tests/Conformance/FrozenNrRosterConformanceTests.cs` | The frozen NR roster lane: one `[Fact]` that runs every applicable spec over the pool |
+| `tests/Conformance/FrozenNrRosterConformanceTests.cs` | The frozen NR roster lane: two `[Fact]`s, `KitchenSink` and `OtherSpecs`, that partition the applicable specs over the pool |
 | `tests/Conformance/FrozenNrUiRosterConformanceTests.cs` | The frozen NR UI roster lane, through the UI driver |
 | `tests/TestProfiles/TestProfiles.cs` | The `nr-frozen`, `nr-ui-frozen` and smoke profiles |
 | `.github/workflows/ci.yml` | The `smoke`, `thorough-conformance` and `thorough-nr-ui-roster` jobs |

@@ -12,14 +12,12 @@ namespace BattleScribeSpec.Tests;
 /// Reuses the same NR Editor static snapshot as <see cref="FrozenNrGameDataFixture"/>
 /// (non-UI engine). No additional setup step needed.
 ///
-/// Skipped when:
-///   - .testdata/nr-editor/ doesn't exist in the checkout these binaries were built in (run setup.ps1)
-///   - NR_EDITOR_UI_FROZEN_SKIP=true
+/// Skipped when .testdata/nr-editor/ doesn't exist in the checkout these binaries were built in
+/// (run setup.ps1).
 ///
 /// Environment variables:
 ///   NR_HEADLESS               — "false" to show the browser (default: true)
 ///   NR_SLOW_MO                — milliseconds to slow Playwright actions (for debugging)
-///   NR_EDITOR_UI_FROZEN_SKIP  — "true" to skip all frozen NR Editor UI tests
 ///
 /// Pool size (number of parallel browser contexts) comes from <see cref="FixtureConcurrency"/>
 /// (backed by <c>ConcurrencyPolicy</c>), not from an env var.
@@ -34,11 +32,6 @@ public sealed class FrozenNrGameDataUiFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        if (Environment.GetEnvironmentVariable("NR_EDITOR_UI_FROZEN_SKIP") == "true")
-        {
-            return;
-        }
-
         var staticDir = NrGameDataUiEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         if (staticDir is null)
         {

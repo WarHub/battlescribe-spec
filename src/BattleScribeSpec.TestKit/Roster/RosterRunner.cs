@@ -31,11 +31,13 @@ public sealed class RosterRunner
 
     /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected snapshot from the actual
-    /// export instead of comparing. Mirrors <see cref="GameDataRunner"/>; defaults to the
-    /// <c>BSSPEC_UPDATE_SNAPSHOTS</c> env var so the xUnit harness honors it.
+    /// export instead of comparing. Mirrors <see cref="GameDataRunner.UpdateSnapshots"/>: off unless
+    /// the caller sets it, which only <c>bs-spec run --update-snapshots</c> does.
     /// </summary>
     public bool UpdateSnapshots { get; set; }
-        = Environment.GetEnvironmentVariable("BSSPEC_UPDATE_SNAPSHOTS") is "1" or "true";
+
+    /// <summary>Mirrors <see cref="GameDataRunner.OnDiverge"/>.</summary>
+    public Func<ExportSnapshotAssertion.SnapshotDivergence, ExportSnapshotAssertion.SnapshotWriteTarget>? OnDiverge { get; set; }
 
     /// <summary>
     /// Called after each step (action, assertion, or dump) completes.
@@ -585,7 +587,7 @@ public sealed class RosterRunner
             stepIndex,
             UpdateSnapshots,
             _exprResolver.Resolve,
-            onDiverge: null,
+            onDiverge: OnDiverge,
             templateMatch: _exprResolver.TryMatchTemplate,
             templatizeForWrite: TemplatizeRosterInstanceIds);
         if (error is not null)

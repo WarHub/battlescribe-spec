@@ -28,10 +28,10 @@ NrGameDataUiEngine (IGameDataEngine)
 
 ## Frozen vs. live mode
 
-| Mode | Description | Skip env var |
-|------|-------------|--------------|
-| Frozen | Serves `.testdata/nr-editor/` static files locally via Playwright route interception | `NR_EDITOR_UI_FROZEN_SKIP=true` |
-| Live | Connects to the live NR Editor at `NR_EDITOR_URL` | — |
+| Mode | Description |
+|------|-------------|
+| Frozen | Serves `.testdata/nr-editor/` static files locally via Playwright route interception |
+| Live | Connects to the live NR Editor at `NR_EDITOR_URL` |
 
 Both use `NrGameDataUiEngine`; the difference is `CreateFrozenAsync` vs `CreateAsync`.
 `setup.ps1` downloads `.testdata/nr-editor/` (the NR Editor gh-pages snapshot pinned in

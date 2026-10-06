@@ -446,9 +446,9 @@ compares it **byte-for-byte** (only `\r\n`→`\n` normalized on read) against ex
 `content:`, or a side-file next to the spec keyed by the step `id`: `{specId}.{stepId}.{ext}` (the
 **NewRecruit base**) plus optional per-engine overrides `{specId}.{stepId}.{engine}.{ext}` (`ext` ∈
 `cat`/`gst`, from the root element). Both NR engines serialize through NR's own writer, so they share
-the base; the BS engines get overrides only where their serialization diverges. `BSSPEC_UPDATE_SNAPSHOTS=1`
-(re)writes the side-files — the only switch, honored by `bs-spec run` and by an unprofiled test run (a
-profiled one refuses it, exit 5); there is no `--update-snapshots` flag. **Declared ids** make exports
+the base; the BS engines get overrides only where their serialization diverges.
+`bs-spec run --update-snapshots <spec>` (re)writes the side-files from the engine it runs; no test run
+does. **Declared ids** make exports
 reproducible: `addEntry`/`addLink` accept an optional `entryId` (the id to assign the created node),
 echoed back for `${{ steps.<id>.entryId }}` references. `export/export-add-entry` pins a declared-id
 selection entry's `.cat` (NR base + `battlescribe`/`battlescribe-ui` overrides); `export/openfile-inline`

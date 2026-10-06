@@ -13,8 +13,8 @@ namespace BattleScribeSpec.Tests;
 /// <para>
 /// Both bases used to log and <c>return</c>, and xunit records a returned test as Passed. Under the strict
 /// zero-tests policy a Passed row counts as executed, so a lane whose real rows all skipped still passed on
-/// its opted-out ones: with <c>NR_SEQUENTIAL</c> unset, <c>--filter "Engine=FrozenNrRoster&amp;Mode=Sequential"</c>
-/// selected 403 rows, skipped 401, "passed" <c>modifier/modifier-repeat-cost-mutual-reference</c> and
+/// its opted-out ones: a filter for the since-deleted per-spec frozen NR roster class, whose engine was gated off
+/// by default, selected 403 rows, skipped 401, "passed" <c>modifier/modifier-repeat-cost-mutual-reference</c> and
 /// <c>customization/customization-category</c> (both <c>engines: {newrecruit: skip}</c>) and exited 0. The
 /// engine-composition check would have counted the same two rows as the lane having run.
 /// </para>

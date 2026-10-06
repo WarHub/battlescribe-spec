@@ -133,10 +133,9 @@ internal sealed record HostIo(
 /// <c>--test-profile &lt;name&gt;</c> (<c>-p:TestProfile=&lt;name&gt;</c> arrives as that): an unknown
 /// name, or a profile that does not cover this assembly, is refused. With a profile, the options that
 /// would override its verdict or its selection are refused (<see cref="RefusedWithAProfile"/>). Every
-/// environment switch that concerns the profile is applied by its <see cref="KnobKind"/>: a lane-defining
-/// one takes the profile's value or must be unset, and a caller value that differs is refused — except a
-/// <c>*_SKIP</c> for an engine the profile lets skip (<see cref="TestProfile.MaySkip"/>); a default one
-/// takes the profile's value only where the caller has none. The filter is the profile's ANDed with the
+/// environment switch that concerns the profile — those it sets, those of the engines it claims — takes
+/// the profile's value only where the caller has none, and each is printed with whose value it is; no
+/// switch changes which tests run (<see cref="Knobs"/>). The filter is the profile's ANDed with the
 /// caller's <c>--filter</c>: <c>(P)&amp;(U)</c>, and a caller's <c>--filter</c> with no value or several is
 /// refused, as the platform refuses it without a profile.
 /// </description></item>
@@ -145,7 +144,7 @@ internal sealed record HostIo(
 /// In GitHub Actions: the GitHub reporter with a failures-only step summary
 /// (<c>--report-github --report-github-summary-include-passed false</c>); a direct run also gets
 /// <c>--output Detailed</c> and the ten slowest tests in its summary (<c>--show-slowest-tests 10</c>), and
-/// a profile that claims a single-test aggregate lane <c>--show-live-output on</c>, so a 27-minute lane
+/// a profile that claims an aggregate lane <c>--show-live-output on</c>, so a 27-minute lane
 /// streams its <c>[i/N]</c> progress instead of being 27 silent minutes.
 /// </description></item>
 /// <item><description>
@@ -175,9 +174,9 @@ internal sealed record HostIo(
 /// </para>
 /// <para>
 /// <b>Why refuse rather than repair.</b> Each refusal stands for a command line that would otherwise
-/// produce a green run that checked less than its name says: a profile whose filter was dropped, a lane
-/// narrowed by a variable exported in someone's shell, an exit code told to lie. The message names the
-/// fix. <c>TestHostTests</c> holds every rule, each with the input that trips it.
+/// produce a green run that checked less than its name says: a profile whose filter was dropped, an exit
+/// code told to lie. The message names the fix. <c>TestHostTests</c> holds every rule, each with the input
+/// that trips it.
 /// </para>
 /// </remarks>
 internal static class TestHost
@@ -451,15 +450,7 @@ internal static class TestHost
                     + "that executed nothing — or only skipped — fails. The policy is strict.");
             }
 
-            var (conflicts, applied) = ApplyKnobs(profile, environment, setEnvironment);
-            if (conflicts.Count > 0)
-            {
-                return Refuse($"profile {profile.Name} and your environment disagree about what the lane runs:\n"
-                    + string.Join("\n", conflicts.Select(static c => $"  {c}"))
-                    + "\nA profiled run is the lane as tests/TestProfiles/TestProfiles.cs records it, and a lane-defining switch "
-                    + "exported in a shell would silently shrink, skip or disarm it. Unset the switch, or run without --test-profile "
-                    + "(narrowing with --filter) to use it.");
-            }
+            var applied = ApplyKnobs(profile, environment, setEnvironment);
 
             // The platform refuses a --filter with no value or several; with a profile the filter is the
             // host's to build, so the host refuses it the same way rather than quietly keeping one value.
@@ -526,18 +517,15 @@ internal static class TestHost
     }
 
     /// <summary>
-    /// Applies every lane-defining and default switch that concerns <paramref name="profile"/> — those it
-    /// sets, those of the engines it claims, and those of no engine in particular — into
-    /// <paramref name="setEnvironment"/>. Returns the conflicts (a caller value a lane-defining switch does
-    /// not allow) and one line per switch applied or left to the caller.
+    /// Applies every default switch that concerns <paramref name="profile"/> — those it sets, those of the
+    /// engines it claims, and those of no engine in particular — into <paramref name="setEnvironment"/>,
+    /// where the caller has no value of its own. Returns one line per switch applied or left to the caller.
     /// </summary>
-    private static (List<string> Conflicts, List<string> Applied) ApplyKnobs(
-        TestProfile profile, Func<string, string?> environment, Dictionary<string, string> setEnvironment)
+    private static List<string> ApplyKnobs(TestProfile profile, Func<string, string?> environment, Dictionary<string, string> setEnvironment)
     {
-        var conflicts = new List<string>();
         var applied = new List<string>();
         var claimed = profile.Selection.Claims;
-        foreach (var knob in Knobs.All.Where(static k => k.Kind is KnobKind.LaneDefining or KnobKind.Default))
+        foreach (var knob in Knobs.All.Where(static k => k.Kind == KnobKind.Default))
         {
             var inProfile = profile.Env.TryGetValue(knob.Name, out var wanted);
             if (!inProfile && knob.Engines.Count > 0 && !knob.Engines.Intersect(claimed, StringComparer.Ordinal).Any())
@@ -545,33 +533,7 @@ internal static class TestHost
                 continue;
             }
 
-            var caller = environment(knob.Name);
-            var callerSet = !string.IsNullOrEmpty(caller);
-            if (knob.Kind == KnobKind.LaneDefining)
-            {
-                if (wanted is null)
-                {
-                    if (callerSet && MaySkipWith(profile, knob))
-                    {
-                        applied.Add($"{knob.Name}={caller} (caller: the profile lets "
-                            + $"{string.Join(", ", knob.Engines.Intersect(claimed, StringComparer.Ordinal))} skip)");
-                    }
-                    else if (callerSet)
-                    {
-                        conflicts.Add($"{knob.Name}={caller} is set, and this profile needs it unset — {knob.Why}");
-                    }
-                }
-                else if (callerSet && !string.Equals(caller, wanted, StringComparison.Ordinal))
-                {
-                    conflicts.Add($"{knob.Name}={caller} is set, and this profile sets {knob.Name}={wanted} — {knob.Why}");
-                }
-                else
-                {
-                    setEnvironment[knob.Name] = wanted;
-                    applied.Add($"{knob.Name}={wanted} (profile)");
-                }
-            }
-            else if (callerSet)
+            if (environment(knob.Name) is { Length: > 0 } caller)
             {
                 applied.Add($"{knob.Name}={caller} (caller)");
             }
@@ -582,23 +544,7 @@ internal static class TestHost
             }
         }
 
-        return (conflicts, applied);
-    }
-
-    /// <summary>
-    /// Whether a caller may set lane-defining <paramref name="knob"/> under <paramref name="profile"/>: a
-    /// <c>*_SKIP</c> switch whose claimed engines the profile all lets skip whole — <c>BS_UI_SKIP=true</c>
-    /// with <c>core</c>, the documented way to sit out the desktop app.
-    /// </summary>
-    private static bool MaySkipWith(TestProfile profile, Knob knob)
-    {
-        if (!knob.Name.EndsWith("_SKIP", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var affected = knob.Engines.Intersect(profile.Selection.Claims, StringComparer.Ordinal).ToList();
-        return affected.Count > 0 && affected.All(e => profile.MaySkip.Any(m => m.Engine == e));
+        return applied;
     }
 
     private static string VsTestRefusal(Item option) => option.Name switch
@@ -753,7 +699,7 @@ internal static class TestHost
             sb.Append("  filter: ").Append(p.Selection.Filter ?? "(every test)").Append('\n');
             if (p.Env.Count > 0)
             {
-                sb.Append("  sets:   ").Append(string.Join(", ", p.Env.Select(static kv => $"{kv.Key}={kv.Value ?? "(unset)"}"))).Append('\n');
+                sb.Append("  sets:   ").Append(string.Join(", ", p.Env.Select(static kv => $"{kv.Key}={kv.Value}"))).Append('\n');
             }
 
             foreach (var (engine, why) in p.MaySkip)
@@ -769,7 +715,7 @@ internal static class TestHost
 
     /// <summary>
     /// The registry as JSON: each profile's name, purpose, filter, claimed engines, assemblies, environment,
-    /// the lane-defining switches whose value it decides, and the engines it lets skip.
+    /// and the engines it lets skip.
     /// </summary>
     internal static string RenderProfilesJson()
     {
@@ -781,10 +727,6 @@ internal static class TestHost
             claims = p.Selection.Claims,
             assemblies = p.Assemblies,
             environment = p.Env,
-            knobs = Knobs.All
-                .Where(k => k.Kind == KnobKind.LaneDefining
-                    && (p.Env.ContainsKey(k.Name) || k.Engines.Count == 0 || k.Engines.Intersect(p.Selection.Claims, StringComparer.Ordinal).Any()))
-                .Select(k => new { name = k.Name, value = p.Env.GetValueOrDefault(k.Name) }),
             maySkip = p.MaySkip.Select(static m => new { engine = m.Engine, why = m.Why }),
         });
 

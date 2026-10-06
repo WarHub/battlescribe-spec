@@ -7,14 +7,12 @@ namespace BattleScribeSpec.Tests;
 /// Serves the NR Editor gh-pages deployment from .testdata/nr-editor/ via Playwright route interception.
 /// Fully offline and deterministic — no network access needed.
 ///
-/// Skipped when:
-///   - .testdata/nr-editor/ doesn't exist in the checkout these binaries were built in (run setup.ps1)
-///   - NR_FROZEN_SKIP=true
+/// Skipped when .testdata/nr-editor/ doesn't exist in the checkout these binaries were built in
+/// (run setup.ps1).
 ///
 /// Environment variables:
 ///   NR_HEADLESS    — "false" to show the browser (default: true)
 ///   NR_SLOW_MO     — milliseconds to slow down Playwright actions (for debugging)
-///   NR_FROZEN_SKIP — "true" to skip frozen tests entirely
 /// </summary>
 public sealed class FrozenNrGameDataFixture : IAsyncLifetime
 {
@@ -23,11 +21,6 @@ public sealed class FrozenNrGameDataFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        if (Environment.GetEnvironmentVariable("NR_FROZEN_SKIP") == "true")
-        {
-            return;
-        }
-
         var staticDir = NewRecruitGameDataEngine.FindFrozenStaticDir(RepoRoot.FromBinaries);
         if (staticDir is null)
         {

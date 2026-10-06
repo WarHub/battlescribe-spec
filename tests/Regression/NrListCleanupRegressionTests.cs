@@ -53,7 +53,7 @@ public sealed class NrListCleanupRegressionTests(ITestOutputHelper output, Froze
     public async Task Cleanup_DeletesTheRowItCreated_SoListDataDoesNotGrowAcrossSpecs()
     {
         Assert.SkipWhen(!fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
 
         // Assert, not skip: past the HAR gate above we are in a real frozen-NR lane, where finding
         // no specs means discovery broke. A skip there would be this bug's own shape — a green

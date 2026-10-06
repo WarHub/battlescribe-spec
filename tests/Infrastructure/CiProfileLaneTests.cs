@@ -12,12 +12,12 @@ namespace BattleScribeSpec.Tests;
 /// <remarks>
 /// <para>
 /// <b>What this replaced.</b> CI used to finish defining its lanes itself: eight steps spelled their
-/// filters inline, and step <c>env:</c> blocks supplied <c>NR_FROZEN_SMOKE</c>, <c>NR_UI_SMOKE</c> and
-/// <c>NR_UI_ROSTER_FULL</c>. So <c>-p:TestProfile=nr-ui-frozen</c> ran one spec on a laptop and every
+/// filters inline, and step <c>env:</c> blocks supplied the switches that narrowed or widened the aggregate
+/// lanes. So <c>-p:TestProfile=nr-ui-frozen</c> ran one spec on a laptop and every
 /// applicable spec in the thorough job, under one name, and nothing compared the two. Now every
-/// Tests-project step names a profile and adds no filter, no lane-defining or profile-owned switch
-/// appears anywhere under <c>.github/</c>, and the lanes' needs — a display, an upload, the full spec
-/// set — are checked against what the registry says each lane is.
+/// Tests-project step names a profile and adds no filter, no switch changes which tests a lane runs
+/// (<see cref="Knobs"/>), and the lanes' needs — a display, an upload, the full spec set — are checked
+/// against what the registry says each lane is.
 /// </para>
 /// <para>
 /// CI is read through <see cref="CiProfileRuns"/>: the steps <see cref="CiTestInvocations"/> finds,
@@ -162,56 +162,40 @@ public sealed class CiProfileLaneTests
     }
 
     /// <summary>
-    /// <b>No lane-defining switch, and no switch a profile sets, appears anywhere under <c>.github/</c></b>
-    /// — not in a workflow's, a job's or a step's <c>env:</c>, not in a <c>$GITHUB_ENV</c> write, not on a
-    /// command line, not in a composite action.
+    /// <b>No switch a profile sets appears anywhere under <c>.github/</c></b> — not in a workflow's, a
+    /// job's or a step's <c>env:</c>, not in a <c>$GITHUB_ENV</c> write, not on a command line, not in a
+    /// composite action.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A lane-defining switch (<see cref="KnobKind.LaneDefining"/>) changes which tests run or whether a
-    /// lane runs at all; set from a workflow, it defines the lane there instead of in the profile, which
-    /// is how <c>nr-ui-frozen</c> meant 378 specs in CI and one everywhere else. A switch a profile sets is
-    /// the profile's: a second value in CI is either refused by the test app (a lane-defining one that
-    /// differs) or wins over the profile's (a default one, such as a URL), and neither belongs in a
-    /// workflow. Every YAML scalar is read, keys
-    /// included — an <c>env:</c> entry is a key, a <c>$GITHUB_ENV</c> write or an inline assignment is in a
-    /// <c>run:</c> value — and comments are not scalars, so the workflows can still explain the rule.
-    /// Default switches the registry leaves to CI (the NR Editor UI driver's diagnostics capture) are not
-    /// covered.
+    /// A switch a profile sets is the profile's — the live lanes' <c>NR_ENGINE_URL</c> and
+    /// <c>NR_EDITOR_URL</c>. Set in CI, it wins over the profile's value, as a caller's value does; set
+    /// where the <c>checks</c> job's <c>non-conformance</c> step sees it, it sends the live smoke and
+    /// integration tests that lane selects to newrecruit.eu on every push. Every YAML scalar is read, keys
+    /// included, and comments are not scalars, so the workflows can still explain the rule.
     /// </para>
     /// <para>
-    /// Mutation-checked when written: <c>NR_UI_ROSTER_FULL: 0</c> in a job-level <c>env:</c>;
-    /// <c>echo NR_FROZEN_SMOKE=1 &gt;&gt; $GITHUB_ENV</c> in a step; and <c>NR_ENGINE_URL</c> set in the
-    /// setup action's environment each go red naming the file and line.
+    /// Mutation-checked when written: <c>NR_ENGINE_URL</c> set in the setup action's environment goes
+    /// red naming the file and line.
     /// </para>
     /// </remarks>
     [Fact]
-    public void LaneDefiningKnobs_AppearNowhereInGithub()
+    public void ProfileSwitches_AppearNowhereInGithub()
     {
-        var banned = Knobs.All.Where(static k => k.Kind == KnobKind.LaneDefining).Select(static k => k.Name)
-            .Concat(TestProfiles.All.SelectMany(static p => p.Env.Keys))
-            .Distinct(StringComparer.Ordinal)
-            .ToDictionary(static name => name, static name => string.Join("; ", new[]
-            {
-                Knobs.Find(name) is { Kind: KnobKind.LaneDefining } knob ? $"lane-defining: {knob.Why}" : null,
-                TestProfiles.All.Where(p => p.Env.ContainsKey(name)).Select(static p => p.Name).ToList() is { Count: > 0 } owners
-                    ? $"set by {(owners.Count == 1 ? "profile" : "profiles")} {string.Join(", ", owners)}"
-                    : null,
-            }.OfType<string>()), StringComparer.Ordinal);
+        var owners = TestProfiles.All
+            .SelectMany(static p => p.Env.Keys.Select(k => (Key: k, p.Name)))
+            .GroupBy(static e => e.Key, StringComparer.Ordinal)
+            .ToDictionary(static g => g.Key, static g => string.Join(", ", g.Select(static e => e.Name)), StringComparer.Ordinal);
+        Assert.True(owners.Count > 0, "No profile sets a switch; this lint checks nothing.");
 
-        Assert.True(banned.Keys.Any(static k => Knobs.Find(k)?.Kind == KnobKind.LaneDefining),
-            "No lane-defining switch is banned: tests/TestProfiles/Knobs.cs classifies none as LaneDefining, so this lint checks nothing.");
-
-        var problems = GithubMentions(banned.Keys, nameof(LaneDefiningKnobs_AppearNowhereInGithub))
-            .Select(m => $"  {m.Where}: {m.Name} ({banned[m.Name]})")
+        var problems = GithubMentions(owners.Keys, nameof(ProfileSwitches_AppearNowhereInGithub))
+            .Select(m => $"  {m.Where}: {m.Name} (set by {owners[m.Name]})")
             .ToList();
 
         Assert.True(problems.Count == 0,
             "These switches belong to the test-profile registry, and CI sets or names them:\n" + string.Join("\n", problems) + "\n\n"
-            + "A lane is its profile: tests/TestProfiles/TestProfiles.cs states every switch the lane depends on, and every "
-            + "lane-defining switch a profile does not list must be unset in it. Set from CI, a switch makes the CI lane differ "
-            + "from the profile of the same name — the full NR UI roster lane was one spec everywhere but CI for exactly this "
-            + "reason. Put the value in the profile the step runs (or a new profile), and delete it here.");
+            + "A lane is its profile: tests/TestProfiles/TestProfiles.cs states every switch the lane depends on, and a value "
+            + "set from CI wins over the profile's. Put the value in the profile the step runs (or a new profile), and delete it here.");
     }
 
     /// <summary>
@@ -381,34 +365,35 @@ public sealed class CiProfileLaneTests
     }
 
     /// <summary>
-    /// <b>The CI step named "Full frozen NR UI roster" runs the full spec set</b>: its profile sets
-    /// <c>NR_UI_ROSTER_FULL</c>, and neither the every-push smoke lane nor <c>pre-push</c> does.
+    /// <b>The CI step named "Full frozen NR UI roster" runs the full spec set</b>: its profile selects
+    /// <c>FrozenNrUiRosterConformanceTests.OtherSpecs</c>, and neither the every-push smoke lane, nor
+    /// <c>pre-push</c>, nor any profile run outside the thorough jobs can.
     /// </summary>
     /// <remarks>
     /// <para>
     /// That lane ran <b>one</b> spec for its entire life, on the since-falsified premise that the frozen
     /// HAR supports a single roster-creation flow per run; <c>docs/warm-reuse.md</c> records what that cost:
     /// "CI never caught the original bug because the NR-UI roster lane runs a single spec." It is the whole
-    /// applicable suite now, but only when the switch is set, because the every-push lane and
-    /// <c>pre-push</c> must stay fast — and an opt-in that is dropped is invisible: the step still passes,
-    /// still says "Full", and covers one spec of ~378. One executed test is not zero, so the
+    /// applicable suite now, split in two tests because the every-push lane and <c>pre-push</c> must stay
+    /// fast — and a full lane whose profile stopped selecting <c>OtherSpecs</c> would be invisible: the step
+    /// still passes, still says "Full", and covers one spec of ~378. One executed test is not zero, so the
     /// executed-at-least-one guard cannot see it either.
     /// </para>
     /// <para>
-    /// The switch used to be the step's <c>env:</c>, so the profile of the same name ran one spec
-    /// everywhere else. It is the profile's now (<c>nr-ui-frozen</c>), and a profile run in any job outside
-    /// the thorough set may not set it.
-    /// </para>
-    /// <para>
-    /// Mutation-checked when written: <c>NR_UI_ROSTER_FULL</c> removed from <c>nr-ui-frozen</c>; set on
-    /// <c>smoke-nr-ui</c>; and the step pointed at <c>smoke-nr-ui</c> — each goes red.
+    /// Each profile's filter is evaluated against the test itself (<see cref="FilterReach"/>), so this reads
+    /// what a run would select, not a switch that says what it should.
     /// </para>
     /// </remarks>
     [Fact]
     public void ThoroughNrUiRosterStep_RunsTheFullSpecSet()
     {
-        const string full = FrozenNrUiRosterConformanceTests.FullVariable;
-        static bool SetsFull(TestProfile p) => p.Env.GetValueOrDefault(full) is "1" or "true";
+        var otherSpecs = SuiteTraits.TestMethods.SingleOrDefault(static t =>
+            t.FullyQualifiedName == EngineLanes.Find("FrozenNrUiRoster")?.OtherSpecs);
+        Assert.True(otherSpecs is not null,
+            "EngineLanes' FrozenNrUiRoster.OtherSpecs names no test method of this assembly, so nothing here can tell the full lane "
+            + "from its kitchen-sink half.");
+        Reach Reaches(TestProfile p) =>
+            p.Assemblies.Contains(EngineLanes.Assembly, StringComparer.Ordinal) ? FilterReach.Parse(p.Selection.Filter).Evaluate(otherSpecs) : Reach.No;
 
         var steps = CiProfileRuns.All.Where(static r => r.Step.Job.Workflow == CiFile && r.Step.Name == "Full frozen NR UI roster").ToList();
         Assert.True(steps.Count == 1,
@@ -417,38 +402,35 @@ public sealed class CiProfileLaneTests
 
         var problems = new List<string>();
         var step = steps[0];
-        if (step.Profile is not { } profile || !step.Lanes.Any(static l => l.Trait == "FrozenNrUiRoster"))
+        if (step.Profile is not { } profile || Reaches(profile) != Reach.Yes)
         {
-            problems.Add($"  {step.Where} runs '{string.Join(", ", step.ProfileNames)}', which is not a profile that runs FrozenNrUiRoster");
-        }
-        else if (!SetsFull(profile))
-        {
-            problems.Add($"  {step.Where} runs profile {profile.Name}, which does not set {full}=1: the lane runs kitchen-sink alone");
+            problems.Add($"  {step.Where} runs '{string.Join(", ", step.ProfileNames)}', which does not select {otherSpecs.FullyQualifiedName}: "
+                + "the lane runs kitchen-sink alone");
         }
 
-        if (TestProfiles.Find("nr-ui-frozen") is not { } fullLane || !SetsFull(fullLane))
+        if (TestProfiles.Find("nr-ui-frozen") is not { } fullLane || Reaches(fullLane) != Reach.Yes)
         {
-            problems.Add($"  profile nr-ui-frozen does not set {full}=1, so the name of the full lane runs one spec");
+            problems.Add($"  profile nr-ui-frozen does not select {otherSpecs.FullyQualifiedName}, so the name of the full lane runs one spec");
         }
 
         string[] fastLanes = ["smoke-nr-ui", "pre-push"];
         foreach (var name in fastLanes)
         {
-            if (TestProfiles.Find(name) is { } p && p.Env.GetValueOrDefault(full) is not null)
+            if (TestProfiles.Find(name) is { } p && Reaches(p) != Reach.No)
             {
-                problems.Add($"  profile {name} sets {full}: a fast lane would run every applicable spec (~27 minutes)");
+                problems.Add($"  profile {name} can select {otherSpecs.FullyQualifiedName}: a fast lane would run every applicable spec (~27 minutes)");
             }
         }
 
         var thorough = CiGateConfig.Load().ThoroughJobs.ToHashSet(StringComparer.Ordinal);
         problems.AddRange(CiProfileRuns.All
-            .Where(r => r.Profile is { } p && SetsFull(p) && !(r.Step.Job.Workflow == CiFile && thorough.Contains(r.Step.Job.Id)))
-            .Select(static r => $"  {r.Where} runs {r.Profile!.Name}, the full NR UI roster lane, outside the thorough jobs"));
+            .Where(r => r.Profile is { } p && Reaches(p) != Reach.No && !(r.Step.Job.Workflow == CiFile && thorough.Contains(r.Step.Job.Id)))
+            .Select(static r => $"  {r.Where} runs {r.Profile!.Name}, which selects the full NR UI roster lane, outside the thorough jobs"));
 
         Assert.True(problems.Count == 0,
             "The full frozen NR UI roster lane must be exactly where it is meant to be:\n" + string.Join("\n", problems) + "\n\n"
-            + $"{full} turns FrozenNrUiRosterConformanceTests from kitchen-sink into every applicable spec. A lane that "
-            + "silently shrinks from ~378 specs to 1 still exits 0, and one that silently grows puts ~27 minutes on every push.");
+            + "FrozenNrUiRosterConformanceTests.OtherSpecs is every applicable spec but kitchen-sink. A lane that silently "
+            + "shrinks from ~378 specs to 1 still exits 0, and one that silently grows puts ~27 minutes on every push.");
     }
 
     /// <summary>

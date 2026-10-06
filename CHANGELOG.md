@@ -1179,6 +1179,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reflectively and a load hook needed only because the copy left them out of `deps.json`.
   `BattleScribeSpec.Tests` imports `BattleScribeIkvmConsumer.targets` as `EngineHost` and
   `ReferenceAdapter` do, which lists them as runtime dependencies so the host resolves them unaided.
+- **Every environment switch that changed which tests a lane runs, and the refusal that guarded them
+  (#532)** — instead of refusing a smoke, full, filter, skip, sequential or snapshot-update switch
+  exported in a shell, there are none left to refuse. The three frozen NR aggregates are each two tests
+  that partition the specs, `KitchenSink` and `OtherSpecs`: selecting the engine runs the lane whole,
+  the smoke profiles and `pre-push`'s NR UI roster lane select it without `OtherSpecs` (derived from
+  `EngineLanes`' `InPrePush`, now `None`/`Whole`/`KitchenSink`), and every profile selects the specs it
+  did. A lane sits out with `--filter "Engine!=X"`; a few specs go through the NR UI driver with
+  `bs-spec run --engine newrecruit --ui <spec>`; snapshots are rewritten by the new
+  `bs-spec run --update-snapshots` (with `--on-diverge base|override`), never by a test run. The
+  never-run `Mode=Sequential` classes and their profiles are gone, and with them `KnobKind.LaneDefining`,
+  the host's environment refusal, the `BS_UI_SKIP`-with-`core` exception, the CI lint's ban on the
+  lane-defining switches under `.github/` (it still bans the ones a profile sets), and the aggregates'
+  full-mode shrink check.
 - **Post-migration overhead in the test suites** — the selection audit (`ProfileSelectionAuditTests`,
   `Category=SelectionAudit`), AGENTS.md's generated lanes-outside-`pre-push` table and profile list with
   their generator tests, the skills inventory and its checks, and all of `BannedSymbolsTests` but one

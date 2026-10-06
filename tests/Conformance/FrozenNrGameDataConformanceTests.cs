@@ -31,7 +31,7 @@ public sealed class FrozenNrGameDataConformanceTests : GameDataConformanceTestBa
     {
         if (!_fixture.Available)
         {
-            Assert.Skip("NR Editor static files not found (run setup.ps1) or NR_FROZEN_SKIP=true — skipping frozen NR Editor GameData tests");
+            Assert.Skip("NR Editor static files not found (run setup.ps1) — skipping frozen NR Editor GameData tests");
             return null;
         }
 

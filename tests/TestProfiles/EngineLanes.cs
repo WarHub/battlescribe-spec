@@ -17,16 +17,29 @@ internal enum Needs
     ThirdPartySite = 4,
 }
 
+/// <summary>How much of an engine lane the pre-push gate runs.</summary>
+internal enum PrePushPart
+{
+    /// <summary>None of it.</summary>
+    None,
+
+    /// <summary>All of it.</summary>
+    Whole,
+
+    /// <summary>All of it but its <see cref="EngineLane.OtherSpecs"/> test: the lane's kitchen-sink half.</summary>
+    KitchenSink,
+}
+
 /// <summary>
-/// One <c>Engine</c> trait value in the suite: what running it needs, whether the pre-push gate runs
-/// it, and which test classes are the lane's own.
+/// One <c>Engine</c> trait value in the suite: what running it needs, how much of it the pre-push gate
+/// runs, and which test classes are the lane's own.
 /// </summary>
 /// <param name="Trait">The <c>Engine</c> trait value, exactly as the test classes carry it.</param>
 /// <param name="Needs">What the lane needs from the machine.</param>
 /// <param name="InPrePush">
-/// Whether <c>pre-push</c> runs this lane. The profile's filter is derived from this column
+/// How much of this lane <c>pre-push</c> runs. The profile's filter is derived from this column
 /// (<see cref="Selection.PrePush"/>), so the decision and the filter cannot disagree; a lane that
-/// needs the desktop app or a third party's site may not say <see langword="true"/>.
+/// needs the desktop app or a third party's site must say <see cref="PrePushPart.None"/>.
 /// </param>
 /// <param name="Why">
 /// The reason for <paramref name="InPrePush"/>, with the cost that justifies it. Costs are summed test
@@ -39,7 +52,7 @@ internal enum Needs
 /// the assembly that carries an <c>Engine</c> trait is either listed here under its own engine or in
 /// <see cref="EngineLanes.NotLaneTests"/> with a reason.
 /// </param>
-internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, string Why, IReadOnlyList<string> LaneTests)
+internal sealed record EngineLane(string Trait, Needs Needs, PrePushPart InPrePush, string Why, IReadOnlyList<string> LaneTests)
 {
     /// <summary>
     /// The environment switches without which every test of this lane skips: a live lane's endpoint
@@ -75,14 +88,23 @@ internal sealed record EngineLane(string Trait, Needs Needs, bool InPrePush, str
     public string? DiagnosticsDirSwitch { get; init; }
 
     /// <summary>
-    /// Whether the lane runs its whole spec suite as one test — a single <c>[Fact] AllSpecs()</c> that
-    /// drives every spec in turn through one engine, rather than one theory row per spec. Such a lane
-    /// prints nothing for minutes while it works, so in GitHub Actions <c>TestHost</c> turns on
-    /// <c>--show-live-output</c> for a profile that claims one; and no <c>DisplayName</c> clause can
-    /// narrow it, so its profiles narrow it from the engine side.
+    /// Whether the lane runs its spec suite inside single tests — a <c>[Fact] AllSpecs()</c>, or a
+    /// <c>KitchenSink</c> and an <c>OtherSpecs</c> <c>[Fact]</c> that split it — each driving its specs
+    /// in turn through one engine, rather than one theory row per spec. Such a lane prints nothing for
+    /// minutes while it works, so in GitHub Actions <c>TestHost</c> turns on <c>--show-live-output</c>
+    /// for a profile that claims one; and no spec-id <c>DisplayName</c> clause can narrow it.
     /// <c>TestProfileRegistryTests.EveryAggregateLane_IsDeclared</c> holds this to the lane classes.
     /// </summary>
     public bool Aggregate { get; init; }
+
+    /// <summary>
+    /// For an aggregate lane split in two, the fully qualified name of its <c>OtherSpecs</c> test, which
+    /// drives every applicable spec but kitchen-sink (its <c>KitchenSink</c> test drives the rest). A
+    /// selection of the lane's kitchen-sink half excludes it by name: <see cref="Selection.KitchenSink"/>,
+    /// and <see cref="Selection.PrePush"/> for a <see cref="PrePushPart.KitchenSink"/> lane.
+    /// <c>TestProfileRegistryTests.EveryAggregateLane_IsDeclared</c> holds it to a <c>[Fact]</c> of the lane.
+    /// </summary>
+    public string? OtherSpecs { get; init; }
 
     /// <summary>
     /// Why no CI job runs this lane, when none does. A lane is either run by a CI step's profile or
@@ -140,46 +162,49 @@ internal static class EngineLanes
     public static IReadOnlyList<EngineLane> All { get; } =
     [
         // ── In pre-push: offline, no app, and cheap against a 267.9s profile.
-        new("BsRoster", Needs.None, InPrePush: true,
+        new("BsRoster", Needs.None, InPrePush: PrePushPart.Whole,
             "in-process IKVM reference engine; 266.8s across 367 specs, the critical path of pre-push, and not a UI",
             ["BattleScribeSpec.Tests.BsRosterConformanceTests"])
         {
             EmptyHint = SpecCorpusMissing,
         },
-        new("BsGameData", Needs.None, InPrePush: true,
+        new("BsGameData", Needs.None, InPrePush: PrePushPart.Whole,
             "in-process IKVM reference engine; 0.8s",
             ["BattleScribeSpec.Tests.BsGameDataConformanceTests"])
         {
             EmptyHint = SpecCorpusMissing,
         },
-        new("FrozenNrRoster", Needs.LocalBrowser, InPrePush: true,
+        new("FrozenNrRoster", Needs.LocalBrowser, InPrePush: PrePushPart.Whole,
             "offline HAR replay, no network; 70.3s",
-            ["BattleScribeSpec.Tests.FrozenNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialFrozenNrRosterConformanceTests"])
+            ["BattleScribeSpec.Tests.FrozenNrRosterConformanceTests"])
         {
             EmptyHint = FrozenHarMissing,
             Aggregate = true,
+            OtherSpecs = "BattleScribeSpec.Tests.FrozenNrRosterConformanceTests.OtherSpecs",
         },
-        new("FrozenNrGameData", Needs.LocalBrowser, InPrePush: true,
+        new("FrozenNrGameData", Needs.LocalBrowser, InPrePush: PrePushPart.Whole,
             "offline static-file serving of the pinned NR Editor snapshot, no network; 133.9s",
             ["BattleScribeSpec.Tests.FrozenNrGameDataConformanceTests"])
         {
             EmptyHint = NrEditorSnapshotMissing,
         },
-        new("FrozenNrUiRoster", Needs.LocalBrowser, InPrePush: true,
-            "Playwright over the frozen HAR, kitchen-sink only unless NR_UI_ROSTER_FULL is set; 22.6s",
+        new("FrozenNrUiRoster", Needs.LocalBrowser, InPrePush: PrePushPart.KitchenSink,
+            "Playwright over the frozen HAR; kitchen-sink only, 22.6s — the whole lane is one browser driving every spec, ~27 minutes",
             ["BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests"])
         {
             EmptyHint = FrozenHarOrBrowsersMissing,
             Aggregate = true,
+            OtherSpecs = "BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests.OtherSpecs",
             DiagnosticsDir = NrUiDiagnostics,
             DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
         },
-        new("FrozenNrGameDataUi", Needs.LocalBrowser, InPrePush: true,
+        new("FrozenNrGameDataUi", Needs.LocalBrowser, InPrePush: PrePushPart.Whole,
             "Playwright over the frozen NR Editor snapshot; 51.8s, and the NR Editor UI driver's only local signal",
             ["BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests"])
         {
             EmptyHint = NrEditorSnapshotOrBrowsersMissing,
             Aggregate = true,
+            OtherSpecs = "BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests.OtherSpecs",
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
             DiagnosticsDirSwitch = NrGameDataUiDiagnosticsDirSwitch,
@@ -187,7 +212,7 @@ internal static class EngineLanes
 
         // ── Excluded: needs the BattleScribe desktop app (setup.ps1 artifacts, the Java agent and a
         //    display). CI's `thorough-ui-bs` job runs both halves, whole.
-        new("BsRosterUi", Needs.DesktopApp, InPrePush: false,
+        new("BsRosterUi", Needs.DesktopApp, InPrePush: PrePushPart.None,
             "launches the BattleScribe desktop app; 687.8s across 367 specs, sequential — it WAS the 689.2s run it joined by default (#405)",
             ["BattleScribeSpec.Tests.BsRosterUiConformanceTests"])
         {
@@ -199,7 +224,7 @@ internal static class EngineLanes
         // anchors its directory at the repo root for the test host the way BsRosterUiFixture does for
         // the roster driver. Wiring both is driver work; the directory is recorded so the uploads are
         // ready for it.
-        new("BsGameDataUi", Needs.DesktopApp, InPrePush: false,
+        new("BsGameDataUi", Needs.DesktopApp, InPrePush: PrePushPart.None,
             "launches the BattleScribe desktop app (the Data Editor half)",
             ["BattleScribeSpec.Tests.BsGameDataUiConformanceTests"])
         {
@@ -212,16 +237,15 @@ internal static class EngineLanes
         //    every push by every contributor, the last traffic profile these sites should see
         //    (ConcurrencyConfigurationDriftTests.EveryLiveFixture_DrawsItsSessionsFromTheThirdPartyLoadBudget).
         //    Each skips whole without its endpoint URL, hence RequiredEnv.
-        new("LiveNrRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
+        new("LiveNrRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: PrePushPart.None,
             "opens sessions on newrecruit.eu",
-            ["BattleScribeSpec.Tests.LiveNrRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrRosterConformanceTests",
-             "BattleScribeSpec.Tests.LiveNrRosterSmokeTests"])
+            ["BattleScribeSpec.Tests.LiveNrRosterConformanceTests", "BattleScribeSpec.Tests.LiveNrRosterSmokeTests"])
         {
             EmptyHint = NrEngineUnreachable,
             Aggregate = true,
             RequiredEnv = ["NR_ENGINE_URL"],
         },
-        new("LiveNrUiRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
+        new("LiveNrUiRoster", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: PrePushPart.None,
             "opens sessions on newrecruit.eu",
             ["BattleScribeSpec.Tests.LiveNrUiRosterConformanceTests", "BattleScribeSpec.Tests.SequentialLiveNrUiRosterConformanceTests"])
         {
@@ -234,7 +258,7 @@ internal static class EngineLanes
                 + "driver over every spec would add a browser clicking through the whole suite to a volunteer-run site's "
                 + "load on every scheduled run. Run nr-ui-live by hand when the UI driver changes.",
         },
-        new("LiveNrGameData", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
+        new("LiveNrGameData", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: PrePushPart.None,
             "opens sessions on the NR Editor deployment",
             ["BattleScribeSpec.Tests.LiveNrGameDataConformanceTests"])
         {
@@ -242,7 +266,7 @@ internal static class EngineLanes
             RequiredEnv = ["NR_EDITOR_URL"],
             CiExempt = NrEditorLiveNotInCi,
         },
-        new("LiveNrGameDataUi", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: false,
+        new("LiveNrGameDataUi", Needs.LocalBrowser | Needs.ThirdPartySite, InPrePush: PrePushPart.None,
             "opens sessions on the NR Editor deployment",
             ["BattleScribeSpec.Tests.LiveNrGameDataUiConformanceTests"])
         {
@@ -262,11 +286,9 @@ internal static class EngineLanes
     private const string NrGameDataUiDiagnosticsDirSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS_DIR";
 
     // ── What an empty lane means (EngineLane.EmptyHint). Each names the cause a reader can act on first:
-    //    what setup.ps1 provisions, or the switch the lane cannot run without. A hint is printed only for a
-    //    profiled run, and a profiled run never has a lane's *_SKIP set: the host refuses one the profile does
-    //    not allow (exit 5), and the one it allows is for a MaySkip lane, which the check exempts — so no hint
-    //    offers "unset *_SKIP". Missing Playwright browsers skip only the two UI lanes; the HAR-replay and NR
-    //    Editor engines' fixtures rethrow a failed browser launch, so those lanes fail instead of going empty.
+    //    what setup.ps1 provisions, or the switch the lane cannot run without. Missing Playwright browsers
+    //    skip only the two UI lanes; the HAR-replay and NR Editor engines' fixtures rethrow a failed browser
+    //    launch, so those lanes fail instead of going empty.
     private const string SpecCorpusMissing =
         "the in-process engine never skips, so its spec rows were never produced: the spec corpus (specs/) was not found "
         + "from the test output folder. Run from a full checkout of this repository.";

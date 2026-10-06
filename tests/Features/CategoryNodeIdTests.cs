@@ -210,7 +210,7 @@ public sealed class BsRosterUiCategoryNodeIdTests(ITestOutputHelper output, BsRo
     public void AddForce_CategoryOutputs_NameTheSameNodesTheStateReports()
     {
         Assert.SkipWhen(!fixture.Available,
-            "BS UI artifacts not found (run setup.ps1) or BS_UI_SKIP=true — skipping BS Roster UI tests");
+            "BS UI artifacts not found (run setup.ps1) — skipping BS Roster UI tests");
 
         var engine = fixture.Engine!;
         engine.SetTestContext(nameof(AddForce_CategoryOutputs_NameTheSameNodesTheStateReports));
@@ -253,7 +253,7 @@ public sealed class FrozenNrCategoryNodeIdTests(ITestOutputHelper output, Frozen
     public async Task AddForce_CategoryOutputs_NameTheSameNodesTheStateReports()
     {
         Assert.SkipWhen(!fixture.Available,
-            "Frozen HAR file not found or NR_FROZEN_SKIP=true — skipping frozen NR tests");
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
 
         using var handle = await fixture.AcquireAsync(TestContext.Current.CancellationToken);
         var engine = handle.Engine;
@@ -298,7 +298,7 @@ public sealed class FrozenNrUiCategoryNodeIdTests(ITestOutputHelper output, Froz
     public void AddForce_CategoryOutputs_NameTheSameNodesTheStateReports()
     {
         Assert.SkipWhen(!fixture.Available,
-            "Frozen HAR file not found, NR_UI_FROZEN_SKIP=true, or Playwright browsers missing "
+            "Frozen HAR file or Playwright browsers missing (run setup.ps1) "
             + "— skipping frozen NR UI tests");
 
         var engine = fixture.Engine!;

@@ -13,7 +13,7 @@ namespace BattleScribeSpec.Tests;
 /// </para>
 ///
 /// <para>
-/// Skipped when the fixture is not available (BS binaries not present or <c>BS_UI_SKIP=true</c>).
+/// Skipped when the fixture is not available (BS binaries not present).
 /// </para>
 ///
 /// <para>
@@ -44,8 +44,7 @@ public sealed class BsGameDataUiConformanceTests : GameDataConformanceTestBase
         if (!_fixture.Available)
         {
             Assert.Skip(
-                "BS UI artifacts not found (run setup.ps1) or BS_UI_SKIP=true " +
-                "— skipping BS GameData UI tests");
+                "BS UI artifacts not found (run setup.ps1) — skipping BS GameData UI tests");
             return null;
         }
 

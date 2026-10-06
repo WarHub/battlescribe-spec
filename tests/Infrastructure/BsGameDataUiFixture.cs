@@ -16,7 +16,6 @@ namespace BattleScribeSpec.Tests;
 /// <para>
 /// <b>Skipped when</b>:
 /// <list type="bullet">
-///   <item><c>BS_UI_SKIP=true</c> environment variable is set</item>
 ///   <item>BattleScribe binary artifacts not found (run <c>setup.ps1</c>)</item>
 ///   <item>Java agent JAR not found (run <c>pwsh -File src/bs-ui-java-agent/build.ps1</c>)</item>
 /// </list>
@@ -31,13 +30,6 @@ namespace BattleScribeSpec.Tests;
 /// the variable in two jobs to paper over the gap. That is exactly the "two mechanisms that can
 /// disagree, one silently" defect the concurrency model exists to remove.
 /// </para>
-///
-/// <para>
-/// <b>Environment variables</b>:
-/// <list type="bullet">
-///   <item><c>BS_UI_SKIP</c> — set to "true" to skip all BS UI tests</item>
-/// </list>
-/// </para>
 /// </summary>
 public sealed class BsGameDataUiFixture : IAsyncLifetime
 {
@@ -46,11 +38,6 @@ public sealed class BsGameDataUiFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        if (Environment.GetEnvironmentVariable("BS_UI_SKIP") == "true")
-        {
-            return;
-        }
-
         var options = BsGameDataUiEngine.FindOptions();
         if (options is null)
         {

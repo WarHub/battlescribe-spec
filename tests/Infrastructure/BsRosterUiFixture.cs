@@ -32,8 +32,8 @@ namespace BattleScribeSpec.Tests;
 /// the same single decision the CLI path takes, for the same reason it is single there.
 /// </para>
 /// <para>
-/// Skipped when <c>BS_UI_SKIP=true</c>, or when the BattleScribe artifacts / agent JAR are absent
-/// (run <c>setup.ps1</c>, which provisions both).
+/// Skipped when the BattleScribe artifacts / agent JAR are absent (run <c>setup.ps1</c>, which
+/// provisions both).
 /// </para>
 /// </remarks>
 public sealed class BsRosterUiFixture : IAsyncLifetime
@@ -44,11 +44,6 @@ public sealed class BsRosterUiFixture : IAsyncLifetime
 
     public ValueTask InitializeAsync()
     {
-        if (Environment.GetEnvironmentVariable("BS_UI_SKIP") == "true")
-        {
-            return ValueTask.CompletedTask;
-        }
-
         BsUiOptions options;
         try
         {

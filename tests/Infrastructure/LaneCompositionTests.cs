@@ -201,8 +201,8 @@ public sealed class LaneCompositionTests
     [Theory]
     [InlineData("--test-profile nr-ui-frozen", 2, true)]
     [InlineData("--test-profile nr-ui-frozen", 8, true)]
-    [InlineData("--test-profile nr-ui-frozen --filter DisplayName~AllSpecs", 8, true)]
-    [InlineData("--test-profile nr-ui-frozen --filter DisplayName~AllSpecs", 2, false)]
+    [InlineData("--test-profile nr-ui-frozen --filter DisplayName~KitchenSink", 8, true)]
+    [InlineData("--test-profile nr-ui-frozen --filter DisplayName~KitchenSink", 2, false)]
     public async Task ARunThatFailedByItself_KeepsItsExitCode(string commandLine, int exit, bool hints)
     {
         var world = World();
