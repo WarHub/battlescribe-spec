@@ -65,7 +65,7 @@ internal sealed record EngineLane(string Trait, Needs Needs, PrePushPart InPrePu
     /// <summary>
     /// Where this lane's driver writes its failure diagnostics (a screenshot, the DOM, the store),
     /// repo-relative; the driver may append a per-worker suffix. A CI job that runs the lane must
-    /// upload it (<c>CiProfileLaneTests.EveryUiLane_UploadsTheDiagnosticsItWrites</c>), or the record
+    /// upload it (<c>CiWorkflowTests.EveryUiLane_UploadsTheDiagnosticsItWrites</c>), or the record
     /// of a failure dies with the runner.
     /// </summary>
     public string? DiagnosticsDir { get; init; }
@@ -76,16 +76,6 @@ internal sealed record EngineLane(string Trait, Needs Needs, PrePushPart InPrePu
     /// expected failures included, so the job that uploads the directory sets it where the lane runs.
     /// </summary>
     public string? DiagnosticsSwitch { get; init; }
-
-    /// <summary>
-    /// The switch that moves <see cref="DiagnosticsDir"/> somewhere else; the driver honours a value
-    /// the caller sets over its default. CI may not set it — not on a step, a job, the workflow or in
-    /// any other YAML under <c>.github/</c> — because the upload rule is derived from the default
-    /// directory, and a redirected driver writes where no upload looks
-    /// (<c>CiProfileLaneTests.EveryUiLane_UploadsTheDiagnosticsItWrites</c>). Required with
-    /// <see cref="DiagnosticsDir"/>.
-    /// </summary>
-    public string? DiagnosticsDirSwitch { get; init; }
 
     /// <summary>
     /// Whether the lane runs its spec suite inside single tests — a <c>[Fact] AllSpecs()</c>, or a
@@ -107,8 +97,8 @@ internal sealed record EngineLane(string Trait, Needs Needs, PrePushPart InPrePu
     public string? OtherSpecs { get; init; }
 
     /// <summary>
-    /// Why no CI job runs this lane, when none does. A lane is either run by a CI step's profile or
-    /// carries this — never both, and never neither (<c>CiProfileLaneTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot</c>).
+    /// Why no CI job runs this lane, when none does. A lane no CI step's profile runs must carry this
+    /// (<c>CiWorkflowTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot</c>).
     /// </summary>
     public string? CiExempt { get; init; }
 
@@ -196,7 +186,6 @@ internal static class EngineLanes
             Aggregate = true,
             OtherSpecs = "BattleScribeSpec.Tests.FrozenNrUiRosterConformanceTests.OtherSpecs",
             DiagnosticsDir = NrUiDiagnostics,
-            DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
         },
         new("FrozenNrGameDataUi", Needs.LocalBrowser, InPrePush: PrePushPart.Whole,
             "Playwright over the frozen NR Editor snapshot; 51.8s, and the NR Editor UI driver's only local signal",
@@ -207,7 +196,6 @@ internal static class EngineLanes
             OtherSpecs = "BattleScribeSpec.Tests.FrozenNrGameDataUiConformanceTests.OtherSpecs",
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
-            DiagnosticsDirSwitch = NrGameDataUiDiagnosticsDirSwitch,
         },
 
         // ── Excluded: needs the BattleScribe desktop app (setup.ps1 artifacts, the Java agent and a
@@ -218,7 +206,6 @@ internal static class EngineLanes
         {
             EmptyHint = DesktopAppMissing,
             DiagnosticsDir = "artifacts/bs-ui-diagnostics",
-            DiagnosticsDirSwitch = "BS_UI_DIAGNOSTICS_DIR",
         },
         // Its driver writes nothing yet: BsGameDataUiDiagnostics.CaptureAsync has no caller, and nothing
         // anchors its directory at the repo root for the test host the way BsRosterUiFixture does for
@@ -230,7 +217,6 @@ internal static class EngineLanes
         {
             EmptyHint = DesktopAppMissing,
             DiagnosticsDir = "artifacts/bs-gamedata-ui-diagnostics",
-            DiagnosticsDirSwitch = "BS_GAMEDATA_UI_DIAGNOSTICS_DIR",
         },
 
         // ── Excluded: opens sessions on somebody else's production website. A pre-push gate runs on
@@ -253,7 +239,6 @@ internal static class EngineLanes
             Aggregate = true,
             RequiredEnv = ["NR_ENGINE_URL"],
             DiagnosticsDir = NrUiDiagnostics,
-            DiagnosticsDirSwitch = NrUiDiagnosticsDirSwitch,
             CiExempt = "nr-conformance, the one job that drives newrecruit.eu, runs the store-direct live lane only; the UI "
                 + "driver over every spec would add a browser clicking through the whole suite to a volunteer-run site's "
                 + "load on every scheduled run. Run nr-ui-live by hand when the UI driver changes.",
@@ -274,7 +259,6 @@ internal static class EngineLanes
             RequiredEnv = ["NR_EDITOR_URL"],
             DiagnosticsDir = NrGameDataUiDiagnostics,
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
-            DiagnosticsDirSwitch = NrGameDataUiDiagnosticsDirSwitch,
             CiExempt = NrEditorLiveNotInCi,
         },
     ];
@@ -282,8 +266,6 @@ internal static class EngineLanes
     private const string NrUiDiagnostics = "artifacts/nr-ui-diagnostics";
     private const string NrGameDataUiDiagnostics = "artifacts/nr-gamedata-ui-diagnostics";
     private const string NrGameDataUiDiagnosticsSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS";
-    private const string NrUiDiagnosticsDirSwitch = "NR_UI_DIAGNOSTICS_DIR";
-    private const string NrGameDataUiDiagnosticsDirSwitch = "NR_GAMEDATA_UI_DIAGNOSTICS_DIR";
 
     // ── What an empty lane means (EngineLane.EmptyHint). Each names the cause a reader can act on first:
     //    what setup.ps1 provisions, or the switch the lane cannot run without. Missing Playwright browsers

@@ -1,96 +1,67 @@
 using System.Globalization;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
 
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// The CI definition as data: every workflow under <c>.github/workflows</c>, parsed as YAML into jobs
-/// and steps, every composite action under <c>.github/actions</c> (its <c>runs.steps</c>, held as a
-/// job-shaped <see cref="CiJob"/>), plus <c>scripts/ci-gate.json</c>. The workflow lints read CI
-/// through this rather than through lines of text; the files come from <see cref="CiDefinitionFiles"/>.
+/// and steps, and every composite action under <c>.github/actions</c> (its <c>runs.steps</c>, held as a
+/// job-shaped <see cref="CiJob"/>). <see cref="CiWorkflowTests"/> reads CI through this rather than
+/// through lines of text; the files come from <see cref="CiDefinitionFiles"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <b>Why YAML and not lines.</b> The text scans this replaces were defeated in both directions by the
-/// shape of the file: a comment that named a project satisfied "this project is run by CI" (the first
-/// draft of <c>EveryTestProject_IsRunBySomeCiStep</c> was beaten by the comment three lines above the
-/// step it guarded), and "find the step body up to the next <c>- name:</c>" cannot tell a step key from
-/// a key inside an <c>env:</c> or <c>with:</c> block. Parsed, a comment is not a value, a step is a
-/// mapping, and <c>timeout-minutes</c> on a step is not <c>timeout-minutes</c> on its job.
-/// </para>
+/// <b>Why YAML and not lines.</b> The text scans this replaced were defeated in both directions by the
+/// shape of the file: a comment that named a project satisfied "this project is run by CI", and "find
+/// the step body up to the next <c>- name:</c>" cannot tell a step key from a key inside an <c>env:</c>
+/// or <c>with:</c> block. Parsed, a comment is not a value, a step is a mapping, and
+/// <c>timeout-minutes</c> on a step is not <c>timeout-minutes</c> on its job.
 /// </remarks>
 internal static class CiWorkflows
 {
     /// <summary>The repository root, from the test binaries' own location.</summary>
     internal static string Root => CiDefinitionFiles.Root;
 
-    /// <summary>What <see cref="CiJob.Id"/> is for a composite action's steps.</summary>
-    internal const string ActionStepsId = "runs.steps";
+    private static readonly Lazy<IReadOnlyList<CiWorkflow>> Loaded = new(static () =>
+        [.. CiDefinitionFiles.Workflows.Select(static f => Parse(f.Path, f.Text))]);
 
-    private static readonly Lazy<IReadOnlyList<CiWorkflow>> Loaded = new(LoadAll);
-
-    private static readonly Lazy<IReadOnlyList<CiJob>> LoadedActions = new(LoadActions);
+    private static readonly Lazy<IReadOnlyList<CiJob>> LoadedActions = new(static () =>
+        [.. CiDefinitionFiles.Actions.Select(static f => ParseAction(f.Path, f.Text))]);
 
     /// <summary>Every workflow under <c>.github/workflows</c>, in path order.</summary>
     internal static IReadOnlyList<CiWorkflow> All => Loaded.Value;
-
-    /// <summary>
-    /// Every action under <c>.github/actions</c>, as a job whose steps are its <c>runs.steps</c> (none
-    /// for an action that is not composite). Not a workflow job: it has no <c>needs</c>, no
-    /// <c>timeout-minutes</c> and no runner, so the job-level lints do not read it — the step-level ones do.
-    /// </summary>
-    internal static IReadOnlyList<CiJob> Actions => LoadedActions.Value;
 
     /// <summary>The main workflow, <c>.github/workflows/ci.yml</c>.</summary>
     internal static CiWorkflow Ci => All.Single(static w => w.File == ".github/workflows/ci.yml");
 
     /// <summary>
-    /// Every step CI runs: each job's of every workflow, then each composite action's. A step moved into
-    /// an action is still a step every step-level lint sees.
+    /// Every step CI runs: each job's of every workflow, then each composite action's (none for an action
+    /// that is not composite). A step moved into an action is still a step the lints see.
     /// </summary>
     internal static IEnumerable<CiStep> AllSteps =>
-        All.SelectMany(static w => w.Jobs).SelectMany(static j => j.Steps).Concat(Actions.SelectMany(static a => a.Steps));
+        All.SelectMany(static w => w.Jobs).SelectMany(static j => j.Steps).Concat(LoadedActions.Value.SelectMany(static a => a.Steps));
 
     /// <summary>The path of <paramref name="absolute"/> relative to the root, with forward slashes.</summary>
     internal static string Relative(string absolute) =>
         Path.GetRelativePath(Root, absolute).Replace(Path.DirectorySeparatorChar, '/');
 
-    private static List<CiWorkflow> LoadAll() =>
-        [.. CiDefinitionFiles.Workflows.Select(static f => Parse(f.Path, f.Text))];
-
-    private static List<CiJob> LoadActions() =>
-        [.. CiDefinitionFiles.Actions.Select(static f => ParseAction(f.Path, f.Text))];
-
-    /// <summary>Parses one action's metadata. Public to the tests so a lint's rules can be exercised on inline YAML.</summary>
-    internal static CiJob ParseAction(string file, string yaml)
+    private static CiJob ParseAction(string file, string yaml)
     {
         var root = LoadDocument(file, yaml);
         var runs = root.Children.TryGetValue(new YamlScalarNode("runs"), out var node) && node is YamlMappingNode map
             ? map
             : throw new InvalidDataException($"{file}: an action needs a `runs:` mapping.");
-        return new CiJob(file, ActionStepsId, runs);
+        return new CiJob(file, "runs.steps", runs);
     }
 
-    /// <summary>Parses one workflow document. Public to the tests so a lint's own rules can be exercised on inline YAML.</summary>
-    internal static CiWorkflow Parse(string file, string yaml)
+    private static CiWorkflow Parse(string file, string yaml)
     {
         var root = LoadDocument(file, yaml);
-        var jobs = new List<CiJob>();
-        var defaults = RunDefaults(root);
-
-        if (root.Children.TryGetValue(new YamlScalarNode("jobs"), out var jobsNode) && jobsNode is YamlMappingNode jobsMap)
-        {
-            foreach (var (key, value) in jobsMap.Children)
-            {
-                if (key is YamlScalarNode { Value: { } id } && value is YamlMappingNode job)
-                {
-                    jobs.Add(new CiJob(file, id, job, defaults));
-                }
-            }
-        }
-
+        var jobs = root.Children.TryGetValue(new YamlScalarNode("jobs"), out var jobsNode) && jobsNode is YamlMappingNode jobsMap
+            ? jobsMap.Children
+                .Where(static j => j.Key is YamlScalarNode { Value: not null } && j.Value is YamlMappingNode)
+                .Select(j => new CiJob(file, ((YamlScalarNode)j.Key).Value!, (YamlMappingNode)j.Value))
+                .ToList()
+            : [];
         return new CiWorkflow(file, root, jobs);
     }
 
@@ -113,67 +84,18 @@ internal static class CiWorkflows
             ? scalar.Value
             : null;
 
-    /// <summary>
-    /// A workflow's or job's <c>defaults.run</c> block (<c>working-directory</c>, <c>shell</c>), or an
-    /// empty mapping. A step inherits from its job, the job from the workflow.
-    /// </summary>
-    internal static YamlMappingNode RunDefaults(YamlMappingNode node) =>
-        node.Children.TryGetValue(new YamlScalarNode("defaults"), out var defaults)
-        && defaults is YamlMappingNode map
-        && map.Children.TryGetValue(new YamlScalarNode("run"), out var run)
-        && run is YamlMappingNode runMap
-            ? runMap
-            : [];
+    /// <summary>The value of one entry of <paramref name="node"/>'s <c>env:</c> mapping (a workflow's, a job's or a step's), or null.</summary>
+    internal static string? Env(YamlMappingNode node, string key) =>
+        node.Children.TryGetValue(new YamlScalarNode("env"), out var env) && env is YamlMappingNode map ? Scalar(map, key) : null;
 
     /// <summary>Every scalar in <paramref name="node"/>, keys included, depth first.</summary>
-    internal static IEnumerable<YamlScalarNode> Scalars(YamlNode node)
+    internal static IEnumerable<YamlScalarNode> Scalars(YamlNode node) => node switch
     {
-        switch (node)
-        {
-            case YamlScalarNode scalar:
-                yield return scalar;
-                break;
-            case YamlSequenceNode sequence:
-                foreach (var child in sequence.Children)
-                {
-                    foreach (var s in Scalars(child))
-                    {
-                        yield return s;
-                    }
-                }
-
-                break;
-            case YamlMappingNode mapping:
-                foreach (var (key, value) in mapping.Children)
-                {
-                    foreach (var s in Scalars(key))
-                    {
-                        yield return s;
-                    }
-
-                    foreach (var s in Scalars(value))
-                    {
-                        yield return s;
-                    }
-                }
-
-                break;
-        }
-    }
-
-    /// <summary>
-    /// <paramref name="text"/> with every <c>${{ matrix.… }}</c> expression replaced by its value in
-    /// <paramref name="combination"/> (<see cref="CiJob.MatrixCombinations"/>). An expression naming a
-    /// key the combination does not have is left as written, so a typo stays an opaque expression the
-    /// lints report rather than an empty string they might accept.
-    /// </summary>
-    internal static string ExpandMatrix(string text, IReadOnlyDictionary<string, string> combination) =>
-        combination.Count == 0
-            ? text
-            : Regex.Replace(
-                text,
-                @"\$\{\{\s*(matrix(?:\.[A-Za-z0-9_-]+)+)\s*\}\}",
-                m => combination.TryGetValue(m.Groups[1].Value, out var value) ? value : m.Value);
+        YamlScalarNode scalar => [scalar],
+        YamlSequenceNode sequence => sequence.Children.SelectMany(Scalars),
+        YamlMappingNode mapping => mapping.Children.SelectMany(static kv => Scalars(kv.Key).Concat(Scalars(kv.Value))),
+        _ => [],
+    };
 
     /// <summary>
     /// A <c>timeout-minutes</c> value as a number, or null when it is absent, not a plain number, or not
@@ -194,17 +116,14 @@ internal sealed record CiWorkflow(string File, YamlMappingNode Node, IReadOnlyLi
         ?? throw new InvalidOperationException($"{File} has no job '{id}'. If it was renamed, update the lint that names it.");
 }
 
-/// <summary>One job of a workflow.</summary>
+/// <summary>One job of a workflow, or a composite action's steps.</summary>
 internal sealed class CiJob
 {
-    private readonly YamlMappingNode _workflowRunDefaults;
-
-    public CiJob(string workflow, string id, YamlMappingNode node, YamlMappingNode? workflowRunDefaults = null)
+    public CiJob(string workflow, string id, YamlMappingNode node)
     {
         Workflow = workflow;
         Id = id;
         Node = node;
-        _workflowRunDefaults = workflowRunDefaults ?? [];
         Steps = node.Children.TryGetValue(new YamlScalarNode("steps"), out var steps) && steps is YamlSequenceNode sequence
             ? [.. sequence.Children.OfType<YamlMappingNode>().Select((s, i) => new CiStep(this, i, s))]
             : [];
@@ -228,84 +147,7 @@ internal sealed class CiJob
 
     public IReadOnlyList<string> Needs { get; }
 
-    public string? If => CiWorkflows.Scalar(Node, "if");
-
     public string? TimeoutMinutes => CiWorkflows.Scalar(Node, "timeout-minutes");
-
-    public string? ContinueOnError => CiWorkflows.Scalar(Node, "continue-on-error");
-
-    /// <summary>The <c>defaults.run</c> value for <paramref name="key"/>: the job's, else the workflow's.</summary>
-    public string? RunDefault(string key) =>
-        CiWorkflows.Scalar(CiWorkflows.RunDefaults(Node), key) ?? CiWorkflows.Scalar(_workflowRunDefaults, key);
-
-    /// <summary>
-    /// The job's <c>strategy.matrix</c>, one dictionary per combination, keyed the way an expression
-    /// names a value (<c>matrix.suite.profile</c>); one empty combination for a job with no matrix.
-    /// Feed each to <see cref="CiWorkflows.ExpandMatrix"/> to read a step as that leg runs it.
-    /// </summary>
-    /// <remarks>
-    /// The cartesian product of the axes; a mapping value is flattened into dotted keys. <c>include</c>,
-    /// <c>exclude</c>, a matrix given as an expression, and a sequence nested in a value are refused with
-    /// an exception rather than approximated: a lint that read a leg the matrix does not run, or missed
-    /// one it does, would hold CI to a matrix nobody wrote. Teach this method the shape first.
-    /// </remarks>
-    public IReadOnlyList<IReadOnlyDictionary<string, string>> MatrixCombinations()
-    {
-        if (!Node.Children.TryGetValue(new YamlScalarNode("strategy"), out var strategyNode)
-            || strategyNode is not YamlMappingNode strategy
-            || !strategy.Children.TryGetValue(new YamlScalarNode("matrix"), out var matrixNode))
-        {
-            return [new Dictionary<string, string>(StringComparer.Ordinal)];
-        }
-
-        if (matrixNode is not YamlMappingNode matrix)
-        {
-            throw new NotSupportedException($"{Where}: strategy.matrix is not a mapping (an expression?), so the workflow lints cannot read its legs.");
-        }
-
-        var combinations = new List<Dictionary<string, string>> { new(StringComparer.Ordinal) };
-        foreach (var (keyNode, valueNode) in matrix.Children)
-        {
-            var axis = (keyNode as YamlScalarNode)?.Value ?? "";
-            if (axis is "include" or "exclude" || valueNode is not YamlSequenceNode values)
-            {
-                throw new NotSupportedException(
-                    $"{Where}: matrix '{axis}' is {(axis is "include" or "exclude" ? "an include/exclude list" : "not a list")}, which " +
-                    "CiJob.MatrixCombinations does not expand. Extend it before relying on that shape, or every lint over the legs reads the wrong set.");
-            }
-
-            combinations =
-            [
-                .. combinations.SelectMany(combination => values.Children.Select(value =>
-                {
-                    var next = new Dictionary<string, string>(combination, StringComparer.Ordinal);
-                    Flatten($"matrix.{axis}", value, next);
-                    return next;
-                })),
-            ];
-        }
-
-        return combinations;
-
-        void Flatten(string prefix, YamlNode node, Dictionary<string, string> into)
-        {
-            switch (node)
-            {
-                case YamlScalarNode scalar:
-                    into[prefix] = scalar.Value ?? "";
-                    break;
-                case YamlMappingNode mapping:
-                    foreach (var (k, v) in mapping.Children)
-                    {
-                        Flatten($"{prefix}.{(k as YamlScalarNode)?.Value}", v, into);
-                    }
-
-                    break;
-                default:
-                    throw new NotSupportedException($"{Where}: matrix value '{prefix}' is a list, which CiJob.MatrixCombinations does not expand.");
-            }
-        }
-    }
 
     /// <summary>Where this job starts, for messages: <c>file:line job</c>.</summary>
     public string Where => $"{Workflow}:{Node.Start.Line} {Id}";
@@ -316,11 +158,10 @@ internal sealed class CiStep(CiJob job, int index, YamlMappingNode node)
 {
     public CiJob Job { get; } = job;
 
-    public int Index { get; } = index;
-
     public YamlMappingNode Node { get; } = node;
 
-    public string? Id => CiWorkflows.Scalar(Node, "id");
+    /// <summary>The step's keys, as written (<c>name</c>, <c>if</c>, <c>run</c>, …).</summary>
+    public IEnumerable<string> Keys => Node.Children.Keys.OfType<YamlScalarNode>().Select(static k => k.Value ?? "");
 
     public string? Name => CiWorkflows.Scalar(Node, "name");
 
@@ -330,24 +171,7 @@ internal sealed class CiStep(CiJob job, int index, YamlMappingNode node)
 
     public string? If => CiWorkflows.Scalar(Node, "if");
 
-    /// <summary>The shell this step runs under: its own <c>shell</c>, else the job's or workflow's <c>defaults.run.shell</c>.</summary>
-    public string? Shell => CiWorkflows.Scalar(Node, "shell") ?? Job.RunDefault("shell");
-
-    /// <summary>
-    /// The directory this step's <c>run</c> starts in, as written: its own <c>working-directory</c>,
-    /// else the job's or workflow's <c>defaults.run.working-directory</c>; null for the checkout root.
-    /// </summary>
-    public string? WorkingDirectory => CiWorkflows.Scalar(Node, "working-directory") ?? Job.RunDefault("working-directory");
-
     public string? TimeoutMinutes => CiWorkflows.Scalar(Node, "timeout-minutes");
-
-    public string? ContinueOnError => CiWorkflows.Scalar(Node, "continue-on-error");
-
-    /// <summary>The value of one <c>env:</c> entry on this step, or null.</summary>
-    public string? Env(string key) =>
-        Node.Children.TryGetValue(new YamlScalarNode("env"), out var env) && env is YamlMappingNode map
-            ? CiWorkflows.Scalar(map, key)
-            : null;
 
     /// <summary>The value of one <c>with:</c> input on this step, or null.</summary>
     public string? With(string key) =>
@@ -355,28 +179,6 @@ internal sealed class CiStep(CiJob job, int index, YamlMappingNode node)
             ? CiWorkflows.Scalar(map, key)
             : null;
 
-    /// <summary>What a reader calls this step: its name, else its id, else what it uses.</summary>
-    public string Label => Name ?? Id ?? Uses ?? $"step {Index + 1}";
-
     /// <summary>Where this step is, for messages: <c>file:line job / label</c>.</summary>
-    public string Where => $"{Job.Workflow}:{Node.Start.Line} {Job.Id} / {Label}";
-}
-
-/// <summary>
-/// <c>scripts/ci-gate.json</c>: the inputs that force the thorough suites, and the jobs gated on the
-/// gate's <c>thorough</c> and <c>live</c> outputs. The node scripts read the same file.
-/// </summary>
-internal sealed record CiGateConfig(IReadOnlyList<string> ThoroughInputs, IReadOnlyList<string> ThoroughJobs, IReadOnlyList<string> LiveJobs)
-{
-    public const string RelativePath = "scripts/ci-gate.json";
-
-    public static CiGateConfig Load()
-    {
-        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(CiWorkflows.Root, "scripts", "ci-gate.json")));
-        var root = doc.RootElement;
-        return new CiGateConfig(
-            [.. root.GetProperty("thoroughInputs").EnumerateArray().Select(static e => e.GetProperty("path").GetString()!)],
-            [.. root.GetProperty("thoroughJobs").EnumerateArray().Select(static e => e.GetString()!)],
-            [.. root.GetProperty("liveJobs").EnumerateArray().Select(static e => e.GetString()!)]);
-    }
+    public string Where => $"{Job.Workflow}:{Node.Start.Line} {Job.Id} / {Name ?? CiWorkflows.Scalar(Node, "id") ?? Uses ?? $"step {index + 1}"}";
 }

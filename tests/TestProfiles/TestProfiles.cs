@@ -30,8 +30,8 @@ internal sealed record TestProfile(
 /// <para>
 /// <b>A profile is a whole lane.</b> What CI runs under a name is what a developer gets from the same
 /// name: the selection and every environment switch the lane depends on live here, not in a workflow
-/// step's <c>env:</c>. <c>CiProfileLaneTests</c> holds CI to that — every Tests-project step names a
-/// profile and adds no filter of its own — so <c>-p:TestProfile=nr-ui-frozen</c> on a laptop is the
+/// step's <c>env:</c>. <c>CiWorkflowTests</c> holds CI to that — every test step is one fixed line that
+/// names a profile and adds nothing to it — so <c>-p:TestProfile=nr-ui-frozen</c> on a laptop is the
 /// thorough job's lane, all of it, rather than the one spec it ran before the job's <c>env:</c> block
 /// supplied the rest. No switch changes which tests a lane runs (<see cref="Knobs"/>): the selection is
 /// the filter, over test identity.
@@ -121,7 +121,8 @@ internal static class TestProfiles
             + "reference adapter, no browser, no network), so they run in the checks job. CI once ran only the other "
             + "test project, so every gate on the CLI's third-party load limit had never been executed by CI; a gate "
             + "nobody invokes is a gate nobody has. CI runs it as its one dotnet test step (dotnet test --project "
-            + "<csproj> -p:TestProfile=cli), so the MSBuild-carried arguments and server mode stay exercised.",
+            + "<csproj> --no-build -p:TestProfile=cli --output Detailed), so the MSBuild-carried arguments and server mode "
+            + "stay exercised; nothing else in CI takes that path and no lint requires one, so keep this step a dotnet test.",
             Selection.Whole, assemblies: [Cli]),
         Profile("lint",
             "Spec lint and structure validation: every Category=Lint test, the repo's own drift gates included.",

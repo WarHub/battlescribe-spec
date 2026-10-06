@@ -503,63 +503,6 @@ public sealed class ConcurrencyConfigurationDriftTests
     }
 
     /// <summary>
-    /// <b>Every test project must actually be RUN by CI.</b> A gate nobody invokes is a gate nobody has.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This repo has two test projects and CI ran <em>one</em> of them: all fifteen test
-    /// steps in <c>ci.yml</c> named <c>tests/BattleScribeSpec.Tests.csproj</c>, and there was no
-    /// solution-wide sweep — so <c>tests/BattleScribeSpec.Cli.Tests</c> had <b>never executed in CI</b>.
-    /// That is where every gate on the CLI's load target lives (the third-party limit, the fail-safe for
-    /// undeclared adapters, the <c>--policy</c> rejections), and where this branch's regression test for
-    /// the case-sensitivity defect lives. They all passed locally and CI had never seen one of them.
-    /// </para>
-    /// <para>
-    /// <b>Falsifiable:</b> delete the CLI step from <c>ci.yml</c> (or add a third test project without a
-    /// step for it) and this goes red, naming the project. It reads the test steps
-    /// <see cref="CiTestInvocations"/> finds in the parsed workflows — by the project each one runs, in
-    /// whatever spelling — so it does not care which job runs the project, with what filter, or in what
-    /// order, and a <em>mention</em> of the project in a YAML comment is not a step at all. The first
-    /// draft of this test scanned the whole file and was defeated by the comment three lines above the
-    /// step it was guarding; the line scan that followed was blind to every test run not spelled with
-    /// the wrapper script.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public void EveryTestProject_IsRunBySomeCiStep()
-    {
-        var invocations = CiTestInvocations.ClassifiedSteps()
-            .Where(static c => c.Invocation.Kind == CiStepKind.TestRun)
-            .Select(static c => c.Invocation)
-            .ToArray();
-
-        Assert.NotEmpty(invocations);
-
-        // Every xunit project in BattleScribeSpec.slnx — the same list the classifier recognises.
-        var testProjects = CiTestInvocations.TestProjects.Select(static p => p.RelativePath).Order(StringComparer.Ordinal).ToArray();
-
-        Assert.NotEmpty(testProjects);
-
-        // A solution-wide sweep (a bare `dotnet test`, or `… BattleScribeSpec.slnx`) would cover every
-        // project at once; today every step names one project explicitly, which is what makes an unnamed
-        // project invisible.
-        var sweepsTheSolution = invocations.Any(static i => i.TargetsSolution);
-
-        var unrun = testProjects
-            .Where(rel => !sweepsTheSolution && !invocations.Any(i => i.Projects.Contains(rel)))
-            .ToArray();
-
-        Assert.True(
-            unrun.Length == 0,
-            $"These test projects are never run by any CI step:\n{string.Join("\n", unrun.Select(p => "  " + p))}\n\n" +
-            "Every test step in .github/workflows names a project explicitly — there is no " +
-            "solution-wide sweep — so a project with no step of its own is a suite that passes on the " +
-            "author's machine and has never once been executed by CI. That is how tests/BattleScribeSpec.Cli.Tests " +
-            "came to hold every gate on the CLI's third-party load limit while CI ran none of them. Add a " +
-            "step, or delete the project.");
-    }
-
-    /// <summary>
     /// The environment-variable knobs the concurrency model replaced. Each one used to answer a
     /// question <c>ConcurrencyPolicy</c> now owns, from a second place that could disagree with it.
     /// They are the <see cref="KnobKind.Retired"/> rows of <see cref="Knobs"/>, where each one says what

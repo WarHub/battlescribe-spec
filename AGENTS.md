@@ -190,18 +190,21 @@ label, or an input edit on a PR to `main` — never just because a PR is stacked
 ten conformance runs on newrecruit.eu at once. `ci-gate` is red on a draft ("draft: nothing ran") and
 accepts a skipped thorough or live job only when the gate said it was not owed.
 `scripts/thorough-inputs.mjs` and `scripts/ci-gate.mjs` hold the rules (unit-tested with
-`node --test scripts/*.test.mjs`); `CiWorkflowDriftTests` holds the workflow to them — every job and
-every test step has a timeout (the job's holding all its steps'), every `steps.<id>` resolves, a test
-step names its project literally and is one invocation with nothing that could swallow its exit code.
+`node --test scripts/*.test.mjs`), and `CiWorkflowTests` keeps `ci-gate` needing every other job. It
+also holds every CI step that runs a test project or `bs-spec` to one of four fixed lines —
+`dotnet run --project <csproj> --no-build -- --test-profile <name>` (optionally after `xvfb-run -a`),
+the CLI tests' one `dotnet test` line, and two `bs-spec` forms — carrying only `name`, `if`,
+`timeout-minutes`, `run` and `env`, a timeout below its job's, and the condition
+`!cancelled() && steps.build.outcome == 'success'`. Nothing can be added to a line, so nothing narrows
+the lane or swallows its exit code, and a shell wrapper is refused.
 
 **`checks` is the analyzer gate; every other CI build is `dotnet build -p:FunctionalBuild=true`.** The
 switch (`Directory.Build.props`) turns off the analyzers, code-style enforcement and XML doc generation
 in this repository's projects — the same binaries, ~25s sooner per job. The vendored `.deps/wham`
-keeps its own settings: its `Directory.Build.props` does not import ours. `CiWorkflowDriftTests`
-keeps `checks` building with the gates on (no switch, and no property that turns analyzers, code
-style, docs or `TreatWarningsAsErrors` off), every other `ci.yml` build using the switch, and the
-switch's properties out of any CI command line. Locally the switch is a faster inner loop, but run a
-plain `dotnet build` before pushing — `checks` will.
+keeps its own settings: its `Directory.Build.props` does not import ours. `checks` must keep the gates
+on: no switch, and no property that turns analyzers, code style, docs or `TreatWarningsAsErrors` off.
+Locally the switch is a faster inner loop, but run a plain `dotnet build` before pushing — `checks`
+will.
 
 **The `docker` CI job builds `docker/bs-spec.Dockerfile` on every push, and runs the image.** It
 exists because nothing built these files and both rotted unnoticed — one referenced a project renamed
@@ -241,7 +244,7 @@ Adding a lane is a decision, not a default (`BsRosterUi` once joined the gate by
 engine lane is a row in `tests/TestProfiles/EngineLanes.cs` saying what it needs and how much of it
 `pre-push` runs, and `pre-push`'s filter is derived from that column. `TestProfileRegistryTests.EveryEngineTraitInTheAssembly_IsDeclared`
 fails if an `Engine` trait appears with no row, `PrePushHonoursItsPromise` fails if a lane that needs
-the desktop app or a third party's site is put in, and `CiProfileLaneTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot`
+the desktop app or a third party's site is put in, and `CiWorkflowTests.EveryEngineLane_IsRunByCi_OrSaysWhyNot`
 fails on a lane no CI step runs that gives no `CiExempt` reason.
 
 **Test profiles are defined in `tests/TestProfiles/TestProfiles.cs`**, the one record of every lane: its
@@ -249,8 +252,9 @@ selection, the environment it sets, the assemblies it covers. **A profile is a w
 step that runs `BattleScribeSpec.Tests` runs one, with no filter of its own and no `env:` entry that
 changes what runs, so `-p:TestProfile=<name>` on your machine selects what CI selects under that name,
 with the same switches — `nr-ui-frozen` included, which is the full ~27-minute NR UI roster lane
-(`smoke-nr-ui` is its one-spec `KitchenSink` test). `CiProfileLaneTests` holds CI to that, and fails if a
-switch a profile sets appears anywhere under `.github/`. Two things can
+(`smoke-nr-ui` is its one-spec `KitchenSink` test). `CiWorkflowTests` holds CI to that — a test step is
+one fixed line that names its profile — and fails if a switch a profile sets appears anywhere under
+`.github/`. Two things can
 still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
 skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
 runners, which do not provision it. And a switch exported in your own shell is yours: every
@@ -406,7 +410,7 @@ pwsh -File tools/format-specs.ps1                                               
 | `tests/Infrastructure/GameDataSpecLintTests.cs` | GameData lint rules |
 | `tests/Infrastructure/FrozenNrGameDataFixture.cs` | Frozen NR Editor GameData fixture |
 | `tests/TestProfiles/` | The test-profile registry — every profile (`TestProfiles.cs`), engine lane (`EngineLanes.cs`) and environment switch (`Knobs.cs`) — the test app's entry point that resolves it (`TestHost.cs`), and the engine-composition check every profiled run is held to (`LaneComposition.cs`) |
-| `tests/Infrastructure/CiProfileLaneTests.cs` | CI held to the registry: every test step runs one profile and adds nothing, no switch a profile sets under `.github/`, xvfb and diagnostics uploads derived from the lanes, every engine lane run by CI or exempt, no dangling profile reference, every documented test command runs as written |
+| `tests/Infrastructure/CiWorkflowTests.cs` | CI held to fixed step shapes and the registry: every test or `bs-spec` step is one of four lines, its profile covering its project, with a step timeout and the independent `if:`; `ci-gate` needs every job; every test project and engine lane run by CI (or exempt); every UI lane's diagnostics uploaded; no switch a profile sets under `.github/` |
 | `tests/Infrastructure/TestHostTests.cs`, `TestHostWiringTests.cs`, `LaneCompositionTests.cs` | The entry point's rules, each with the input that trips it; every test project wired through it, one setter of the strict zero-tests policy, no launch profile, testconfig or runsettings feeding the app; the composition check's verdicts |
 | `tests/Infrastructure/AggregateLaneRun.cs` | The `[lane]` selection line, `[i/N]` progress and stop check every aggregate lane reports through |
 | `tools/format-specs.ps1` | Spec formatter |

@@ -68,7 +68,7 @@ public sealed class TestHostWiringTests
         }
 
         var entryHosts = new Regex(@"TestHost\.RunAsync\(\s*args\s*,\s*TestProfiles\.(\w+)\s*,\s*(.+?)\s*\)\s*;", RegexOptions.Singleline);
-        var projects = CiTestInvocations.TestProjects;
+        var projects = SolutionProjects.Tests;
         Assert.NotEmpty(projects);
         foreach (var project in projects)
         {
