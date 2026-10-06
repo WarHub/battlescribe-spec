@@ -404,6 +404,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **The test app runs on server GC, and `pre-push` takes about three quarters of the time (#534).**
+  The `BsRoster` lane — `pre-push`'s critical path — is its two real-world specs, and they spend their
+  time allocating inside the BattleScribe engine: about a third less under server GC, and `pre-push`
+  a quarter less, on an idle machine and a loaded one. Running the lane's specs in parallel was
+  measured and is not done: it is safe (every
+  verdict identical at 1–8 workers, in one process and across processes), but splitting the lane only
+  takes an xUnit thread from another lane, and `pre-push` did not get faster. A shared browser-context
+  budget for the frozen NR pools was measured and is not built either: the pools barely overlap, and no
+  NR UI interaction timed out under load even at the old 20 s ceiling. `battlescribe`'s process-axis
+  sweep and memory are recorded in `docs/concurrency-policy-measurements.md` §12 and deliberately not
+  transcribed into its profile.
+
 - **The NR Editor snapshot is re-pinned to the redesigned app, and the drivers fail fast on the next
   move (#543).** The pin was 194 commits behind a deployment that moved its import from `/` to the
   Systems page, so every live NR Editor spec waited 30 s for an `input[type=file]` that was not

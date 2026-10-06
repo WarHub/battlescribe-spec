@@ -70,9 +70,12 @@ public sealed class EngineRegistry
     // right. Feeding one number to both is the bug this separation fixes (#314).
     private static readonly Dictionary<string, EngineEntry> Builtins = new()
     {
-        // MemPerInstanceBytes UNDECLARED (0) — never measured. While it is 0 this engine is bound by
-        // ConcurrencyPolicy.UndeclaredMemoryWorkerCap, which is the correct, conservative answer for
-        // an engine nobody has measured. Measure it and the cap retires for this engine by itself.
+        // MemPerInstanceBytes UNDECLARED (0) — measured, and deliberately left undeclared
+        // (docs/concurrency-policy-measurements.md §12). One adapter peaks at 3.8–4.7 GiB, but only while
+        // it runs one of the corpus's two real-world specs, and the sweep's optimum (2 workers) is set by
+        // those two specs, not by the engine or the machine: declared, either number would size every
+        // worker by the two heaviest specs. While it is 0, ConcurrencyPolicy.UndeclaredMemoryWorkerCap
+        // binds it, and the sweep found no cliff to its right.
         //
         // CONTEXT AXIS: also undeclared (0) → ConcurrencyPolicy.UndeclaredContextPoolSize. This engine
         // is in-process IKVM with no browser and no context pool, so no fixture asks it for a pool

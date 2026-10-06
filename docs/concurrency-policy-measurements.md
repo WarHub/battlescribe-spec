@@ -38,9 +38,9 @@
 `MemPerInstanceBytes` is measured (§4). **§7 measures the context axis on BOTH a 32-core dev box and
 a 4-CPU/16 GiB Linux container** (the CI-runner class), for `newrecruit` and `newrecruit-ui`.
 The 4-vCPU runner remains unmeasured **on the process axis** and `k` must not be inferred from the
-dev box — see "What was not reached". `battlescribe` (non-UI) is also unmeasured
-and therefore still declares `MemPerInstanceBytes = 0`, leaving it bound by
-`ConcurrencyPolicy.UndeclaredMemoryWorkerCap` — which is exactly what that cap is for.
+dev box — see "What was not reached". `battlescribe` (non-UI) is measured in §12 and still
+declares `MemPerInstanceBytes = 0` on purpose, leaving it bound by
+`ConcurrencyPolicy.UndeclaredMemoryWorkerCap` — §12 says why.
 
 > **Note on §5 vs §6.** Two sections were written concurrently by two agents working this branch at
 > the same time and both are kept: **§5** is Task 8's `newrecruit` measurement (its `k`, its cliff,
@@ -622,7 +622,7 @@ decision left to Task 9, same as section 3.
 | `newrecruit-ui` | 0 | **P=32** / 32 cpus | **1.0** | **1,548,969,984** (≈1.44 GiB) |
 | `newrecruit` | 0 | **P=15** / 32 cpus → 0.47 | **0.375** ⚠️ *deliberately below the optimum — see the cliff* | **1,313,420,083** (≈1.22 GiB) |
 | `battlescribe-ui` | 1 | n/a (`k` moot) | *(unchanged)* | see section 4 |
-| `battlescribe` | 0 | **NOT MEASURED** | **NOT MEASURED** | **NOT MEASURED** |
+| `battlescribe` | 0 | **P=2** / 8 cpus (§12) | *not transcribed — §12* | *3.8–4.7 GiB measured, not transcribed — §12* |
 
 Both verdict-safety gates passed, so the parallelism these values unlock is conformance-neutral on
 this box.
@@ -635,7 +635,7 @@ this box.
 
 | Engine | `MemPerInstanceBytes` | `OversubscriptionFactor` (k) |
 |---|--:|--:|
-| `battlescribe` | **0 — UNDECLARED** (never measured) | 1.0 (default; moot while undeclared) |
+| `battlescribe` | **0 — UNDECLARED** (measured in §12, deliberately not transcribed) | 1.0 (default; moot while undeclared) |
 | `battlescribe-ui` | **1,055,391,744** (§4) | 1.0 (default; moot — `MaxParallel = 1`) |
 | `newrecruit` | **1,313,420,083** (§5) | **0.375 — MEASURED** (§5: optimum P=15 → 0.47, fitted **below** it; 1.97× cliff at P=16) |
 | `newrecruit-ui` | **1,548,969,984** (§3) | **1.0 — MEASURED** (§1: knee at P=32 / 32 cores; P=48 degrades) |
@@ -673,7 +673,8 @@ oversubscription factor could not have served both; this is the per-engine `k` e
 > against 23.1s at the capped 8**: a **2.55× regression**, straight over a cliff the plan did not
 > know existed when it was written. The cap was not dead weight awaiting removal; it was holding an
 > unmeasured engine back from a cliff nobody knew was there. **`battlescribe` is in exactly that
-> position today** — unmeasured, cap-bound, cliff unknown.
+> position today** — unmeasured, cap-bound, cliff unknown. *(§12 has since swept it: no cliff, and
+> still cap-bound, by choice.)*
 
 ### 6b. The cap was KEPT and PROMOTED, not deleted
 
@@ -682,7 +683,7 @@ once every builtin declares a measured footprint, the `MemPerInstanceBytes == 0`
 again and the cap becomes dead weight. **That premise turned out to be false**, so the step was not
 followed:
 
-- **`battlescribe` is still unmeasured** and declares `0`. One built-in is all it takes; and §5 is the
+- **`battlescribe` is still unmeasured** and declares `0` *(measured in §12; it still declares `0`, on purpose)*. One built-in is all it takes; and §5 is the
   proof that an unmeasured engine can hide a 1.97× cliff.
 - `EngineRegistry.DefaultProfile` and the `engines.json` config path both let an engine register
   **without declaring `MemPerInstanceBytes` at all**, defaulting to 0. This harness is explicitly
@@ -856,8 +857,8 @@ Stated plainly, because inferring these from the dev box would be wrong:
   **CI must be swept on CI.** This applies to the `MemPerInstanceBytes` figures too — per-instance RSS
   is plausibly closer to hardware-invariant than `k` (it is not a contention effect), but that has
   not been verified on the 4-vCPU class either.
-- **`battlescribe` (non-UI, in-process IKVM) — NOT MEASURED.** Out of this campaign's scope. Its
-  `MemPerInstanceBytes` is still `0`, so the undeclared-memory cap still governs it.
+- ~~**`battlescribe` (non-UI, in-process IKVM) — NOT MEASURED.**~~ **Now measured — see §12.** Its
+  `MemPerInstanceBytes` is still `0`, deliberately, so the undeclared-memory cap still governs it.
 - **The gamedata domain — NOT MEASURED for `newrecruit`/`newrecruit-ui`.** Every sweep here is
   `--roster`. `k` may differ by domain; nothing here licenses assuming it does not.
 - **Spec sets other than `cost/,condition/` — NOT MEASURED.** The knee is a property of the workload
@@ -1886,3 +1887,119 @@ had the document.
 machine profile is the exact sin this document exists to record. The measurement is now printed on
 every CI run; re-deriving §6d/§7.5/§8.3's CI column against the real runner is the follow-up, and it
 should be done by *sweeping the runner*, not by arithmetic.
+
+---
+
+# 12. `battlescribe` — measured; the lane is GC-bound, not worker-bound (#534)
+
+> **A different machine from §1–§6:** a 4-core / 8-logical laptop (i7-10610U), 31.7 GiB, Windows 11.
+> Every timed run held the machine-wide test lock — no other test run or build alongside — and every
+> figure is three runs unless it says otherwise.
+
+## 12.1 Where the lane's time goes
+
+`BsRoster` is 409 rows, and **two of them are the lane.** On CI's `windows-pre-push` (run
+[37494340589](https://github.com/WarHub/battlescribe-spec/actions/runs/37494340589)) its rows sum to
+148.1 s, of which `real-world/wh40k-10e-space-marines-army` is 76.8 s and
+`real-world/wh40k-10e-create-army` 71.0 s; the other 400 specs take about a second between them. Each
+real-world spec loads BSData `wh40k-10e` (a game system and 44 catalogues, 26 MB: ~7 s) and then spends
+**~52 s inside the engine's own `selectRootForce`** on its first `addForce`. A CPU sample puts 80% of the
+spec in the engine (`net.battlescribe.engine.a.d.ai()`), mostly `HashSet.add` and `ArrayList.addAll`. The
+engine's own thread pool does not reach that path: 4 and 8 threads measured 54.1 s and 54.4 s.
+
+**It is GC-bound.** The 402 applicable specs, serially, in the test app's process: **130.0 / 136.4 /
+130.1 s** under workstation GC (the default until now), **85.1 / 86.9 / 89.3 s** under server GC. A 64 MiB
+gen0 budget on workstation GC gets part of the way (107.9 s, one run).
+
+## 12.2 Can specs run in parallel safely? Yes
+
+**Shared state.** `javap` over the patched engine jar finds four non-final statics, all lazily
+initialised and written once: an "Uncategorised" `CategoryEntry` and the id generator's `Random`, both on
+the roster path, and two sort-order `HashMap`s in a comparator the roster path never constructs.
+`DataUtils.jar` adds an XSL cache only the desktop app's file-open path reaches, and date/number
+formatters the adapter never calls. The one hazard is the first-use race (two threads initialising at
+once); a spec run serially first removes it. Nothing holds per-roster state.
+
+**Verdicts.** In one process (`Parallel.ForEach` over the specs): 16 runs at P = 1, 2, 4 and 8 under both
+GC modes, and 21 process starts at P = 1 and 8 over the 400 small specs — every per-spec verdict file
+byte-identical. Across processes, `bs-spec compare --engine battlescribe --roster --policy-a workers=1
+--policy-b workers=4`: **verdicts identical across 403 specs**.
+
+## 12.3 Process axis (`bs-spec run --all`): sweep and memory
+
+| P | wall, 402 specs |
+|--:|---|
+| 1 | 137.7 / 134.9 / 130.5 s |
+| **2** | **82.2 / 90.5 / 88.9 s** |
+| 4 | 93.9 / 93.5 / 105.2 s |
+| 8 | 99.2 / 102.8 / 104.0 s |
+
+**The optimum is 2 because there are two heavy specs.** Past it, eight adapters cold-starting IKVM at once
+slow the small specs (10–17 s each instead of milliseconds), and the heavy two run contended. No cliff:
+the cap's 8 costs about 15% against 2. One adapter's peak working set over a full run: **4764 / 4759 /
+3883 MiB**, set by the real-world specs.
+
+**Nothing is transcribed.** Both numbers belong to two specs in the corpus, not to the engine or the
+machine: `k = 2/8` would give a 4-vCPU runner one worker (≈135 s, not ≈85 s), and a declared 4.7 GiB would
+size every worker as if it ran a real-world spec. `UndeclaredMemoryWorkerCap` keeps sizing it.
+
+## 12.4 Why the test app's lane is not sharded
+
+xUnit runs a collection's rows one at a time, so parallel rows need the lane split across collections.
+Under workstation GC that buys little: the two heavy specs side by side take 115.6 s against ~130 s
+apart (P = 8 over every spec: 118.5 / 119.3 / 120.9 s) — they share one GC heap. Under server GC the same
+P = 8 takes 63.8 / 59.3 / 61.5 s, but pre-push does not run the lane alone: the assembly has
+`maxParallelThreads: 0.5x` (4 threads here, 2 on a 4-vCPU runner), and a second `BsRoster` collection
+takes a thread from another lane. Measured with each real-world spec in its own collection, under server
+GC: `BsRoster` finished at 122 s instead of ~198 s, `FrozenNrGameData` waited for a thread until 94 s
+instead of ~50 s and finished at 189 s, and **pre-push took 201.3 s against 196.9–201.2 s unsplit**. Not
+worth a split, nor the in-process worker pool a policy-sized one would need.
+
+## 12.5 What changed: the test app runs on server GC
+
+`tests/BattleScribeSpec.Tests.csproj` sets `ServerGarbageCollection`. `pre-push`, this box:
+
+| | workstation GC | server GC |
+|---|---|---|
+| `BattleScribeSpec.Tests`, idle machine | 252.9 / 264.1 / 264.6 s | **201.2 / 200.0 / 196.9 s** |
+| both modules (`dotnet test -p:TestProfile=pre-push`), 4 busy loops | 391.3 / 405.1 / 414.8 s | **330.9 / 329.6 / 306.1 s** |
+| test app's peak working set, idle (one run) | 5656 MiB | 4773 MiB |
+
+`BsRoster` still finishes last here: its first real-world spec runs beside the NR browser lanes (124–137 s
+under server GC, 171–183 s under workstation). On CI it starts later still: in seven `windows-pre-push`
+runs before this change it started 150–206 s into the step, after every frozen NR lane, and was the last
+collection to finish in all seven; the step took 266–358 s (median 324 s) over twelve runs.
+
+## 12.6 A shared browser-context budget for the frozen NR pools — measured, not built
+
+The worry (#534, from #525): `pre-push` runs the four frozen browser lanes at once, each pool sized for
+the whole machine — `FrozenNrGameDataUi` alone opens 16 contexts — so under extra load NR UI clicks time
+out, and #545 raised `NrUiTimeouts.Interaction` from 20 s to 30 s.
+
+**The pools barely stack.** Start–end in seconds, idle / 4 busy loops: `FrozenNrUiRoster` 7–77 / 11–104,
+`FrozenNrRoster` (4 contexts) 36–76 / 55–153, `FrozenNrGameData` (1) 54–163 / 85–258, `FrozenNrGameDataUi`
+(16) 105–190 / 178–296. The 16-context pool overlaps neither the 4-context pool nor the NR UI roster
+lane whose click timed out in #525; the most contexts live at once is 17. On CI's two threads the order
+differs — `FrozenNrUiRoster` and `FrozenNrGameDataUi` run side by side for about a minute — and still
+pass. A budget that binds would bind on `FrozenNrGameDataUi`, below its own measured optimum.
+
+**Timeouts under load,** with `Interaction` put back to **20 s** and server GC, both modules:
+
+| extra load | wall | timeouts |
+|---|---|---|
+| 4 busy loops | 345.1 / 320.4 / 318.2 s | none |
+| 8 busy loops (every logical CPU) | 585.5 / 679.3 / 693.8 s | one: `FrozenNrGameData`'s 30 s page load, third run |
+
+No NR UI interaction timed out at 20 s under any load. The one timeout was the NR Editor engine's
+navigation, in a one-context lane, while only the 4-context pool ran beside it — not a stacking a budget
+would have prevented. So no budget is built, and `Interaction` stays 30 s: 20 s held under every load
+here, but #525's failure came under a different load (several agents' builds and test runs) that busy
+loops do not reproduce, and the ceiling costs nothing while an interaction is healthy.
+
+## 12.7 What §12 did not reach
+
+- **The 32-core box.** The process-axis sweep is one 4-core machine; the cap gives a 32-core box 8.
+- **The `bs-engine-host` adapter still runs workstation GC**, so `bs-spec run` of a real-world spec costs
+  what §12.1 says.
+- **Collection order on CI.** `BsRoster` starting after every frozen NR lane on a two-thread runner is
+  xUnit's ordering, untouched here.

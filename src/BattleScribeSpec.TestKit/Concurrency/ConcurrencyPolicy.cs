@@ -24,7 +24,7 @@ public static class ConcurrencyPolicy
     /// measurement campaign), but it is gated on <c>MemPerInstanceBytes == 0</c>, which means it
     /// <em>self-retires per engine</em>: the moment an engine declares a measured footprint, the
     /// real memory bound in <see cref="For"/> governs and this cap stops applying to it — no code
-    /// change needed. Its consumers today are <c>battlescribe</c> (the one built-in still unmeasured),
+    /// change needed. Its consumers today are <c>battlescribe</c> (the one built-in that declares none),
     /// <c>EngineRegistry.DefaultProfile</c>, and every third-party engine registered via
     /// <c>engines.json</c> that omits <c>memPerInstanceBytes</c> — this harness is explicitly open to
     /// other engines, so "every engine is measured" is a state it can never reach. Deleting this cap
@@ -36,8 +36,9 @@ public static class ConcurrencyPolicy
     /// <c>docs/concurrency-policy-measurements.md</c>) found a <b>1.97× wall-clock cliff one worker
     /// past its optimum</b> — 32 workers on the dev box measures <b>58.9 s against 23.1 s</b> at the
     /// capped 8. Had the cap been deleted while that engine still declared nothing, it would have
-    /// been handed <c>cpuCount</c> workers and driven straight over it. <c>battlescribe</c> is in
-    /// exactly that position today, and nobody knows where its cliff is either.
+    /// been handed <c>cpuCount</c> workers and driven straight over it. <c>battlescribe</c> has since
+    /// been swept (§12): no cliff on the box it was swept on, and it still declares nothing, because
+    /// what it would declare is set by two specs in the corpus rather than by the engine.
     /// </para>
     /// <para>
     /// <b>Declaring <see cref="EngineProfile.MemPerInstanceBytes"/> is how an engine opts into full

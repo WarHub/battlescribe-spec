@@ -124,7 +124,7 @@ jobs:
           echo "MemTotal: $(awk '/MemTotal/ {printf "%.1f GiB", $2/1048576}' /proc/meminfo)"
           echo ""
           echo "ConcurrencyPolicy reads Environment.ProcessorCount and GC.GetGCMemoryInfo()."
-          echo "The 'Reference adapter' step below prints 'Workers: N' for a Local, k=1.0, unmeasured"
+          echo "The 'Reference adapter' step below prints 'Workers: N' for a Local, k=1.0, undeclared"
           echo "engine — i.e. N == min(ProcessorCount, UndeclaredMemoryWorkerCap=8). That is the number"
           echo "the policy actually saw."
       # Style rules are enforced during the build (EnforceCodeStyleInBuild); this only needs

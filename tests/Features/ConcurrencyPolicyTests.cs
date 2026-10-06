@@ -98,9 +98,9 @@ public sealed class ConcurrencyPolicyTests
         Assert.Equal(expectedReuseSafeRoster, profile.ReuseSafeRoster);
         Assert.Equal(expectedReuseSafeGameData, profile.ReuseSafeGameData);
 
-        // PROCESS axis. Pin the §1–§6-measured numbers, and pin the one still-UNMEASURED engine
-        // (battlescribe) at 0 so nobody can slip a guessed footprint into it without turning this
-        // test red and having the conversation. A 0 here is not "negligible" — it is "undeclared",
+        // PROCESS axis. Pin the §1–§6-measured numbers, and pin battlescribe — measured in §12 and
+        // deliberately left undeclared — at 0 so nobody can slip a footprint into it without turning
+        // this test red and having the conversation. A 0 here is not "negligible" — it is "undeclared",
         // and it is what makes UndeclaredMemoryWorkerCap bind.
         //
         // newrecruit's k = 0.375 is deliberately BELOW its measured optimum of 0.47 (a 1.97x cliff
@@ -368,7 +368,7 @@ public sealed class ConcurrencyPolicyTests
         // battlescribe is the one built-in still declaring MemPerInstanceBytes = 0, so the cap still
         // binds it — which is why deleting the cap would have been a regression, not a cleanup. The
         // newrecruit sweep is the evidence for why that matters: it was unmeasured too, and turned
-        // out to hide a 1.97x cliff one worker past its optimum. Nobody knows where battlescribe's is.
+        // out to hide a 1.97x cliff one worker past its optimum. battlescribe's sweep (§12) found none.
         var profile = Builtin("battlescribe");
 
         Assert.Equal(0L, profile.MemPerInstanceBytes);
