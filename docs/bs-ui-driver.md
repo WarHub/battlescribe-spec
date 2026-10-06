@@ -1086,7 +1086,9 @@ side times out first with a clearer error message.
 ## Failure Diagnostics
 
 When an action fails, `BsUiDiagnostics.CaptureAsync()` writes a diagnostic dump file to
-`artifacts/bs-ui-diagnostics/` (configurable via `BS_UI_DIAGNOSTICS_DIR`). The dump includes:
+`artifacts/bs-ui-diagnostics/` under the working directory — anchored at the repo root in the test
+app (`TestPaths.AnchorDiagnosticsAtRepoRoot`), where CI uploads it from; `BS_UI_DIAGNOSTICS_DIR`
+wins over both. The dump includes:
 
 1. **Metadata**: Timestamp, spec ID, action description, error type/message
 2. **Open windows**: `getWindows()` result

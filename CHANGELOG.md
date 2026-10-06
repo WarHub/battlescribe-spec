@@ -946,6 +946,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Post-sweep cleanup** — `setup.ps1` installs Chromium alone (its headless shell comes with it), the
+  one browser every driver launches. Without `-JavaHome`, the Java tools' `build.ps1` take this
+  checkout's `lib/liberica-jdk` instead of walking up into the checkout a worktree sits in. The BS
+  roster UI driver's diagnostics are anchored at the repo root by the assembly fixture that anchors the
+  NR drivers', which also covers the tests that start an engine of their own. `nr-conformance` runs its
+  NR Editor live steps when a newrecruit.eu step fails: they drive another host. And
+  `load-missing-game-system-id` stays opted out of `newrecruit-ui`, re-checked against the editor #543
+  pinned: NR still takes the file, then cannot open it or, after it, any other.
+
 - **A test run ends when whatever started it dies (#527)** — outside an IDE the test app passes the
   platform's `--exit-on-process-exit` with its launcher's id (`tests/TestProfiles/Launcher.cs`): the
   `dotnet` of `dotnet test` or `dotnet run`, or the shell that started the executable, unless the caller

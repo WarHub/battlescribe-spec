@@ -178,9 +178,9 @@ jobs:
       # continue-on-error, working-directory or shell):
       #   * `if: !cancelled() && steps.build.outcome == 'success'` — test steps are independent of each
       #     other (a red lint step must not hide whether the CLI tests pass), yet all of them skip when
-      #     there is nothing built to test. The one exception is `nr-conformance`, sequential on purpose
-      #     (see that job). Keep `id: build` on each Build step: a renamed one evaluates to null and
-      #     skips every test step in a job that still reports success.
+      #     there is nothing built to test. The one exception is `nr-conformance`'s newrecruit.eu
+      #     steps, sequential on purpose (see that job). Keep `id: build` on each Build step: a renamed
+      #     one evaluates to null and skips every test step in a job that still reports success.
       #   * `timeout-minutes` below the job's, of about 2.5x the step's duration in run 36772377382, and
       #     never under 5 (runner variance on a 2-vCPU box). A hang becomes a failed step, so the
       #     `failure()` and `always()` uploads after it still run, instead of a job that burns its budget
@@ -502,13 +502,14 @@ jobs:
         id: build
         run: dotnet build -p:FunctionalBuild=true
       # EVERY LANE HERE RUNS REGARDLESS OF THE LANES BEFORE IT — `!cancelled()` plus a successful
-      # build, the condition every test step outside nr-conformance carries (see the `checks` job). It
-      # was the default `success()` here, which made each lane hostage to every lane above it. This
-      # job's own history is one flaky NR-UI spec per run, each time a different one, and PR #338 (the v35.27 HAR
-      # bump) was reported red having never run two of the four lanes it exists to verify — the NR
-      # Editor lanes replay a DIFFERENT snapshot than the HAR above them, so a red NR-UI roster lane says
-      # nothing about them, and learning their verdict cost another hour of runner time. Those two lanes
-      # were then special-cased with `!cancelled()`; now no lane waits on another's verdict.
+      # build, the condition every test step but nr-conformance's newrecruit.eu ones carries (see the
+      # `checks` job). It was the default `success()` here, which made each lane hostage to every lane
+      # above it. This job's own history is one flaky NR-UI spec per run, each time a different one,
+      # and PR #338 (the v35.27 HAR bump) was reported red having never run two of the four lanes it
+      # exists to verify — the NR Editor lanes replay a DIFFERENT snapshot than the HAR above them, so
+      # a red NR-UI roster lane says nothing about them, and learning their verdict cost another hour
+      # of runner time. Those two lanes were then special-cased with `!cancelled()`; now no lane waits
+      # on another's verdict.
       - name: Full offline suite (core)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 7
@@ -717,9 +718,11 @@ jobs:
   #
   # Gated on `live`, not `thorough` (scripts/thorough-inputs.mjs has the reasoning): every stack PR
   # owes the thorough suites, but ten of them must not drive newrecruit.eu at once on every restack.
-  # The steps stay sequential — default `success()` — so a site that is down is not hammered by the
-  # lanes after the one that found out — the one job whose steps CiWorkflowTests does not hold to the
-  # independent condition. Live durations are the site's, not ours, hence the margin.
+  # The newrecruit.eu steps stay sequential — default `success()` — so a site that is down is not
+  # hammered by the lanes after the one that found out: the one job whose steps CiWorkflowTests does
+  # not hold to the independent condition. The NR Editor steps take it anyway — they drive another
+  # host, so a newrecruit.eu failure says nothing about them. Live durations are the sites', not ours,
+  # hence the margin.
   nr-conformance:
     needs: [gate]
     if: needs.gate.outputs.live == 'true'
@@ -768,13 +771,16 @@ jobs:
           path: artifacts/battlescribe-conformance-report.json
       # The frozen NR Editor lanes replay a pinned snapshot; only these notice when the deployment
       # (giloushaker.github.io/nr-editor/, a volunteer's) drifts from it. One session each, from that
-      # host's LiveLoadBudget. After the report, so a drifted deployment does not cost it. Both bounds
-      # are the 5-minute floor: 34s and 93s in run 37495035242, the first green one.
+      # host's LiveLoadBudget. After the report, so a drifted deployment does not cost it, and run
+      # whatever the newrecruit.eu steps said: another host. Both bounds are the 5-minute floor: 34s
+      # and 93s in run 37495035242, the first green one.
       - name: Run NR Editor conformance tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
         run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-live
       # NR_GAMEDATA_UI_DIAGNOSTICS: same switch, and same reason it is CI's, as smoke's step.
       - name: Run NR Editor UI conformance tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
         run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile nr-editor-ui-live
         env:

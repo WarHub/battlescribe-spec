@@ -425,11 +425,11 @@ per-engine block at all.
 
 **One spec is still opted out of `newrecruit-ui`, and it is not a skip for convenience.**
 `load-missing-game-system-id` gives NR a catalogue with no `gameSystemId`. NR reads the absent
-attribute as the string `undefined`, files the catalogue under a game system by that name and opens
-it — after which its editor throws `Cannot read properties of null (reading 'showImported')` and its
-file list can no longer render, so nothing later in the session can be driven. That is an NR defect,
-not a difference of policy; the payload has a spec of its own precisely so the rest of the
-missing-attribute family can run on NR instead of being lost behind it.
+attribute as the string `undefined`, files the catalogue under a game system by that name and routes
+to it — and the catalogue never opens, and after it neither does the seed catalogue, so nothing later
+in the session can be driven. That is an NR defect, not a difference of policy; the payload has a spec
+of its own precisely so the rest of the missing-attribute family can run on NR instead of being lost
+behind it.
 
 **Store-direct `newrecruit` stays opted out of all seven**, for a different reason: its `LoadFile`
 parses the payload with a `DOMParser` call inside our own adapter, so what it accepts or refuses is

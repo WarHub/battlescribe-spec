@@ -197,8 +197,9 @@ also holds every CI step that runs a test project or `bs-spec` to one of four fi
 `dotnet run --project <csproj> --no-build -- --test-profile <name>` (optionally after `xvfb-run -a`),
 the CLI tests' one `dotnet test` line, and two `bs-spec` forms — carrying only `name`, `if`,
 `timeout-minutes`, `run` and `env`, a timeout below its job's, and the condition
-`!cancelled() && steps.build.outcome == 'success'`. Nothing can be added to a line, so nothing narrows
-the lane or swallows its exit code, and a shell wrapper is refused.
+`!cancelled() && steps.build.outcome == 'success'` — except in `nr-conformance`, whose newrecruit.eu
+steps run in sequence on purpose, so a site found down is not driven by the lanes after it. Nothing can
+be added to a line, so nothing narrows the lane or swallows its exit code, and a shell wrapper is refused.
 
 **`checks` is the analyzer gate; every other CI build is `dotnet build -p:FunctionalBuild=true`.** The
 switch (`Directory.Build.props`) turns off the analyzers, code-style enforcement and XML doc generation

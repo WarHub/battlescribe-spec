@@ -1946,14 +1946,14 @@ size every worker as if it ran a real-world spec. `UndeclaredMemoryWorkerCap` ke
 ## 12.4 Why the test app's lane is not sharded
 
 xUnit runs a collection's rows one at a time, so parallel rows need the lane split across collections.
-Under workstation GC that buys little: the two heavy specs side by side take 115.6 s against ~130 s
-apart (P = 8 over every spec: 118.5 / 119.3 / 120.9 s) — they share one GC heap. Under server GC the same
-P = 8 takes 63.8 / 59.3 / 61.5 s, but pre-push does not run the lane alone: the assembly has
+Under workstation GC that buys little: the two heavy specs side by side take 115.6 s (one run) against
+~130 s apart (P = 8 over every spec: 118.5 / 119.3 / 120.9 s) — they share one GC heap. Under server GC the
+same P = 8 takes 63.8 / 59.3 / 61.5 s, but pre-push does not run the lane alone: the assembly has
 `maxParallelThreads: 0.5x` (4 threads here, 2 on a 4-vCPU runner), and a second `BsRoster` collection
 takes a thread from another lane. Measured with each real-world spec in its own collection, under server
 GC: `BsRoster` finished at 122 s instead of ~198 s, `FrozenNrGameData` waited for a thread until 94 s
-instead of ~50 s and finished at 189 s, and **pre-push took 201.3 s against 196.9–201.2 s unsplit**. Not
-worth a split, nor the in-process worker pool a policy-sized one would need.
+instead of ~50 s and finished at 189 s, and **pre-push took 201.3 s (one run) against 196.9–201.2 s
+unsplit**. Not worth a split, nor the in-process worker pool a policy-sized one would need.
 
 ## 12.5 What changed: the test app runs on server GC
 
@@ -2012,3 +2012,4 @@ loops do not reproduce, and the ceiling costs nothing while an interaction is he
   what §12.1 says.
 - **Collection order on CI.** `BsRoster` starting after every frozen NR lane on a two-thread runner is
   xUnit's ordering, untouched here.
+- **The split on the 2-thread CI runner.** §12.4 measured it on this box only.

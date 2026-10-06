@@ -265,8 +265,7 @@ whether it can fail. Prove it once, and keep the proof where it is cheap:
   so uncommitted work survives — and names every mutation that was not killed.
 
 Stryker.NET does not reach these guards (#529): it mutates only projects that are not test projects, and
-the guards are compiled into the test apps, `tests/TestProfiles/` included. Against a `src/` project it
-drives `BattleScribeSpec.Cli.Tests` as it is.
+the guards are compiled into the test apps, `tests/TestProfiles/` included.
 
 ## Parallelism
 

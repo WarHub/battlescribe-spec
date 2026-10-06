@@ -25,20 +25,14 @@ if (-not $AsmJar) {
 }
 
 # JDK discovery mirrors src/bs-ui-java-agent/build.ps1: explicit param, then JAVA_HOME, then the
-# in-repo Liberica JDK that setup.ps1 installs for local dev.
+# in-repo Liberica JDK that setup.ps1 installs for local dev -- THIS checkout's, never one found by
+# walking up past it (a worktree nests inside the main checkout).
 if ($JavaHome) {
     # use as-is
 } elseif ($env:JAVA_HOME) {
     $JavaHome = $env:JAVA_HOME
-} else {
-    $searchDir = $ScriptDir
-    while ($searchDir) {
-        $candidate = Join-Path $searchDir 'lib' 'liberica-jdk'
-        if (Test-Path (Join-Path $candidate 'bin')) { $JavaHome = $candidate; break }
-        $parent = Split-Path $searchDir -Parent
-        if ($parent -eq $searchDir) { break }
-        $searchDir = $parent
-    }
+} elseif (Test-Path (Join-Path $ScriptDir '../../lib/liberica-jdk/bin')) {
+    $JavaHome = Join-Path $ScriptDir '../../lib/liberica-jdk'
 }
 
 if ($JavaHome) {
