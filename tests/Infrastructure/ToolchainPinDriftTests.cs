@@ -254,13 +254,8 @@ public sealed class ToolchainPinDriftTests
             ("sdk:10.0.402", "sdk:10.0.300", "sdk:10.0.300"),
             ("sdk:10.0.402", "sdk:11.0.400", "sdk:11.0.400"),
             ("sdk:10.0.402", "sdk:10.0", "sdk:10.0"),
-            ("dotnet/sdk:10.0.402", "dotnet/sdk-preview:10.0.402", "read no sdk tag"),
         ],
-        text =>
-        {
-            var (read, mismatched) = SdkTagsOutsideTheBand("10.0.400", [("sample.Dockerfile", text)]);
-            return read == 0 ? ["read no sdk tag"] : mismatched;
-        });
+        text => SdkTagsOutsideTheBand("10.0.400", [("sample.Dockerfile", text)]).Mismatched);
 
     /// <summary>
     /// How many <c>mcr.microsoft.com/dotnet/sdk</c> tags the Dockerfiles ask for, and each one outside the

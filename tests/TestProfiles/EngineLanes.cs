@@ -208,9 +208,9 @@ internal static class EngineLanes
             DiagnosticsDir = "artifacts/bs-ui-diagnostics",
         },
         // Its driver writes nothing yet: BsGameDataUiDiagnostics.CaptureAsync has no caller, and nothing
-        // anchors its directory at the repo root for the test host the way BsRosterUiFixture does for
-        // the roster driver. Wiring both is driver work; the directory is recorded so the uploads are
-        // ready for it.
+        // anchors its directory at the repo root for the test host the way UiArtifactPathsAssemblyFixture
+        // does the roster driver's. Wiring both is driver work; the directory is recorded so the uploads
+        // are ready for it.
         new("BsGameDataUi", Needs.DesktopApp, InPrePush: PrePushPart.None,
             "launches the BattleScribe desktop app (the Data Editor half)",
             ["BattleScribeSpec.Tests.BsGameDataUiConformanceTests"])

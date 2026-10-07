@@ -1669,7 +1669,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
             if (_client is not null
                 && ex is TimeoutException or OperationCanceledException or InvalidOperationException or AgentException)
             {
-                CaptureAndRethrow(ex, actionName);
+                CaptureDiagnostics(ex, actionName);
             }
 
             // The agent's own expectation failed — it waited for a roster state the app never
@@ -1698,7 +1698,7 @@ public sealed class BsUiRosterEngine : IRosterEngine
         return await task;
     }
 
-    private void CaptureAndRethrow(Exception ex, string actionName)
+    private void CaptureDiagnostics(Exception ex, string actionName)
     {
         // Best-effort diagnostic capture — don't let it mask the original exception
         try

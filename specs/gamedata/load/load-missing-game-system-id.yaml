@@ -8,15 +8,16 @@ description: >
   gameSystemId is the one required attribute a catalogue declares itself rather than inheriting, and
   it is the one that says which game system the file belongs to. BattleScribe will not build a
   catalogue without it. NewRecruit reads the absent attribute as the string "undefined", files the
-  catalogue under a game system by that name, and opens it — after which its editor throws
-  "Cannot read properties of null (reading 'showImported')" and its file list can no longer render,
-  so nothing further can be driven in that session. That is an NR defect rather than a difference of
-  policy, and it is why the newrecruit-ui lane stops here instead of at the assertion.
+  catalogue under a game system by that name, and routes to it — and the catalogue never opens, and
+  after that neither does any other, so nothing further can be driven in that session. That is an NR
+  defect rather than a difference of policy, and it is why the newrecruit-ui lane stops here instead
+  of at the assertion.
 
 # newrecruit-ui is opted out of this spec alone — it runs the rest of the load/ family. NR does not
-# refuse this payload, it breaks on it: the import succeeds, the editor opens the catalogue under a
-# game system keyed "undefined", and the next navigation throws. Recorded here rather than asserted,
-# because there is no engine answer to assert — the session is unusable from that point.
+# refuse this payload, it breaks on it: the import succeeds, the editor routes to the catalogue under
+# a game system keyed "undefined" and never loads it (the open times out with nothing loaded under
+# that system), and reopening the seed catalogue afterwards times out too. Recorded here rather than
+# asserted, because there is no engine answer to assert — the session is unusable from that point.
 #
 # newrecruit (store-direct) is out for the reason it is out of every load spec: its LoadFile parses
 # the payload with a DOMParser call inside our own adapter, so what it accepts would be our parser's

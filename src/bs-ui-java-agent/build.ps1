@@ -38,17 +38,11 @@ if ($JavaHome) {
 } elseif ($env:JAVA_HOME) {
     # Respect JAVA_HOME environment variable (set by CI via actions/setup-java)
     $JavaHome = $env:JAVA_HOME
-} else {
-    # Auto-discover in-repo Liberica JDK (installed by setup.ps1 for local dev)
-    $searchDir = $ScriptDir
-    while ($searchDir) {
-        # setup.ps1 normalizes the in-repo JDK so bin/ is directly under lib/liberica-jdk on every OS.
-        $candidate = Join-Path $searchDir 'lib' 'liberica-jdk'
-        if (Test-Path (Join-Path $candidate 'bin')) { $JavaHome = $candidate; break }
-        $parent = Split-Path $searchDir -Parent
-        if ($parent -eq $searchDir) { break }  # filesystem root
-        $searchDir = $parent
-    }
+} elseif (Test-Path (Join-Path $ScriptDir '../../lib/liberica-jdk/bin')) {
+    # This checkout's Liberica JDK (installed by setup.ps1 for local dev, normalized so bin/ is
+    # directly under lib/liberica-jdk on every OS) -- never one found by walking up past the
+    # checkout: a worktree nests inside the main checkout.
+    $JavaHome = Join-Path $ScriptDir '../../lib/liberica-jdk'
 }
 
 if ($JavaHome) {

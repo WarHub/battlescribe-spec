@@ -42,13 +42,14 @@ internal static class TestPaths
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The NR UI drivers default to <c>artifacts/&lt;folder&gt;</c> <b>relative to the process's
-    /// working directory</b>, which is right for <c>bs-spec</c> and wrong in the test app: xunit sets the
+    /// The UI drivers default to <c>artifacts/&lt;folder&gt;</c> <b>under the process's working
+    /// directory</b>, which is right for <c>bs-spec</c> and wrong in the test app: xunit sets the
     /// test app's working directory to the test assembly's output folder, so a
     /// failing spec writes its screenshot, DOM and Pinia dump to
     /// <c>artifacts/bin/BattleScribeSpec.Tests/debug/artifacts/nr-ui-diagnostics/</c> — a path no
-    /// CI upload step looks at. The same trap, with the same cause and the same fix, is written down
-    /// in <see cref="BsRosterUiFixture"/> and <see cref="TelemetryAssemblyFixture"/>.
+    /// CI upload step looks at (measured for the BS roster lane: 19 dumps there against 1 at the repo
+    /// root). The same trap, with the same cause and the same fix, is written down in
+    /// <see cref="TelemetryAssemblyFixture"/>.
     /// </para>
     /// <para>
     /// Done test-side rather than in the drivers because the CWD-relative default is correct for
@@ -58,7 +59,7 @@ internal static class TestPaths
     /// </para>
     /// <para>
     /// Called from <see cref="UiArtifactPathsAssemblyFixture"/>, which explains why it is an
-    /// assembly fixture and not the four NR UI fixtures that need it.
+    /// assembly fixture and not the UI fixtures that need it.
     /// </para>
     /// </remarks>
     public static void AnchorDiagnosticsAtRepoRoot(string environmentVariable, string folderName)

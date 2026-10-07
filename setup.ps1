@@ -633,7 +633,9 @@ if ($SkipPlaywright) {
         $Env:PLAYWRIGHT_DRIVER_SEARCH_PATH = $pkg
         $dll = Join-Path $pkg 'lib/netstandard2.0/Microsoft.Playwright.dll'
         [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($dll)) | Out-Null
-        $exitCode = [Microsoft.Playwright.Program]::Main(@('install', '--with-deps'))
+        # Chromium only: every driver launches it, and nothing else. `chromium` also brings the
+        # headless shell a headless launch runs and ffmpeg; Firefox and WebKit would go unused.
+        $exitCode = [Microsoft.Playwright.Program]::Main(@('install', '--with-deps', 'chromium'))
         if ($exitCode -ne 0) { throw "Playwright browser install failed (exit code $exitCode)" }
         Write-Host "  [OK] Playwright browsers installed" -ForegroundColor Green
     }

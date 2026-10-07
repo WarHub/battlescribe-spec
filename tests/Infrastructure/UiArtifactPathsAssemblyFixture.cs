@@ -3,7 +3,7 @@
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// Anchors the NR UI drivers' diagnostics directories at the repo root — once, before any test runs.
+/// Anchors the UI drivers' diagnostics directories at the repo root — once, before any test runs.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,8 +23,9 @@ namespace BattleScribeSpec.Tests;
 /// once, before anything can read it, and never touched again.
 /// </para>
 /// <para>
-/// The BS drivers are not here because they expose a settable directory property instead, which
-/// <see cref="BsRosterUiFixture"/> sets without touching the environment.
+/// The BS roster driver reads its variable once, the first time <c>BsUiDiagnostics</c> is touched,
+/// which this also precedes. Anchored here rather than in <see cref="BsRosterUiFixture"/>, it covers
+/// the tests that start an engine of their own too.
 /// </para>
 /// </remarks>
 public sealed class UiArtifactPathsAssemblyFixture
@@ -34,5 +35,6 @@ public sealed class UiArtifactPathsAssemblyFixture
         TestPaths.AnchorDiagnosticsAtRepoRoot("NR_UI_DIAGNOSTICS_DIR", "nr-ui-diagnostics");
         TestPaths.AnchorDiagnosticsAtRepoRoot(
             "NR_GAMEDATA_UI_DIAGNOSTICS_DIR", "nr-gamedata-ui-diagnostics");
+        TestPaths.AnchorDiagnosticsAtRepoRoot("BS_UI_DIAGNOSTICS_DIR", "bs-ui-diagnostics");
     }
 }

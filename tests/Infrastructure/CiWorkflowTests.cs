@@ -53,7 +53,7 @@ public sealed class CiWorkflowTests
 
     private const string Independent = "${{ !cancelled() && steps.build.outcome == 'success' }}";
 
-    /// <summary>The job whose steps are sequential on purpose: it drives newrecruit.eu, and a lane that found the site down must not be followed by more.</summary>
+    /// <summary>The job whose newrecruit.eu steps are sequential on purpose: a lane that found the site down must not be followed by more.</summary>
     private const string SequentialJob = "nr-conformance";
 
     private const double GitHubDefaultTimeoutMinutes = 360;
