@@ -22,15 +22,15 @@
     <PackageVersion Include="GitHubActionsTestLogger" Version="3.0.5" />
     <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
     <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
-    <PackageVersion Include="IKVM" Version="8.16.1" />
-    <PackageVersion Include="JsonSchema.Net" Version="9.4.0" />
+    <PackageVersion Include="IKVM" Version="8.16.2" />
+    <PackageVersion Include="JsonSchema.Net" Version="9.4.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.63.0" />
     <PackageVersion Include="OpenTelemetry" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.12" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.13" />
     <!--
       xunit.v3 4.x is the Microsoft.Testing.Platform v2 flavour, and the suites run on that platform: a
       test project is an executable whose entry point is tests/TestProfiles/TestHost.cs (it resolves
@@ -42,7 +42,7 @@
       extension too (annotations and the step summary in Actions); it is referenced directly, so it is
       pinned and watched like any other package.
     -->
-    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="Yaml2JsonNode" Version="3.0.1" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
