@@ -1,0 +1,62 @@
+id: handoff-saved-edit-reaches-new-roster
+category: handoff
+description: >
+  A cost edited in the data editor and saved reaches a roster the roster editor starts afterwards.
+  The unit costs 10 in the setup data; the data editor sets it to 15 and saves, then a new roster
+  selects it. The roster can only show 15 if the roster editor read the file the data editor wrote.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - data:
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "15"
+
+  - action: saveData
+
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 15
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad
+                  costs:
+                    - typeId: ct-pts
+                      value: 15
