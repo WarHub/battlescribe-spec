@@ -130,6 +130,61 @@ public sealed class CiWorkflowTests
             "Add the job to `needs:` (and to scripts/ci-gate.json if the gate turns it on or off).");
     }
 
+    /// <summary>
+    /// <b><c>ci-gate</c> runs after a failed job, and not in a cancelled run: its <c>if:</c> is
+    /// <c>${{ !cancelled() }}</c>, exactly.</b> The two other usual choices are wrong in opposite directions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With no <c>if:</c> the job takes the default <c>success()</c>, so one failed job skips it, and a skipped
+    /// required check is a pass. With <c>always()</c> it also runs inside a run that <c>cancel-in-progress</c>
+    /// stopped for a newer one, reads every job it needs as <c>cancelled</c>, and leaves a red <c>ci-gate</c> on
+    /// the head commit beside the newer run's verdict. Every Dependabot PR did: it opens and then labels, the
+    /// <c>labeled</c> trigger (there for <c>thorough-ci</c>) starts a run per event, and #559, #562 and #564 each
+    /// carried a failed <c>ci-gate</c> from a run nobody needed.
+    /// </para>
+    /// <para>
+    /// <c>!cancelled()</c> still runs it after a failure, and after a job's own timeout, which stops the job and
+    /// not the run. In a cancelled run it ends <c>cancelled</c>, which still blocks a merge: a run stopped by hand
+    /// vouches for nothing. <see cref="EveryWrongCiGateCondition_IsReported"/> keeps the wrong conditions.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void CiGate_RunsAfterAFailure_ButNotInACancelledRun()
+    {
+        var problems = CiGateConditionProblems(CiWorkflows.Ci.Job("ci-gate").If);
+        Assert.True(problems.Count == 0, string.Join("\n", problems));
+    }
+
+    /// <summary><b>Each wrong <c>ci-gate</c> condition is reported</b>: <c>always()</c> in either spelling, the default <c>success()</c>, and none at all.</summary>
+    [Fact]
+    public void EveryWrongCiGateCondition_IsReported() => LintSamples.AssertEachBreakIsRejected(
+        CiGateCondition,
+        [
+            (CiGateCondition, "always()", "`if: always()` also runs it in a run cancelled for a newer one"),
+            (CiGateCondition, "${{ always() }}", "`if: ${{ always() }}` also runs it in a run cancelled for a newer one"),
+            (CiGateCondition, "success()", "`if: success()` is not"),
+            (CiGateCondition, "", "no `if:`"),
+        ],
+        static text => CiGateConditionProblems(text.Length == 0 ? null : text));
+
+    private const string CiGateCondition = "${{ !cancelled() }}";
+
+    /// <summary>What is wrong with <paramref name="condition"/> as <c>ci-gate</c>'s job-level <c>if:</c>, if anything.</summary>
+    private static List<string> CiGateConditionProblems(string? condition) => condition?.Trim() switch
+    {
+        CiGateCondition => [],
+        null => [
+            "ci-gate has no `if:`, so it takes the default success() and is skipped when any job it needs fails — "
+            + $"and a skipped required check is a pass. Set `if: {CiGateCondition}`."],
+        { } other when other.Contains("always()", StringComparison.Ordinal) => [
+            $"ci-gate's `if: {other}` also runs it in a run cancelled for a newer one, where every job it needs reads "
+            + $"`cancelled`: a red required check left on the head commit beside the newer run's verdict. Set `if: {CiGateCondition}`."],
+        { } other => [
+            $"ci-gate's `if: {other}` is not `{CiGateCondition}`, the one condition that runs it after a failed job "
+            + "and not in a cancelled run."],
+    };
+
     /// <summary><b>Every test project is run by a CI step</b>: each <see cref="TestProfiles.Projects"/> value is some verdict step's project.</summary>
     /// <remarks>
     /// <c>tests/BattleScribeSpec.Cli.Tests</c> was added in #262 and never ran in CI until #314, while it held

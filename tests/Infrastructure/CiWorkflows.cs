@@ -147,6 +147,8 @@ internal sealed class CiJob
 
     public IReadOnlyList<string> Needs { get; }
 
+    public string? If => CiWorkflows.Scalar(Node, "if");
+
     public string? TimeoutMinutes => CiWorkflows.Scalar(Node, "timeout-minutes");
 
     /// <summary>Where this job starts, for messages: <c>file:line job</c>.</summary>

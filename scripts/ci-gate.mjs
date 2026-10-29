@@ -125,7 +125,9 @@ export function evaluate({ needs, event, config }) {
       continue;
     }
 
-    fail(job, result, result === "cancelled" ? "cancelled (a timeout, a superseded run, or a manual cancel)" : result);
+    // A cancelled run never reaches ci-gate (`if: ${{ !cancelled() }}`), so a cancelled job here is one
+    // stopped inside a run that went on: its own timeout-minutes, most often.
+    fail(job, result, result === "cancelled" ? "cancelled (its timeout-minutes, most often: a cancelled run does not reach ci-gate)" : result);
   }
 
   return { ok: failures.length === 0, rows, failures, thorough, live };

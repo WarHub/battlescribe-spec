@@ -3,6 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # `labeled` is here for `thorough-ci`, but the event cannot be filtered by label name, so every label
+  # starts a run. Dependabot opens a PR and then labels it, so its PRs start two or three runs within
+  # seconds; cancel-in-progress keeps the last, and ci-gate's `!cancelled()` keeps the ones it stopped
+  # from leaving a red required check behind.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
   workflow_dispatch:
@@ -815,9 +819,16 @@ jobs:
   #    the gate said thorough=false, a live job only when it said live=false, and the gate's outputs
   #    must be exactly "true" or "false" — "true" on a scheduled or manual run. A draft is RED ("draft:
   #    nothing ran"): every job skips on a draft, and a required check whose inputs all skipped used
-  #    to read as a pass. CiWorkflowTests.CiGate_NeedsEveryOtherJob keeps `needs` complete. ──
+  #    to read as a pass. CiWorkflowTests.CiGate_NeedsEveryOtherJob keeps `needs` complete.
+  #
+  #    `!cancelled()`, not `always()`: either runs it after a failed job (the default `success()` would
+  #    skip it, and a skipped required check is a pass), but `always()` also runs it in a run that
+  #    cancel-in-progress stopped for a newer one, where every job reads `cancelled` — so each superseded
+  #    run left a red ci-gate on the head commit beside the newer run's verdict (every Dependabot PR,
+  #    #559, #562, #564). In a cancelled run it now ends cancelled, which still blocks a merge.
+  #    CiWorkflowTests.CiGate_RunsAfterAFailure_ButNotInACancelledRun holds it there. ──
   ci-gate:
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [gate, checks, docker, smoke, windows-pre-push, thorough-conformance, thorough-nr-ui-roster, thorough-ui-bs, nr-conformance]
     runs-on: ubuntu-latest
     timeout-minutes: 10

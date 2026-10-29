@@ -946,6 +946,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **A superseded CI run no longer leaves a red `ci-gate` on the PR** — `ci-gate` ran under `if: always()`,
+  so it also ran inside a run that `cancel-in-progress` had stopped for a newer one, read every job it
+  needs as `cancelled`, and failed: a red required check on the head commit beside the newer run's green
+  one. Every Dependabot PR carried one (#559, #562, #564), because Dependabot opens a PR and then labels
+  it, and the `labeled` trigger that exists for `thorough-ci` starts a run per event. `ci-gate` now runs
+  under `if: ${{ !cancelled() }}`: still after a failed or timed-out job, and in a cancelled run it ends
+  `cancelled`, which still blocks a merge. The default `success()` would be wrong the other way — it
+  skips `ci-gate` when a job fails, and a skipped required check is a pass — so
+  `CiWorkflowTests.CiGate_RunsAfterAFailure_ButNotInACancelledRun` holds the condition exactly.
+
 - **The docker image installs the SDK `global.json` pins, so an SDK bump needs no edit under `docker/`
   (#559)** — `docker/bs-spec.Dockerfile` built `FROM mcr.microsoft.com/dotnet/sdk:<tag>`, a second
   record of the SDK that Dependabot's dotnet-sdk updater cannot see and that had to move by hand in
