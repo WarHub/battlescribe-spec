@@ -175,10 +175,13 @@ what it needs in its `with:`.) This matters because `AnalysisLevel=latest-recomm
 `TreatWarningsAsErrors=true` make the set of rules that can fail the build a property of the
 installed SDK — unpinned, a runner-image bump turns untouched code red. Bumping the band is
 Dependabot's job (`dotnet-sdk` ecosystem), and reviewing that PR is where a widened rule set gets
-dealt with. `ToolchainPinDriftTests` fails if a workflow or composite-action step starts picking its
-own SDK again, or if `docker/`'s SDK image tag leaves the pinned band. One SDK-derived pin is
-invisible to Dependabot and must move by hand **in the same PR** as an SDK bump: the
-`mcr.microsoft.com/dotnet/sdk` tag in `docker/`.
+dealt with. **`global.json` is the only record of the SDK** — the docker image reads it too: its build
+stage starts from `runtime-deps` and installs `global.json`'s `sdk.version`, so an SDK bump needs no
+edit under `docker/`. `ToolchainPinDriftTests` fails if a workflow or composite-action step starts
+picking its own SDK again, if a Dockerfile names a `mcr.microsoft.com/dotnet/sdk` image (any tag: a
+second record is what let #559 pass a band check and fail the image build) or stops reading
+`global.json`, or if a .NET runtime image leaves the channel of the `TargetFramework` — which, not
+`global.json`, is what the app needs to start.
 
 **What makes CI run the thorough suites is one file: [`scripts/ci-gate.json`](scripts/ci-gate.json).**
 A PR that edits one of its `thoroughInputs` — `testdata.json`, `Directory.Packages.props`,

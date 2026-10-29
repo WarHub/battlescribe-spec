@@ -946,6 +946,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The docker image installs the SDK `global.json` pins, so an SDK bump needs no edit under `docker/`
+  (#559)** — `docker/bs-spec.Dockerfile` built `FROM mcr.microsoft.com/dotnet/sdk:<tag>`, a second
+  record of the SDK that Dependabot's dotnet-sdk updater cannot see and that had to move by hand in
+  every bump PR. `ToolchainPinDriftTests.DockerImagesUseTheSdkBandPinnedInGlobalJson` was meant to turn
+  a forgotten tag into a red lint, and compared feature bands only; under `rollForward: latestPatch` an
+  image in the right band but below the pinned patch cannot satisfy the pin either, so #559
+  (10.0.400 → 10.0.402) passed the lint and failed the `docker` job with "A compatible .NET SDK was not
+  found". The build stage now starts from `runtime-deps` and installs `global.json`'s `sdk.version`
+  itself: the archive's URL and SHA-512 from the channel's `releases.json` (the record Dependabot reads
+  to offer the bump), the hash checked before anything is unpacked, and the installed `dotnet` asked
+  which SDK it resolves before restore runs. No installer script is downloaded and no build argument is
+  needed — a plain `docker build` reads the pin, as CI's does. MCR's SDK tags were never a complete
+  source anyway: it publishes SDK images for the newest feature band only. The lint is replaced by
+  `DockerImages_TakeTheSdkFromGlobalJson_AndTheRuntimeFromTheTargetFramework`, which refuses any
+  `dotnet/sdk` image whatever its tag (#559's is one of its broken samples), fails a Dockerfile that
+  builds .NET without reading `global.json`, and holds the runtime images to the channel of the
+  `TargetFramework` instead — an SDK of a later major still builds `net10.0`, and only a 10.0 runtime
+  starts it. `global.json` moves to 10.0.402 in the same change, superseding #559, so the fix is proven
+  on the case that failed.
+
 - **Post-sweep cleanup** — `setup.ps1` installs Chromium alone (its headless shell comes with it), the
   one browser every driver launches. Without `-JavaHome`, the Java tools' `build.ps1` take this
   checkout's `lib/liberica-jdk` instead of walking up into the checkout a worktree sits in. The BS
