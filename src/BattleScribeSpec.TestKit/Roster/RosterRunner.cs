@@ -20,7 +20,6 @@ public sealed class RosterRunner
     private IReadOnlyList<string> _catalogueIds = [];
     private string _specId = "";
     private string? _specDir;
-    private string? _harnessError;
 
     /// <summary>
     /// Set when an <c>expectFailure</c> step's expectation was not met. The step loop's own catch
@@ -108,14 +107,7 @@ public sealed class RosterRunner
     /// </summary>
     public SpecResult Run(SpecFile spec)
     {
-        _errors.Clear();
-        _skippedSteps.Clear();
-        _isDataSourceMode = false;
-        _catalogueIds = [];
-        _specId = spec.Id;
-        _specDir = spec.SourceDirectory;
-        _harnessError = null;
-        _abortRun = false;
+        BeginSteps(spec.Id, spec.SourceDirectory);
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -144,62 +136,16 @@ public sealed class RosterRunner
             // Execute steps
             for (var i = 0; i < spec.Steps.Count; i++)
             {
-                var step = spec.Steps[i];
-                try
+                if (!ExecuteStep(spec.Steps[i], i))
                 {
-                    if (OnBeforeStep is { } beforeStep && !beforeStep(i, step))
-                    {
-                        break;
-                    }
-
-                    if (IsSkippedForEngine(step))
-                    {
-                        SkipStep(step, i);
-                    }
-                    else if (step.Action == "dump")
-                    {
-                        // dump is a no-op in the runner itself; the callback does the work
-                    }
-                    else if (step.Action is not null)
-                    {
-                        ExecuteActionStep(step, i);
-                    }
-                    else if (step.ExpectedState is not null)
-                    {
-                        ExecuteAssertion(step, i);
-                    }
-                    else if (step.ExpectedFile is not null)
-                    {
-                        ExecuteFileAssertion(step, i);
-                    }
-                    else
-                    {
-                        _errors.Add($"Step {i}: neither 'action', 'expectedState' nor 'expectedFile' defined");
-                    }
-
-                    NotifyStepCompleted(i, step);
-
-                    if (_abortRun)
-                    {
-                        break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _errors.Add($"Step {i}: {ex.GetType().Name}: {ex.Message}");
-                    _harnessError = $"{ex.GetType().Name}: {ex.Message}";
-                    NotifyStepCompleted(i, step);
-                    if (step.Action is not null && step.Action != "dump")
-                    {
-                        break;
-                    }
+                    break;
                 }
             }
         }
         catch (Exception ex)
         {
             _errors.Add($"Setup failed: {ex.GetType().Name}: {ex.Message}");
-            _harnessError = $"{ex.GetType().Name}: {ex.Message}";
+            HarnessError = $"{ex.GetType().Name}: {ex.Message}";
         }
         finally
         {
@@ -215,9 +161,99 @@ public sealed class RosterRunner
 
         return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors])
         {
-            HarnessError = _harnessError,
+            HarnessError = HarnessError,
             SkippedSteps = [.. _skippedSteps],
         };
+    }
+
+    // ===== Step-at-a-time entry points =====
+    //
+    // `Run` is a setup followed by these, one step at a time. A scenario spec drives the same members
+    // directly, interleaving this runner's steps with a gamedata runner's (ScenarioRunner), so a step
+    // in a scenario's `roster:` block is executed by exactly the code that executes it here — never by
+    // a second implementation that could drift.
+
+    /// <summary>Failures recorded so far, in step order. A scenario reads what each step added.</summary>
+    internal IReadOnlyList<string> Errors => _errors;
+
+    /// <summary>See <see cref="SpecResult.SkippedSteps"/>.</summary>
+    internal IReadOnlyList<string> SkippedSteps => _skippedSteps;
+
+    /// <summary>See <see cref="SpecResult.HarnessError"/>.</summary>
+    internal string? HarnessError { get; private set; }
+
+    /// <summary>
+    /// Reset the per-run state for spec <paramref name="specId"/>, whose side-files (snapshots) live in
+    /// <paramref name="specDir"/>. Does not touch the engine: setup is the caller's.
+    /// </summary>
+    internal void BeginSteps(string specId, string? specDir)
+    {
+        _errors.Clear();
+        _skippedSteps.Clear();
+        _isDataSourceMode = false;
+        _catalogueIds = [];
+        _specId = specId;
+        _specDir = specDir;
+        HarnessError = null;
+        _abortRun = false;
+    }
+
+    /// <summary>
+    /// The catalogues an <c>addForce</c> without a <c>catalogueId</c> may default to. <see cref="Run"/>
+    /// sets them from the spec's inline setup; a scenario sets them from its data directory each time
+    /// the roster editor reads it.
+    /// </summary>
+    internal void SetCatalogueIds(IReadOnlyList<string> catalogueIds) => _catalogueIds = catalogueIds;
+
+    /// <summary>
+    /// Execute one step. Returns false when the run must stop here: an action failed, an
+    /// <c>expectFailure</c> expectation was not met, or <see cref="OnBeforeStep"/> asked to stop.
+    /// Failures are recorded in <see cref="Errors"/>, never thrown.
+    /// </summary>
+    internal bool ExecuteStep(StepDef step, int stepIndex)
+    {
+        try
+        {
+            if (OnBeforeStep is { } beforeStep && !beforeStep(stepIndex, step))
+            {
+                return false;
+            }
+
+            if (IsSkippedForEngine(step))
+            {
+                SkipStep(step, stepIndex);
+            }
+            else if (step.Action == "dump")
+            {
+                // dump is a no-op in the runner itself; the callback does the work
+            }
+            else if (step.Action is not null)
+            {
+                ExecuteActionStep(step, stepIndex);
+            }
+            else if (step.ExpectedState is not null)
+            {
+                ExecuteAssertion(step, stepIndex);
+            }
+            else if (step.ExpectedFile is not null)
+            {
+                ExecuteFileAssertion(step, stepIndex);
+            }
+            else
+            {
+                _errors.Add($"Step {stepIndex}: neither 'action', 'expectedState' nor 'expectedFile' defined");
+            }
+
+            NotifyStepCompleted(stepIndex, step);
+            return !_abortRun;
+        }
+        catch (Exception ex)
+        {
+            _errors.Add($"Step {stepIndex}: {ex.GetType().Name}: {ex.Message}");
+            HarnessError = $"{ex.GetType().Name}: {ex.Message}";
+            NotifyStepCompleted(stepIndex, step);
+            return step.Action is null || step.Action == "dump";
+        }
     }
 
     /// <summary>
@@ -383,7 +419,7 @@ public sealed class RosterRunner
                 // adapter that did not classify, and an engine whose wording moved are all
                 // assertion failures, and reporting them as crashes would mislead every consumer
                 // that reads HarnessError to tell the two apart.
-                _harnessError = $"{ex.GetType().Name}: {ex.Message}";
+                HarnessError = $"{ex.GetType().Name}: {ex.Message}";
             }
 
             _abortRun = true;

@@ -225,6 +225,13 @@ public interface IRosterEngine : IDisposable
     /// <summary>
     /// Clean up engine state after a spec run completes.
     /// Implementations must be safe to call when partially initialized.
+    /// <para>
+    /// A cleaned engine must also be safe to set up again: <see cref="Setup"/> or
+    /// <see cref="SetupFromFiles"/> after <c>Cleanup</c> yields an engine that knows only the new data, as
+    /// if freshly constructed. The protocol host's warm reuse relies on this between specs, and a scenario
+    /// spec relies on it within one, each time its roster editor reads the data directory again
+    /// (<c>newRoster</c>, <c>openRoster</c>; see <c>docs/adr/002-scenario-specs.md</c>).
+    /// </para>
     /// </summary>
     void Cleanup() { }
 

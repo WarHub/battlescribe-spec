@@ -10,6 +10,7 @@ public sealed class GameDataRunner
 {
     private readonly IGameDataEngine _engine;
     private readonly string? _engineName;
+    private readonly string? _baseEngineName;
     private readonly List<string> _errors = [];
     private readonly GameDataExpressionResolver _exprResolver = new();
     private string _specId = "";
@@ -42,21 +43,41 @@ public sealed class GameDataRunner
     /// </summary>
     public Action<int, GameDataStepDef, GameDataState>? OnStepCompleted { get; set; }
 
-    public GameDataRunner(IGameDataEngine engine, string? engineName = null)
+    /// <param name="engine">The engine under test.</param>
+    /// <param name="engineName">
+    /// The engine actually running (<c>battlescribe-ui</c>): the name per-engine overrides are looked up
+    /// by first, and the one <c>expectedFile</c> snapshots resolve against (exact → family → base).
+    /// </param>
+    /// <param name="baseEngineName">
+    /// The engine whose overrides apply when the spec has none for <paramref name="engineName"/>
+    /// (<c>battlescribe-ui</c> → <c>battlescribe</c>) — the most-specific-wins rule
+    /// <see cref="RosterRunner"/> already follows. Null keeps the gamedata lanes' rule, under which only
+    /// an entry for the exact name applies. Scenario runs pass it, so one rule covers both kinds of block
+    /// in a scenario spec; gamedata specs, whose overrides were written against the exact name, are
+    /// unaffected.
+    /// </param>
+    public GameDataRunner(IGameDataEngine engine, string? engineName = null, string? baseEngineName = null)
     {
         _engine = engine;
         _engineName = engineName;
+        _baseEngineName = baseEngineName;
     }
+
+    /// <summary>
+    /// Which per-engine override key applies: the running engine's own entry when the spec declares one,
+    /// else the base engine's. Without a base name this is always <see cref="_engineName"/>.
+    /// </summary>
+    private string? OverrideKeyFor<T>(Dictionary<string, T>? engines)
+        => _engineName is { } name && engines is not null && engines.ContainsKey(name)
+            ? name
+            : _baseEngineName ?? _engineName;
 
     /// <summary>
     /// Run a complete GameData spec. Returns list of assertion failures (empty = pass).
     /// </summary>
     public SpecResult Run(GameDataSpecFile spec)
     {
-        _errors.Clear();
-        _specId = spec.Id;
-        _specDir = spec.SourceDirectory;
-        _abortRun = false;
+        BeginSteps(spec.Id, spec.SourceDirectory);
         try
         {
             _engine.SetTestContext(spec.Id);
@@ -88,48 +109,9 @@ public sealed class GameDataRunner
             // Execute steps
             for (var i = 0; i < spec.Steps.Count; i++)
             {
-                var step = spec.Steps[i];
-                try
+                if (!ExecuteStep(spec.Steps[i], i))
                 {
-                    if (step.Action == "dump")
-                    {
-                        // dump is a no-op in the runner; the callback does the work
-                    }
-                    else if (step.Action is not null)
-                    {
-                        ExecuteActionStep(step, i);
-                    }
-                    else if (step.ExpectedState is not null || step.ExpectedFile is not null)
-                    {
-                        if (step.ExpectedState is not null)
-                        {
-                            ExecuteAssertion(step, i);
-                        }
-                        if (step.ExpectedFile is not null)
-                        {
-                            ExecuteFileAssertion(step, i);
-                        }
-                    }
-                    else
-                    {
-                        _errors.Add($"Step {i}: neither 'action', 'expectedState' nor 'expectedFile' defined");
-                    }
-
-                    NotifyStepCompleted(i, step);
-
-                    if (_abortRun)
-                    {
-                        break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _errors.Add($"Step {i}: {ex.GetType().Name}: {ex.Message}");
-                    NotifyStepCompleted(i, step);
-                    if (step.Action is not null && step.Action != "dump")
-                    {
-                        break;
-                    }
+                    break;
                 }
             }
         }
@@ -150,6 +132,66 @@ public sealed class GameDataRunner
         }
 
         return new SpecResult(spec.Id, spec.Category, spec.Description, [.. _errors]);
+    }
+
+    // ===== Step-at-a-time entry points =====
+    //
+    // `Run` is a setup followed by these; a scenario spec drives them directly, interleaving this
+    // runner's steps with a roster runner's. Mirrors RosterRunner's members of the same names.
+
+    /// <summary>Failures recorded so far, in step order. A scenario reads what each step added.</summary>
+    internal IReadOnlyList<string> Errors => _errors;
+
+    /// <summary>Reset the per-run state. Does not touch the engine: setup is the caller's.</summary>
+    internal void BeginSteps(string specId, string? specDir)
+    {
+        _errors.Clear();
+        _specId = specId;
+        _specDir = specDir;
+        _abortRun = false;
+    }
+
+    /// <summary>
+    /// Execute one step. Returns false when the run must stop here: an action failed, or an
+    /// <c>expectFailure</c> expectation was not met. Failures are recorded in <see cref="Errors"/>.
+    /// </summary>
+    internal bool ExecuteStep(GameDataStepDef step, int stepIndex)
+    {
+        try
+        {
+            if (step.Action == "dump")
+            {
+                // dump is a no-op in the runner; the callback does the work
+            }
+            else if (step.Action is not null)
+            {
+                ExecuteActionStep(step, stepIndex);
+            }
+            else if (step.ExpectedState is not null || step.ExpectedFile is not null)
+            {
+                if (step.ExpectedState is not null)
+                {
+                    ExecuteAssertion(step, stepIndex);
+                }
+                if (step.ExpectedFile is not null)
+                {
+                    ExecuteFileAssertion(step, stepIndex);
+                }
+            }
+            else
+            {
+                _errors.Add($"Step {stepIndex}: neither 'action', 'expectedState' nor 'expectedFile' defined");
+            }
+
+            NotifyStepCompleted(stepIndex, step);
+            return !_abortRun;
+        }
+        catch (Exception ex)
+        {
+            _errors.Add($"Step {stepIndex}: {ex.GetType().Name}: {ex.Message}");
+            NotifyStepCompleted(stepIndex, step);
+            return step.Action is null || step.Action == "dump";
+        }
     }
 
     private void NotifyStepCompleted(int stepIndex, GameDataStepDef step)
@@ -210,7 +252,7 @@ public sealed class GameDataRunner
         }
 
         var error = ExportSnapshotAssertion.AssertOrUpdate(
-            step.ExpectedFile!.ForEngine(_engineName),
+            step.ExpectedFile!.ForEngine(OverrideKeyFor(step.ExpectedFile.Engines)),
             activeFile,
             _engineName,
             _specId,
@@ -279,7 +321,7 @@ public sealed class GameDataRunner
     private void ExecuteActionStep(GameDataStepDef step, int stepIndex)
     {
         var declared = step.ExpectFailure;
-        var expected = declared?.ForEngine(_engineName);
+        var expected = declared?.ForEngine(OverrideKeyFor(declared.Engines));
 
         if (PrepareAction(step, stepIndex) is not { } dispatch)
         {
@@ -427,7 +469,7 @@ public sealed class GameDataRunner
     {
         if (step.ExpectedState is not null)
         {
-            var effective = step.ExpectedState.ForEngine(_engineName);
+            var effective = step.ExpectedState.ForEngine(OverrideKeyFor(step.ExpectedState.Engines));
             AssertExpectedState(effective, stepIndex);
         }
     }
