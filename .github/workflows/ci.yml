@@ -270,6 +270,10 @@ jobs:
   # relative to a project graph that changes. The only thing that finds it is building the image.
   # It is a plain `docker build` with no push, no registry auth and no secrets: nothing here needs the
   # BattleScribe archive, because this image ships no engine.
+  #
+  # It is also where an SDK bump reaches the image. The build stage installs the SDK global.json pins,
+  # read by the build itself, so this job needs no SDK input and a Dependabot bump of global.json needs
+  # no edit here or under docker/: the bump PR's run of this job is the proof that the image follows.
   docker:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest

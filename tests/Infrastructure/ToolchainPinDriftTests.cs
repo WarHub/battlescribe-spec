@@ -5,8 +5,8 @@ namespace BattleScribeSpec.Tests;
 
 /// <summary>
 /// <b>The .NET SDK feature band this repo builds on is a decision, and these tests are where it is
-/// kept one.</b> <c>global.json</c> pins the band, every CI job installs from that file, and
-/// Dependabot is the channel that moves it.
+/// kept one.</b> <c>global.json</c> pins the band, every CI job and the docker image install from that
+/// file, and Dependabot is the channel that moves it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -194,29 +194,45 @@ public sealed class ToolchainPinDriftTests
         static text => [.. VsTestPackage.Matches(text).Select(static m => m.Groups[1].Value)]);
 
     /// <summary>
-    /// <b>A Dockerfile's SDK tag is the same decision, spelled somewhere Dependabot's dotnet-sdk
-    /// updater cannot reach.</b> The images COPY <c>global.json</c>, so a tag outside the pinned band
-    /// does not build differently — it fails outright ("A compatible .NET SDK was not found"). Two
-    /// numbers that must agree, in two files, is exactly the shape that drifts, so it is asserted.
+    /// <b>The image builds on the SDK <c>global.json</c> pins, read from <c>global.json</c> by the build
+    /// itself, and runs on the runtime the app targets.</b> No Dockerfile under <c>docker/</c> may name a
+    /// <c>dotnet/sdk</c> image, whatever its tag; every one that builds .NET must read <c>sdk.version</c>
+    /// from <c>global.json</c>; and every other .NET image must name the channel of the CLI's
+    /// <c>TargetFramework</c>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Bands only: the patch within the band is free to move, because <c>latestPatch</c> accepts any
-    /// patch at or above the pinned one. So <c>sdk:10.0.302</c> satisfies a <c>10.0.300</c> pin and
-    /// this test says nothing about it; <c>sdk:10.0.400</c> does not, and this test says so by name.
+    /// <b>No SDK image at all, not one that matches.</b> This test used to hold an SDK image tag to
+    /// <c>global.json</c>'s feature band, and that was the wrong invariant twice over. Under
+    /// <c>latestPatch</c> a tag in the right band but below the pinned patch cannot satisfy the pin either:
+    /// #559 moved the pin from 10.0.400 to 10.0.402, this test passed, and the <c>docker</c> job failed
+    /// with "A compatible .NET SDK was not found". And a tag that matched exactly would still have been a
+    /// second record of the SDK, in a file Dependabot's dotnet-sdk updater does not know exists — right
+    /// until the next bump, and moved by hand in every one. So the build stage installs the SDK from
+    /// <c>global.json</c> (<c>docker/bs-spec.Dockerfile</c> says how), the one record is the one Dependabot
+    /// moves, and this test refuses both ways back: a <c>dotnet/sdk</c> image, by name, and a build stage
+    /// that no longer reads <c>global.json</c>.
     /// </para>
     /// <para>
-    /// A tag in another band fails here with both values — the failure the <c>docker</c> CI job would
-    /// produce, several minutes later. <see cref="EveryBrokenSdkTag_IsReported"/> holds the ways a tag
-    /// can leave the band.
+    /// <b>The runtime images follow the target framework, not <c>global.json</c>.</b> An SDK builds every
+    /// target framework up to its own, so a later-major SDK in <c>global.json</c> still produces a
+    /// <c>net10.0</c> app, and that app starts only on a 10.0 runtime: roll-forward does not cross a major
+    /// by default. Tying these tags to <c>global.json</c> would be wrong in exactly the window where the
+    /// two differ. The tag is the channel (<c>10.0</c>, or a variant of it such as <c>10.0-noble</c>), not
+    /// a patch, because nothing bumps a patch tag here: it would freeze the runtime's security fixes.
+    /// </para>
+    /// <para>
+    /// Comment lines are not read — the Dockerfile tells its history in prose that names the images it no
+    /// longer uses. <see cref="EveryBrokenDockerToolchain_IsReported"/> holds the ways each rule can be
+    /// broken, #559's among them.
     /// </para>
     /// </remarks>
     [Fact]
-    public void DockerImagesUseTheSdkBandPinnedInGlobalJson()
+    public void DockerImages_TakeTheSdkFromGlobalJson_AndTheRuntimeFromTheTargetFramework()
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "global.json")));
-        var pinned = doc.RootElement.GetProperty("sdk").GetProperty("version").GetString()!;
-        var pinnedBand = FeatureBandOf(pinned);
+        var pinned = doc.RootElement.GetProperty("sdk").GetProperty("version").GetString();
+        var channel = TargetFrameworkChannel();
 
         var dockerfiles = Directory
             .EnumerateFiles(Path.Combine(RepoRoot, "docker"), "*.Dockerfile", SearchOption.AllDirectories)
@@ -225,75 +241,137 @@ public sealed class ToolchainPinDriftTests
 
         Assert.NotEmpty(dockerfiles);
 
-        var (read, mismatched) = SdkTagsOutsideTheBand(pinned, dockerfiles.Select(static f => (Path.GetFileName(f), File.ReadAllText(f))));
+        var (images, builds, problems) = DockerToolchainProblems(channel, dockerfiles.Select(static f => (Path.GetFileName(f), File.ReadAllText(f))));
 
         Assert.True(
-            read > 0,
-            "No `mcr.microsoft.com/dotnet/sdk` tag found under docker/. Either the images stopped using "
-            + "the .NET SDK image or the tag was written in a form this gate cannot read — check before "
-            + "assuming the pin still holds.");
+            images > 0 && builds > 0,
+            $"Read {images} `mcr.microsoft.com/dotnet/*` image(s) and {builds} Dockerfile(s) that build .NET under docker/. "
+            + "Either the images stopped building or running .NET, or they spell it in a form this gate cannot read — "
+            + "check before assuming either rule still holds.");
 
         Assert.True(
-            mismatched.Count == 0,
-            $"global.json pins the SDK to the {pinnedBand} feature band (version {pinned}, "
-            + $"rollForward latestPatch), but these images ask for a different band:\n"
-            + string.Join("\n", mismatched)
-            + "\n\nThe Dockerfiles COPY global.json, so this is a build failure, not a nuance: the "
-            + "SDK in the image cannot satisfy the pin. Move both together — Dependabot's dotnet-sdk "
-            + "updater rewrites global.json and does not know these files exist.");
+            problems.Count == 0,
+            "These Dockerfiles take their .NET toolchain from somewhere other than the record that owns it:\n"
+            + string.Join("\n", problems)
+            + $"\n\nThe SDK is global.json's alone (pinned: {pinned}, rollForward latestPatch). The build stage starts "
+            + "from runtime-deps and installs global.json's `sdk.version` itself, so an SDK bump needs no edit under "
+            + "docker/; a `dotnet/sdk` image is a second record of it that Dependabot never moves — #559's 10.0.400 "
+            + "image sat inside the band of a 10.0.402 pin and still could not satisfy it. The runtime images name the "
+            + $"channel of the CLI's TargetFramework (net{channel}, so {channel}): that, not the SDK, is what the app "
+            + "needs to start.");
     }
 
     /// <summary>
-    /// <b>A tag outside the band is reported</b>, whichever way it leaves it: another feature band, another
-    /// major version, or no band at all. Pinned to <c>10.0.400</c>, the sample asks for <c>10.0.402</c>.
+    /// <b>Each way back to a second record is reported</b>: an SDK image in the pinned band but below the
+    /// pinned patch (#559, which the old band check passed), one at the pinned version itself, a floating
+    /// SDK tag, a build stage that no longer reads <c>global.json</c>, and a runtime image off the target
+    /// framework's channel — by major, by patch pin, or by naming no tag — or not a runtime image at all.
+    /// Each finding is matched by its own wording, so a rule that only fires through another's branch
+    /// does not count. The clean sample's comment names an SDK image, so it also proves comment lines are
+    /// not read.
     /// </summary>
     [Fact]
-    public void EveryBrokenSdkTag_IsReported() => LintSamples.AssertEachBreakIsRejected(
-        "FROM mcr.microsoft.com/dotnet/sdk:10.0.402 AS build\nFROM mcr.microsoft.com/dotnet/aspnet:10.0\n",
+    public void EveryBrokenDockerToolchain_IsReported() => LintSamples.AssertEachBreakIsRejected(
+        "# It was FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build until the pin outran it.\n"
+        + "FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS build\n"
+        + "COPY global.json .\n"
+        + "RUN version=\"$(jq -er '.sdk.version' global.json)\"\n"
+        + "RUN dotnet publish src/App/App.csproj -c Release -o /app\n"
+        + "FROM mcr.microsoft.com/dotnet/aspnet:10.0\n",
         [
-            ("sdk:10.0.402", "sdk:10.0.300", "sdk:10.0.300"),
-            ("sdk:10.0.402", "sdk:11.0.400", "sdk:11.0.400"),
-            ("sdk:10.0.402", "sdk:10.0", "sdk:10.0"),
+            // #559: global.json at 10.0.402, the image at 10.0.400 — the same band, a patch below the pin.
+            ("runtime-deps:10.0 AS build", "sdk:10.0.400 AS build", "sdk:10.0.400 is an SDK image"),
+            ("runtime-deps:10.0 AS build", "sdk:10.0.402 AS build", "sdk:10.0.402 is an SDK image"),
+            ("runtime-deps:10.0 AS build", "sdk:10.0 AS build", "sdk:10.0 is an SDK image"),
+            ("jq -er '.sdk.version' global.json", "echo 10.0.402", "without reading `sdk.version` from global.json"),
+            ("aspnet:10.0\n", "aspnet:11.0\n", "aspnet:11.0 is not the 10.0 channel"),
+            ("aspnet:10.0\n", "aspnet:10.0.13\n", "aspnet:10.0.13 is not the 10.0 channel"),
+            ("aspnet:10.0\n", "aspnet\n", "aspnet with no tag"),
+            ("aspnet:10.0\n", "monitor:10.0\n", "monitor:10.0 is not a runtime image"),
         ],
-        text => SdkTagsOutsideTheBand("10.0.400", [("sample.Dockerfile", text)]).Mismatched);
+        static text => DockerToolchainProblems("10.0", [("sample.Dockerfile", text)]).Problems);
 
     /// <summary>
-    /// How many <c>mcr.microsoft.com/dotnet/sdk</c> tags the Dockerfiles ask for, and each one outside the
-    /// feature band of <paramref name="pinned"/>, as <c>  &lt;file&gt;: sdk:&lt;tag&gt;</c>.
+    /// How many <c>mcr.microsoft.com/dotnet/*</c> images the Dockerfiles name, how many of the files build
+    /// .NET, and each rule of <see cref="DockerImages_TakeTheSdkFromGlobalJson_AndTheRuntimeFromTheTargetFramework"/>
+    /// one breaks, as <c>  &lt;file&gt;: …</c>. <paramref name="channel"/> is the target framework's
+    /// <c>major.minor</c>. Comment lines are skipped.
     /// </summary>
-    private static (int Read, List<string> Mismatched) SdkTagsOutsideTheBand(string pinned, IEnumerable<(string Name, string Text)> dockerfiles)
+    private static (int Images, int Builds, List<string> Problems) DockerToolchainProblems(string channel, IEnumerable<(string Name, string Text)> dockerfiles)
     {
-        var pinnedBand = FeatureBandOf(pinned);
-        var read = 0;
-        var mismatched = new List<string>();
+        var images = 0;
+        var builds = 0;
+        var problems = new List<string>();
         foreach (var (name, text) in dockerfiles)
         {
-            foreach (var match in Regex.Matches(text, @"mcr\.microsoft\.com/dotnet/sdk:(?<tag>[^\s]+)").Cast<Match>())
+            var instructions = string.Join('\n', text.Split('\n').Where(static l => !l.TrimStart().StartsWith('#')));
+            foreach (Match match in DotnetImage.Matches(instructions))
             {
-                read++;
-                var tag = match.Groups["tag"].Value;
-                if (FeatureBandOf(tag) != pinnedBand)
+                images++;
+                var repo = match.Groups["repo"].Value;
+                var reference = match.Groups["ref"].Value;
+                if (repo == "sdk" || repo.EndsWith("/sdk", StringComparison.Ordinal))
                 {
-                    mismatched.Add($"  {name}: sdk:{tag}");
+                    problems.Add($"  {name}: {repo}{reference} is an SDK image; the SDK is the one global.json pins, installed by the build stage");
+                }
+                else if (repo is not ("runtime-deps" or "runtime" or "aspnet"))
+                {
+                    problems.Add($"  {name}: {repo}{reference} is not a runtime image (runtime-deps, runtime or aspnet)");
+                }
+                else if (reference.Length == 0)
+                {
+                    problems.Add($"  {name}: {repo} with no tag is `latest`, not the {channel} channel net{channel} runs on");
+                }
+                else if (reference != $":{channel}" && !reference.StartsWith($":{channel}-", StringComparison.Ordinal))
+                {
+                    problems.Add($"  {name}: {repo}{reference} is not the {channel} channel net{channel} runs on");
+                }
+            }
+
+            if (BuildsDotnet.IsMatch(instructions))
+            {
+                builds++;
+                if (!ReadsTheSdkVersionFromGlobalJson.IsMatch(instructions))
+                {
+                    problems.Add($"  {name}: builds .NET without reading `sdk.version` from global.json, so its SDK is not the pinned one");
                 }
             }
         }
 
-        return (read, mismatched);
+        return (images, builds, problems);
     }
 
+    /// <summary>An image from <c>mcr.microsoft.com/dotnet/</c>: the repository, and the <c>:tag</c> or <c>@digest</c> after it, if any.</summary>
+    private static readonly Regex DotnetImage = new(@"mcr\.microsoft\.com/dotnet/(?<repo>[a-z0-9/-]+)(?<ref>[:@]\S*)?");
+
+    /// <summary>A <c>dotnet</c> command that needs an SDK.</summary>
+    private static readonly Regex BuildsDotnet = new(@"\bdotnet\s+(?:restore|build|publish|pack|test)\b");
+
     /// <summary>
-    /// The <c>major.minor.Fxx</c> band of an SDK version or image tag, or the input unchanged when it
-    /// names no band (<c>10.0</c>, <c>latest</c>) — those float by definition and are reported as a
-    /// mismatch rather than silently treated as compatible.
+    /// <c>sdk.version</c> read out of <c>global.json</c> on one line, as the build stage's
+    /// <c>jq -er '.sdk.version' global.json</c> does. A different way of reading the pin is a change to
+    /// make here too, deliberately.
     /// </summary>
-    private static string FeatureBandOf(string version)
+    private static readonly Regex ReadsTheSdkVersionFromGlobalJson = new(@"\.sdk\.version\b.*\bglobal\.json\b");
+
+    /// <summary>
+    /// The <c>major.minor</c> of the CLI's target framework, the one app the image ships: from its own
+    /// project if that sets one, else from <c>Directory.Build.props</c>, which every project inherits.
+    /// </summary>
+    private static string TargetFrameworkChannel()
     {
-        var match = Regex.Match(version, @"^(?<major>\d+)\.(?<minor>\d+)\.(?<band>\d)\d\d$");
-        return match.Success
-            ? $"{match.Groups["major"].Value}.{match.Groups["minor"].Value}.{match.Groups["band"].Value}xx"
-            : version;
+        var match = new[] { Path.Combine("src", "BattleScribeSpec.Cli", "BattleScribeSpec.Cli.csproj"), "Directory.Build.props" }
+            .Select(static f => TargetFramework.Match(File.ReadAllText(Path.Combine(RepoRoot, f))))
+            .FirstOrDefault(static m => m.Success);
+
+        Assert.True(
+            match is not null,
+            "Neither src/BattleScribeSpec.Cli/BattleScribeSpec.Cli.csproj nor Directory.Build.props sets a "
+            + "`<TargetFramework>netX.Y</TargetFramework>` this gate can read, so it cannot say which runtime the image needs.");
+        return match.Groups["channel"].Value;
     }
+
+    private static readonly Regex TargetFramework = new(@"<TargetFramework>net(?<channel>\d+\.\d+)</TargetFramework>");
 
     /// <summary>
     /// <b>The bump path.</b> Without this entry the pin above is a slow leak rather than a fix — the

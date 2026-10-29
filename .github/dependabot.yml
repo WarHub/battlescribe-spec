@@ -42,16 +42,21 @@ updates:
   # read on its own — a red build here is the analyzer band tightening, which is a decision, not
   # noise to be batched with a JSON serializer bump.
   #
-  # One SDK-derived pin is invisible to this updater and must move by hand in the same PR: the
-  # `mcr.microsoft.com/dotnet/sdk` tag in docker/. It is not left to drift, though: the Dockerfile
-  # COPYs global.json, so a tag outside the pinned band fails the image build outright, and
-  # `ToolchainPinDriftTests.DockerImagesUseTheSdkBandPinnedInGlobalJson` says so in seconds rather
-  # than minutes. Expect the SDK bump PR to go red there until the tag follows —
-  # that is the reminder working, not a problem with the PR.
+  # global.json is the ONLY record of the SDK, so this entry's PR is the whole bump. The docker image
+  # reads it too: docker/bs-spec.Dockerfile's build stage starts from runtime-deps and installs
+  # global.json's `sdk.version` itself, and the `docker` CI job builds it on every bump PR. Until
+  # 2026-10 the image named an SDK tag of its own that had to follow by hand, guarded by a check that
+  # compared feature bands only — #559 (10.0.400 -> 10.0.402) stayed in the band, passed the check, and
+  # failed the image build.
+  # `ToolchainPinDriftTests.DockerImages_TakeTheSdkFromGlobalJson_AndTheRuntimeFromTheTargetFramework`
+  # now refuses any `dotnet/sdk` image under docker/.
   #
-  # There is deliberately no `package-ecosystem: docker` entry. A second bot bumping the image tag
-  # would race this one over two numbers that must agree, and every such PR would be red until the
-  # other landed.
+  # There is deliberately no `package-ecosystem: docker` entry, because nothing under docker/ is a
+  # version for it to move. The SDK comes from global.json, above. The runtime images name the channel
+  # of the app's TargetFramework (`aspnet:X.Y` for netX.Y), a floating tag that takes each runtime
+  # patch on the next build by itself; the only bump a docker updater could offer is a new major, and
+  # a netX.Y app does not start on it. The channel moves with the TargetFramework, in the PR that
+  # moves that, and the same test says so if it does not.
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:

@@ -253,8 +253,9 @@ through the memory cap for unmeasured engines. Declare what you know; inherit no
 ### With Docker
 
 Build the image first (it is not published yet — `docker build -f docker/bs-spec.Dockerfile -t
-bs-spec:local .` from a checkout cloned with `--recurse-submodules`). It ships the specs and the
-runner and **no engine**, so yours is the only one:
+bs-spec:local .` from a checkout cloned with `--recurse-submodules`; no build arguments, and no .NET
+SDK of your own: the build installs the one `global.json` pins). It ships the specs and the runner
+and **no engine**, so yours is the only one:
 
 ```bash
 docker run --rm -v /path/to/your-adapter:/adapter:ro \
