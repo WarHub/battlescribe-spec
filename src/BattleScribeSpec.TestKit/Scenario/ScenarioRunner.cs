@@ -30,6 +30,7 @@ public sealed class ScenarioRunner
     private readonly List<string> _errors = [];
     private readonly Dictionary<string, string> _savedRosters = new(StringComparer.Ordinal);
     private ScenarioDataDirectory _dataDirectory = new();
+    private string? _setupEdit;
     private int _dataErrorsSeen;
     private int _rosterErrorsSeen;
     private string? _harnessError;
@@ -83,6 +84,7 @@ public sealed class ScenarioRunner
         _rosterErrorsSeen = 0;
         _harnessError = null;
         _rosterEditorStarted = false;
+        _setupEdit = spec.Setup.Edit;
 
         _dataRunner.UpdateSnapshots = UpdateSnapshots;
         _dataRunner.OnDiverge = OnDiverge;
@@ -173,8 +175,8 @@ public sealed class ScenarioRunner
 
     /// <summary>
     /// Execute one item of <c>steps</c>: every step of a block, or one hand-off. Each step and each hand-off
-    /// takes the next global index, so "Step 7" is the seventh a reader counts down the file. Returns false
-    /// when the run must stop.
+    /// takes the next global index, counted from 0 as the other runners count: "Step 7" is the eighth down the
+    /// file, whichever block it sits in. Returns false when the run must stop.
     /// </summary>
     private bool ExecuteItem(ScenarioStepDef item, ref int stepIndex)
     {
@@ -182,6 +184,16 @@ public sealed class ScenarioRunner
         if (kinds != 1)
         {
             _errors.Add($"Step {stepIndex}: a scenario item is exactly one of 'data', 'roster' or 'action' (this one has {kinds})");
+            return false;
+        }
+
+        if (item.Action is null && (item.File is not null || item.ExpectFailure is not null))
+        {
+            // Both belong to a hand-off. On a block they would be read by nothing — and an expectFailure
+            // indented one level too shallow, meant for a step inside the block, would vanish silently.
+            _errors.Add(
+                $"Step {stepIndex}: 'file' and 'expectFailure' belong to a hand-off; a data or roster block " +
+                "takes neither — put expectFailure on the step inside the block");
             return false;
         }
 
@@ -342,7 +354,7 @@ public sealed class ScenarioRunner
                 return () =>
                 {
                     _data.Reload();
-                    _dataDirectory.Write(_data.ExportActiveFile());
+                    _dataDirectory.Write(_data.ExportActiveFile(), replaces: _dataRunner.OpenedFileId ?? _setupEdit);
                 };
 
             case ScenarioHandoffs.NewRoster:
@@ -380,7 +392,11 @@ public sealed class ScenarioRunner
         var setupErrors = _roster.SetupFromFiles(_dataDirectory.Files);
         if (setupErrors.Count > 0)
         {
-            throw new InvalidOperationException(
+            // A fault, never a refusal an expectFailure can assert. Over the protocol a setup failure arrives
+            // as bare text whatever caused it — the host failing to start a browser, an engine's own null
+            // reference — so nothing here can tell an engine declining the data from the harness breaking.
+            // The refusal an openRoster asserts is LoadRoster's, which keeps its classification.
+            throw new HarnessFaultException(
                 $"the roster editor could not read the data directory: {string.Join("; ", setupErrors)}");
         }
 

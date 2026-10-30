@@ -12,7 +12,8 @@ namespace BattleScribeSpec.Tests;
 /// The steps inside a block are a roster or GameData spec's steps verbatim, so they are held to those lints'
 /// own per-step rules (<see cref="SpecLintTests.CheckRosterSteps"/>, <see cref="GameDataSpecLintTests.CheckGameDataSteps"/>)
 /// rather than to a copy of them. Step numbers in the findings count every step and hand-off down the file, as
-/// the runner's do.
+/// the runner's do — from 1, like the other lints' numbers, where the runner's "Step N" counts from 0 like the
+/// other runners'. So the runner's "Step 5" is the lint's "step 6".
 /// </para>
 /// <para>
 /// What the lint catches before a run, the runner refuses during one (<see cref="ScenarioRunner"/>): an unknown
@@ -174,6 +175,11 @@ public sealed class ScenarioSpecLintTests
             {
                 yield return $"{where} has more than one of 'data', 'roster' and 'action' — a block and a hand-off are separate items";
                 continue;
+            }
+
+            if (item.Action is null && (item.File is not null || item.ExpectFailure is not null))
+            {
+                yield return $"{where}: 'file' and 'expectFailure' belong to a hand-off; a data or roster block takes neither — put expectFailure on the step inside the block";
             }
 
             if (item.Data is { } data)
@@ -380,6 +386,10 @@ public sealed class ScenarioSpecLintTests
         // each item is exactly one kind
         ("  - action: newRoster\n", "  - action: newRoster\n    data: []\n", "item 3 has more than one of 'data', 'roster' and 'action'"),
         ("  - action: saveData\n", "  - file: my-list\n", "item 2 has none of 'data', 'roster' or 'action'"),
+
+        // a block takes neither a hand-off's file nor its expectFailure
+        ("          ct-pts: \"15\"\n", "          ct-pts: \"15\"\n    expectFailure: true\n",
+            "item 1: 'file' and 'expectFailure' belong to a hand-off"),
 
         // the hand-off is known
         ("action: saveData", "action: saveDta", "item 2 (step 2): unknown hand-off 'saveDta'"),

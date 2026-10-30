@@ -35,6 +35,32 @@ public sealed class ScenarioDataDirectoryTests
     }
 
     [Fact]
+    public void Write_ReplacingTheOpenedFile_TakesItsPlace()
+    {
+        var directory = new ScenarioDataDirectory();
+        directory.Write("""<gameSystem id="gs-1"/>""");
+        directory.Write("""<catalogue id="cat-1"/>""");
+        directory.Write("""<catalogue id="cat-2"/>""");
+        directory.Write("""<catalogue id="cat-9"/>""", replaces: "cat-1");
+
+        Assert.Equal(["gs-1.gst", "cat-9.cat", "cat-2.cat"], directory.Files.Select(f => f.FileName));
+    }
+
+    [Fact]
+    public void Write_RenamingOntoAnotherFile_IsRefused()
+    {
+        var directory = new ScenarioDataDirectory();
+        directory.Write("""<catalogue id="cat-1"/>""");
+        directory.Write("""<catalogue id="cat-2"/>""");
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => directory.Write("""<catalogue id="cat-2"/>""", replaces: "cat-1"));
+
+        Assert.Contains("'cat-1' as 'cat-2'", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["cat-1.cat", "cat-2.cat"], directory.Files.Select(f => f.FileName)); // refused, not half-applied
+    }
+
+    [Fact]
     public void Namespaced_RootsAreRecognised()
     {
         var directory = new ScenarioDataDirectory();

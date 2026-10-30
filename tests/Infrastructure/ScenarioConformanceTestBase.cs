@@ -60,10 +60,7 @@ public abstract class ScenarioConformanceTestBase
     /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c> — resolved
     /// most-specific-first: this engine's own entry, else the base engine's.
     /// </summary>
-    private string ExpectationFor(ScenarioSpecFile spec)
-        => spec.Engines is not null && spec.Engines.ContainsKey(EngineName)
-            ? spec.GetExpectation(EngineName)
-            : spec.GetExpectation(BaseEngineName);
+    private string ExpectationFor(ScenarioSpecFile spec) => spec.GetExpectation(EngineName, BaseEngineName);
 
     /// <summary>
     /// One row per scenario spec, carrying and labelled with its name (<c>category/id</c>) — see

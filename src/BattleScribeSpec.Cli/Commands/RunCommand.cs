@@ -871,8 +871,10 @@ internal static class RunCommand
         }
 
         // As in the gamedata branch: an anonymous connectable has no identity to check the spec's
-        // `engines:` map against.
-        if (options.Engine.EngineName is { } identityName && !spec.IsApplicableTo(identityName))
+        // `engines:` map against. Unlike it, a UI driver inherits its base engine's `skip` — the one rule a
+        // scenario applies to its `engines:` and to both kinds of block (ScenarioRunner, the scenario lanes).
+        if (options.Engine.EngineName is { } identityName
+            && string.Equals(spec.GetExpectation(identityName, options.Engine.AssertionEngineName), "skip", StringComparison.OrdinalIgnoreCase))
         {
             Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{identityName}' (skipped).");
             return 0;

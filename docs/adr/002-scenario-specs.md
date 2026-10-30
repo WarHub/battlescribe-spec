@@ -185,7 +185,8 @@ snapshots and all. The scenario runner adds:
 - the data directory and the saved rosters;
 - the four hand-offs;
 - one error list in step order;
-- one global step index across blocks, so `Step 7` means the seventh step a reader counts.
+- one global step index across blocks, counted from 0 like the other runners' indices, so `Step 7`
+  is the eighth step or hand-off down the file, whichever block it is in.
 
 Step ids are one namespace across the whole spec. Expressions resolve within their domain: a roster
 step references roster outputs and a data step references data outputs. A data-side id a roster step

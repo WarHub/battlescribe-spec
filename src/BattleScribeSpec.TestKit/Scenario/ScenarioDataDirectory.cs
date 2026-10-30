@@ -29,8 +29,18 @@ internal sealed class ScenarioDataDirectory
     /// Store <paramref name="xml"/> under the id its root element carries, replacing an earlier file with
     /// that id in place.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The root is neither <c>gameSystem</c> nor <c>catalogue</c>, or has no id.</exception>
-    public void Write(string xml)
+    /// <param name="xml">The file as the data editor wrote it.</param>
+    /// <param name="replaces">
+    /// The id of the file the editor opened, when it saves that file. An edit can change a file's own id,
+    /// and the editor still writes back to the file it read, so the old id's entry gives way to the new one
+    /// in its place — rather than staying beside it, where the roster editor would read two catalogues, or
+    /// two game systems, where the app has one.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// The root is neither <c>gameSystem</c> nor <c>catalogue</c>, or has no id; or a save renamed its file
+    /// to the id another file already has.
+    /// </exception>
+    public void Write(string xml, string? replaces = null)
     {
         var (root, id) = ReadRoot(xml);
         var isCatalogue = root switch
@@ -46,7 +56,18 @@ internal sealed class ScenarioDataDirectory
             throw new InvalidOperationException($"The data editor wrote a <{root}> with no id.");
         }
 
-        if (!_files.ContainsKey(id))
+        if (replaces is not null && replaces != id && _files.ContainsKey(replaces))
+        {
+            if (_files.ContainsKey(id))
+            {
+                throw new InvalidOperationException(
+                    $"The data editor saved '{replaces}' as '{id}', the id another file in the data directory already has.");
+            }
+
+            _files.Remove(replaces);
+            _order[_order.IndexOf(replaces)] = id;
+        }
+        else if (!_files.ContainsKey(id))
         {
             _order.Add(id);
         }

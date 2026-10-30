@@ -142,6 +142,13 @@ public sealed class GameDataRunner
     /// <summary>Failures recorded so far, in step order. A scenario reads what each step added.</summary>
     internal IReadOnlyList<string> Errors => _errors;
 
+    /// <summary>
+    /// The file the last successful <c>openFile</c> step opened, by root id; null before one has. A
+    /// scenario's <c>saveData</c> writes the editor's save over the file it opened, as the Data Editor
+    /// writes back to the path it read — even when an edit changed the file's own id.
+    /// </summary>
+    internal string? OpenedFileId { get; private set; }
+
     /// <summary>Reset the per-run state. Does not touch the engine: setup is the caller's.</summary>
     internal void BeginSteps(string specId, string? specDir)
     {
@@ -149,6 +156,7 @@ public sealed class GameDataRunner
         _specId = specId;
         _specDir = specDir;
         _abortRun = false;
+        OpenedFileId = null;
     }
 
     /// <summary>
@@ -330,7 +338,13 @@ public sealed class GameDataRunner
 
         if (expected is null || !expected.IsExpected)
         {
-            StoreOutputs(step, dispatch());
+            var outputs = dispatch();
+            StoreOutputs(step, outputs);
+            if (step.Action == "openFile")
+            {
+                OpenedFileId = outputs?.EntryId;
+            }
+
             return;
         }
 

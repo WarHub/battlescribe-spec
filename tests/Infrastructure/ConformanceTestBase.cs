@@ -45,10 +45,7 @@ public abstract class ConformanceTestBase
     /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c> — resolved
     /// most-specific-first: this driver's own entry, else the base engine's.
     /// </summary>
-    private string ExpectationFor(SpecFile spec)
-        => spec.Engines is not null && spec.Engines.ContainsKey(EngineName)
-            ? spec.GetExpectation(EngineName)
-            : spec.GetExpectation(BaseEngineName);
+    private string ExpectationFor(SpecFile spec) => spec.GetExpectation(EngineName, BaseEngineName);
 
     /// <summary>Optional prefix for log messages (e.g., "[FROZEN]").</summary>
     protected virtual string LogPrefix => "";

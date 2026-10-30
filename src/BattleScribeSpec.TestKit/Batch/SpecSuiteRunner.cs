@@ -201,7 +201,9 @@ public static class SpecSuiteRunner
         var filterLabel = filterPatterns is not null ? string.Join(",", filterPatterns) : "";
         var filteredSpecs = PreFilterSpecs(specSources, SpecDomain.Roster, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
         var filteredGameDataSpecs = PreFilterSpecs(gameDataSpecSources, SpecDomain.GameData, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
-        var filteredScenarioSpecs = PreFilterSpecs(scenarioSpecSources, SpecDomain.Scenario, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
+        // A scenario's `engines:` follows the rule its blocks do: a UI driver inherits its base engine's
+        // entry (ScenarioRunner, the scenario lanes). Roster and gamedata keep this runner's exact-name rule.
+        var filteredScenarioSpecs = PreFilterSpecs(scenarioSpecSources, SpecDomain.Scenario, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults, baseEngine: assertionEngine);
 
         // Counted before the describe gate below can still skip some of them: "selected" is what the
         // filters asked to run, so the nothing-executed message can tell "matched nothing" from
@@ -373,7 +375,8 @@ public static class SpecSuiteRunner
         TagFilter? tagFilter,
         string? engineFilter,
         List<SpecResult> results,
-        List<SpecResultSummary> reportResults)
+        List<SpecResultSummary> reportResults,
+        string? baseEngine = null)
         where TSpec : SpecFileBase
     {
         var domainName = domain.Name();
@@ -409,7 +412,7 @@ public static class SpecSuiteRunner
                 continue;
             }
 
-            if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
+            if (engineFilter is not null && string.Equals(spec.GetExpectation(engineFilter, baseEngine), "skip", StringComparison.OrdinalIgnoreCase))
             {
                 reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
                     [$"Skipped by engine filter '{engineFilter}'"], spec.Tags, Domain: domainName));

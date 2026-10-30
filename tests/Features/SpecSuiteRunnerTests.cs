@@ -254,6 +254,45 @@ public sealed class SpecSuiteRunnerTests
     }
 
     /// <summary>
+    /// <b>A scenario's <c>engines:</c> lets a UI driver inherit its base engine's skip</b> — the rule the
+    /// scenario's blocks and the scenario lanes apply. A spec that opts <c>battlescribe</c> out is opted out
+    /// under <c>battlescribe-ui</c> too, rather than run there and counted as a real failure.
+    /// </summary>
+    /// <remarks>Falsifiable: filter scenarios by the exact engine name and this spec runs.</remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ScenarioSkip_ForTheBaseEngine_AppliesToItsUiDriver()
+    {
+        var root = Directory.CreateTempSubdirectory("bsspec-scenario-skip-");
+        try
+        {
+            var handoff = Directory.CreateDirectory(Path.Combine(root.FullName, "scenario", "handoff"));
+            var source = SpecLoader.ResolveScenarioSpec(ScenarioFilter);
+            var yaml = File.ReadAllText(source).Replace(
+                "\nsetup:", "\nengines:\n  battlescribe: skip\n\nsetup:", StringComparison.Ordinal);
+            File.WriteAllText(Path.Combine(handoff.FullName, Path.GetFileName(source)), yaml);
+
+            var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+            {
+                Domains = ["scenario"],
+                SpecsDirectory = root.FullName,
+                EngineFilter = "battlescribe-ui",
+                AssertionEngine = "battlescribe",
+                AdapterFactory = _ => AdapterProcess.Start("dotnet", AdapterTestHost.ReferenceAdapterDll),
+            });
+
+            var skipped = Assert.Single(result.ReportResults, r => r.SpecId == "handoff-saved-edit-reaches-new-roster");
+            Assert.Equal(("scenario", "skipped"), (skipped.Domain, skipped.Status));
+            Assert.Contains("engine filter", Assert.Single(skipped.Failures), StringComparison.Ordinal);
+            Assert.Empty(result.Results);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
     /// <b>Under an explicit specs root, the other domains' subtrees are not roster specs.</b> Roster discovery
     /// used to take every yaml under the explicit directory, so <c>SpecsDirectory = specs/</c> found
     /// <c>specs/gamedata/entry/add-entry-basic.yaml</c> as the roster spec <c>entry/add-entry-basic</c> and ran

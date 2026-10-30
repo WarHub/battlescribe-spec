@@ -192,6 +192,64 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
         Assert.True(roster.StateReads > 0);
     }
 
+    /// <summary>
+    /// A roster editor that cannot read the data directory is a fault, never a refusal. Over the protocol a
+    /// setup failure arrives as bare text whatever caused it — this one is what a host's null reference
+    /// becomes on the wire — so letting it satisfy expectFailure would pass a spec on a broken harness.
+    /// </summary>
+    [Fact]
+    public void SetupErrors_NeverSatisfyExpectFailure()
+    {
+        var (_, _, result) = Run(
+            """
+              - action: newRoster
+                expectFailure: true
+            """,
+            roster: new RecordingRosterEditor { SetupErrors = ["Object reference not set to an instance of an object."] });
+
+        var failure = Assert.Single(result.Failures);
+        Assert.Contains("harness fault", failure, StringComparison.Ordinal);
+        Assert.Contains("Object reference not set", failure, StringComparison.Ordinal);
+        Assert.NotNull(result.HarnessError);
+    }
+
+    [Fact]
+    public void ExpectFailure_OnABlock_IsSpecError()
+    {
+        var (_, _, result) = Run(
+            """
+              - action: newRoster
+              - roster:
+                  - action: addForce
+                    forceEntryId: fe-1
+                expectFailure: true
+            """);
+
+        Assert.Contains("belong to a hand-off", Assert.Single(result.Failures), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Data Editor writes back to the file it opened, even when an edit changed that file's own id: the
+    /// roster editor then reads one catalogue under the new id, not the stale one beside it.
+    /// </summary>
+    [Fact]
+    public void SaveData_AfterAnIdEdit_ReplacesTheOpenedFile()
+    {
+        var (_, roster, result) = Run(
+            """
+              - data:
+                  - action: setFields
+                    entryId: cat-1
+                    fields:
+                      id: cat-9
+              - action: saveData
+              - action: newRoster
+            """);
+
+        AssertPassed(result);
+        Assert.Equal(["gs-1.gst", "cat-9.cat"], Assert.Single(roster.Setups).Select(f => f.FileName));
+    }
+
     [Fact]
     public void ExpectFailure_OnOpenRoster_ThatSucceeds_Fails()
     {
@@ -403,6 +461,8 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
 
         public Exception? LoadThrows { get; init; }
 
+        public IReadOnlyList<string> SetupErrors { get; init; } = [];
+
         public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
             => throw new InvalidOperationException("A scenario's roster editor reads files, never the Protocol model.");
 
@@ -411,7 +471,7 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
             Log.Add("setup");
             Setups.Add(files);
             Forces.Clear();
-            return [];
+            return SetupErrors;
         }
 
         public void Cleanup() => Log.Add("cleanup");
