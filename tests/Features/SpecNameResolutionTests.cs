@@ -1,9 +1,9 @@
 namespace BattleScribeSpec.Tests;
 
 /// <summary>
-/// <see cref="SpecLoader.ResolveRosterSpec"/> and <see cref="SpecLoader.ResolveGameDataSpec"/>: the
-/// name → file index every spec-carrying theory row is resolved through (see
-/// <see cref="TheoryRowIdentityTests"/> for why rows carry names).
+/// <see cref="SpecLoader.ResolveRosterSpec"/>, <see cref="SpecLoader.ResolveGameDataSpec"/> and
+/// <see cref="SpecLoader.ResolveScenarioSpec"/>: the name → file index every spec-carrying theory row is
+/// resolved through (see <see cref="TheoryRowIdentityTests"/> for why rows carry names).
 /// </summary>
 [Trait("Category", "Unit")]
 public sealed class SpecNameResolutionTests
@@ -16,9 +16,11 @@ public sealed class SpecNameResolutionTests
         {
             (SpecLoader.FindRosterSpecsDirectory(), SpecLoader.DiscoverSpecs, SpecLoader.ResolveRosterSpec),
             (SpecLoader.FindGameDataSpecsDirectory(), SpecLoader.DiscoverGameDataSpecs, SpecLoader.ResolveGameDataSpec),
+            (SpecLoader.FindScenarioSpecsDirectory(), SpecLoader.DiscoverScenarioSpecs, SpecLoader.ResolveScenarioSpec),
         })
         {
             Assert.NotNull(dir);
+            Assert.NotEmpty(discover(dir));
             foreach (var (path, id, category) in discover(dir))
             {
                 Assert.Equal(path, resolve(SpecLoader.SpecName(category, id)));
@@ -78,5 +80,24 @@ public sealed class SpecNameResolutionTests
         // file of the same name, or the wrong lane would run it.
         _ = SpecLoader.ResolveRosterSpec(ARealRosterSpec);
         Assert.Throws<ArgumentException>(() => SpecLoader.ResolveGameDataSpec(ARealRosterSpec));
+    }
+
+    /// <summary>
+    /// The scenario index is a third one, and neither of the others reaches into it: a scenario spec's name
+    /// finds no roster or GameData file, and a roster spec's name finds no scenario — so a scenario lane
+    /// runs scenarios and nothing else. The unknown-name message names the scenario directory.
+    /// </summary>
+    [Fact]
+    public void TheScenarioIndex_IsItsOwn()
+    {
+        var aRealScenario = SpecLoader.DiscoverScenarioSpecs(SpecLoader.FindScenarioSpecsDirectory()!)
+            .Select(static s => SpecLoader.SpecName(s.Category, s.Id))
+            .First();
+        _ = SpecLoader.ResolveScenarioSpec(aRealScenario);
+
+        Assert.Throws<ArgumentException>(() => SpecLoader.ResolveRosterSpec(aRealScenario));
+        Assert.Throws<ArgumentException>(() => SpecLoader.ResolveGameDataSpec(aRealScenario));
+        var ex = Assert.Throws<ArgumentException>(() => SpecLoader.ResolveScenarioSpec(ARealRosterSpec));
+        Assert.Contains(SpecLoader.FindScenarioSpecsDirectory()!, ex.Message, StringComparison.Ordinal);
     }
 }

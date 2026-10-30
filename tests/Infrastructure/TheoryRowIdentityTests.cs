@@ -55,10 +55,12 @@ public sealed class TheoryRowIdentityTests
 
         var rosterSpecs = SpecNames(SpecLoader.FindRosterSpecsDirectory(), SpecLoader.DiscoverSpecs);
         var gameDataSpecs = SpecNames(SpecLoader.FindGameDataSpecsDirectory(), SpecLoader.DiscoverGameDataSpecs);
-        Assert.True(rosterSpecs.Count > 0 && gameDataSpecs.Count > 0,
-            $"Found {rosterSpecs.Count} roster and {gameDataSpecs.Count} GameData specs above '{AppContext.BaseDirectory}'. " +
-            "Without the corpus this sweep cannot tell a spec row from any other, and would pass on nothing.");
-        var specs = new HashSet<string>(rosterSpecs.Concat(gameDataSpecs), StringComparer.Ordinal);
+        var scenarioSpecs = SpecNames(SpecLoader.FindScenarioSpecsDirectory(), SpecLoader.DiscoverScenarioSpecs);
+        Assert.True(rosterSpecs.Count > 0 && gameDataSpecs.Count > 0 && scenarioSpecs.Count > 0,
+            $"Found {rosterSpecs.Count} roster, {gameDataSpecs.Count} GameData and {scenarioSpecs.Count} scenario specs above " +
+            $"'{AppContext.BaseDirectory}'. Without the corpus this sweep cannot tell a spec row from any other, and would " +
+            "pass on nothing.");
+        var specs = new HashSet<string>(rosterSpecs.Concat(gameDataSpecs).Concat(scenarioSpecs), StringComparer.Ordinal);
 
         var violations = new List<string>();
         var specsSeen = new HashSet<string>(StringComparer.Ordinal);
@@ -103,7 +105,8 @@ public sealed class TheoryRowIdentityTests
                             $"{where} {label}: {what} \"{value}\" is or contains an absolute path. It becomes part of the " +
                             "test's name and uid, so both change with where the repo is checked out, and xunit cuts it at " +
                             "50 characters. Carry the name relative to the repo and resolve the file inside the test " +
-                            $"({nameof(SpecLoader)}.{nameof(SpecLoader.ResolveRosterSpec)} / {nameof(SpecLoader.ResolveGameDataSpec)} for a spec).");
+                            $"({nameof(SpecLoader)}.{nameof(SpecLoader.ResolveRosterSpec)} / {nameof(SpecLoader.ResolveGameDataSpec)} / " +
+                            $"{nameof(SpecLoader.ResolveScenarioSpec)} for a spec).");
                     }
                 }
 

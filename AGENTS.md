@@ -391,6 +391,7 @@ pwsh -File tools/format-specs.ps1                                               
 |------|------|
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (403 total, 24 categories) |
 | `specs/gamedata/{category}/{id}.yaml` | GameData spec files (120 total, 23 categories) |
+| `specs/scenario/{category}/{id}.yaml` | Scenario spec files (1 total, 1 category): one engine family's data editor and roster editor in one spec, joined by explicit hand-offs ([ADR 002](docs/adr/002-scenario-specs.md)); lanes `BsScenario`, `FrozenNrScenario`, `FrozenNrUiScenario` (pre-push) and `BsScenarioUi` (`bs-ui-scenario`) |
 | `docs/error-assertions.md` | The two ways a spec is about something going wrong, and they are not the same: `expectedState.errors` asserts the validation list of a roster the engine **accepted**; `expectFailure` asserts an action the engine **refused** |
 | `docs/running-tests.md` | How the tests run: the test app and its entry point, test profiles, environment switches, the zero-tests policy and the engine-composition check, refusals and exit codes, what CI adds. The commands themselves are in "Build & test" above |
 | `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk. Tests use `RepoRoot.FromBinaries` (`TestPaths.Root` when they need a checkout), never the working directory |

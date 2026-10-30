@@ -103,10 +103,16 @@ internal static class TestProfiles
             + "while CI's offline lanes run setup.ps1 -SkipJavaAgent, the agent jar is absent, and every one of those "
             + "tests skips. Kept that way on purpose: the local half is what has caught this suite's cross-spec reuse "
             + "defects, each invisible to CI at the time. To sit out the app for one run, narrow it with "
-            + "--filter \"Engine!=BsRosterUi\", which the test app ANDs onto this profile's filter.",
+            + "--filter \"Engine!=BsRosterUi\", which the test app ANDs onto this profile's filter. The BattleScribe "
+            + "scenario UI lane (BsScenarioUi) is treated the same way: claimed, running both desktop apps on a "
+            + "developer machine and skipping on CI's; --filter \"Engine!=BsRosterUi&Engine!=BsScenarioUi\" sits out both.",
             Selection.AllExcept("FrozenNrRoster", "FrozenNrGameData", "LiveNrRoster", "LiveNrGameData", "FrozenNrUiRoster",
-                "LiveNrUiRoster", "FrozenNrGameDataUi", "LiveNrGameDataUi", "BsGameDataUi"),
-            maySkip: [("BsRosterUi", "CI does not provision the app: thorough-conformance runs setup.ps1 -SkipJavaAgent, so the agent jar is absent and every BsRosterUi test skips there")]),
+                "LiveNrUiRoster", "FrozenNrGameDataUi", "LiveNrGameDataUi", "BsGameDataUi", "FrozenNrScenario", "FrozenNrUiScenario"),
+            maySkip:
+            [
+                ("BsRosterUi", "CI does not provision the app: thorough-conformance runs setup.ps1 -SkipJavaAgent, so the agent jar is absent and every BsRosterUi test skips there"),
+                ("BsScenarioUi", "CI does not provision the app: thorough-conformance runs setup.ps1 -SkipJavaAgent, so the agent jar is absent and every BsScenarioUi test skips there"),
+            ]),
         Profile("non-conformance",
             "Everything that is not a conformance test: unit, integration, lint, protocol. The checks job's first test "
             + "step. Category=Conformance is what keeps every browser- and app-driving test out of it, which is why "
@@ -157,6 +163,11 @@ internal static class TestProfiles
             "The BattleScribe Data Editor UI driver over kitchen-sink: the desktop app, its Java agent and a display "
             + "(xvfb-run in CI).",
             Selection.Engines("BsGameDataUi").Where("DisplayName~kitchen-sink")),
+        Profile("smoke-scenario",
+            "Every scenario spec (specs/scenario/) through the in-process BattleScribe pair — the data editor and the "
+            + "roster editor of one family, joined by the hand-offs of docs/adr/002-scenario-specs.md. Whole rather "
+            + "than kitchen-sink: the corpus is a handful of specs, each seconds, and there is no kitchen-sink scenario.",
+            Selection.Engines("BsScenario")),
 
         // ── Thorough: whole lanes, on demand and on every stack or CI-definition PR.
         Profile("nr-frozen",
@@ -183,6 +194,12 @@ internal static class TestProfiles
             "BattleScribe roster UI conformance: every roster spec through the real desktop app. Needs the app and "
             + "the Java agent (both provisioned by setup.ps1) and a display; minutes.",
             Selection.Engines("BsRosterUi")),
+        Profile("bs-ui-scenario",
+            "BattleScribe scenario UI conformance: every scenario spec through BOTH real desktop apps at once — the Data "
+            + "Editor and the Roster Editor, each its own JVM in its own temp home, the runner carrying the saved files "
+            + "between them. The normative lane for scenarios (AGENTS.md, \"What is normative\"). Needs the app and the "
+            + "Java agent (both provisioned by setup.ps1) and a display.",
+            Selection.Engines("BsScenarioUi")),
 
         // ── Live: sessions on a third party's production site.
         Profile("nr-live",
