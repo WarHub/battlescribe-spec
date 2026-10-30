@@ -232,8 +232,14 @@ skipped, with that reason, when it does not.
 - **Roster engines are now set up from files in the main suite**, not only in `dataSource` specs.
   `SetupFromFiles` had to become a full equal of `Setup` in the engines where it was not:
   - `battlescribe`: entry lookup, cost types, constraint-declarer index, catalogue force entries,
-    and a clean second setup.
-  - `newrecruit-ui`: game-system and entry records, so the UI driver can act after a file setup.
+    and a clean second setup. Before the fix, 68 of the 400 inline roster specs failed through file
+    setup and passed through `Setup`; `BsFileSetupParityTests` now holds every one to the same
+    verdict both ways.
+  - `newrecruit-ui`: game-system and entry records, so the UI driver can act after a file setup. Both
+    setup paths now build one index from the XML NR is given (`NrUiDataIndex`).
+- **The protocol host resets a warm roster engine set up again mid-spec**, as teardown resets it
+  between specs. The client cannot ask for that reset itself: `teardown` resets both domains, and the
+  gamedata engine is mid-spec.
 - **`battlescribe-ui` runs its two editors as two isolated apps** and the runner carries the files
   between them. The real apps share one folder on disk. Sharing a home between the two JVMs collides
   in staging today (see `docs/bs-ui-driver.md`), and the bytes that cross are the ones the Data
@@ -247,11 +253,30 @@ skipped, with that reason, when it does not.
 - **The Roster Editor's live reload prompt.** When the data under an open roster changes,
   BattleScribe asks "A file was modified outside of BattleScribe. Would you like to reload your
   roster?". Asserting what accepting it does is a fourth way into roster migration, alongside reopen.
-  It needs the shared folder above, and it belongs to #280.
+  It needs the shared folder above. Tracked in #568, beside #280.
 - **Which roster-node ids survive `openRoster`.** Expressions captured before a save still resolve
   after a reopen; whether they still name live nodes is an engine fact, and #280 records it.
-- A JSON Schema for scenario specs. Gamedata specs have none either; the roster schema covers roster
-  specs only.
+- A JSON Schema for scenario specs (#569). Gamedata specs have none either; the roster schema covers
+  roster specs only.
+
+## What the first scenarios found
+
+All five `handoff` scenarios pass on every family, `battlescribe-ui` (the desktop apps) included.
+
+- **Reopening a roster re-prices it from the new data.** BattleScribe shows the saved roster at the
+  edited cost, not the cost the `.ros` recorded. So do the other three families.
+- **Selection ids survive a reopen.** They do on BattleScribe and on both NR engines. NewRecruit
+  mints a new force id. Expressions captured before a save therefore still name the same selection
+  afterwards, but not necessarily the same force.
+- **NR loads NR Editor output.** Both NR roster engines load the NR Editor's own exports, edited and
+  reloaded ones included.
+- **For #280, not yet checked against the app:** the in-process adapter's `LoadRoster` keeps the
+  force and silently drops a selection whose entry the edited data no longer has.
+
+Found along the way and filed:
+
+- #566: game-system entries are missing from the in-process adapter's entry lookup.
+- #567: newrecruit-ui's by-name pick matches a substring of the entry label.
 
 ## Options considered
 
@@ -281,10 +306,17 @@ skipped, with that reason, when it does not.
 
 This ADR lands with its implementation:
 
-- the scenario model, loader, runner and lint;
+- the scenario model, loader, runner and lint, plus the formatter's knowledge of blocks;
 - the runner entry points;
-- the `SetupFromFiles` fixes above;
-- the four lanes, the CLI support;
+- the `SetupFromFiles` fixes and the host reset above;
+- the four lanes;
+- the CLI support (`run`, `run --all`, `compare`, with results keyed by domain);
 - a first set of `handoff` scenarios checked against the BattleScribe desktop apps.
 
-Follow-ups are tracked as sub-issues of #73 and as the existing #280 and #281.
+Follow-ups:
+
+- #568: the live reload prompt.
+- #569: a scenario schema.
+- #570: `bs-spec run --break` on scenarios. It is refused today; `ScenarioRunner` has no before-step
+  hook.
+- #280 and #281, which this unblocks.
