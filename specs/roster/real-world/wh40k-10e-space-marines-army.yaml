@@ -3,9 +3,10 @@ category: real-world
 description: Build a Space Marines army — verify auto-selections, unit types, and points costs
 tags: [wh40k-10e, real-world, space-marines, cost, profile, design-difference]
 
-# Same unimplemented path as wh40k-10e-create-army: newrecruit-ui's SetupFromFilesAsync records
-# no spec data, so the first addForce throws before the UI is touched at all. Driver gap, not an
-# NR limitation — store-direct `newrecruit` passes. See docs/nr-ui-roster-coverage.md.
+# newrecruit-ui loads the dataset and builds the roster since its file setup records the data (#273),
+# but selecting "Intercessor Squad" adds "Assault Intercessor Squad" (155 pts, not 160): the driver's
+# by-name pick appears to match a substring of the label. Driver gap, not an NR limitation —
+# store-direct `newrecruit` passes. `fail` so fixing the pick is reported as an unexpected pass.
 # BattleScribe 2.03.21 cannot PARSE this dataset. `Warhammer 40,000.gst` carries four modifiers
 # written `<modifier type="replace" field="…" arg="+0">` with no `value` attribute, and `value` is
 # `use="required"` on Modifier in BattleScribe's own schema — v2_03 and latest alike. Its parser
