@@ -1,0 +1,82 @@
+id: handoff-save-each-file
+category: handoff
+description: >
+  Each data file reaches the roster editor through its own save, and a save survives switching
+  files. The catalogue's unit is repriced and saved; the game system is opened, its force entry
+  renamed, and saved; then the catalogue is opened again and saved again. A new roster sees both
+  edits: the force under its new name and the unit at its new price. The price could only be lost
+  if switching away from the catalogue dropped what its save wrote, since the second save would then
+  write the old price back.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - data:
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "15"
+
+  - action: saveData
+
+  - data:
+      - action: openFile
+        entryId: gs-1
+
+      - action: setFields
+        entryId: fe-1
+        fields:
+          name: Patrol
+
+  - action: saveData
+
+  - data:
+      - action: openFile
+        entryId: cat-1
+
+  - action: saveData
+
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-patrol
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-patrol.forceId }}
+        entryId: se-squad
+
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 15
+          forces:
+            - name: Patrol
+              selections:
+                - name: Squad
+                  costs:
+                    - typeId: ct-pts
+                      value: 15

@@ -1,0 +1,71 @@
+id: handoff-unsaved-edit-stays-in-editor
+category: handoff
+description: >
+  An edit the data editor has not saved does not reach the roster editor. The unit's cost is changed
+  from 10 to 15 and a new roster is started before saving: it still costs 10. After saveData, a
+  second new roster sees 15. Only the save is a hand-off; holding the edit in the editor is not.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - data:
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "15"
+
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-before-save
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-before-save.forceId }}
+        entryId: se-squad
+
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 10
+
+  - action: saveData
+
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-after-save
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-after-save.forceId }}
+        entryId: se-squad
+
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 15

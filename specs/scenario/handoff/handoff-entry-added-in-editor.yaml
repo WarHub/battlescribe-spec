@@ -1,0 +1,71 @@
+id: handoff-entry-added-in-editor
+category: handoff
+description: >
+  An entry the data editor creates is selectable in a roster once it is saved. The data editor adds
+  a unit with a declared id, names it, types it and prices it, and saves; a new roster then selects
+  it by that id. The declared id is what lets a roster step name an entry a data step made.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - data:
+      - action: addEntry
+        parentId: cat-1
+        entryType: selectionEntry
+        entryId: se-heavy
+        name: Heavy Squad
+
+      - action: setFields
+        entryId: se-heavy
+        fields:
+          type: unit
+        costs:
+          ct-pts: "20"
+
+  - action: saveData
+
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-heavy
+
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 20
+          forces:
+            - name: Detachment
+              selections:
+                - name: Heavy Squad
+                  entryId: se-heavy
+                  costs:
+                    - typeId: ct-pts
+                      value: 20
