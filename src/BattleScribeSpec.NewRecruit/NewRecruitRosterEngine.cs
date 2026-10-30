@@ -22,7 +22,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
     /// </summary>
     internal NewRecruitBrowser Browser { get; }
     private bool _disposed;
-    private ProtocolGameSystem? _gameSystem;
     private string _rosterName = "Spec Test";
 
     /// <summary>
@@ -80,11 +79,13 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return new NewRecruitRosterEngine(browser);
     }
 
+    /// <remarks>
+    /// Nothing the engine does after setup reads a C#-side record of the data: every action and read
+    /// addresses NR's store by id, through the <c>window.__bsspec</c> handles both setup paths write.
+    /// So <see cref="SetupFromFiles"/> needs nothing from this path to work as well as it does.
+    /// </remarks>
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
-    {
-        _gameSystem = gameSystem;
-        return SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
-    }
+        => SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
 
     private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
@@ -255,11 +256,21 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
         return errors;
     }
 
+    /// <summary>
+    /// Loads caller-supplied <c>.gst</c>/<c>.cat</c> XML through NR's own <c>loadSystemFromFs</c> and
+    /// starts an empty roster on it, exactly as <see cref="Setup"/> does for generated XML.
+    /// </summary>
+    /// <remarks>
+    /// <b>After <see cref="Cleanup"/> this is a fresh session</b>, which is what a scenario's
+    /// <c>newRoster</c>/<c>openRoster</c> hand-offs rely on: Cleanup releases every locally loaded
+    /// system (<c>NrSystemStoreJs</c>), so "the last system in <c>localLibrary</c>" below is the one
+    /// just loaded, even under the same game-system id with different content. Without a Cleanup in
+    /// between it is not — the previous system and roster row are still registered — and nothing
+    /// calls it that way: every caller pairs a setup with a Cleanup, and the protocol host recreates
+    /// this engine per setup (its registry entry is not reuse-safe).
+    /// </remarks>
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
-    {
-        _gameSystem = null;
-        return SetupFromFilesAsync(files).GetAwaiter().GetResult();
-    }
+        => SetupFromFilesAsync(files).GetAwaiter().GetResult();
 
     private async Task<IReadOnlyList<string>> SetupFromFilesAsync(IReadOnlyList<(string FileName, string Content)> files)
     {
