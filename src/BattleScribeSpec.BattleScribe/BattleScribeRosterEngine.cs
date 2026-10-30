@@ -335,52 +335,16 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
     // ===== DataSource support (file-based setup + name-based actions) =====
 
+    /// <summary>
+    /// Set up from BattleScribe XML files. A full equal of <see cref="Setup"/>: the engine derives
+    /// the same lookups from the loaded files as from Protocol types, and either setup starts clean,
+    /// so <c>Cleanup</c> followed by this on a used engine sees only these files (see
+    /// <see cref="BattleScribeEngine.SetupFromFiles"/>).
+    /// </summary>
     public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
     {
         Engine.RosterName = _specId;
-        // Write files to a temp directory so the engine can load them via SimpleXML
-        var tempDir = Path.Combine(Path.GetTempPath(), "bsspec-engine-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            foreach (var (fileName, content) in files)
-            {
-                var filePath = Path.Combine(tempDir, fileName);
-                File.WriteAllText(filePath, content);
-            }
-
-            // Load .gst file (game system)
-            var gstFiles = Directory.GetFiles(tempDir, "*.gst");
-            if (gstFiles.Length == 0)
-            {
-                return ["No .gst (game system) file found in data source files."];
-            }
-
-            if (gstFiles.Length > 1)
-            {
-                return [$"Expected exactly one .gst file, found {gstFiles.Length}."];
-            }
-
-            Engine.LoadGameSystemFile(gstFiles[0]);
-
-            // Load all .cat files with dependency resolution
-            var catFiles = Directory.GetFiles(tempDir, "*.cat");
-            foreach (var catFile in catFiles)
-            {
-                Engine.LoadCatalogueWithDependencies(catFile, tempDir);
-            }
-
-            return Engine.InitializeFromLoadedData();
-        }
-        finally
-        {
-            try
-            { Directory.Delete(tempDir, recursive: true); }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[BattleScribeRosterEngine] Failed to clean up temp dir '{tempDir}': {ex.Message}");
-            }
-        }
+        return Engine.SetupFromFiles(files);
     }
 
     // ===== ID-based navigation helpers =====
