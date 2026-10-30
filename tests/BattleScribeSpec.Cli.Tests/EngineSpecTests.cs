@@ -125,6 +125,53 @@ public sealed class EngineSpecTests
         Assert.Throws<CliInputException>(() => options.Resolve(result, "spec"));
     }
 
+    [Fact]
+    public void Resolve_InfersScenarioFromSpecPath()
+    {
+        var selection = Resolve("specs/scenario/handoff/handoff-saved-edit-reaches-new-roster");
+        Assert.Equal(EngineDomain.Scenario, selection.Domain);
+        Assert.Equal("scenario/battlescribe", selection.Display);
+    }
+
+    [Fact]
+    public void Resolve_ScenarioFlagForcesScenario()
+    {
+        var selection = Resolve("plain-roster-spec", "--scenario");
+        Assert.Equal(EngineDomain.Scenario, selection.Domain);
+    }
+
+    /// <summary>
+    /// <c>--scenario</c> is a third domain flag, and at most one may be given — the refusal names the two that
+    /// were. Falsifiable: check only <c>--gamedata</c> against <c>--roster</c>, as before scenarios, and
+    /// <c>--scenario --roster</c> resolves silently to whichever the precedence happens to pick.
+    /// </summary>
+    [Theory]
+    [InlineData("--scenario", "--roster")]
+    [InlineData("--gamedata", "--scenario")]
+    public void Resolve_ScenarioWithAnotherDomainFlag_IsRefused(string first, string second)
+    {
+        var options = BuiltInOptions();
+        var result = ParseWith(options, "spec", first, second);
+
+        var ex = Assert.Throws<CliInputException>(() => options.Resolve(result, "spec"));
+        Assert.Contains("mutually exclusive", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(first, ex.Message, StringComparison.Ordinal);
+        Assert.Contains(second, ex.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(new string[0], new[] { "roster", "gamedata", "scenario" })]
+    [InlineData(new[] { "--scenario" }, new[] { "scenario" })]
+    [InlineData(new[] { "--roster" }, new[] { "roster" })]
+    [InlineData(new[] { "--gamedata" }, new[] { "gamedata" })]
+    public void BatchDomains_CoverEveryDomainByDefault_AndOneWhenAFlagNamesIt(string[] flags, string[] expected)
+    {
+        var options = BuiltInOptions();
+        var result = ParseWith(options, ["spec", .. flags]);
+
+        Assert.Equal(expected, options.BatchDomains(result));
+    }
+
     // ---- The parent decides; the child is told. ----
     // These pin the property that distinguishes "parent decides" from "both guess and hopefully
     // agree": the composed child command line must CARRY the decision. A child that computed its
@@ -311,6 +358,67 @@ public sealed class EngineSpecTests
         Assert.Equal(
             ConcurrencyPolicy.For(MachineProfile.Current(), selection.Entry.Profile, LoadTarget.Local),
             selection.EffectivePlan);
+    }
+
+    /// <summary>
+    /// <b>A scenario lands on both of an engine's services, so it is planned against the stricter.</b> With
+    /// <c>NR_ENGINE_URL</c> pointed at the live site, <c>newrecruit</c>'s roster editor is a third party's
+    /// service and its data editor is a local static dir — and a scenario drives both, in one adapter.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: plan a scenario against its gamedata endpoint (the domain a scenario's spec setup looks
+    /// like) and the first assertion goes red — a live roster editor at the machine's full width.
+    /// </remarks>
+    [Fact]
+    public void LoadTarget_Scenario_IsTheStricterOfItsTwoEndpoints_LiveRosterSide()
+    {
+        var scenario = Live(Resolve("plain-spec-id", "--engine", "newrecruit", "--scenario"));
+        var roster = Live(Resolve("plain-spec-id", "--engine", "newrecruit", "--roster"));
+        var gamedata = Live(Resolve("plain-spec-id", "--engine", "newrecruit", "--gamedata"));
+
+        // The two halves really do differ here — otherwise this would prove nothing.
+        Assert.Equal(LoadTarget.ThirdPartyLive, roster.LoadTarget);
+        Assert.Equal(LoadTarget.Local, gamedata.LoadTarget);
+
+        Assert.Equal(LoadTarget.ThirdPartyLive, scenario.LoadTarget);
+        Assert.Equal(LiveWorkersEntitlement(scenario.Entry.Profile), scenario.EffectivePlan.Workers);
+        Assert.True(scenario.EffectivePlan.PoolSize <= ConcurrencyPolicy.ThirdPartyLiveLoadLimit);
+    }
+
+    /// <summary>
+    /// The mirror image, so "stricter" cannot be satisfied by "the roster's": an engine whose <b>gamedata</b>
+    /// side is the third party's and whose roster side is local still plans a scenario as live. No built-in
+    /// has that shape; an <c>EngineEntry</c> is what can, and the property must not depend on which half the
+    /// built-ins happen to make live.
+    /// </summary>
+    /// <remarks>Falsifiable: implement the scenario arm as the roster endpoint alone and this goes red.</remarks>
+    [Fact]
+    public void LoadTarget_Scenario_IsTheStricterOfItsTwoEndpoints_LiveGameDataSide()
+    {
+        var entry = Builtin("battlescribe") with
+        {
+            RosterEndpoint = EngineEndpoint.OnThisMachine,
+            GameDataEndpoint = EngineEndpoint.ThirdPartyLive,
+        };
+
+        Assert.Equal(LoadTarget.Local, new EngineSelection(entry, EngineDomain.Roster, Headed: false).LoadTarget);
+        Assert.Equal(LoadTarget.ThirdPartyLive, new EngineSelection(entry, EngineDomain.Gamedata, Headed: false).LoadTarget);
+        Assert.Equal(LoadTarget.ThirdPartyLive, new EngineSelection(entry, EngineDomain.Scenario, Headed: false).LoadTarget);
+    }
+
+    /// <summary>
+    /// And the stricter of two local endpoints is local: a frozen <c>newrecruit</c> scenario keeps the
+    /// machine's measured width. Falsifiable: plan every scenario as live "to be safe" and this goes red.
+    /// </summary>
+    [Fact]
+    public void LoadTarget_Scenario_BothEndpointsLocal_IsLocal()
+    {
+        var scenario = Frozen(Resolve("plain-spec-id", "--engine", "newrecruit", "--scenario"));
+
+        Assert.Equal(LoadTarget.Local, scenario.LoadTarget);
+        Assert.Equal(
+            ConcurrencyPolicy.For(MachineProfile.Current(), scenario.Entry.Profile, LoadTarget.Local),
+            scenario.EffectivePlan);
     }
 
     /// <summary>

@@ -2,47 +2,80 @@ using System.Diagnostics;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 using BattleScribeSpec.Telemetry;
 
 namespace BattleScribeSpec.Batch;
 
 /// <summary>
-/// Runs a suite of roster and/or GameData conformance specs against an adapter, applying
+/// Runs a suite of roster, GameData and/or scenario conformance specs against an adapter, applying
 /// filter/tag/engine selection and (optionally) parallel execution. This is the batch pipeline
 /// extracted verbatim from the Runner so the unified CLI and the Runner shell can share it.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Domain discovery rule (see <see cref="SpecSuiteOptions.Domains"/>): when
-/// <see cref="SpecSuiteOptions.SpecsDirectory"/> is set explicitly, roster specs are discovered
-/// directly under it (unchanged from before domains existed). For the gamedata domain, only a
-/// "gamedata" subtree under the explicit directory is used — mirroring the repo's own convention
-/// of <c>specs/roster</c> and <c>specs/gamedata</c> as sibling trees. There is no fallback: if the
-/// explicit directory has no such subtree (e.g. <c>--specs</c> points directly at a roster-only
-/// tree), zero gamedata specs are discovered — <see cref="SpecLoader.FindGameDataSpecsDirectory"/>
-/// is never consulted in this case. When <see cref="SpecSuiteOptions.SpecsDirectory"/> is null,
-/// each domain is discovered independently: roster via
-/// <see cref="SpecLoader.FindRosterSpecsDirectory"/> then the embedded fallback, gamedata via
-/// <see cref="SpecLoader.FindGameDataSpecsDirectory"/> (no embedded fallback exists for gamedata
-/// specs).
-///
+/// <see cref="SpecSuiteOptions.SpecsDirectory"/> is set explicitly, its <c>gamedata</c> subtree holds the
+/// gamedata specs and its <c>scenario</c> subtree the scenario specs — mirroring the repo's own
+/// <c>specs/roster</c>, <c>specs/gamedata</c> and <c>specs/scenario</c> sibling trees — and roster specs are
+/// discovered everywhere else under it. A spec's category is its immediate parent folder, so
+/// <c>--specs specs/</c> and <c>--specs specs/roster</c> discover the same roster specs, and an ad-hoc
+/// fixture directory of category folders is a roster tree as it always was.
+/// </para>
+/// <para>
+/// <b>Why "everywhere else", and not "the <c>roster</c> subtree when there is one".</b> Roster discovery used
+/// to take every yaml under the explicit directory, so <c>--specs specs/</c> swept each gamedata spec in as a
+/// roster spec and failed to load it as the wrong model. Reading a <c>roster</c> subdirectory as the roster
+/// tree is the obvious fix and the wrong one: <c>specs/roster</c> has a <em>category</em> named
+/// <c>roster</c>, so <c>--specs specs/roster</c> would have narrowed to it. The other domains' subtrees are
+/// theirs whether or not the run includes them, and that is all roster discovery needs to know.
+/// </para>
+/// <para>
+/// There is no fallback to the repo's tree: an explicit directory is the whole answer. When
+/// <see cref="SpecSuiteOptions.SpecsDirectory"/> is null, each domain is discovered independently: roster
+/// via <see cref="SpecLoader.FindRosterSpecsDirectory"/> then the embedded fallback, gamedata via
+/// <see cref="SpecLoader.FindGameDataSpecsDirectory"/>, scenario via
+/// <see cref="SpecLoader.FindScenarioSpecsDirectory"/> (no embedded fallback exists for either).
+/// </para>
+/// <para>
 /// The adapter process pool is shared across domains — the same process(es) that serve roster
-/// specs also serve gamedata specs. Before any gamedata spec runs, the first pooled process is
-/// asked to <c>describe</c> itself once; if it doesn't advertise the "gamedata" domain, every
-/// gamedata spec becomes a skip record instead of being executed.
+/// specs also serve gamedata and scenario specs, and a scenario spec drives one process's roster and
+/// gamedata engines together. Before any gamedata or scenario spec runs, the first pooled process is
+/// asked to <c>describe</c> itself once; a gamedata spec needs it to advertise "gamedata", a scenario
+/// spec needs "roster" <em>and</em> "gamedata", and every spec whose domain the adapter does not serve
+/// becomes a skip record instead of being executed.
+/// </para>
 /// </remarks>
 public static class SpecSuiteRunner
 {
+    /// <summary>
+    /// The identity a scenario runs under when the run names no engine (an anonymous adapter with no
+    /// <see cref="SpecSuiteOptions.AssertionEngine"/>). <see cref="ScenarioRunner"/> takes a name where the
+    /// other runners take null; this is the label they print for null, and as an override key it matches no
+    /// spec's <c>engines:</c> entry, so only the base expectations apply — which is what null means to them.
+    /// </summary>
+    public const string UnnamedEngine = "(unnamed engine)";
+
+    /// <summary>The skip reason of a gamedata spec on an adapter that does not advertise the gamedata domain.</summary>
+    public const string GameDataUnsupportedReason = "Skipped: engine does not support gamedata domain";
+
+    /// <summary>The skip reason of a scenario spec on an adapter that does not advertise both domains.</summary>
+    public const string ScenarioUnsupportedReason =
+        "Skipped: engine does not support both roster and gamedata, which a scenario drives together";
+
     public static async Task<SpecSuiteResult> RunAsync(SpecSuiteOptions options, TextWriter? progressWriter = null)
     {
         var domains = options.Domains;
-        var runRoster = domains.Contains("roster", StringComparer.OrdinalIgnoreCase);
-        var runGameData = domains.Contains("gamedata", StringComparer.OrdinalIgnoreCase);
+        var runRoster = domains.Contains(SpecDomain.Roster.Name(), StringComparer.OrdinalIgnoreCase);
+        var runGameData = domains.Contains(SpecDomain.GameData.Name(), StringComparer.OrdinalIgnoreCase);
+        var runScenario = domains.Contains(SpecDomain.Scenario.Name(), StringComparer.OrdinalIgnoreCase);
 
         // ===== Discover specs =====
         var specsDir = options.SpecsDirectory;
         List<(string Path, string Id, string Category)>? fileSpecs = null;
         List<(string ResourceName, string Id, string Category)>? embeddedSpecs = null;
         List<(string Path, string Id, string Category)>? gameDataFileSpecs = null;
+        List<(string Path, string Id, string Category)>? scenarioFileSpecs = null;
 
         if (specsDir is not null)
         {
@@ -53,15 +86,29 @@ public static class SpecSuiteRunner
 
             if (runRoster)
             {
-                fileSpecs = [.. SpecLoader.DiscoverSpecs(specsDir)];
+                // The other domains' subtrees are theirs whether or not this run includes them — see the
+                // class remarks.
+                var otherDomainTrees = new[] { SpecDomain.GameData, SpecDomain.Scenario }
+                    .Select(domain => DomainSubdir(specsDir, domain))
+                    .ToList();
+                fileSpecs = [.. SpecLoader.DiscoverSpecs(specsDir).Where(s => !otherDomainTrees.Any(tree => IsUnder(tree, s.Path)))];
             }
 
             if (runGameData)
             {
-                var gameDataSubdir = Path.Combine(specsDir, "gamedata");
+                var gameDataSubdir = DomainSubdir(specsDir, SpecDomain.GameData);
                 if (Directory.Exists(gameDataSubdir))
                 {
                     gameDataFileSpecs = [.. SpecLoader.DiscoverGameDataSpecs(gameDataSubdir)];
+                }
+            }
+
+            if (runScenario)
+            {
+                var scenarioSubdir = DomainSubdir(specsDir, SpecDomain.Scenario);
+                if (Directory.Exists(scenarioSubdir))
+                {
+                    scenarioFileSpecs = [.. SpecLoader.DiscoverScenarioSpecs(scenarioSubdir)];
                 }
             }
         }
@@ -89,9 +136,20 @@ public static class SpecSuiteRunner
                     gameDataFileSpecs = [.. SpecLoader.DiscoverGameDataSpecs(gameDataDir)];
                 }
             }
+
+            if (runScenario)
+            {
+                var scenarioDir = SpecLoader.FindScenarioSpecsDirectory();
+                if (scenarioDir is not null)
+                {
+                    scenarioFileSpecs = [.. SpecLoader.DiscoverScenarioSpecs(scenarioDir)];
+                }
+            }
         }
 
-        var totalSpecs = (fileSpecs?.Count ?? embeddedSpecs?.Count ?? 0) + (gameDataFileSpecs?.Count ?? 0);
+        var totalSpecs = (fileSpecs?.Count ?? embeddedSpecs?.Count ?? 0)
+            + (gameDataFileSpecs?.Count ?? 0)
+            + (scenarioFileSpecs?.Count ?? 0);
         if (totalSpecs == 0)
         {
             throw new InvalidOperationException("no spec files found.");
@@ -113,6 +171,7 @@ public static class SpecSuiteRunner
         var reportResults = new List<SpecResultSummary>();
         var specsByResult = new Dictionary<SpecResult, SpecFile>();
         var gameDataSpecsByResult = new Dictionary<SpecResult, GameDataSpecFile>();
+        var scenarioSpecsByResult = new Dictionary<SpecResult, ScenarioSpecFile>();
         var durationsByResult = new Dictionary<SpecResult, double>();
         var sw = Stopwatch.StartNew();
 
@@ -134,20 +193,49 @@ public static class SpecSuiteRunner
             gameDataFileSpecs?.Select(s => (s.Path, s.Id, s.Category, (Func<GameDataSpecFile>)(() => SpecLoader.LoadGameData(s.Path))))
             ?? [];
 
+        IEnumerable<(string IdForLoad, string Id, string Category, Func<ScenarioSpecFile> Loader)> scenarioSpecSources =
+            scenarioFileSpecs?.Select(s => (s.Path, s.Id, s.Category, (Func<ScenarioSpecFile>)(() => SpecLoader.LoadScenario(s.Path))))
+            ?? [];
+
         // Pre-filter specs (filtering doesn't need the adapter)
         var filterLabel = filterPatterns is not null ? string.Join(",", filterPatterns) : "";
-        var filteredSpecs = PreFilterSpecs(specSources, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
-        var filteredGameDataSpecs = PreFilterSpecs(gameDataSpecSources, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
+        var filteredSpecs = PreFilterSpecs(specSources, SpecDomain.Roster, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
+        var filteredGameDataSpecs = PreFilterSpecs(gameDataSpecSources, SpecDomain.GameData, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
+        var filteredScenarioSpecs = PreFilterSpecs(scenarioSpecSources, SpecDomain.Scenario, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
 
-        // Counted before the gamedata describe gate below can still skip some of them: "selected" is
-        // what the filters asked to run, so the nothing-executed message can tell "matched nothing"
-        // from "matched, then skipped" (SpecSuiteResult.NothingExecutedMessage).
-        var selected = filteredSpecs.Count + filteredGameDataSpecs.Count;
+        // Counted before the describe gate below can still skip some of them: "selected" is what the
+        // filters asked to run, so the nothing-executed message can tell "matched nothing" from
+        // "matched, then skipped" (SpecSuiteResult.NothingExecutedMessage).
+        var selected = filteredSpecs.Count + filteredGameDataSpecs.Count + filteredScenarioSpecs.Count;
+
+        // One spec, one execution path, whichever domain and whichever loop: RunOneSpec, then the result
+        // filed under its domain's map and reported with its domain.
+        void Record(SpecResult result, SpecFileBase spec, SpecDomain domain, string status, double durationMs, int deaths)
+        {
+            results.Add(result);
+            durationsByResult[result] = durationMs;
+            switch (domain)
+            {
+                case SpecDomain.Roster:
+                    specsByResult[result] = (SpecFile)spec;
+                    break;
+                case SpecDomain.GameData:
+                    gameDataSpecsByResult[result] = (GameDataSpecFile)spec;
+                    break;
+                case SpecDomain.Scenario:
+                    scenarioSpecsByResult[result] = (ScenarioSpecFile)spec;
+                    break;
+            }
+
+            reportResults.Add(new SpecResultSummary(
+                result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths,
+                domain.Name()));
+        }
 
         if (workers > 1)
         {
             // Parallel execution with N adapter processes
-            progressWriter?.WriteLine($"Running {filteredSpecs.Count + filteredGameDataSpecs.Count} specs with {workers} workers...");
+            progressWriter?.WriteLine($"Running {selected} specs with {workers} workers...");
 
             // Tracks EVERY process ever created for this run (originals + any adapter-death
             // replacements) so all of them get disposed at the end — a replacement is never part
@@ -164,13 +252,8 @@ public static class SpecSuiteRunner
                     allProcesses.Add(p);
                 }
 
-                var gameDataSupported = filteredGameDataSpecs.Count == 0
-                    || (await AdapterDescriber.DescribeAsync(initialProcesses[0])).Domains.Contains("gamedata");
-                if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
-                {
-                    SkipGameDataDomain(filteredGameDataSpecs, reportResults);
-                    filteredGameDataSpecs = [];
-                }
+                (filteredGameDataSpecs, filteredScenarioSpecs) = await ApplyDescribeGateAsync(
+                    initialProcesses[0], filteredGameDataSpecs, filteredScenarioSpecs, reportResults);
 
                 // Channel-based process pool. Each pooled item remembers which worker index it
                 // belongs to, so a death-replacement process is created with the SAME worker
@@ -181,9 +264,9 @@ public static class SpecSuiteRunner
                     processPool.Writer.TryWrite(new PooledAdapter(initialProcesses[w], w));
                 }
 
-                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, bool IsGameData, string Status, double DurationMs, int AdapterDeaths)>();
+                var concurrentResults = new System.Collections.Concurrent.ConcurrentBag<(SpecResult Result, SpecFileBase Spec, SpecDomain Domain, string Status, double DurationMs, int AdapterDeaths)>();
 
-                async ValueTask RunPooledAsync<TSpec>((string Id, string Category, TSpec Spec) item, bool isGameData, CancellationToken ct)
+                async ValueTask RunPooledAsync<TSpec>((string Id, string Category, TSpec Spec) item, SpecDomain domain, CancellationToken ct)
                     where TSpec : SpecFileBase
                 {
                     var pooled = await processPool.Reader.ReadAsync(ct);
@@ -191,7 +274,7 @@ public static class SpecSuiteRunner
                     try
                     {
                         var (result, status, durationMs, deaths) = RunOneSpec(
-                            ref proc, pooled.WorkerIndex, item.Spec, isGameData, assertionEngine, engineFilter,
+                            ref proc, pooled.WorkerIndex, item.Spec, domain, assertionEngine, engineFilter,
                             expectedFailuresEngine, options.AdapterFactory, deathBudget, progressWriter);
                         if (!ReferenceEquals(proc, pooled.Process))
                         {
@@ -201,7 +284,7 @@ public static class SpecSuiteRunner
                             }
                         }
 
-                        concurrentResults.Add((result, item.Spec, isGameData, status, durationMs, deaths));
+                        concurrentResults.Add((result, item.Spec, domain, status, durationMs, deaths));
                     }
                     finally
                     {
@@ -209,32 +292,15 @@ public static class SpecSuiteRunner
                     }
                 }
 
-                await Parallel.ForEachAsync(
-                    filteredSpecs,
-                    new ParallelOptions { MaxDegreeOfParallelism = workers },
-                    (item, ct) => RunPooledAsync(item, isGameData: false, ct));
-
-                await Parallel.ForEachAsync(
-                    filteredGameDataSpecs,
-                    new ParallelOptions { MaxDegreeOfParallelism = workers },
-                    (item, ct) => RunPooledAsync(item, isGameData: true, ct));
+                var parallel = new ParallelOptions { MaxDegreeOfParallelism = workers };
+                await Parallel.ForEachAsync(filteredSpecs, parallel, (item, ct) => RunPooledAsync(item, SpecDomain.Roster, ct));
+                await Parallel.ForEachAsync(filteredGameDataSpecs, parallel, (item, ct) => RunPooledAsync(item, SpecDomain.GameData, ct));
+                await Parallel.ForEachAsync(filteredScenarioSpecs, parallel, (item, ct) => RunPooledAsync(item, SpecDomain.Scenario, ct));
 
                 // Collect results in order
-                foreach (var (result, spec, isGameData, status, durationMs, deaths) in concurrentResults)
+                foreach (var (result, spec, domain, status, durationMs, deaths) in concurrentResults)
                 {
-                    results.Add(result);
-                    durationsByResult[result] = durationMs;
-                    if (isGameData)
-                    {
-                        gameDataSpecsByResult[result] = (GameDataSpecFile)spec;
-                    }
-                    else
-                    {
-                        specsByResult[result] = (SpecFile)spec;
-                    }
-
-                    reportResults.Add(new SpecResultSummary(
-                        result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths));
+                    Record(result, spec, domain, status, durationMs, deaths);
                 }
             }
             finally
@@ -254,41 +320,28 @@ public static class SpecSuiteRunner
             // being passed by ref into RunOneSpec) when it dies mid-batch.
             var proc = options.AdapterFactory(0);
             var allProcesses = new HashSet<AdapterProcess> { proc };
+
+            void RunSequentially<TSpec>(List<(string Id, string Category, TSpec Spec)> specs, SpecDomain domain)
+                where TSpec : SpecFileBase
+            {
+                foreach (var (_, _, spec) in specs)
+                {
+                    var (result, status, durationMs, deaths) = RunOneSpec(
+                        ref proc, 0, spec, domain, assertionEngine, engineFilter, expectedFailuresEngine,
+                        options.AdapterFactory, deathBudget, progressWriter);
+                    allProcesses.Add(proc);
+                    Record(result, spec, domain, status, durationMs, deaths);
+                }
+            }
+
             try
             {
-                var gameDataSupported = filteredGameDataSpecs.Count == 0
-                    || (await AdapterDescriber.DescribeAsync(proc)).Domains.Contains("gamedata");
-                if (filteredGameDataSpecs.Count > 0 && !gameDataSupported)
-                {
-                    SkipGameDataDomain(filteredGameDataSpecs, reportResults);
-                    filteredGameDataSpecs = [];
-                }
+                (filteredGameDataSpecs, filteredScenarioSpecs) = await ApplyDescribeGateAsync(
+                    proc, filteredGameDataSpecs, filteredScenarioSpecs, reportResults);
 
-                foreach (var (id, category, spec) in filteredSpecs)
-                {
-                    var (result, status, durationMs, deaths) = RunOneSpec(
-                        ref proc, 0, spec, isGameData: false, assertionEngine, engineFilter, expectedFailuresEngine,
-                        options.AdapterFactory, deathBudget, progressWriter);
-                    allProcesses.Add(proc);
-                    results.Add(result);
-                    specsByResult[result] = spec;
-                    durationsByResult[result] = durationMs;
-                    reportResults.Add(new SpecResultSummary(
-                        result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths));
-                }
-
-                foreach (var (id, category, spec) in filteredGameDataSpecs)
-                {
-                    var (result, status, durationMs, deaths) = RunOneSpec(
-                        ref proc, 0, spec, isGameData: true, assertionEngine, engineFilter, expectedFailuresEngine,
-                        options.AdapterFactory, deathBudget, progressWriter);
-                    allProcesses.Add(proc);
-                    results.Add(result);
-                    gameDataSpecsByResult[result] = spec;
-                    durationsByResult[result] = durationMs;
-                    reportResults.Add(new SpecResultSummary(
-                        result.SpecId, result.Category, result.Description, status, [.. result.Failures], spec.Tags, durationMs, deaths));
-                }
+                RunSequentially(filteredSpecs, SpecDomain.Roster);
+                RunSequentially(filteredGameDataSpecs, SpecDomain.GameData);
+                RunSequentially(filteredScenarioSpecs, SpecDomain.Scenario);
             }
             finally
             {
@@ -301,18 +354,20 @@ public static class SpecSuiteRunner
 
         sw.Stop();
 
-        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, durationsByResult, totalSpecs, selected, sw.Elapsed, expectedFailuresEngine);
+        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, scenarioSpecsByResult, durationsByResult, totalSpecs, selected, sw.Elapsed, expectedFailuresEngine);
     }
 
     /// <summary>
     /// Applies filter/tag/engine selection to a domain's spec sources, recording skip/load-error
     /// records for excluded specs (into <paramref name="reportResults"/>, and additionally into
     /// <paramref name="results"/> for load errors) exactly as the pre-domains pipeline did for
-    /// roster specs. Generic over <see cref="SpecFileBase"/> so the same logic serves both roster
-    /// (<see cref="SpecFile"/>) and gamedata (<see cref="GameDataSpecFile"/>) specs uniformly.
+    /// roster specs. Generic over <see cref="SpecFileBase"/> so the same logic serves roster
+    /// (<see cref="SpecFile"/>), gamedata (<see cref="GameDataSpecFile"/>) and scenario
+    /// (<see cref="ScenarioSpecFile"/>) specs uniformly. Every record carries its domain.
     /// </summary>
     private static List<(string Id, string Category, TSpec Spec)> PreFilterSpecs<TSpec>(
         IEnumerable<(string IdForLoad, string Id, string Category, Func<TSpec> Loader)> specSources,
+        SpecDomain domain,
         IReadOnlyList<string>? filterPatterns,
         string filterLabel,
         TagFilter? tagFilter,
@@ -321,6 +376,7 @@ public static class SpecSuiteRunner
         List<SpecResultSummary> reportResults)
         where TSpec : SpecFileBase
     {
+        var domainName = domain.Name();
         var filtered = new List<(string Id, string Category, TSpec Spec)>();
         foreach (var (_, id, category, loader) in specSources)
         {
@@ -328,7 +384,8 @@ public static class SpecSuiteRunner
 
             if (filterPatterns is not null && !filterPatterns.Any(p => specName.Contains(p, StringComparison.OrdinalIgnoreCase)))
             {
-                reportResults.Add(new SpecResultSummary(id, category, "", "skipped", [$"Skipped by filter '{filterLabel}'"]));
+                reportResults.Add(new SpecResultSummary(id, category, "", "skipped", [$"Skipped by filter '{filterLabel}'"],
+                    Domain: domainName));
                 continue;
             }
 
@@ -341,21 +398,21 @@ public static class SpecSuiteRunner
             {
                 var failures = new List<string> { $"Load error: {ex.Message}" };
                 results.Add(new SpecResult(id, category, "Failed to load", failures));
-                reportResults.Add(new SpecResultSummary(id, category, "Failed to load", "failed", failures));
+                reportResults.Add(new SpecResultSummary(id, category, "Failed to load", "failed", failures, Domain: domainName));
                 continue;
             }
 
             if (tagFilter is not null && !tagFilter.Matches(spec.Tags))
             {
                 reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
-                    [$"Skipped by tag filter '{tagFilter}'"], spec.Tags));
+                    [$"Skipped by tag filter '{tagFilter}'"], spec.Tags, Domain: domainName));
                 continue;
             }
 
             if (engineFilter is not null && !spec.IsApplicableTo(engineFilter))
             {
                 reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
-                    [$"Skipped by engine filter '{engineFilter}'"], spec.Tags));
+                    [$"Skipped by engine filter '{engineFilter}'"], spec.Tags, Domain: domainName));
                 continue;
             }
 
@@ -366,18 +423,70 @@ public static class SpecSuiteRunner
     }
 
     /// <summary>
-    /// Records every filtered gamedata spec as a skip (no adapter call made) when the pre-flight
-    /// describe handshake shows the adapter doesn't advertise the "gamedata" domain.
+    /// The pre-flight <c>describe</c> gate: asks <paramref name="proc"/> once which domains it serves — only
+    /// when a gamedata or scenario spec was selected — and turns every selected spec of a domain it cannot
+    /// serve into a skip record (no adapter call made). A gamedata spec needs "gamedata"; a scenario spec
+    /// drives the roster and the gamedata engine together and needs both. Returns what is left to run.
     /// </summary>
-    private static void SkipGameDataDomain(
-        List<(string Id, string Category, GameDataSpecFile Spec)> filteredGameDataSpecs,
-        List<SpecResultSummary> reportResults)
+    private static async Task<(List<(string Id, string Category, GameDataSpecFile Spec)> GameData, List<(string Id, string Category, ScenarioSpecFile Spec)> Scenario)>
+        ApplyDescribeGateAsync(
+            AdapterProcess proc,
+            List<(string Id, string Category, GameDataSpecFile Spec)> gameData,
+            List<(string Id, string Category, ScenarioSpecFile Spec)> scenario,
+            List<SpecResultSummary> reportResults)
     {
-        foreach (var (id, category, spec) in filteredGameDataSpecs)
+        if (gameData.Count == 0 && scenario.Count == 0)
         {
-            reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
-                ["Skipped: engine does not support gamedata domain"], spec.Tags));
+            return (gameData, scenario);
         }
+
+        var advertised = (await AdapterDescriber.DescribeAsync(proc)).Domains;
+        var servesRoster = advertised.Contains(SpecDomain.Roster.Name());
+        var servesGameData = advertised.Contains(SpecDomain.GameData.Name());
+
+        if (gameData.Count > 0 && !servesGameData)
+        {
+            SkipDomain(gameData, SpecDomain.GameData, GameDataUnsupportedReason, reportResults);
+            gameData = [];
+        }
+
+        if (scenario.Count > 0 && !(servesRoster && servesGameData))
+        {
+            SkipDomain(scenario, SpecDomain.Scenario, ScenarioUnsupportedReason, reportResults);
+            scenario = [];
+        }
+
+        return (gameData, scenario);
+    }
+
+    /// <summary>Records every one of <paramref name="specs"/> as skipped for <paramref name="reason"/>.</summary>
+    private static void SkipDomain<TSpec>(
+        List<(string Id, string Category, TSpec Spec)> specs,
+        SpecDomain domain,
+        string reason,
+        List<SpecResultSummary> reportResults)
+        where TSpec : SpecFileBase
+    {
+        foreach (var (id, category, spec) in specs)
+        {
+            reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped", [reason], spec.Tags,
+                Domain: domain.Name()));
+        }
+    }
+
+    private static string DomainSubdir(string specsDir, SpecDomain domain) => Path.Combine(specsDir, domain.Name());
+
+    /// <summary>
+    /// Whether <paramref name="path"/> lies inside <paramref name="root"/>, by <see cref="Path.GetRelativePath"/>
+    /// so the platform's own path-casing rule applies — the rule <c>Directory.Exists</c> applied when the
+    /// subtree was looked for.
+    /// </summary>
+    private static bool IsUnder(string root, string path)
+    {
+        var relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(path));
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -406,7 +515,7 @@ public static class SpecSuiteRunner
         ref AdapterProcess proc,
         int workerIndex,
         SpecFileBase spec,
-        bool isGameData,
+        SpecDomain domain,
         string? assertionEngine,
         string? engineFilter,
         string? expectedFailuresEngine,
@@ -417,7 +526,7 @@ public static class SpecSuiteRunner
         var wasAlreadyDead = proc.HasExited;
 
         var (result, status, durationMs) = RunOneSpecAttempt(
-            proc, spec, isGameData, assertionEngine, engineFilter, expectedFailuresEngine);
+            proc, spec, domain, assertionEngine, engineFilter, expectedFailuresEngine);
         if (!proc.HasExited)
         {
             return (result, status, durationMs, 0);
@@ -483,7 +592,7 @@ public static class SpecSuiteRunner
         }
 
         var (retryResult, retryStatus, retryDurationMs) = RunOneSpecAttempt(
-            proc, spec, isGameData, assertionEngine, engineFilter, expectedFailuresEngine);
+            proc, spec, domain, assertionEngine, engineFilter, expectedFailuresEngine);
         if (!proc.HasExited)
         {
             // Retried on a fresh process and it did not die — the retry's verdict wins, but the
@@ -511,23 +620,31 @@ public static class SpecSuiteRunner
     private static (SpecResult Result, string Status, double DurationMs) RunOneSpecAttempt(
         AdapterProcess proc,
         SpecFileBase spec,
-        bool isGameData,
+        SpecDomain domain,
         string? assertionEngine,
         string? engineFilter,
         string? expectedFailuresEngine)
     {
-        using var activity = HarnessTelemetry.StartSpec(
-            spec.Id,
-            spec.Category,
-            isGameData ? "gamedata" : "roster");
+        using var activity = HarnessTelemetry.StartSpec(spec.Id, spec.Category, domain.Name());
 
         var sw = Stopwatch.StartNew();
         SpecResult result;
-        if (isGameData)
+        if (domain == SpecDomain.GameData)
         {
             using var engine = new JsonProtocolGameDataEngine(proc, null);
             var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
             result = runner.Run((GameDataSpecFile)spec);
+        }
+        else if (domain == SpecDomain.Scenario)
+        {
+            // One process, both editors: the adapter keeps its roster and gamedata engines in separate
+            // slots, so the two wrappers drive them side by side. Each sends `teardown` when disposed, which
+            // resets both slots; the second is a no-op. The scenario's identity is the concrete engine, with
+            // the assertion engine as the base whose declarations apply when the spec names no concrete one.
+            using var dataEngine = new JsonProtocolGameDataEngine(proc, null);
+            using var rosterEngine = new JsonProtocolEngine(proc, null);
+            var runner = new ScenarioRunner(dataEngine, rosterEngine, engineFilter ?? assertionEngine ?? UnnamedEngine, assertionEngine);
+            result = runner.Run((ScenarioSpecFile)spec);
         }
         else
         {

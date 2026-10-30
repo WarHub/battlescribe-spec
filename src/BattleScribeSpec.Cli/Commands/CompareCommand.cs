@@ -136,14 +136,7 @@ internal static class CompareCommand
             try
             {
                 var selection = engineOptions.Resolve(parseResult, specInput: null);
-
-                IReadOnlyList<string> domains =
-                    (parseResult.GetValue(engineOptions.Gamedata), parseResult.GetValue(engineOptions.Roster)) switch
-                    {
-                        (true, false) => ["gamedata"],
-                        (false, true) => ["roster"],
-                        _ => ["roster", "gamedata"],
-                    };
+                var domains = engineOptions.BatchDomains(parseResult);
 
                 // Each arm gets its own EngineSelection.PlanOverride — RunCommand.ApplyPolicyOverride
                 // is the shared wrapper around PolicyOverride.Apply (the one --policy parser); calling
@@ -347,9 +340,18 @@ internal static class CompareCommand
         Ui.Info(FormattableString.Invariant($"  speedup (B/A):     {speedup:F2}x"));
     }
 
-    /// <summary>Build the id -> status map ("category/specId" -> passed/failed/expected-failure/unexpected-pass/skipped) for one arm.</summary>
-    private static Dictionary<string, string> ToStatusMap(SpecSuiteResult suite) =>
-        suite.ReportResults.ToDictionary(r => $"{r.Category}/{r.SpecId}", r => r.Status, StringComparer.Ordinal);
+    /// <summary>
+    /// Build the id -> status map ("domain/category/specId" -> passed/failed/expected-failure/unexpected-pass/skipped)
+    /// for one arm.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by <see cref="SpecResultSummary.QualifiedId"/>, not <c>category/specId</c>: a run covers three
+    /// spec trees that share category names, and two specs of one <c>category/id</c> in two domains would be
+    /// one key — <c>ToDictionary</c> throwing on the second, or, keyed any more forgivingly, one verdict
+    /// silently standing in for the other in the very comparison this command exists to make.
+    /// </remarks>
+    internal static Dictionary<string, string> ToStatusMap(SpecSuiteResult suite) =>
+        suite.ReportResults.ToDictionary(r => r.QualifiedId, r => r.Status, StringComparer.Ordinal);
 
     /// <summary>
     /// Build the id -> adapter-death-count map for one arm, keyed identically to
@@ -357,7 +359,7 @@ internal static class CompareCommand
     /// adapter actually died while running that spec in either arm (see #304).
     /// </summary>
     private static Dictionary<string, int> ToDeathMap(SpecSuiteResult suite) =>
-        suite.ReportResults.ToDictionary(r => $"{r.Category}/{r.SpecId}", r => r.AdapterDeaths, StringComparer.Ordinal);
+        suite.ReportResults.ToDictionary(r => r.QualifiedId, r => r.AdapterDeaths, StringComparer.Ordinal);
 
     /// <summary>
     /// Run the full spec set for one arm: its own <see cref="HarnessCollector"/> (so <see cref="TraceSummary"/>
