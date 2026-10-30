@@ -11,6 +11,7 @@ public sealed class SpecResolutionTests
     [Theory]
     [InlineData("specs/gamedata/entry/add-entry-basic.yaml", "gamedata")]
     [InlineData("specs/roster/selection/selection-page.yaml", "roster")]
+    [InlineData("specs/scenario/handoff/some-scenario.yaml", "scenario")]
     [InlineData("plain-id-with-no-hint", "roster")]
     [InlineData("-", "roster")]
     public void InferEngineType_UsesPathHints(string input, string expected)
@@ -24,6 +25,68 @@ public sealed class SpecResolutionTests
         // A bare gamedata spec id (no path hint) is resolved against specs/gamedata.
         Assert.Equal("gamedata", SpecLoading.InferEngineType("add-entry-basic"));
     }
+
+    /// <summary>
+    /// A scenario named by bare id or <c>category/id</c> — no path segment to hint at it — is found in
+    /// <c>specs/scenario</c>, the way a gamedata id is found in <c>specs/gamedata</c>. Without that lookup
+    /// it would fall through to the roster default and be loaded as the wrong model.
+    /// </summary>
+    [Theory]
+    [InlineData(ScenarioId)]
+    [InlineData(ScenarioCategory + "/" + ScenarioId)]
+    public void InferEngineType_DetectsScenarioByBareIdOrCategoryId(string input)
+    {
+        Assert.Equal("scenario", SpecLoading.InferEngineType(input));
+    }
+
+    /// <summary>
+    /// A scenario spec that exists on disk is classified by containment in <c>specs/scenario</c>, in both
+    /// its absolute form and the spelling a user types.
+    /// </summary>
+    [Fact]
+    public void InferEngineType_ClassifiesARepoScenarioByContainment()
+    {
+        var path = CliProcess.SpecPath("scenario", ScenarioCategory, ScenarioId + ".yaml");
+        Assert.True(File.Exists(path), $"Spec not found: {path}");
+
+        Assert.Equal("scenario", SpecLoading.InferEngineType(path));
+    }
+
+    [Theory]
+    [InlineData("scenario")]
+    [InlineData("Scenario")]
+    public void InferEngineType_HonoursAScenarioSegment_OutsideTheSpecsTree(string segment)
+    {
+        using var workspace = new TempWorkspace(segment);
+        var spec = workspace.WriteSpec("some-spec.yaml");
+
+        Assert.Equal("scenario", SpecLoading.InferEngineType(spec));
+    }
+
+    [Theory]
+    [InlineData(ScenarioId)]
+    [InlineData(ScenarioCategory + "/" + ScenarioId)]
+    public void LoadScenarioSpec_ResolvesAdvertisedIdForms(string specId)
+    {
+        var spec = SpecLoading.LoadScenarioSpec(specId);
+
+        Assert.Equal(ScenarioId, spec.Id);
+        Assert.Equal(ScenarioCategory, spec.Category);
+        Assert.NotEmpty(spec.Steps);
+    }
+
+    [Fact]
+    public void LoadScenarioSpec_ThrowsForUnknownSpec()
+    {
+        var ex = Assert.Throws<FileNotFoundException>(() => SpecLoading.LoadScenarioSpec("no-such-spec-anywhere"));
+        Assert.StartsWith("Scenario spec not found", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The scenario spec every scenario test here leans on — the first one the repo has.</summary>
+    internal const string ScenarioCategory = "handoff";
+
+    /// <inheritdoc cref="ScenarioCategory"/>
+    internal const string ScenarioId = "handoff-saved-edit-reaches-new-roster";
 
     /// <summary>
     /// <b>A directory the spec merely lives under does not get to name its domain.</b> Domain

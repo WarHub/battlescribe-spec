@@ -39,6 +39,16 @@ internal static class ProbeForwardCommand
                     return 1;
                 }
 
+                // The host's probe opens one editor on one spec's setup. A scenario is two editors joined
+                // by hand-offs, and there is no single surface to open — refused here rather than sent to the
+                // host as a roster probe that fails to load the spec.
+                if (selection.Domain == EngineDomain.Scenario)
+                {
+                    Ui.Error("probe does not support scenario specs: it opens one editor on one spec's setup, and a " +
+                        "scenario drives two. Probe the roster or gamedata surface with a roster or gamedata spec.");
+                    return 1;
+                }
+
                 var domainFlag = selection.Domain == EngineDomain.Gamedata ? "--gamedata" : "--roster";
                 var verbArgs = new[] { "--engine", engineName, "--headed", specInput, domainFlag };
                 return await HostForwarder.ForwardAsync(selection.Entry, "probe", verbArgs);

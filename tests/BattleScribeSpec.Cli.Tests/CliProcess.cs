@@ -72,12 +72,23 @@ internal static class CliProcess
     /// (Windows only; see <see cref="LegacyCodePageConsole"/>), so the test sees what a user on such
     /// a console sees.
     /// </param>
+    /// <param name="environment">
+    /// Variables set in the child's environment on top of what it inherits — and so in the environment of
+    /// every adapter it starts, which is how a test reaches the reference adapter's test hooks
+    /// (<c>BSSPEC_TEST_ROSTER_ONLY</c>) through <c>bs-spec</c>.
+    /// </param>
     public static async Task<CliResult> RunAsync(
         IReadOnlyList<string> args,
         string stdin,
-        bool legacyCodePageConsole = false)
+        bool legacyCodePageConsole = false,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var psi = CreateStartInfo(args);
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            psi.Environment[name] = value;
+        }
+
         if (legacyCodePageConsole)
         {
             LegacyCodePageConsole.Apply(psi);
@@ -103,7 +114,7 @@ internal static class CliProcess
     internal static readonly string[] WithheldEnvironment = ["GITHUB_STEP_SUMMARY", "GITHUB_ACTIONS"];
 
     /// <summary>
-    /// How <see cref="RunAsync(IReadOnlyList{string}, string, bool)"/> starts the child — everything the
+    /// How <see cref="RunAsync(IReadOnlyList{string}, string, bool, IReadOnlyDictionary{string, string})"/> starts the child — everything the
     /// remarks on <see cref="CliProcess"/> promise, before anything is started. Split out so
     /// <c>CliProcessTests</c> can hold it to those promises.
     /// </summary>

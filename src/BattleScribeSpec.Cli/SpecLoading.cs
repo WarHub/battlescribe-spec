@@ -1,5 +1,6 @@
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 
 namespace BattleScribeSpec.Cli;
 
@@ -10,7 +11,28 @@ namespace BattleScribeSpec.Cli;
 /// </summary>
 internal static class SpecLoading
 {
-    public static SpecFile LoadSpec(string input)
+    // Anchored at specs/roster so a "category/id" (e.g. "cost/cost-hidden-limit-validation") resolves
+    // directly — the category is the immediate parent folder, above the roster grouping.
+    public static SpecFile LoadSpec(string input) => Load(
+        input, SpecLoader.FindRosterSpecsDirectory(), SpecLoader.Load, SpecLoader.LoadFromYaml, "Spec");
+
+    public static GameDataSpecFile LoadGameDataSpec(string input) => Load(
+        input, SpecLoader.FindGameDataSpecsDirectory(), SpecLoader.LoadGameData, SpecLoader.LoadGameDataFromYaml, "GameData spec");
+
+    public static ScenarioSpecFile LoadScenarioSpec(string input) => Load(
+        input, SpecLoader.FindScenarioSpecsDirectory(), SpecLoader.LoadScenario, SpecLoader.LoadScenarioFromYaml, "Scenario spec");
+
+    /// <summary>
+    /// The one resolution rule every domain's loader follows: <c>-</c> is the spec's text on stdin, an
+    /// existing file is that file, and anything else is a bare id or <c>category/id</c> under
+    /// <paramref name="specsDir"/>.
+    /// </summary>
+    private static TSpec Load<TSpec>(
+        string input,
+        string? specsDir,
+        Func<string, TSpec> loadFile,
+        Func<string, string?, TSpec> loadYaml,
+        string label)
     {
         if (input == "-")
         {
@@ -18,80 +40,54 @@ internal static class SpecLoading
             // whatever the console code page is: bs-spec's entry point re-opened it (Utf8Stdio). When
             // a person types the spec, it is the console's own reader, in the code page they typed in.
             var yaml = Console.In.ReadToEnd();
-            return SpecLoader.LoadFromYaml(yaml, defaultId: "stdin");
+            return loadYaml(yaml, "stdin");
         }
 
         if (File.Exists(input))
         {
-            return SpecLoader.Load(input);
+            return loadFile(input);
         }
 
-        // Anchor at specs/roster so a "category/id" (e.g. "cost/cost-hidden-limit-validation")
-        // resolves directly — the category is the immediate parent folder, above the roster grouping.
-        var specsDir = SpecLoader.FindRosterSpecsDirectory();
-        if (specsDir is not null)
+        if (FindIn(specsDir, input) is { } file)
         {
-            var candidate = Path.Combine(specsDir, input + ".yaml");
-            if (File.Exists(candidate))
-            {
-                return SpecLoader.Load(candidate);
-            }
-
-            foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
-            {
-                var name = Path.GetFileNameWithoutExtension(file);
-                var relative = Path.GetRelativePath(specsDir, file).Replace('\\', '/');
-                if (name == input || relative == input || relative == input + ".yaml")
-                {
-                    return SpecLoader.Load(file);
-                }
-            }
+            return loadFile(file);
         }
 
-        throw new FileNotFoundException($"Spec not found: '{input}'. Provide a file path, category/id, or id.");
-    }
-
-    public static GameDataSpecFile LoadGameDataSpec(string input)
-    {
-        if (input == "-")
-        {
-            // Raw spec text, non-ASCII included. When stdin is a pipe, Console.In is UTF-8 here
-            // whatever the console code page is: bs-spec's entry point re-opened it (Utf8Stdio). When
-            // a person types the spec, it is the console's own reader, in the code page they typed in.
-            var yaml = Console.In.ReadToEnd();
-            return SpecLoader.LoadGameDataFromYaml(yaml, defaultId: "stdin");
-        }
-
-        if (File.Exists(input))
-        {
-            return SpecLoader.LoadGameData(input);
-        }
-
-        var specsDir = SpecLoader.FindGameDataSpecsDirectory();
-        if (specsDir is not null)
-        {
-            var candidate = Path.Combine(specsDir, input + ".yaml");
-            if (File.Exists(candidate))
-            {
-                return SpecLoader.LoadGameData(candidate);
-            }
-
-            foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
-            {
-                var name = Path.GetFileNameWithoutExtension(file);
-                var relative = Path.GetRelativePath(specsDir, file).Replace('\\', '/');
-                if (name == input || relative == input || relative == input + ".yaml")
-                {
-                    return SpecLoader.LoadGameData(file);
-                }
-            }
-        }
-
-        throw new FileNotFoundException($"GameData spec not found: '{input}'. Provide a file path, category/id, or id.");
+        throw new FileNotFoundException($"{label} not found: '{input}'. Provide a file path, category/id, or id.");
     }
 
     /// <summary>
-    /// Infer the engine domain ("gamedata" or "roster") for a spec named by file path, by
+    /// The spec file under <paramref name="specsDir"/> that <paramref name="input"/> names — as
+    /// <c>category/id</c> (with or without <c>.yaml</c>) or as a bare id — or null.
+    /// </summary>
+    private static string? FindIn(string? specsDir, string input)
+    {
+        if (specsDir is null)
+        {
+            return null;
+        }
+
+        var candidate = Path.Combine(specsDir, input + ".yaml");
+        if (File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(specsDir, "*.yaml", SearchOption.AllDirectories))
+        {
+            var name = Path.GetFileNameWithoutExtension(file);
+            var relative = Path.GetRelativePath(specsDir, file).Replace('\\', '/');
+            if (name == input || relative == input || relative == input + ".yaml")
+            {
+                return file;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Infer the engine domain ("gamedata", "scenario" or "roster") for a spec named by file path, by
     /// <c>category/id</c>, or by bare id. Defaults to roster.
     /// </summary>
     /// <remarks>
@@ -104,8 +100,8 @@ internal static class SpecLoading
     /// on every platform. The absolute path is the machine's, and none of it is about the spec.
     /// </para>
     /// <para>
-    /// So an existing file is classified by containment in <c>specs/gamedata</c> or
-    /// <c>specs/roster</c>, via <see cref="Path.GetRelativePath"/> — which applies the running
+    /// So an existing file is classified by containment in <c>specs/gamedata</c>, <c>specs/scenario</c>
+    /// or <c>specs/roster</c>, via <see cref="Path.GetRelativePath"/> — which applies the running
     /// platform's own path-comparison rule (case-insensitive on Windows, case-sensitive on Linux)
     /// rather than a hard-coded one. Hard-coding either is the trap #311 was filed about: folding
     /// case is wrong on ext4, and forcing <c>Ordinal</c> would be the mirror-image bug, correct on
@@ -123,7 +119,7 @@ internal static class SpecLoading
     {
         if (input is null or "-")
         {
-            return "roster";
+            return EngineDomains.Roster;
         }
 
         if (File.Exists(input))
@@ -131,26 +127,27 @@ internal static class SpecLoading
             var full = Path.GetFullPath(input);
             if (IsUnder(SpecLoader.FindGameDataSpecsDirectory(), full))
             {
-                return "gamedata";
+                return EngineDomains.Gamedata;
             }
 
-            return IsUnder(SpecLoader.FindRosterSpecsDirectory(), full) ? "roster" : DomainHintIn(input);
+            if (IsUnder(SpecLoader.FindScenarioSpecsDirectory(), full))
+            {
+                return EngineDomains.Scenario;
+            }
+
+            return IsUnder(SpecLoader.FindRosterSpecsDirectory(), full) ? EngineDomains.Roster : DomainHintIn(input);
         }
 
-        // Not a file on disk: a bare id or category/id. A gamedata id resolves against specs/gamedata,
-        // and everything else falls through to the hint in what was typed.
-        var gameDataDir = SpecLoader.FindGameDataSpecsDirectory();
-        if (gameDataDir is not null)
+        // Not a file on disk: a bare id or category/id. A gamedata or scenario id resolves against its own
+        // tree, and everything else falls through to the hint in what was typed.
+        if (FindIn(SpecLoader.FindGameDataSpecsDirectory(), input) is not null)
         {
-            foreach (var file in Directory.EnumerateFiles(gameDataDir, "*.yaml", SearchOption.AllDirectories))
-            {
-                var name = Path.GetFileNameWithoutExtension(file);
-                var relative = Path.GetRelativePath(gameDataDir, file).Replace('\\', '/');
-                if (name == input || relative == input || relative == input + ".yaml")
-                {
-                    return "gamedata";
-                }
-            }
+            return EngineDomains.Gamedata;
+        }
+
+        if (FindIn(SpecLoader.FindScenarioSpecsDirectory(), input) is not null)
+        {
+            return EngineDomains.Scenario;
         }
 
         return DomainHintIn(input);
@@ -175,8 +172,8 @@ internal static class SpecLoading
     }
 
     /// <summary>
-    /// The domain a spec reference hints at: a path <em>segment</em> named "gamedata" means gamedata,
-    /// anything else means roster.
+    /// The domain a spec reference hints at: a path <em>segment</em> named "gamedata" or "scenario" means
+    /// that domain, anything else means roster.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -190,9 +187,19 @@ internal static class SpecLoading
     /// <c>Contains("roster") ? "roster" : "roster"</c> — both arms identical, the probe evaluated and
     /// discarded. It has never been possible for this method to fail to answer.
     /// </para>
+    /// <para>
+    /// When both segments appear, the one nearest the file wins — it is the one that organises the spec,
+    /// and the other is a directory further up that merely has the name.
+    /// </para>
     /// </remarks>
-    private static string DomainHintIn(string input) =>
-        input.Split('/', '\\').Any(segment => segment.Equals("gamedata", StringComparison.OrdinalIgnoreCase))
-            ? "gamedata"
-            : "roster";
+    private static string DomainHintIn(string input)
+    {
+        var nearest = input.Split('/', '\\')
+            .LastOrDefault(segment => Names(segment, EngineDomains.Gamedata) || Names(segment, EngineDomains.Scenario));
+        return nearest is null ? EngineDomains.Roster
+            : Names(nearest, EngineDomains.Gamedata) ? EngineDomains.Gamedata
+            : EngineDomains.Scenario;
+
+        static bool Names(string segment, string domain) => segment.Equals(domain, StringComparison.OrdinalIgnoreCase);
+    }
 }
