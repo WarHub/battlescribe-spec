@@ -821,6 +821,30 @@ source — inline `content:` XML, or a side-file keyed by the step `id` — via 
 The file type (catalogue vs game system) is always derived from the XML root element; no type flag is
 sent.
 
+### Scenario specs: both domains on one connection
+
+A scenario spec (`specs/scenario/`, [ADR 002](adr/002-scenario-specs.md)) drives an adapter's gamedata
+engine and roster engine in one run, over **one connection**, and needs no command of its own. An adapter
+that advertises both `roster` and `gamedata` in `describeResult.domains` runs scenarios as it stands; one
+that advertises only one is reported skipped for every scenario, with that reason.
+
+What the client sends, in the order the spec's steps make it:
+
+| Scenario step | Commands |
+|---|---|
+| setup | `gamedataSetup`, then `openFile` + `exportFile` for each file (the data directory's seed), then `openFile` for `setup.edit` |
+| a `data:` block's steps | `gamedataAction` / `gamedataGetState`, as for a gamedata spec |
+| `saveData` | `gamedataAction` `reload`, then `exportFile` |
+| `newRoster` | `setupFromFiles` with the data directory's files |
+| a `roster:` block's steps | `action` / `getState` / `getErrors`, as for a roster spec |
+| `saveRoster` | `exportRosterXml` |
+| `openRoster` | `setupFromFiles`, then `action` `loadRoster` |
+
+So an adapter must keep its two engines independent: `setup` / `setupFromFiles` replace the roster
+engine and leave the gamedata engine alone, and `gamedataSetup` the reverse, which is how `AdapterHandler`
+already holds them. `setupFromFiles` arrives more than once in a spec: each must leave a roster engine
+that knows only the files it was just given. `teardown` still ends the spec for both.
+
 ### BattleScribe Data Editor wire (JSON-RPC 2.0)
 
 This is the `battlescribe-ui` in-process driver's **internal** transport to the Java agent, distinct
