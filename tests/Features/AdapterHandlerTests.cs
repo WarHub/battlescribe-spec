@@ -376,6 +376,41 @@ public sealed class AdapterHandlerTests
         Assert.Equal(1, engines[0].DisposeCalls);       // then disposed (self-heal)
     }
 
+    /// <summary>
+    /// A scenario spec sets the roster engine up again mid-spec, with no teardown between: its roster
+    /// editor re-reads the data directory at every newRoster/openRoster, and teardown would reset the
+    /// gamedata engine too. A warm engine must be reset first, as teardown resets it between specs — and
+    /// only then: a setup right after a teardown gets no second reset.
+    /// </summary>
+    [Fact]
+    public async Task ReusedEngine_SetUpAgainWithoutTeardown_IsResetFirst()
+    {
+        var engines = new List<CountingRosterEngine>();
+        var connection = new InMemoryAdapterConnection(
+            (input, output, ct) => AdapterHandler.RunAsync(
+                new AdapterOptions
+                {
+                    RosterEngineFactory = () => { var e = new CountingRosterEngine(); engines.Add(e); return e; },
+                    Name = "battlescribe-ui",
+                    ReuseRosterEngineAcrossSetups = true,
+                },
+                input, output, ct));
+
+        var ct = TestContext.Current.CancellationToken;
+        var gs = new ProtocolGameSystem { Id = "gs", Name = "GS" };
+        await connection.SendCommandAsync(new SetupCommand { GameSystem = gs }, ct);
+        await connection.SendCommandAsync(new SetupCommand { GameSystem = gs }, ct); // mid-spec re-setup
+        var midSpecCleanups = engines[0].CleanupCalls;
+        await connection.SendCommandAsync(new TeardownCommand(), ct);
+        await connection.SendCommandAsync(new SetupCommand { GameSystem = gs }, ct); // next spec
+        await connection.DisposeAsync();
+
+        var engine = Assert.Single(engines);
+        Assert.Equal(1, midSpecCleanups);
+        Assert.Equal(2, engine.CleanupCalls); // the mid-spec reset and teardown's — none after teardown
+        Assert.Equal(3, engine.SetupCalls);
+    }
+
     [Fact]
     public async Task PerDomainFlags_AreIndependent()
     {
