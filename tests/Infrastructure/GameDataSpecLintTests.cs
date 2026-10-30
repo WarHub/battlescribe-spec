@@ -94,11 +94,11 @@ public sealed class GameDataSpecLintTests
             violations.AddRange(CheckRequiredFields(spec));
             violations.AddRange(CheckIdMatchesFilename(spec, filename));
             violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName));
-            violations.AddRange(CheckKnownActions(spec));
-            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
-            violations.AddRange(CheckSetupHasGameSystem(spec));
-            violations.AddRange(CheckSetupHasEdit(spec));
-            violations.AddRange(CheckActionParameters(spec));
+            violations.AddRange(CheckKnownActions(spec.Steps));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(spec.Steps));
+            violations.AddRange(CheckSetupHasGameSystem(spec.Setup));
+            violations.AddRange(CheckSetupHasEdit(spec.Setup));
+            violations.AddRange(CheckActionParameters(spec.Steps));
         }
 
         return violations;
@@ -254,9 +254,9 @@ public sealed class GameDataSpecLintTests
         "dump"
     ];
 
-    private static IEnumerable<string> CheckKnownActions(GameDataSpecFile spec)
+    private static IEnumerable<string> CheckKnownActions(IReadOnlyList<GameDataStepDef> steps)
     {
-        foreach (var step in spec.Steps)
+        foreach (var step in steps)
         {
             if (step.Action is { } action && !KnownActions.Contains(action))
             {
@@ -265,39 +265,53 @@ public sealed class GameDataSpecLintTests
         }
     }
 
+    /// <summary>
+    /// Every per-step rule a GameData spec's steps are held to, over a list of steps that is not a GameData
+    /// spec's own — a scenario's <c>data:</c> block (<see cref="ScenarioSpecLintTests"/>): known actions, one kind
+    /// per step, and each action's required parameters. The step numbers in the findings start at
+    /// <paramref name="firstStep"/>, so they count across the whole spec.
+    /// </summary>
+    internal static IEnumerable<string> CheckGameDataSteps(IReadOnlyList<GameDataStepDef> steps, int firstStep) =>
+    [
+        .. CheckKnownActions(steps),
+        .. CheckStepsAreActionOrExpectedState(steps, firstStep),
+        .. CheckActionParameters(steps, firstStep),
+    ];
+
     // ── Steps have action or expectedState ───────────────────────────
 
-    private static IEnumerable<string> CheckStepsAreActionOrExpectedState(GameDataSpecFile spec)
+    private static IEnumerable<string> CheckStepsAreActionOrExpectedState(IReadOnlyList<GameDataStepDef> steps, int firstStep = 1)
     {
-        for (var i = 0; i < spec.Steps.Count; i++)
+        for (var i = 0; i < steps.Count; i++)
         {
-            var step = spec.Steps[i];
+            var step = steps[i];
             var hasAction = step.Action is not null;
             var hasExpected = step.ExpectedState is not null;
             var hasExpectedFile = step.ExpectedFile is not null;
             if (!hasAction && !hasExpected && !hasExpectedFile)
             {
-                yield return $"step {i + 1} has none of 'action', 'expectedState' or 'expectedFile'";
+                yield return $"step {firstStep + i} has none of 'action', 'expectedState' or 'expectedFile'";
             }
 
             if (hasAction && (hasExpected || hasExpectedFile))
             {
-                yield return $"step {i + 1} has both an action and an assertion (expectedState/expectedFile)";
+                yield return $"step {firstStep + i} has both an action and an assertion (expectedState/expectedFile)";
             }
 
             // A side-file expectedFile (no inline content) is keyed by the step id.
             if (hasExpectedFile && step.ExpectedFile!.Content is null && step.Id is not { Length: > 0 })
             {
-                yield return $"step {i + 1}: expectedFile without inline 'content' requires the step to have an 'id'";
+                yield return $"step {firstStep + i}: expectedFile without inline 'content' requires the step to have an 'id'";
             }
         }
     }
 
     // ── Setup has gameSystem ─────────────────────────────────────────
 
-    private static IEnumerable<string> CheckSetupHasGameSystem(GameDataSpecFile spec)
+    /// <summary>Shared with <see cref="ScenarioSpecLintTests"/>, whose setup is this one verbatim.</summary>
+    internal static IEnumerable<string> CheckSetupHasGameSystem(GameDataSetupDef? setup)
     {
-        if (spec.Setup?.GameSystem is null)
+        if (setup?.GameSystem is null)
         {
             yield return "setup.gameSystem is required";
         }
@@ -307,9 +321,10 @@ public sealed class GameDataSpecLintTests
     // Engines disagree on which loaded file is "active" by default, so every spec must declare the
     // file it edits (a catalogue id or the game system id). An openFile step may switch it later.
 
-    private static IEnumerable<string> CheckSetupHasEdit(GameDataSpecFile spec)
+    /// <summary>Shared with <see cref="ScenarioSpecLintTests"/>, whose setup is this one verbatim.</summary>
+    internal static IEnumerable<string> CheckSetupHasEdit(GameDataSetupDef? setup)
     {
-        var edit = spec.Setup?.Edit;
+        var edit = setup?.Edit;
         if (string.IsNullOrWhiteSpace(edit))
         {
             yield return "setup.edit is required (the id of the catalogue or game system to open for editing)";
@@ -317,11 +332,11 @@ public sealed class GameDataSpecLintTests
         }
 
         var knownIds = new HashSet<string>(StringComparer.Ordinal);
-        if (spec.Setup?.GameSystem?.Id is { Length: > 0 } gsId)
+        if (setup?.GameSystem?.Id is { Length: > 0 } gsId)
         {
             knownIds.Add(gsId);
         }
-        foreach (var cat in spec.Setup?.Catalogues ?? [])
+        foreach (var cat in setup?.Catalogues ?? [])
         {
             if (cat.Id is { Length: > 0 } catId)
             {
@@ -338,11 +353,12 @@ public sealed class GameDataSpecLintTests
 
     // ── Action parameter validation ──────────────────────────────────
 
-    private static IEnumerable<string> CheckActionParameters(GameDataSpecFile spec)
+    private static IEnumerable<string> CheckActionParameters(IReadOnlyList<GameDataStepDef> steps, int firstStep = 1)
     {
-        for (var i = 0; i < spec.Steps.Count; i++)
+        for (var i = 0; i < steps.Count; i++)
         {
-            var step = spec.Steps[i];
+            var step = steps[i];
+            var n = firstStep + i;
             if (step.Action is null)
             {
                 continue;
@@ -353,48 +369,48 @@ public sealed class GameDataSpecLintTests
                 case "addEntry":
                     if (step.ParentId is null)
                     {
-                        yield return $"step {i + 1}: addEntry requires 'parentId'";
+                        yield return $"step {n}: addEntry requires 'parentId'";
                     }
 
                     if (step.EntryType is null)
                     {
-                        yield return $"step {i + 1}: addEntry requires 'entryType'";
+                        yield return $"step {n}: addEntry requires 'entryType'";
                     }
 
                     break;
                 case "removeEntry":
                     if (step.EntryId is null)
                     {
-                        yield return $"step {i + 1}: removeEntry requires 'entryId'";
+                        yield return $"step {n}: removeEntry requires 'entryId'";
                     }
 
                     break;
                 case "setFields":
                     if (step.EntryId is null)
                     {
-                        yield return $"step {i + 1}: setFields requires 'entryId'";
+                        yield return $"step {n}: setFields requires 'entryId'";
                     }
 
                     if (step.Fields is null && step.Characteristics is null && step.Costs is null)
                     {
-                        yield return $"step {i + 1}: setFields requires at least one of 'fields', 'characteristics' or 'costs'";
+                        yield return $"step {n}: setFields requires at least one of 'fields', 'characteristics' or 'costs'";
                     }
 
                     break;
                 case "addLink":
                     if (step.ParentId is null)
                     {
-                        yield return $"step {i + 1}: addLink requires 'parentId'";
+                        yield return $"step {n}: addLink requires 'parentId'";
                     }
 
                     if (step.LinkType is null)
                     {
-                        yield return $"step {i + 1}: addLink requires 'linkType'";
+                        yield return $"step {n}: addLink requires 'linkType'";
                     }
 
                     if (step.TargetId is null)
                     {
-                        yield return $"step {i + 1}: addLink requires 'targetId'";
+                        yield return $"step {n}: addLink requires 'targetId'";
                     }
 
                     break;
@@ -403,7 +419,7 @@ public sealed class GameDataSpecLintTests
                     // side-file keyed by the step id.
                     if (step.EntryId is null && step.Content is null && step.Id is not { Length: > 0 })
                     {
-                        yield return $"step {i + 1}: openFile requires 'entryId', 'content', or a step 'id' for a side-file";
+                        yield return $"step {n}: openFile requires 'entryId', 'content', or a step 'id' for a side-file";
                     }
 
                     break;

@@ -237,7 +237,7 @@ internal sealed record CompositionReport(
 /// <remarks>
 /// <para>
 /// <b>What the strict zero-tests policy cannot see.</b> Strict fails a run that executed nothing at all.
-/// <c>pre-push</c> claims six lanes and runs three thousand tests; on a machine where <c>setup.ps1</c> never
+/// <c>pre-push</c> claims nine lanes and runs three thousand tests; on a machine where <c>setup.ps1</c> never
 /// fetched the HAR, both frozen NR roster lanes skip whole and the run is still green, because everything
 /// else executed. This check holds each claimed lane to the same rule strict holds the run to, and prints
 /// the lane's <see cref="EngineLane.EmptyHint"/> — the fix — with exit 8, the platform's own code for "nothing

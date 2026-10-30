@@ -36,7 +36,7 @@ public sealed class DocumentedSpecCountLintTests
 
     // ── On-disk truth ────────────────────────────────────────────────
 
-    /// <summary>Per-category spec file counts for one spec domain (roster or gamedata).</summary>
+    /// <summary>Per-category spec file counts for one spec domain (roster, gamedata or scenario).</summary>
     private sealed record SpecInventory(string Domain, IReadOnlyDictionary<string, int> ByCategory)
     {
         public int Total => ByCategory.Values.Sum();
@@ -54,6 +54,9 @@ public sealed class DocumentedSpecCountLintTests
 
     private static readonly Lazy<SpecInventory> GameData =
         new(() => TakeInventory("gamedata", SpecLoader.FindGameDataSpecsDirectory(), SpecLoader.DiscoverGameDataSpecs));
+
+    private static readonly Lazy<SpecInventory> Scenario =
+        new(() => TakeInventory("scenario", SpecLoader.FindScenarioSpecsDirectory(), SpecLoader.DiscoverScenarioSpecs));
 
     private static SpecInventory TakeInventory(
         string domain,
@@ -78,10 +81,10 @@ public sealed class DocumentedSpecCountLintTests
         return new(domain, byCategory);
     }
 
-    private static int TotalSpecs => Roster.Value.Total + GameData.Value.Total;
+    private static int TotalSpecs => Roster.Value.Total + GameData.Value.Total + Scenario.Value.Total;
 
     private static string DiskTruth =>
-        $"{Roster.Value.Summary}; {GameData.Value.Summary}; {TotalSpecs} spec files in total";
+        $"{Roster.Value.Summary}; {GameData.Value.Summary}; {Scenario.Value.Summary}; {TotalSpecs} spec files in total";
 
     // ── Documented claims ────────────────────────────────────────────
 
@@ -125,6 +128,16 @@ public sealed class DocumentedSpecCountLintTests
         return new("categories", "gamedata category directories", () => GameData.Value.CategoryCount);
     }
 
+    private static DocumentedNumber ScenarioCount(string group)
+    {
+        return new(group, "scenario spec files", () => Scenario.Value.Total);
+    }
+
+    private static DocumentedNumber ScenarioCategories()
+    {
+        return new("categories", "scenario category directories", () => Scenario.Value.CategoryCount);
+    }
+
     private static Regex Pattern(string pattern)
     {
         return new(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -136,19 +149,21 @@ public sealed class DocumentedSpecCountLintTests
             "README.md intro sentence",
             "README.md",
             "the opening sentence's spec file totals",
-            Pattern(@"against\s+(?<total>\d+)\s+spec\s+files\s*[—-]\s*(?<roster>\d+)\s+roster\s+specs\s+and\s+(?<gamedata>\d+)\s+GameData"),
+            Pattern(@"against\s+(?<total>\d+)\s+spec\s+files\s*[—-]\s*(?<roster>\d+)\s+roster\s+specs,\s+(?<gamedata>\d+)\s+GameData\s+specs\s+and\s+(?<scenario>\d+)\s+scenario\s+specs?"),
             TotalCount(),
             RosterCount("roster"),
-            GameDataCount("gamedata")),
+            GameDataCount("gamedata"),
+            ScenarioCount("scenario")),
 
         new(
             "README.md architecture table",
             "README.md",
             "the 'YAML Specs' row of the architecture layer table",
-            Pattern(@"\*\*YAML\s+Specs\*\*\s*\|\s*(?<total>\d+)\s+declarative\s+spec\s+files\s*\(\s*(?<roster>\d+)\s+roster\s*\+\s*(?<gamedata>\d+)\s+GameData\s*\)"),
+            Pattern(@"\*\*YAML\s+Specs\*\*\s*\|\s*(?<total>\d+)\s+declarative\s+spec\s+files\s*\(\s*(?<roster>\d+)\s+roster\s*\+\s*(?<gamedata>\d+)\s+GameData\s*\+\s*(?<scenario>\d+)\s+scenario\s*\)"),
             TotalCount(),
             RosterCount("roster"),
-            GameDataCount("gamedata")),
+            GameDataCount("gamedata"),
+            ScenarioCount("scenario")),
 
         new(
             "README.md roster coverage heading",
@@ -166,14 +181,25 @@ public sealed class DocumentedSpecCountLintTests
             GameDataCount("total"),
             GameDataCategories()),
 
+        // "Scenario specs" contains neither "Roster specs" nor "GameData specs", so the table lookup in
+        // ReadmeCategoryTableMatchesDisk (first heading containing the phrase) cannot land on it, nor it on them.
+        new(
+            "README.md scenario coverage heading",
+            "README.md",
+            "the 'Scenario specs' heading above the scenario category table",
+            Pattern(@"#+\s*Scenario\s+specs\s*[—-]\s*(?<total>\d+)\s+across\s+(?<categories>\d+)\s+categor(?:y|ies)\b"),
+            ScenarioCount("total"),
+            ScenarioCategories()),
+
         new(
             "README.md project structure tree",
             "README.md",
             "the 'specs/' comment in the project structure tree",
-            Pattern(@"specs/\s*#\s*(?<total>\d+)\s+YAML\s+spec\s+files\s*\(\s*(?<roster>\d+)\s+roster\s*\+\s*(?<gamedata>\d+)\s+gamedata\s*\)"),
+            Pattern(@"specs/\s*#\s*(?<total>\d+)\s+YAML\s+spec\s+files\s*\(\s*(?<roster>\d+)\s+roster\s*\+\s*(?<gamedata>\d+)\s+gamedata\s*\+\s*(?<scenario>\d+)\s+scenario\s*\)"),
             TotalCount(),
             RosterCount("roster"),
-            GameDataCount("gamedata")),
+            GameDataCount("gamedata"),
+            ScenarioCount("scenario")),
 
         new(
             "AGENTS.md roster key-files row",
@@ -190,6 +216,14 @@ public sealed class DocumentedSpecCountLintTests
             Pattern(@"GameData\s+spec\s+files\s*\(\s*(?<total>\d+)\s+total,\s*(?<categories>\d+)\s+categories\s*\)"),
             GameDataCount("total"),
             GameDataCategories()),
+
+        new(
+            "AGENTS.md scenario key-files row",
+            "AGENTS.md",
+            "the specs/scenario/ row of the key files table",
+            Pattern(@"Scenario\s+spec\s+files\s*\(\s*(?<total>\d+)\s+total,\s*(?<categories>\d+)\s+categor(?:y|ies)\s*\)"),
+            ScenarioCount("total"),
+            ScenarioCategories()),
 
         // This doc describes the NR *roster* engine's data loading path (loadSystemFromFs, used by
         // NewRecruitRosterEngine). GameData specs drive the NR Editor instead, so the claim is
@@ -257,9 +291,16 @@ public sealed class DocumentedSpecCountLintTests
     [Theory]
     [InlineData("roster", "Roster specs")]
     [InlineData("gamedata", "GameData specs")]
+    [InlineData("scenario", "Scenario specs")]
     public void ReadmeCategoryTableMatchesDisk(string domain, string heading)
     {
-        var inventory = string.Equals(domain, "roster", StringComparison.Ordinal) ? Roster.Value : GameData.Value;
+        var inventory = domain switch
+        {
+            "roster" => Roster.Value,
+            "gamedata" => GameData.Value,
+            "scenario" => Scenario.Value,
+            _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, "no such spec domain"),
+        };
         var lines = File.ReadAllLines(Path.Combine(RepoRoot, "README.md"));
 
         var headingIndex = Array.FindIndex(lines, l =>
