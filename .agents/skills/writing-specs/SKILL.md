@@ -10,7 +10,8 @@ description: >
 
 ## Workflow
 
-1. Create `specs/roster/{category}/{spec-id}.yaml` (a GameData spec goes under `specs/gamedata/`)
+1. Create `specs/roster/{category}/{spec-id}.yaml` (a GameData spec goes under `specs/gamedata/`, a
+   scenario spec — data editor and roster editor in one run — under `specs/scenario/`; see below)
 2. Run it with the one-spec command in [AGENTS.md, "Build & test"](../../../AGENTS.md#build--test), your spec id
    in place of `my-spec-id` (what it runs: [docs/running-tests.md](../../../docs/running-tests.md#selecting-tests-by-name))
 3. Fix failures and re-run until BattleScribe passes
@@ -165,6 +166,50 @@ contract: `docs/error-assertions.md`.
 ```
 
 Non-null fields in the engine override replace the base fields for that engine.
+
+## Scenario specs (data editor + roster editor in one spec)
+
+A scenario spec (`specs/scenario/{category}/{id}.yaml`) follows one engine family's data editor and
+roster editor through a single run. Use one when the thing under test is the **hand-off**: an edit
+reaching a roster, or a saved roster reopened against changed data. Design:
+[docs/adr/002-scenario-specs.md](../../../docs/adr/002-scenario-specs.md).
+
+```yaml
+setup:                       # the gamedata setup, verbatim: these files seed the data directory
+  edit: cat-1                # the data editor's open file (required)
+  gameSystem: {...}
+  catalogues: [...]
+
+steps:                       # each item is exactly ONE of: data / roster / action
+  - action: newRoster        # roster editor reads the data directory, starts an empty roster
+  - roster:                  # roster-spec steps, unchanged vocabulary
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+  - action: saveRoster       # roster editor saves; `file` names the saved roster
+    file: my-list
+  - data:                    # gamedata-spec steps, unchanged vocabulary
+      - action: setFields
+        entryId: se-squad
+        costs: {ct-pts: "15"}
+  - action: saveData         # data editor saves its OPEN file into the data directory
+  - action: openRoster       # roster editor re-reads the data directory, opens `file`
+    file: my-list
+  - roster:
+      - expectedState: {...} # the last item is a block ending in an assertion
+```
+
+**The one rule:** the roster editor sees data only as of the last `saveData`, and only at
+`newRoster`/`openRoster`. Unsaved edits stay in the data editor. `saveData` saves the open file only;
+to save another, `openFile` it in a `data:` block first.
+
+- Step ids are one namespace across the spec; expressions resolve within their editor. A roster step
+  names an entry a data step made by its **declared** id (`addEntry` with `entryId:`), not by expression.
+- A roster block or `saveRoster` before any `newRoster`/`openRoster` is a spec error.
+- Any hand-off can carry `expectFailure` (an `openRoster` the edited data can no longer carry).
+- Per-engine overrides use one rule in both kinds of block: the running engine's entry
+  (`battlescribe-ui`) wins, else its base engine's (`battlescribe`).
+- Expectations come from `battlescribe-ui` (the desktop apps): run the `bs-ui-scenario` profile.
 
 ## Reference files
 

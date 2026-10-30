@@ -85,6 +85,11 @@ public sealed class BattleScribeEngine : IDisposable
         _gameSystem = gameSystem;
         _catalogues.Clear();
         _forceCatalogueMap.Clear();
+        // The one-shot default-selection pass (see AddForce) belongs to the roster, and this is a new
+        // roster. Left set by an earlier roster on this instance, the first force of the next one came
+        // up without its min-1 entries — invisible while every lane built a fresh engine per spec, and
+        // the second roster a scenario starts on the same engine is exactly that case.
+        _autoSelectDone = false;
         foreach (var kvp in catalogues)
         {
             _catalogues[kvp.Key] = kvp.Value;
@@ -577,16 +582,9 @@ public sealed class BattleScribeEngine : IDisposable
         var forceEntry = JavaModelFactory.CreateForceEntry("fe-patrol", "Patrol");
         var gs = JavaModelFactory.CreateGameSystem(forceEntries: [forceEntry]);
         var cat = JavaModelFactory.CreateCatalogue("cat-1", "Cat", "test-gs");
-        _setupCatalogue = cat;
-        _setupCatalogues.Clear();
-        _setupCatalogues.Add(cat);
-        _perCatalogueEntries.Clear();
-        _perCatalogueEntries.Add([]);
-        _forceCatalogueMap.Clear();
-        _setupForceEntries.Clear();
-        _setupForceEntries.Add(forceEntry);
-        _setupSelectionEntries.Clear();
 
+        ResetSetupState();
+        IndexSetupData(gs, [cat]);
         Initialize(gs, new Dictionary<string, Catalogue> { ["cat-1"] = cat });
     }
 
@@ -607,16 +605,9 @@ public sealed class BattleScribeEngine : IDisposable
         var gs = JavaModelFactory.CreateGameSystem(forceEntries: [forceEntry], costTypes: costTypes);
         var cat = JavaModelFactory.CreateCatalogue("cat-1", "Cat", "test-gs",
             selectionEntries: [unitEntry]);
-        _setupCatalogue = cat;
-        _setupCatalogues.Clear();
-        _setupCatalogues.Add(cat);
-        _perCatalogueEntries.Clear();
-        _perCatalogueEntries.Add([unitEntry]);
-        _forceCatalogueMap.Clear();
 
-        _setupForceEntries.Clear();
-        _setupForceEntries.Add(forceEntry);
-        _setupSelectionEntries.Clear();
+        ResetSetupState();
+        IndexSetupData(gs, [cat]);
         _setupSelectionEntries.Add(unitEntry);
 
         Initialize(gs, new Dictionary<string, Catalogue> { ["cat-1"] = cat });
@@ -989,32 +980,88 @@ public sealed class BattleScribeEngine : IDisposable
     /// Called via reflection because obfuscated class names create C# namespace conflicts.
     /// Pre-processes XML to fix compatibility issues with newer data formats.
     /// </summary>
-    public void LoadGameSystemFile(string gstFilePath)
-    {
-        using var bis = CreatePreprocessedStream(gstFilePath);
-        var gs = (GameSystem)InvokeDataUtils("e", typeof(java.io.InputStream), bis);
-        _gameSystem = gs;
-    }
+    public void LoadGameSystemFile(string gstFilePath) =>
+        _gameSystem = ParseGameSystemXml(File.ReadAllText(gstFilePath));
 
     /// <summary>
     /// Load a catalogue from a .cat XML file using DataUtils deserialization.
     /// </summary>
     public void LoadCatalogueFile(string catFilePath)
     {
-        using var bis = CreatePreprocessedStream(catFilePath);
-        var cat = (Catalogue)InvokeDataUtils("f", typeof(java.io.InputStream), bis);
+        var cat = ParseCatalogueXml(File.ReadAllText(catFilePath));
         _catalogues[cat.getId()] = cat;
     }
 
     /// <summary>
-    /// Read XML file and pre-process to fix compatibility with BattleScribe 2.3.21's model.
+    /// Set up the engine from BattleScribe XML files: exactly one <c>.gst</c> and any number of
+    /// <c>.cat</c>, matched by extension (anything else — a dataSource's YAML — is ignored). The
+    /// file-based counterpart of <see cref="SetupFromProtocol"/>, and its equal: it starts from a
+    /// clean slate and derives everything Setup derives (<see cref="IndexSetupData"/>), so a roster
+    /// built after either is the same roster. Returns initialization errors.
+    /// </summary>
+    /// <remarks>
+    /// Catalogues are loaded in the order given, not the order a directory listing returns them in:
+    /// that order is the setup's declaration order (the runner passes the game system and then each
+    /// catalogue as the spec lists them), it is what Protocol setup uses, and a listing's order is
+    /// the file system's — alphabetical on NTFS, unspecified on ext4. Every catalogue the files hold
+    /// is loaded, so the links between them need no separate resolution.
+    /// </remarks>
+    public List<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        ResetSetupState();
+
+        var gameSystems = files.Where(f => HasExtension(f.FileName, ".gst")).ToList();
+        if (gameSystems.Count == 0)
+        {
+            return ["No .gst (game system) file found in data source files."];
+        }
+
+        if (gameSystems.Count > 1)
+        {
+            return [$"Expected exactly one .gst file, found {gameSystems.Count}."];
+        }
+
+        _gameSystem = ParseGameSystemXml(gameSystems[0].Content);
+        foreach (var (_, content) in files.Where(f => HasExtension(f.FileName, ".cat")))
+        {
+            var cat = ParseCatalogueXml(content);
+            _catalogues[cat.getId()] = cat;
+        }
+
+        return InitializeFromLoadedData();
+    }
+
+    private static bool HasExtension(string fileName, string extension) =>
+        string.Equals(Path.GetExtension(fileName), extension, StringComparison.OrdinalIgnoreCase);
+
+    private static GameSystem ParseGameSystemXml(string xml)
+    {
+        using var bis = CreatePreprocessedStream(xml);
+        return (GameSystem)InvokeDataUtils("e", typeof(java.io.InputStream), bis);
+    }
+
+    private static Catalogue ParseCatalogueXml(string xml)
+    {
+        using var bis = CreatePreprocessedStream(xml);
+        return (Catalogue)InvokeDataUtils("f", typeof(java.io.InputStream), bis);
+    }
+
+    /// <summary>
+    /// Pre-process XML to fix compatibility with BattleScribe 2.3.21's model.
     /// Adds default value="" attribute to modifier elements missing it, since the engine's
     /// Modifier class has @Attribute(required=true) on the value field, but newer data
     /// formats allow omitting it.
     /// </summary>
-    private static java.io.BufferedInputStream CreatePreprocessedStream(string xmlFilePath)
+    private static java.io.BufferedInputStream CreatePreprocessedStream(string xml)
     {
-        var xml = File.ReadAllText(xmlFilePath);
+        // A byte-order mark decoded into the string is not XML. File.ReadAllText drops it; content
+        // handed over in memory (SetupFromFiles) may still carry it, and the parser would see three
+        // bytes before the prolog.
+        if (xml.Length > 0 && xml[0] == '\uFEFF')
+        {
+            xml = xml[1..];
+        }
+
         xml = AddMissingModifierValues(xml);
         var bytes = System.Text.Encoding.UTF8.GetBytes(xml);
         var bais = new java.io.ByteArrayInputStream(bytes);
@@ -1236,9 +1283,9 @@ public sealed class BattleScribeEngine : IDisposable
     /// <summary>
     /// Reorder a roster-level cost list (costs or costLimits) in place to match the cost-type
     /// DECLARATION order captured in <see cref="_setupCostTypes"/>. Stable: cost types not found
-    /// in the declaration order (e.g. file-based setups where <see cref="_setupCostTypes"/> is
-    /// empty) retain their original relative order, so this degrades to a no-op when the order
-    /// is unknown. Only reorders — never adds, drops, or mutates cost values.
+    /// in the declaration order retain their original relative order, so this degrades to a no-op
+    /// when the order is unknown (a game system declaring no cost types). Only reorders — never
+    /// adds, drops, or mutates cost values.
     /// </summary>
     private void ReorderCostsByDeclaration(JavaList? costs)
     {
@@ -1349,7 +1396,9 @@ public sealed class BattleScribeEngine : IDisposable
     }
 
     /// <summary>
-    /// Initialize the engine after loading game system and catalogues from files.
+    /// Initialize the engine after loading game system and catalogues from files. Everything a setup
+    /// derives from its data is rebuilt from what is loaded now (<see cref="IndexSetupData"/>), so
+    /// this sets up what <see cref="SetupFromProtocol"/> would from the same data.
     /// </summary>
     public List<string> InitializeFromLoadedData()
     {
@@ -1358,35 +1407,7 @@ public sealed class BattleScribeEngine : IDisposable
             throw new InvalidOperationException("Load a game system file first.");
         }
 
-        // Populate force entries from loaded data
-        _setupForceEntries.Clear();
-        var feIter = _gameSystem.getForceEntries().iterator();
-        while (feIter.hasNext())
-        {
-            _setupForceEntries.Add((ForceEntry)feIter.next());
-        }
-
-        // Set up catalogue references for AddForceByIndex
-        _setupCatalogues.Clear();
-        _perCatalogueEntries.Clear();
-        _forceCatalogueMap.Clear();
-        if (_catalogues.Count > 0)
-        {
-            _setupCatalogue = _catalogues.Values.First();
-            foreach (var cat in _catalogues.Values)
-            {
-                _setupCatalogues.Add(cat);
-                var entries = new List<SelectionEntry>();
-                var seIter = cat.getSelectionEntries().iterator();
-                while (seIter.hasNext())
-                {
-                    entries.Add((SelectionEntry)seIter.next());
-                }
-
-                _perCatalogueEntries.Add(entries);
-            }
-        }
-
+        IndexSetupData(_gameSystem, [.. _catalogues.Values]);
         return Initialize(_gameSystem, new Dictionary<string, Catalogue>(_catalogues));
     }
 
@@ -1471,10 +1492,14 @@ public sealed class BattleScribeEngine : IDisposable
     // ===== Protocol-based API (primary setup path) =====
 
     /// <summary>
-    /// Set up the engine from Protocol types. Returns initialization errors.
+    /// Set up the engine from Protocol types. Returns initialization errors. Starts from a clean
+    /// slate, builds the Java model, and derives the rest from that model exactly as
+    /// <see cref="SetupFromFiles"/> does (<see cref="IndexSetupData"/>).
     /// </summary>
     public List<string> SetupFromProtocol(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
+        ResetSetupState();
+
         var costTypes = gameSystem.CostTypes?.Select(ct =>
             JavaModelFactory.CreateCostType(ct.Id, ct.Name, ct.DefaultCostLimit, ct.Hidden, ct.Limit)).ToArray();
 
@@ -1523,13 +1548,7 @@ public sealed class BattleScribeEngine : IDisposable
 
         // Build all catalogues
         var catalogueDict = new Dictionary<string, Catalogue>();
-        _setupCatalogues.Clear();
-        _perCatalogueEntries.Clear();
-        _forceCatalogueMap.Clear();
-        _setupSelectionEntries.Clear();
-        _entryLookup.Clear();
-        _groupLookup.Clear();
-        _constraintDeclarers.Clear();
+        var builtCatalogues = new List<Catalogue>(catalogues.Length);
 
         foreach (var catSpec in catalogues)
         {
@@ -1607,55 +1626,113 @@ public sealed class BattleScribeEngine : IDisposable
             }
 
             catalogueDict[catSpec.Id] = cat;
-            _setupCatalogues.Add(cat);
+            builtCatalogues.Add(cat);
+        }
 
-            // Build shared entry lookup for resolving entry links
-            var sharedEntryLookup = new Dictionary<string, SelectionEntry>();
-            if (sharedSelectionEntries != null)
+        IndexSetupData(gs, builtCatalogues);
+        return Initialize(gs, catalogueDict);
+    }
+
+    // ===== Per-setup state =====
+    // Two ways in — SetupFromProtocol builds the Java model from Protocol types, SetupFromFiles parses
+    // it from XML — and one way on from there: both reset, then derive everything else from the Java
+    // model they ended with. The derivation used to live inside the Protocol path alone, reading the
+    // Protocol types, so file setup had none of it: no entry lookup (selectChildEntry and
+    // setSelectionCount threw), no cost types (setCostLimit threw, exported roster costs kept the
+    // engine's alphabetical order), no constraint-declarer index (a link-reached error's `from` named
+    // the target), and only the game system's force entries. Nothing ran file setup but the two
+    // real-world dataSource specs, whose steps touched none of it. Scenario specs (ADR 002) set the
+    // roster engine up from the data editor's saved files, so it has to be the same engine either way.
+
+    /// <summary>
+    /// Forget the previous setup: its loaded data and everything derived from it. Both setup paths
+    /// call this first, so a second setup on one instance — a scenario's second <c>newRoster</c> —
+    /// sees only its own data. Without it, file setup kept every catalogue an earlier setup had
+    /// loaded (a catalogue the new files no longer hold stayed addressable), and nothing that was not
+    /// rebuilt was cleared.
+    /// </summary>
+    private void ResetSetupState()
+    {
+        _initialized = false;
+        _gameSystem = null;
+        _catalogues.Clear();
+        ClearDerivedSetupState();
+    }
+
+    private void ClearDerivedSetupState()
+    {
+        _setupCatalogue = null;
+        _setupCatalogues.Clear();
+        _perCatalogueEntries.Clear();
+        _forceCatalogueMap.Clear();
+        _setupForceEntries.Clear();
+        _setupSelectionEntries.Clear();
+        _setupCostTypes.Clear();
+        _entryLookup.Clear();
+        _groupLookup.Clear();
+        _constraintDeclarers.Clear();
+    }
+
+    /// <summary>
+    /// Derive everything a setup needs beyond the data itself, from the Java model, in catalogue
+    /// order: the catalogue list and the default (first) catalogue, each catalogue's root entries,
+    /// the entry lookup behind <see cref="GetEntryById"/>, the constraint-declarer index behind
+    /// <see cref="DeclaringEntryOf"/>, the force entries <see cref="FindForceEntryById"/> searches
+    /// (the game system's, then each catalogue's), and the cost types (the game system's, in
+    /// declaration order). Clears the previous derivation first.
+    /// </summary>
+    /// <remarks>
+    /// Read from the Java model rather than whatever it was built from, so both setup paths share
+    /// it. The force entries are therefore the instances the catalogues hold — the Protocol path
+    /// used to build a second, detached copy of each catalogue force entry for this list.
+    /// </remarks>
+    private void IndexSetupData(GameSystem gameSystem, IReadOnlyList<Catalogue> catalogues)
+    {
+        ClearDerivedSetupState();
+
+        _setupCostTypes.AddRange(JavaListToList<CostType>(gameSystem.getCostTypes()));
+        _setupForceEntries.AddRange(JavaListToList<ForceEntry>(gameSystem.getForceEntries()));
+
+        foreach (var cat in catalogues)
+        {
+            _setupCatalogues.Add(cat);
+            var selectionEntries = JavaListToList<SelectionEntry>(cat.getSelectionEntries());
+            var sharedSelectionEntries = JavaListToList<SelectionEntry>(cat.getSharedSelectionEntries());
+
+            // The catalogue's root entries: its own, then the shared entries its own entry links
+            // target (the fallback GetEntriesForForce uses when the engine has no catalogue manager).
+            var sharedById = new Dictionary<string, SelectionEntry>();
+            foreach (var se in sharedSelectionEntries)
             {
-                foreach (var se in sharedSelectionEntries)
+                if (se.getId() is { } id)
                 {
-                    sharedEntryLookup[se.getId()] = se;
+                    sharedById[id] = se;
                 }
             }
 
-            // Track per-catalogue entries (direct entries + entry link targets)
-            var catEntries = new List<SelectionEntry>();
-            if (selectionEntries != null)
+            var catEntries = new List<SelectionEntry>(selectionEntries);
+            foreach (var el in JavaListToList<EntryLink>(cat.getEntryLinks()))
             {
-                catEntries.AddRange(selectionEntries);
-            }
-
-            if (entryLinks != null)
-            {
-                foreach (var el in entryLinks)
+                if (el.getTargetId() is { } targetId && sharedById.TryGetValue(targetId, out var target)
+                    && !catEntries.Contains(target))
                 {
-                    var targetId = el.getTargetId();
-                    if (targetId != null && sharedEntryLookup.TryGetValue(targetId, out var target)
-                        && !catEntries.Contains(target))
-                    {
-                        catEntries.Add(target);
-                    }
+                    catEntries.Add(target);
                 }
             }
 
             _perCatalogueEntries.Add(catEntries);
 
-            // Index direct entries and shared entries for lookup by ID.
-            if (selectionEntries != null)
+            foreach (var se in selectionEntries)
             {
-                foreach (var se in selectionEntries)
-                {
-                    IndexEntries(se);
-                }
+                IndexEntries(se);
             }
-            if (sharedSelectionEntries != null)
+
+            foreach (var se in sharedSelectionEntries)
             {
-                foreach (var se in sharedSelectionEntries)
-                {
-                    IndexEntries(se);
-                }
+                IndexEntries(se);
             }
+
+            _setupForceEntries.AddRange(JavaListToList<ForceEntry>(cat.getForceEntries()));
         }
 
         // Which container declares each constraint id, from every constraint-bearing container in
@@ -1664,28 +1741,6 @@ public sealed class BattleScribeEngine : IDisposable
 
         // Default active catalogue is the first loaded catalogue.
         _setupCatalogue = _setupCatalogues.Count > 0 ? _setupCatalogues[0] : null;
-
-        _setupForceEntries.Clear();
-        if (forceEntries != null)
-        {
-            _setupForceEntries.AddRange(forceEntries);
-        }
-        // Include force entries defined in catalogues
-        foreach (var catSpec in catalogues)
-        {
-            if (catSpec.ForceEntries is { Count: > 0 })
-            {
-                _setupForceEntries.AddRange(catSpec.ForceEntries.Select(BuildForceEntry));
-            }
-        }
-        _setupCostTypes.Clear();
-        if (costTypes != null)
-        {
-            _setupCostTypes.AddRange(costTypes);
-        }
-
-        var initErrors = Initialize(gs, catalogueDict);
-        return initErrors;
     }
 
     // ===== Constraint-declarer indexing =====
@@ -1696,115 +1751,98 @@ public sealed class BattleScribeEngine : IDisposable
     // The same walk used to build a second index of each constraint's kind and field. Nothing read
     // it after placement was retired (#426), so it went (#437); the walk itself stayed, because
     // DeclaringEntryOf is a live reader and every spec's `from:` on a link-reached error rides on it.
+    // It walks the Java model (IndexSetupData), visiting the containers the Protocol walk it replaced
+    // visited. That walk also read a catalogue's sharedForceEntries, which BattleScribe 2.03's model
+    // has no place for: nothing built from them reached the engine, so no error could name them.
 
-    private void IndexConstraintDeclarers(string declarerId, IEnumerable<ProtocolConstraint>? constraints)
+    private void IndexConstraintDeclarers(string? declarerId, JavaList? constraints)
     {
-        if (constraints is null || string.IsNullOrEmpty(declarerId))
+        if (string.IsNullOrEmpty(declarerId))
         {
             return;
         }
-        foreach (var c in constraints)
+        foreach (var c in JavaListToList<Constraint>(constraints))
         {
-            if (string.IsNullOrEmpty(c.Id))
+            var constraintId = c.getId();
+            if (string.IsNullOrEmpty(constraintId))
             {
                 continue;
             }
-            if (!_constraintDeclarers.TryGetValue(c.Id, out var declarers))
+            if (!_constraintDeclarers.TryGetValue(constraintId, out var declarers))
             {
                 declarers = [];
-                _constraintDeclarers[c.Id] = declarers;
+                _constraintDeclarers[constraintId] = declarers;
             }
             declarers.Add(declarerId);
         }
     }
 
-    private void IndexConstraintDeclarersTree(ProtocolGameSystem gs, IEnumerable<ProtocolCatalogue> catalogues)
+    private void IndexConstraintDeclarersTree(GameSystem gs, IEnumerable<Catalogue> catalogues)
     {
-        WalkForceEntries(gs.ForceEntries);
-        WalkCategoryEntries(gs.CategoryEntries);
-        WalkSelectionEntries(gs.SelectionEntries);
-        WalkSelectionEntries(gs.SharedSelectionEntries);
-        WalkGroups(gs.SharedSelectionEntryGroups);
-        WalkEntryLinks(gs.EntryLinks);
+        WalkForceEntries(gs.getForceEntries());
+        WalkCategoryEntries(gs.getCategoryEntries());
+        WalkSelectionEntries(gs.getSelectionEntries());
+        WalkSelectionEntries(gs.getSharedSelectionEntries());
+        WalkGroups(gs.getSharedSelectionEntryGroups());
+        WalkEntryLinks(gs.getEntryLinks());
 
         foreach (var cat in catalogues)
         {
-            WalkForceEntries(cat.ForceEntries);
-            WalkForceEntries(cat.SharedForceEntries);
-            WalkCategoryEntries(cat.CategoryEntries);
-            WalkSelectionEntries(cat.SelectionEntries);
-            WalkSelectionEntries(cat.SharedSelectionEntries);
-            WalkGroups(cat.SharedSelectionEntryGroups);
-            WalkEntryLinks(cat.EntryLinks);
+            WalkForceEntries(cat.getForceEntries());
+            WalkCategoryEntries(cat.getCategoryEntries());
+            WalkSelectionEntries(cat.getSelectionEntries());
+            WalkSelectionEntries(cat.getSharedSelectionEntries());
+            WalkGroups(cat.getSharedSelectionEntryGroups());
+            WalkEntryLinks(cat.getEntryLinks());
         }
     }
 
-    private void WalkForceEntries(IEnumerable<ProtocolForceEntry>? forceEntries)
+    private void WalkForceEntries(JavaList? forceEntries)
     {
-        if (forceEntries is null)
+        foreach (var fe in JavaListToList<ForceEntry>(forceEntries))
         {
-            return;
-        }
-        foreach (var fe in forceEntries)
-        {
-            IndexConstraintDeclarers(fe.Id, fe.Constraints);
-            WalkForceEntries(fe.ForceEntries);
+            IndexConstraintDeclarers(fe.getId(), fe.getConstraints());
+            WalkForceEntries(fe.getForceEntries());
         }
     }
 
-    private void WalkCategoryEntries(IEnumerable<ProtocolCategoryEntry>? categoryEntries)
+    private void WalkCategoryEntries(JavaList? categoryEntries)
     {
-        if (categoryEntries is null)
+        foreach (var ce in JavaListToList<CategoryEntry>(categoryEntries))
         {
-            return;
-        }
-        foreach (var ce in categoryEntries)
-        {
-            IndexConstraintDeclarers(ce.Id, ce.Constraints);
+            IndexConstraintDeclarers(ce.getId(), ce.getConstraints());
         }
     }
 
-    private void WalkSelectionEntries(IEnumerable<ProtocolSelectionEntry>? entries)
+    private void WalkSelectionEntries(JavaList? entries)
     {
-        if (entries is null)
+        foreach (var se in JavaListToList<SelectionEntry>(entries))
         {
-            return;
-        }
-        foreach (var se in entries)
-        {
-            IndexConstraintDeclarers(se.Id, se.Constraints);
-            WalkSelectionEntries(se.SelectionEntries);
-            WalkGroups(se.SelectionEntryGroups);
-            WalkEntryLinks(se.EntryLinks);
+            IndexConstraintDeclarers(se.getId(), se.getConstraints());
+            WalkSelectionEntries(se.getSelectionEntries());
+            WalkGroups(se.getSelectionEntryGroups());
+            WalkEntryLinks(se.getEntryLinks());
         }
     }
 
-    private void WalkGroups(IEnumerable<ProtocolSelectionEntryGroup>? groups)
+    private void WalkGroups(JavaList? groups)
     {
-        if (groups is null)
+        foreach (var g in JavaListToList<SelectionEntryGroup>(groups))
         {
-            return;
-        }
-        foreach (var g in groups)
-        {
-            IndexConstraintDeclarers(g.Id, g.Constraints);
-            WalkSelectionEntries(g.SelectionEntries);
-            WalkGroups(g.SelectionEntryGroups);
-            WalkEntryLinks(g.EntryLinks);
+            IndexConstraintDeclarers(g.getId(), g.getConstraints());
+            WalkSelectionEntries(g.getSelectionEntries());
+            WalkGroups(g.getSelectionEntryGroups());
+            WalkEntryLinks(g.getEntryLinks());
         }
     }
 
-    private void WalkEntryLinks(IEnumerable<ProtocolEntryLink>? links)
+    private void WalkEntryLinks(JavaList? links)
     {
-        if (links is null)
+        foreach (var el in JavaListToList<EntryLink>(links))
         {
-            return;
-        }
-        foreach (var el in links)
-        {
-            IndexConstraintDeclarers(el.Id, el.Constraints);
-            WalkSelectionEntries(el.SelectionEntries);
-            WalkGroups(el.SelectionEntryGroups);
+            IndexConstraintDeclarers(el.getId(), el.getConstraints());
+            WalkSelectionEntries(el.getSelectionEntries());
+            WalkGroups(el.getSelectionEntryGroups());
         }
     }
 
@@ -2147,7 +2185,13 @@ public sealed class BattleScribeEngine : IDisposable
 
     private void IndexEntries(SelectionEntry entry)
     {
-        _entryLookup[entry.getId()] = entry;
+        // An id is required by the schema, but this now runs over whatever XML file setup was handed,
+        // and an entry without one is unaddressable rather than a reason to fail the whole setup.
+        if (entry.getId() is { } id)
+        {
+            _entryLookup[id] = entry;
+        }
+
         var children = JavaListToList<SelectionEntry>(entry.getSelectionEntries());
         foreach (var child in children)
         {
@@ -2157,23 +2201,17 @@ public sealed class BattleScribeEngine : IDisposable
         var groups = JavaListToList<SelectionEntryGroup>(entry.getSelectionEntryGroups());
         foreach (var group in groups)
         {
-            _groupLookup[group.getId()] = group;
-            var groupEntries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
-            foreach (var ge in groupEntries)
-            {
-                IndexEntries(ge);
-            }
-            var subGroups = JavaListToList<SelectionEntryGroup>(group.getSelectionEntryGroups());
-            foreach (var sg in subGroups)
-            {
-                IndexGroupRecursive(sg);
-            }
+            IndexGroupRecursive(group);
         }
     }
 
     private void IndexGroupRecursive(SelectionEntryGroup group)
     {
-        _groupLookup[group.getId()] = group;
+        if (group.getId() is { } id)
+        {
+            _groupLookup[id] = group;
+        }
+
         var entries = JavaListToList<SelectionEntry>(group.getSelectionEntries());
         foreach (var e in entries)
         {
@@ -2398,17 +2436,7 @@ public sealed class BattleScribeEngine : IDisposable
 
     public void Dispose()
     {
-        _initialized = false;
-        _gameSystem = null;
-        _catalogues.Clear();
-        _forceCatalogueMap.Clear();
-        _setupCatalogues.Clear();
-        _perCatalogueEntries.Clear();
-        _setupForceEntries.Clear();
-        _setupSelectionEntries.Clear();
-        _entryLookup.Clear();
-        _groupLookup.Clear();
-        _constraintDeclarers.Clear();
+        ResetSetupState();
         GC.SuppressFinalize(this);
     }
 

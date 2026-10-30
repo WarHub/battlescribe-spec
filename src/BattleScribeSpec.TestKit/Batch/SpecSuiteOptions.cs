@@ -1,12 +1,42 @@
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 
 namespace BattleScribeSpec.Batch;
 
+/// <summary>The spec domains a suite runs, one per tree under <c>specs/</c>.</summary>
+internal enum SpecDomain
+{
+    Roster,
+    GameData,
+
+    /// <summary>A data editor and a roster editor in one spec (<c>docs/adr/002-scenario-specs.md</c>).</summary>
+    Scenario,
+}
+
+internal static class SpecDomainNames
+{
+    /// <summary>
+    /// The domain's name — its directory under <c>specs/</c>, its entry in <see cref="SpecSuiteOptions.Domains"/>
+    /// and <c>describe</c>'s <c>domains</c>, and the <c>bsspec.domain</c> telemetry tag.
+    /// </summary>
+    public static string Name(this SpecDomain domain) => domain switch
+    {
+        SpecDomain.Roster => "roster",
+        SpecDomain.GameData => "gamedata",
+        SpecDomain.Scenario => "scenario",
+        _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, null),
+    };
+}
+
 public sealed class SpecSuiteOptions
 {
-    /// <summary>Specs directory; null → SpecLoader.FindRosterSpecsDirectory() then embedded fallback.</summary>
+    /// <summary>
+    /// Specs directory: its <c>gamedata</c> and <c>scenario</c> subtrees are those domains' specs, and roster
+    /// specs are everything else under it — see <see cref="SpecSuiteRunner"/>'s remarks. Null → each domain's
+    /// own repo tree, roster with the embedded fallback.
+    /// </summary>
     public string? SpecsDirectory { get; init; }
     public IReadOnlyList<string>? FilterPatterns { get; init; }
     public TagFilter? TagFilter { get; init; }
@@ -22,11 +52,11 @@ public sealed class SpecSuiteOptions
     public required Func<int, AdapterProcess> AdapterFactory { get; init; }
 
     /// <summary>
-    /// Spec domains to discover and run. Defaults to roster-only so existing callers (the
-    /// `bs-spec run` CLI command) keep their exact current behavior without passing this at all.
-    /// Include <c>"gamedata"</c> to additionally discover and run GameData specs over the same
-    /// adapter pool. Domain discovery rule when <see cref="SpecsDirectory"/> is set explicitly:
-    /// see <see cref="SpecSuiteRunner"/>'s remarks.
+    /// Spec domains to discover and run. Defaults to roster-only so existing callers keep their exact
+    /// behavior without passing this at all (the <c>bs-spec run --all</c> and <c>compare</c> verbs pass
+    /// every domain). Include <c>"gamedata"</c> and/or <c>"scenario"</c> to additionally discover and run
+    /// GameData and scenario specs over the same adapter pool. Domain discovery rule when
+    /// <see cref="SpecsDirectory"/> is set explicitly: see <see cref="SpecSuiteRunner"/>'s remarks.
     /// </summary>
     public IReadOnlyList<string> Domains { get; init; } = ["roster"];
 
@@ -57,6 +87,33 @@ public sealed class SpecSuiteResult
     /// Empty when the suite's <see cref="SpecSuiteOptions.Domains"/> didn't include "gamedata".
     /// </summary>
     public required IReadOnlyDictionary<SpecResult, GameDataSpecFile> GameDataSpecsByResult { get; init; }
+
+    /// <summary>
+    /// Scenario spec results, parallel to <see cref="SpecsByResult"/> and <see cref="GameDataSpecsByResult"/>.
+    /// Empty when the suite's <see cref="SpecSuiteOptions.Domains"/> didn't include "scenario".
+    /// </summary>
+    public required IReadOnlyDictionary<SpecResult, ScenarioSpecFile> ScenarioSpecsByResult { get; init; }
+
+    /// <summary>
+    /// The spec a result came from, whichever domain it ran in — null for a load failure, which has no
+    /// spec. The one lookup across the per-domain maps, so a reader of tags or expected-failure
+    /// annotations cannot forget a domain.
+    /// </summary>
+    internal SpecFileBase? SpecFor(SpecResult result) =>
+        SpecsByResult.TryGetValue(result, out var roster) ? roster
+        : GameDataSpecsByResult.TryGetValue(result, out var gameData) ? gameData
+        : ScenarioSpecsByResult.TryGetValue(result, out var scenario) ? scenario
+        : null;
+
+    /// <summary>
+    /// The domain a result ran in (<c>roster</c>, <c>gamedata</c>, <c>scenario</c>) — null for a load
+    /// failure. Pairs a <see cref="SpecResult"/> with its <see cref="SpecResultSummary.QualifiedId"/>.
+    /// </summary>
+    internal string? DomainOf(SpecResult result) =>
+        SpecsByResult.ContainsKey(result) ? SpecDomain.Roster.Name()
+        : GameDataSpecsByResult.ContainsKey(result) ? SpecDomain.GameData.Name()
+        : ScenarioSpecsByResult.ContainsKey(result) ? SpecDomain.Scenario.Name()
+        : null;
 
     /// <summary>
     /// Wall-clock duration (milliseconds) of each executed spec, keyed the same way as
@@ -136,6 +193,7 @@ public sealed class SpecSuiteResult
         IReadOnlyList<SpecResultSummary> reportResults,
         IReadOnlyDictionary<SpecResult, SpecFile> specsByResult,
         IReadOnlyDictionary<SpecResult, GameDataSpecFile> gameDataSpecsByResult,
+        IReadOnlyDictionary<SpecResult, ScenarioSpecFile> scenarioSpecsByResult,
         IReadOnlyDictionary<SpecResult, double> durationsByResult,
         int totalSpecs,
         int selected,
@@ -153,6 +211,7 @@ public sealed class SpecSuiteResult
             {
                 SpecFileBase? spec = specsByResult.TryGetValue(r, out var s) ? s
                     : gameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
+                    : scenarioSpecsByResult.TryGetValue(r, out var ss) ? ss
                     : null;
                 var isExpectedFail = spec?.IsExpectedToFail(expectedFailuresEngine) ?? false;
                 if (!r.Passed && !isExpectedFail)
@@ -184,6 +243,7 @@ public sealed class SpecSuiteResult
             ReportResults = reportResults,
             SpecsByResult = specsByResult,
             GameDataSpecsByResult = gameDataSpecsByResult,
+            ScenarioSpecsByResult = scenarioSpecsByResult,
             DurationsByResult = durationsByResult,
             TotalSpecs = totalSpecs,
             Selected = selected,

@@ -84,4 +84,15 @@ public abstract class SpecFileBase
 
         return Engines.TryGetValue(engineName, out var expectation) ? expectation : "pass";
     }
+
+    /// <summary>
+    /// The expectation for <paramref name="engineName"/>, resolved most-specific-first: its own entry when
+    /// the spec declares one, else <paramref name="baseEngineName"/>'s (<c>battlescribe-ui</c> →
+    /// <c>battlescribe</c>). A UI driver inherits its base engine's declarations by default and can still
+    /// state its own — the rule the roster lanes and every scenario run apply.
+    /// </summary>
+    public string GetExpectation(string engineName, string? baseEngineName)
+        => baseEngineName is not null && Engines?.ContainsKey(engineName) != true
+            ? GetExpectation(baseEngineName)
+            : GetExpectation(engineName);
 }

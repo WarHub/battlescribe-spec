@@ -448,7 +448,7 @@ Everything else was a declaration, and which KIND it got was a decision each tim
 |---|---:|---|
 | NR-UI limitation | 11 | `fail`, because a future NR release could plausibly lift it — and `fail` still RUNS the spec, so that arrives as an unexpected pass rather than as nothing. Seven hidden-entry/hidden-modifier cases, plus four that hit the empty-catalogue limitation of §1. |
 | NR behaviour, by design | 2 | `skip`. Both engines fail byte-identically and both NR drivers `return` early on the relevant input on purpose. No NR release can flip a call the drivers no-op deliberately, so `fail` there would be an alarm that cannot ring. |
-| Driver gap | 2 | `fail`. `real-world/wh40k-10e-*` need `SetupFromFilesAsync` to record the spec's model, which it does not — an unimplemented feature, not a patch. Declared so implementing it is reported. |
+| Driver gap | 1 | `fail`. Both `real-world/wh40k-10e-*` specs needed `SetupFromFilesAsync` to record the spec's model, which it did not — an unimplemented feature, not a patch. Declared so implementing it is reported, and it was: since both setup paths read the loaded XML (`NrUiDataIndex`, #273), `wh40k-10e-create-army` passes and its declaration is gone. `wh40k-10e-space-marines-army` still fails, on a different gap, not yet traced: its `selectEntry` for `Intercessor Squad` adds `Assault Intercessor Squad` (155 pts against 160) — the shape of `SelectEntryByNameAsync`'s by-name fallback, whose `HasText` is a substring match. |
 
 **One of them was nearly mis-declared, which is the argument for settling open questions rather
 than declaring around them.** `catalogue/catalogue-category-entries` looked like the same

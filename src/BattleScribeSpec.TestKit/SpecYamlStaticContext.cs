@@ -1,6 +1,7 @@
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 using YamlDotNet.Serialization;
 
 namespace BattleScribeSpec;
@@ -38,6 +39,9 @@ namespace BattleScribeSpec;
 [YamlSerializable(typeof(ExpectedDataEntryDef))]
 [YamlSerializable(typeof(ExpectedErrorDef))]
 [YamlSerializable(typeof(ExpectedFileDef))]
+// Scenario spec models
+[YamlSerializable(typeof(ScenarioSpecFile))]
+[YamlSerializable(typeof(ScenarioStepDef))]
 // Protocol setup data types (used in YAML setup section)
 [YamlSerializable(typeof(ProtocolGameSystem))]
 [YamlSerializable(typeof(ProtocolCatalogue))]

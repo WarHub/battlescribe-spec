@@ -62,7 +62,8 @@ public sealed class LaneCompositionTests
         Assert.Equal(0, await TestHost.RunAsync(["--test-profile", "pre-push"], TestProfiles.Tests, Platform("pre-push"), world.Io));
 
         Assert.Contains($"{LaneComposition.Prefix} pre-push ({TestProfiles.Tests}): passed — every lane the profile claims executed at least one "
-            + "of its own tests: BsRoster 1, BsGameData 1, FrozenNrRoster 1, FrozenNrGameData 1, FrozenNrUiRoster 1, FrozenNrGameDataUi 1.",
+            + "of its own tests: BsRoster 1, BsGameData 1, FrozenNrRoster 1, FrozenNrGameData 1, FrozenNrUiRoster 1, FrozenNrGameDataUi 1, "
+            + "BsScenario 1, FrozenNrScenario 1, FrozenNrUiScenario 1.",
             world.Out.ToString(), StringComparison.Ordinal);
         Assert.Equal("", world.Error.ToString());
 
@@ -73,8 +74,8 @@ public sealed class LaneCompositionTests
 
         using var record = JsonDocument.Parse(Written(world, ArtifactBase + LaneComposition.JsonSuffix));
         Assert.Equal("passed", record.RootElement.GetProperty("verdict").GetString());
-        Assert.Equal(6, record.RootElement.GetProperty("lanes").GetArrayLength());
-        Assert.Equal(7, record.RootElement.GetProperty("executed").GetInt32());
+        Assert.Equal(9, record.RootElement.GetProperty("lanes").GetArrayLength());
+        Assert.Equal(10, record.RootElement.GetProperty("executed").GetInt32());
     }
 
     /// <summary>
@@ -175,7 +176,7 @@ public sealed class LaneCompositionTests
     public async Task NoFalseRed(string commandLine, string assembly, string? feeds, bool reports)
     {
         var world = World();
-        var platform = feeds is null ? UnprofiledPlatform : Platform(feeds, 0, "FrozenNrUiRoster", "BsRosterUi");
+        var platform = feeds is null ? UnprofiledPlatform : Platform(feeds, 0, "FrozenNrUiRoster", "BsRosterUi", "BsScenarioUi");
 
         Assert.Equal(0, await TestHost.RunAsync(commandLine.Split(' '), assembly, platform, world.Io));
         Assert.Equal("", world.Error.ToString());
@@ -215,7 +216,7 @@ public sealed class LaneCompositionTests
     /// <b>A lane the run never reached gets no setup hint</b> when the run already says why: in a narrowed run the
     /// caller's filter chose its tests away, and an aborted session (exit 3: <c>--timeout</c>, Ctrl+C) stopped before
     /// reaching them. Only a lane whose tests were there and every one skipped is hinted — and a filter that selected
-    /// nothing at all is named as the cause, instead of six lanes' worth of "run ./setup.ps1" for a typo.
+    /// nothing at all is named as the cause, instead of nine lanes' worth of "run ./setup.ps1" for a typo.
     /// </summary>
     [Theory]
     [InlineData("--test-profile pre-push --filter DisplayName~zzz-no-such-spec", 8, false)]
@@ -235,7 +236,7 @@ public sealed class LaneCompositionTests
         }, world.Io));
 
         var error = world.Error.ToString();
-        foreach (var unreached in new[] { "BsRoster", "BsGameData", "FrozenNrGameData", "FrozenNrUiRoster", "FrozenNrGameDataUi" })
+        foreach (var unreached in new[] { "BsRoster", "BsGameData", "FrozenNrGameData", "FrozenNrUiRoster", "FrozenNrGameDataUi", "BsScenario", "FrozenNrScenario", "FrozenNrUiScenario" })
         {
             Assert.DoesNotContain($"  {unreached}:", error, StringComparison.Ordinal);
         }

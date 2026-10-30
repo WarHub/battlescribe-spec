@@ -1,6 +1,7 @@
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -138,6 +139,59 @@ public static class SpecLoader
     }
 
     /// <summary>
+    /// Find the scenario specs directory (specs/scenario/) — specs that drive a data editor and a roster
+    /// editor in one run (docs/adr/002-scenario-specs.md).
+    /// </summary>
+    public static string? FindScenarioSpecsDirectory()
+    {
+        var specsDir = FindSpecsDirectory();
+        if (specsDir is null)
+        {
+            return null;
+        }
+
+        var scenarioDir = Path.Combine(specsDir, "scenario");
+        return Directory.Exists(scenarioDir) ? scenarioDir : null;
+    }
+
+    /// <summary>
+    /// Load a single scenario spec file.
+    /// </summary>
+    public static ScenarioSpecFile LoadScenario(string yamlPath)
+    {
+        var yaml = File.ReadAllText(yamlPath);
+        var spec = Deserializer.Deserialize<ScenarioSpecFile>(yaml);
+        spec.SourcePath = Path.GetFullPath(yamlPath);
+        if (string.IsNullOrEmpty(spec.Id))
+        {
+            spec.Id = Path.GetFileNameWithoutExtension(yamlPath);
+        }
+
+        return spec;
+    }
+
+    /// <summary>
+    /// Load a scenario spec from a YAML string.
+    /// </summary>
+    public static ScenarioSpecFile LoadScenarioFromYaml(string yaml, string? defaultId = null)
+    {
+        var spec = Deserializer.Deserialize<ScenarioSpecFile>(yaml);
+        if (string.IsNullOrEmpty(spec.Id) && defaultId is not null)
+        {
+            spec.Id = defaultId;
+        }
+
+        return spec;
+    }
+
+    /// <summary>
+    /// Discover all scenario spec YAML files under the given directory. Same shape as
+    /// <see cref="DiscoverSpecs"/>: a file directly in the root has no category and is skipped.
+    /// </summary>
+    public static IEnumerable<(string Path, string Id, string Category)> DiscoverScenarioSpecs(string specsDir)
+        => DiscoverGameDataSpecs(specsDir);
+
+    /// <summary>
     /// Load a single GameData spec file.
     /// </summary>
     public static GameDataSpecFile LoadGameData(string yamlPath)
@@ -224,11 +278,21 @@ public static class SpecLoader
     /// <exception cref="ArgumentException">No GameData spec has that name.</exception>
     public static string ResolveGameDataSpec(string specName) => Resolve(GameDataSpecIndex.Value, specName, "gamedata");
 
+    /// <summary>
+    /// The path of the scenario spec named <paramref name="specName"/> (see <see cref="SpecName"/>)
+    /// under <see cref="FindScenarioSpecsDirectory"/>. The same index as <see cref="ResolveRosterSpec"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">No scenario spec has that name.</exception>
+    public static string ResolveScenarioSpec(string specName) => Resolve(ScenarioSpecIndex.Value, specName, "scenario");
+
     private static readonly Lazy<SpecIndex> RosterSpecIndex =
         new(() => SpecIndex.Build(FindRosterSpecsDirectory(), DiscoverSpecs));
 
     private static readonly Lazy<SpecIndex> GameDataSpecIndex =
         new(() => SpecIndex.Build(FindGameDataSpecsDirectory(), DiscoverGameDataSpecs));
+
+    private static readonly Lazy<SpecIndex> ScenarioSpecIndex =
+        new(() => SpecIndex.Build(FindScenarioSpecsDirectory(), DiscoverScenarioSpecs));
 
     private static string Resolve(SpecIndex index, string specName, string domain)
     {
@@ -270,7 +334,14 @@ public static class SpecLoader
     }
 
     /// <summary>
-    /// Discover all spec YAML files embedded in the TestKit assembly.
+    /// Discover the roster spec YAML files embedded in the TestKit assembly.
+    /// <para>
+    /// Resource names look like <c>BattleScribeSpec.specs.{domain}.{category}.{file}.yaml</c>: every tree
+    /// under <c>specs/</c> is embedded, and only <c>roster</c> is roster specs. This used to take the
+    /// segment after <c>specs</c> as the category, so every embedded spec — gamedata included — came back
+    /// as a "roster" spec in category <c>roster</c> or <c>gamedata</c>, and a gamedata file then failed to
+    /// load as a roster model. The other domains have no embedded fallback; their callers find them on disk.
+    /// </para>
     /// </summary>
     public static IEnumerable<(string ResourceName, string Id, string Category)> DiscoverEmbeddedSpecs()
     {
@@ -282,18 +353,16 @@ public static class SpecLoader
                 continue;
             }
 
-            // Resource names look like: BattleScribeSpec.specs.category.file.yaml
             var parts = name.Split('.');
-            // Find "specs" segment, category is next, then filename
             var specsIdx = Array.IndexOf(parts, "specs");
-            if (specsIdx < 0 || specsIdx + 2 >= parts.Length)
+            if (specsIdx < 0 || specsIdx + 3 >= parts.Length || parts[specsIdx + 1] != "roster")
             {
                 continue;
             }
 
-            var category = parts[specsIdx + 1];
-            // filename is everything between category and .yaml extension
-            var id = string.Join(".", parts[(specsIdx + 2)..^1]);
+            var category = parts[specsIdx + 2];
+            // The file name is everything between the category and the .yaml extension.
+            var id = string.Join(".", parts[(specsIdx + 3)..^1]);
             yield return (name, id, category);
         }
     }

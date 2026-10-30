@@ -71,8 +71,11 @@ public static class SpecSuiteOutput
         // roster path (RosterRunner), so it is null for GameDataRunner results and for the
         // load-failure SpecResult that SpecSuiteRunner builds; and it is not surfaced in
         // JsonSpecEntry below, so `bs-spec run --all --json` does not expose it yet.
+        //
+        // Keyed by the domain-qualified id: the domains share category names, so `category/id` alone can
+        // name two specs, and ToDictionary would throw on the second.
         var deathsByKey = result.ReportResults.ToDictionary(
-            r => $"{r.Category}/{r.SpecId}", r => r.AdapterDeaths, StringComparer.Ordinal);
+            r => r.QualifiedId, r => r.AdapterDeaths, StringComparer.Ordinal);
 
         var report = new JsonRunReport
         {
@@ -83,9 +86,7 @@ public static class SpecSuiteOutput
             ElapsedSeconds = result.Elapsed.TotalSeconds,
             Specs = [.. result.Results.Select(r =>
             {
-                SpecFileBase? spec = result.SpecsByResult.TryGetValue(r, out var s) ? s
-                    : result.GameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
-                    : null;
+                var spec = result.SpecFor(r);
                 result.DurationsByResult.TryGetValue(r, out var durationMs);
                 return new JsonSpecEntry
                 {
@@ -96,7 +97,8 @@ public static class SpecSuiteOutput
                     Failures = r.Failures,
                     Tags = spec?.Tags,
                     DurationMs = durationMs,
-                    AdapterDeaths = deathsByKey.GetValueOrDefault($"{r.Category}/{r.SpecId}"),
+                    AdapterDeaths = deathsByKey.GetValueOrDefault(
+                        SpecResultSummary.QualifiedName(result.DomainOf(r), r.Category, r.SpecId)),
                     SkippedSteps = r.SkippedSteps.Count > 0 ? r.SkippedSteps : null,
                 };
             })],
@@ -133,9 +135,7 @@ public static class SpecSuiteOutput
             output.WriteLine("|------|----------|");
             foreach (var r in result.Results)
             {
-                SpecFileBase? spec = result.SpecsByResult.TryGetValue(r, out var s) ? s
-                    : result.GameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
-                    : null;
+                var spec = result.SpecFor(r);
                 var isExpectedFail = result.ExpectedFailuresEngine is not null && (spec?.IsExpectedToFail(result.ExpectedFailuresEngine) ?? false);
                 var isRealFailure = !r.Passed && !isExpectedFail;
                 var isUnexpectedPass = r.Passed && isExpectedFail;

@@ -119,16 +119,17 @@ public sealed class SpecLintTests
             violations.AddRange(CheckRequiredFields(spec));
             violations.AddRange(CheckIdMatchesFilename(spec, filename));
             violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName));
-            violations.AddRange(CheckKnownActions(spec));
+            violations.AddRange(CheckKnownActions(spec.Steps));
             violations.AddRange(CheckKnownTags(spec));
             violations.AddRange(CheckEngineExpectations(spec));
-            violations.AddRange(CheckStepsAreActionOrExpectedState(spec));
-            violations.AddRange(CheckSetSelectionCountHasSelectionId(spec));
-            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(spec));
+            violations.AddRange(CheckStepsAreActionOrExpectedState(spec.Steps));
+            violations.AddRange(CheckSetSelectionCountHasSelectionId(spec.Steps));
+            violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(
+                spec.Steps, spec.Setup?.Catalogues?.Count ?? 0, spec.Setup?.DataSource is { Length: > 0 }));
             violations.AddRange(CheckEverySpecHasSetup(spec));
             violations.AddRange(CheckLastStepIsExpectedState(spec));
-            violations.AddRange(CheckAllErrorAssertionsHaveFrom(spec));
-            violations.AddRange(CheckErrorAssertionAddressShape(spec));
+            violations.AddRange(CheckAllErrorAssertionsHaveFrom(spec.Steps));
+            violations.AddRange(CheckErrorAssertionAddressShape(spec.Steps));
             violations.AddRange(CheckNoRedundantCountAssertions(spec));
         }
 
@@ -251,7 +252,11 @@ public sealed class SpecLintTests
 
     // ── Formatting ───────────────────────────────────────────────────
 
-    private static IEnumerable<string> CheckFormatting(string text)
+    /// <summary>
+    /// The file equals its <see cref="SpecFormatter"/> output. Shared with <see cref="ScenarioSpecLintTests"/>:
+    /// one formatter covers every tree under <c>specs/</c>.
+    /// </summary>
+    internal static IEnumerable<string> CheckFormatting(string text)
     {
         // Normalize CRLF → LF before comparing: on Windows with autocrlf=true,
         // checked-out files have CRLF but the formatter (and repository) uses LF.
@@ -541,7 +546,8 @@ public sealed class SpecLintTests
 
     // ── Required fields ──────────────────────────────────────────────
 
-    private static IEnumerable<string> CheckRequiredFields(SpecFile spec)
+    /// <summary>The metadata every spec domain requires. Shared with <see cref="ScenarioSpecLintTests"/>.</summary>
+    internal static IEnumerable<string> CheckRequiredFields(SpecFileBase spec)
     {
         if (string.IsNullOrWhiteSpace(spec.Id))
         {
@@ -559,7 +565,7 @@ public sealed class SpecLintTests
         }
     }
 
-    private static IEnumerable<string> CheckIdMatchesFilename(SpecFile spec, string filename)
+    internal static IEnumerable<string> CheckIdMatchesFilename(SpecFileBase spec, string filename)
     {
         if (filename != spec.Id)
         {
@@ -567,7 +573,7 @@ public sealed class SpecLintTests
         }
     }
 
-    private static IEnumerable<string> CheckCategoryMatchesDirectory(SpecFile spec, string dirName)
+    internal static IEnumerable<string> CheckCategoryMatchesDirectory(SpecFileBase spec, string dirName)
     {
         if (dirName != spec.Category)
         {
@@ -588,14 +594,14 @@ public sealed class SpecLintTests
         "dump"
     ];
 
-    private static IEnumerable<string> CheckKnownActions(SpecFile spec)
+    private static IEnumerable<string> CheckKnownActions(IReadOnlyList<StepDef>? steps)
     {
-        if (spec.Steps is null)
+        if (steps is null)
         {
             yield break;
         }
 
-        foreach (var step in spec.Steps)
+        foreach (var step in steps)
         {
             if (step.Action is { } action && !KnownActions.Contains(action))
             {
@@ -603,6 +609,25 @@ public sealed class SpecLintTests
             }
         }
     }
+
+    /// <summary>
+    /// Every per-step rule a roster spec's steps are held to, over a list of steps that is not a roster spec's
+    /// own — a scenario's <c>roster:</c> block (<see cref="ScenarioSpecLintTests"/>): known actions, one kind per
+    /// step, each action's required parameters, and every error assertion's <c>from:</c> and address. The step
+    /// numbers in the findings start at <paramref name="firstStep"/>, so they count across the whole spec.
+    /// </summary>
+    /// <param name="steps">The steps.</param>
+    /// <param name="catalogueCount">How many catalogues the roster editor reads, for <c>addForce</c>'s <c>catalogueId</c> rule.</param>
+    /// <param name="firstStep">The 1-based number of the first step.</param>
+    internal static IEnumerable<string> CheckRosterSteps(IReadOnlyList<StepDef> steps, int catalogueCount, int firstStep) =>
+    [
+        .. CheckKnownActions(steps),
+        .. CheckStepsAreActionOrExpectedState(steps, firstStep),
+        .. CheckSetSelectionCountHasSelectionId(steps, firstStep),
+        .. CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(steps, catalogueCount, isDataSource: false, firstStep),
+        .. CheckAllErrorAssertionsHaveFrom(steps),
+        .. CheckErrorAssertionAddressShape(steps),
+    ];
 
     // ── Valid tags ────────────────────────────────────────────────────
 
@@ -654,7 +679,7 @@ public sealed class SpecLintTests
 
     private static readonly HashSet<string> KnownExpectations = ["pass", "fail", "skip"];
 
-    private static IEnumerable<string> CheckEngineExpectations(SpecFile spec)
+    internal static IEnumerable<string> CheckEngineExpectations(SpecFileBase spec)
     {
         if (spec.Engines is null)
         {
@@ -673,68 +698,67 @@ public sealed class SpecLintTests
 
     // ── Steps have action or expectedState ───────────────────────────
 
-    private static IEnumerable<string> CheckStepsAreActionOrExpectedState(SpecFile spec)
+    private static IEnumerable<string> CheckStepsAreActionOrExpectedState(IReadOnlyList<StepDef>? steps, int firstStep = 1)
     {
-        if (spec.Steps is null)
+        if (steps is null)
         {
             yield break;
         }
 
-        for (var i = 0; i < spec.Steps.Count; i++)
+        for (var i = 0; i < steps.Count; i++)
         {
-            var step = spec.Steps[i];
+            var step = steps[i];
             var kinds = (step.Action is not null ? 1 : 0)
                 + (step.ExpectedState is not null ? 1 : 0)
                 + (step.ExpectedFile is not null ? 1 : 0);
             if (kinds == 0)
             {
-                yield return $"step {i + 1} has none of 'action', 'expectedState', 'expectedFile'";
+                yield return $"step {firstStep + i} has none of 'action', 'expectedState', 'expectedFile'";
             }
             else if (kinds > 1)
             {
-                yield return $"step {i + 1} has more than one of 'action', 'expectedState', 'expectedFile'";
+                yield return $"step {firstStep + i} has more than one of 'action', 'expectedState', 'expectedFile'";
             }
         }
     }
 
     // ── setSelectionCount requires selectionId ───────────────────────
 
-    private static IEnumerable<string> CheckSetSelectionCountHasSelectionId(SpecFile spec)
+    private static IEnumerable<string> CheckSetSelectionCountHasSelectionId(IReadOnlyList<StepDef>? steps, int firstStep = 1)
     {
-        if (spec.Steps is null)
+        if (steps is null)
         {
             yield break;
         }
 
-        for (var i = 0; i < spec.Steps.Count; i++)
+        for (var i = 0; i < steps.Count; i++)
         {
-            var step = spec.Steps[i];
+            var step = steps[i];
             if (step.Action == "setSelectionCount" && step.SelectionId is null or { Length: 0 })
             {
-                yield return $"step {i + 1}: setSelectionCount requires 'selectionId'";
+                yield return $"step {firstStep + i}: setSelectionCount requires 'selectionId'";
             }
         }
     }
 
     // ── addForce/addChildForce require catalogueId when multi-catalogue ──
 
-    private static IEnumerable<string> CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(SpecFile spec)
+    private static IEnumerable<string> CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(
+        IReadOnlyList<StepDef>? steps, int catalogueCount, bool isDataSource, int firstStep = 1)
     {
-        var catalogueCount = spec.Setup?.Catalogues?.Count ?? 0;
-        var isDataSource = spec.Setup?.DataSource is { Length: > 0 };
         if (catalogueCount < 2 && !isDataSource)
         {
             yield break;
         }
 
-        if (spec.Steps is null)
+        if (steps is null)
         {
             yield break;
         }
 
-        for (var i = 0; i < spec.Steps.Count; i++)
+        for (var i = 0; i < steps.Count; i++)
         {
-            var step = spec.Steps[i];
+            var step = steps[i];
             if (step.Action is not ("addForce" or "addChildForce"))
             {
                 continue;
@@ -744,7 +768,7 @@ public sealed class SpecLintTests
             {
                 var reason = isDataSource ? "dataSource specs always require catalogueId"
                     : $"setup has {catalogueCount} catalogues";
-                yield return $"step {i + 1}: {step.Action} requires 'catalogueId' ({reason})";
+                yield return $"step {firstStep + i}: {step.Action} requires 'catalogueId' ({reason})";
             }
         }
     }
@@ -786,9 +810,9 @@ public sealed class SpecLintTests
     /// <c>errors:</c>/<c>errorsContain:</c> lists and the same two inside each <c>engines:</c>
     /// override. Anything that lints an assertion has to see all four, because the runner does.
     /// </summary>
-    private static IEnumerable<(string Where, ErrorAssertionDef Err)> AllErrorAssertions(SpecFile spec)
+    private static IEnumerable<(string Where, ErrorAssertionDef Err)> AllErrorAssertions(IEnumerable<StepDef>? steps)
     {
-        foreach (var step in spec.Steps ?? [])
+        foreach (var step in steps ?? [])
         {
             if (step.ExpectedState is not { } expected)
             {
@@ -820,9 +844,9 @@ public sealed class SpecLintTests
         }
     }
 
-    private static IEnumerable<string> CheckAllErrorAssertionsHaveFrom(SpecFile spec)
+    private static IEnumerable<string> CheckAllErrorAssertionsHaveFrom(IEnumerable<StepDef>? steps)
     {
-        foreach (var (where, err) in AllErrorAssertions(spec))
+        foreach (var (where, err) in AllErrorAssertions(steps))
         {
             if (err.On is null)
             {
@@ -845,9 +869,9 @@ public sealed class SpecLintTests
     /// Parsed through <see cref="ErrorAddress"/>, the runner's own parser, so the linter cannot drift
     /// into accepting a shape the matcher does not.
     /// </summary>
-    private static IEnumerable<string> CheckErrorAssertionAddressShape(SpecFile spec)
+    private static IEnumerable<string> CheckErrorAssertionAddressShape(IEnumerable<StepDef>? steps)
     {
-        foreach (var (where, err) in AllErrorAssertions(spec))
+        foreach (var (where, err) in AllErrorAssertions(steps))
         {
             if (err.On is not { Length: > 0 } on)
             {

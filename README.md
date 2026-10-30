@@ -1,8 +1,9 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 523 spec files — 403 roster specs
-and 120 GameData specs — covering the complete BattleScribe data model and editing operations.
+Any engine, in any language, can validate its behavior against 528 spec files — 403 roster specs,
+120 GameData specs and 5 scenario specs — covering the complete BattleScribe data model, its editing
+operations, and what crosses from the data editor to the roster editor.
 
 ## Quick Start
 
@@ -105,7 +106,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 523 declarative spec files (403 roster + 120 GameData) covering all BattleScribe operations |
+| **YAML Specs** | 528 declarative spec files (403 roster + 120 GameData + 5 scenario) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -114,10 +115,13 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 ## Spec Coverage
 
-The suite covers two domains, and they are counted separately. **Roster** specs (`specs/roster/`)
+The suite covers three domains, and they are counted separately. **Roster** specs (`specs/roster/`)
 drive a roster engine — add forces, select entries, assert the resulting roster state. **GameData**
 specs (`specs/gamedata/`) drive a catalogue editor — create and edit `.cat`/`.gst` data, assert the
-resulting model or the exact serialized file.
+resulting model or the exact serialized file. **Scenario** specs (`specs/scenario/`) drive one engine
+family's data editor and roster editor in a single run, joined by explicit hand-offs — `saveData`,
+`newRoster`, `saveRoster`, `openRoster` — so what crosses from one editor to the other, and when, is
+asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 
 ### Roster specs — 403 across 24 categories
 
@@ -176,11 +180,17 @@ resulting model or the exact serialized file.
 | type-def | 1 | Cost types, profile types, characteristic types |
 | validation | 12 | Referential integrity and validation errors (broken links, bad scopes) |
 
+### Scenario specs — 5 across 1 category
+
+| Category | Specs | Description |
+|----------|------:|-------------|
+| handoff | 5 | What crosses from the data editor to the roster editor, and when: saved and unsaved edits, an added entry, per-file saves, a saved roster reopened against edited data |
+
 ## Project Structure
 
 ```
 battlescribe-spec/
-├── specs/                          # 523 YAML spec files (403 roster + 120 gamedata)
+├── specs/                          # 528 YAML spec files (403 roster + 120 gamedata + 5 scenario)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

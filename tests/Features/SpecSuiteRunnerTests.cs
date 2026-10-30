@@ -3,6 +3,7 @@ using BattleScribeSpec.Batch;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 
 namespace BattleScribeSpec.Tests.Features;
 
@@ -163,6 +164,7 @@ public sealed class SpecSuiteRunnerTests
         var result = SpecSuiteResult.Create(
             results: [failed], reportResults: [], specsByResult: new Dictionary<SpecResult, SpecFile> { [failed] = spec },
             gameDataSpecsByResult: new Dictionary<SpecResult, GameDataSpecFile>(),
+            scenarioSpecsByResult: new Dictionary<SpecResult, ScenarioSpecFile>(),
             durationsByResult: new Dictionary<SpecResult, double>(),
             totalSpecs: 1, selected: 1, elapsed: TimeSpan.Zero, expectedFailuresEngine: "xfail-engine");
 
@@ -170,6 +172,203 @@ public sealed class SpecSuiteRunnerTests
         Assert.Equal(1, result.ExpectedFailures);
         Assert.Equal(0, result.ExitCode);
         Assert.Null(result.NothingExecutedMessage);
+    }
+
+    private const string ScenarioFilter = "handoff/handoff-saved-edit-reaches-new-roster";
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ScenarioDomain_RunsOverTheSameAdapterPool()
+    {
+        var dll = AdapterTestHost.ReferenceAdapterDll;
+
+        var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            Domains = ["roster", "gamedata", "scenario"],
+            FilterPatterns = [ScenarioFilter],
+            EngineFilter = "battlescribe",
+            AssertionEngine = "battlescribe",
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
+        });
+
+        Assert.Equal(0, result.ExitCode);
+        var scenario = Assert.Single(result.ReportResults, r => r.Status != "skipped");
+        Assert.Equal(("scenario", "handoff", "handoff-saved-edit-reaches-new-roster", "passed"),
+            (scenario.Domain, scenario.Category, scenario.SpecId, scenario.Status));
+        Assert.Single(result.ScenarioSpecsByResult);
+    }
+
+    /// <summary>
+    /// Parallel workers hand each scenario one pooled process for both of its editors, alongside roster and
+    /// gamedata specs in the same pool.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task AllThreeDomains_ParallelWorkers_RunEveryDomain()
+    {
+        var dll = AdapterTestHost.ReferenceAdapterDll;
+
+        var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            Domains = ["roster", "gamedata", "scenario"],
+            Workers = 2,
+            FilterPatterns = ["protocol/protocol-kitchen-sink", "entry/add-entry-basic", ScenarioFilter],
+            EngineFilter = "battlescribe",
+            AssertionEngine = "battlescribe",
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
+        });
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(result.ReportResults, r => r.Domain == "roster" && r.SpecId == "protocol-kitchen-sink" && r.Status == "passed");
+        Assert.Contains(result.ReportResults, r => r.Domain == "gamedata" && r.SpecId == "add-entry-basic" && r.Status == "passed");
+        Assert.Contains(result.ReportResults, r => r.Domain == "scenario" && r.SpecId == "handoff-saved-edit-reaches-new-roster" && r.Status == "passed");
+    }
+
+    /// <summary>
+    /// <b>A scenario on an adapter that serves only the roster domain is skipped with the reason, never run.</b>
+    /// It drives a data editor too, and an adapter that has none would fail it halfway with an engine error —
+    /// or worse, a gate that checked only "roster" would let it through.
+    /// </summary>
+    /// <remarks>Falsifiable: gate scenarios on "roster" alone and this executes the spec (and fails it).</remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ScenarioOnARosterOnlyAdapter_IsSkippedAtTheDescribeGate()
+    {
+        var dll = AdapterTestHost.ReferenceAdapterDll;
+        var rosterOnly = new Dictionary<string, string> { ["BSSPEC_TEST_ROSTER_ONLY"] = "1" };
+
+        var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            Domains = ["scenario"],
+            FilterPatterns = [ScenarioFilter],
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll, rosterOnly),
+        });
+
+        Assert.Equal(8, result.ExitCode);
+        Assert.Empty(result.Results);
+        Assert.Equal(1, result.Selected);
+        var skipped = Assert.Single(result.ReportResults, r => r.SpecId == "handoff-saved-edit-reaches-new-roster");
+        Assert.Equal(("scenario", "skipped"), (skipped.Domain, skipped.Status));
+        Assert.Equal([SpecSuiteRunner.ScenarioUnsupportedReason], skipped.Failures);
+        Assert.Contains("engine does not support both roster and gamedata", SpecSuiteRunner.ScenarioUnsupportedReason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>A scenario's <c>engines:</c> lets a UI driver inherit its base engine's skip</b> — the rule the
+    /// scenario's blocks and the scenario lanes apply. A spec that opts <c>battlescribe</c> out is opted out
+    /// under <c>battlescribe-ui</c> too, rather than run there and counted as a real failure.
+    /// </summary>
+    /// <remarks>Falsifiable: filter scenarios by the exact engine name and this spec runs.</remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ScenarioSkip_ForTheBaseEngine_AppliesToItsUiDriver()
+    {
+        var root = Directory.CreateTempSubdirectory("bsspec-scenario-skip-");
+        try
+        {
+            var handoff = Directory.CreateDirectory(Path.Combine(root.FullName, "scenario", "handoff"));
+            var source = SpecLoader.ResolveScenarioSpec(ScenarioFilter);
+            var yaml = File.ReadAllText(source).Replace(
+                "\nsetup:", "\nengines:\n  battlescribe: skip\n\nsetup:", StringComparison.Ordinal);
+            File.WriteAllText(Path.Combine(handoff.FullName, Path.GetFileName(source)), yaml);
+
+            var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+            {
+                Domains = ["scenario"],
+                SpecsDirectory = root.FullName,
+                EngineFilter = "battlescribe-ui",
+                AssertionEngine = "battlescribe",
+                AdapterFactory = _ => AdapterProcess.Start("dotnet", AdapterTestHost.ReferenceAdapterDll),
+            });
+
+            var skipped = Assert.Single(result.ReportResults, r => r.SpecId == "handoff-saved-edit-reaches-new-roster");
+            Assert.Equal(("scenario", "skipped"), (skipped.Domain, skipped.Status));
+            Assert.Contains("engine filter", Assert.Single(skipped.Failures), StringComparison.Ordinal);
+            Assert.Empty(result.Results);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// <b>Under an explicit specs root, the other domains' subtrees are not roster specs.</b> Roster discovery
+    /// used to take every yaml under the explicit directory, so <c>SpecsDirectory = specs/</c> found
+    /// <c>specs/gamedata/entry/add-entry-basic.yaml</c> as the roster spec <c>entry/add-entry-basic</c> and ran
+    /// a gamedata file as the wrong model. Asked for the roster domain alone, that id must not exist at all,
+    /// and the roster specs found are exactly <c>specs/roster</c>'s.
+    /// </summary>
+    /// <remarks>Falsifiable: discover roster over the whole explicit directory again and this selects one spec and fails it.</remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ExplicitSpecsRoot_RosterDomain_DoesNotSweepInOtherDomainsFiles()
+    {
+        var dll = AdapterTestHost.ReferenceAdapterDll;
+        var specsRoot = Path.Combine(TestPaths.Root, "specs");
+
+        var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            SpecsDirectory = specsRoot,
+            Domains = ["roster"],
+            FilterPatterns = ["entry/add-entry-basic"],
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
+        });
+
+        Assert.Equal(SpecSuiteResult.NothingExecutedExitCode, result.ExitCode);
+        Assert.Equal(0, result.Selected);
+        Assert.Equal(Directory.EnumerateFiles(Path.Combine(specsRoot, "roster"), "*.yaml", SearchOption.AllDirectories).Count(), result.TotalSpecs);
+        Assert.All(result.ReportResults, r => Assert.Equal("roster", r.Domain));
+    }
+
+    /// <summary>
+    /// The same explicit root still serves every domain from its own subtree — a scenario selected under
+    /// <c>SpecsDirectory = specs/</c> runs — and a roster tree passed directly (<c>specs/roster</c>) is still the
+    /// whole roster tree. It has a category named <c>roster</c>, which is why "a <c>roster</c> subdirectory
+    /// means a specs root" would have narrowed it to that one category.
+    /// </summary>
+    /// <remarks>
+    /// Falsifiable: read a <c>roster</c> subdirectory as the roster tree and the second run finds only
+    /// <c>specs/roster/roster</c>, so the kitchen-sink is not there to pass.
+    /// </remarks>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task ExplicitSpecsRoot_ServesEachDomain_AndARosterTreeStaysARosterTree()
+    {
+        var dll = AdapterTestHost.ReferenceAdapterDll;
+        var specsRoot = Path.Combine(TestPaths.Root, "specs");
+
+        var fromRoot = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            SpecsDirectory = specsRoot,
+            Domains = ["roster", "gamedata", "scenario"],
+            FilterPatterns = [ScenarioFilter, "protocol/protocol-kitchen-sink"],
+            EngineFilter = "battlescribe",
+            AssertionEngine = "battlescribe",
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
+        });
+
+        Assert.Equal(0, fromRoot.ExitCode);
+        Assert.Contains(fromRoot.ReportResults, r => r.Domain == "scenario" && r.SpecId == "handoff-saved-edit-reaches-new-roster" && r.Status == "passed");
+        Assert.Contains(fromRoot.ReportResults, r => r.Domain == "roster" && r.SpecId == "protocol-kitchen-sink" && r.Status == "passed");
+
+        var rosterTree = Path.Combine(specsRoot, "roster");
+        var fromRosterTree = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
+        {
+            SpecsDirectory = rosterTree,
+            Domains = ["roster", "gamedata", "scenario"],
+            FilterPatterns = ["protocol/protocol-kitchen-sink"],
+            EngineFilter = "battlescribe",
+            AssertionEngine = "battlescribe",
+            AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
+        });
+
+        Assert.Equal(0, fromRosterTree.ExitCode);
+        Assert.Contains(fromRosterTree.ReportResults, r => r.Domain == "roster" && r.SpecId == "protocol-kitchen-sink" && r.Status == "passed");
+        Assert.DoesNotContain(fromRosterTree.ReportResults, r => r.Domain is "gamedata" or "scenario");
+        Assert.Equal(
+            Directory.EnumerateFiles(rosterTree, "*.yaml", SearchOption.AllDirectories).Count(),
+            fromRosterTree.TotalSpecs);
     }
 
     [Fact]

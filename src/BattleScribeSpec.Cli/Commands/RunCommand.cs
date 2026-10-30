@@ -6,6 +6,7 @@ using BattleScribeSpec.Engines;
 using BattleScribeSpec.GameData;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
+using BattleScribeSpec.Scenario;
 
 namespace BattleScribeSpec.Cli;
 
@@ -22,7 +23,8 @@ internal partial class GameDataDumpJsonContext : JsonSerializerContext;
 /// <c>bs-spec run &lt;spec&gt;</c> — execute a spec end-to-end against an engine and report
 /// pass/fail. Roster and gamedata domains share one pass/fail renderer and one dump path;
 /// artifact options are accepted for every engine and skipped (with a uniform warning) when
-/// the engine can't honor them.
+/// the engine can't honor them. A scenario spec (both editors in one run) refuses the roster-only
+/// artifact options instead — see <c>RunScenarioAsync</c>.
 /// </summary>
 internal static class RunCommand
 {
@@ -217,22 +219,15 @@ internal static class RunCommand
 
                     engineOptions.ApplyDiagnosticSwitches(parseResult);
 
-                    // Resolve validates --gamedata/--roster exclusivity, --ui, and the engine identity.
+                    // Resolve validates domain-flag exclusivity, --ui, and the engine identity.
                     var selection = ApplyPolicyOverride(
                         engineOptions.Resolve(parseResult, specInput: null),
                         parseResult.GetValue(policy),
                         Ui.Warn,
                         UnsafeReuse.Refuse);
 
-                    // Batch runs both domains by default; --gamedata/--roster narrow. Resolve already
-                    // rejected the both-set case, so the remaining cases are single-domain or neither→both.
-                    IReadOnlyList<string> domains =
-                        (parseResult.GetValue(engineOptions.Gamedata), parseResult.GetValue(engineOptions.Roster)) switch
-                        {
-                            (true, false) => ["gamedata"],
-                            (false, true) => ["roster"],
-                            _ => ["roster", "gamedata"],
-                        };
+                    // Batch runs every domain by default; --gamedata/--roster/--scenario narrow to one.
+                    var domains = engineOptions.BatchDomains(parseResult);
 
                     foreach (var (set, flag) in new (bool Set, string Flag)[]
                     {
@@ -483,9 +478,12 @@ internal static class RunCommand
     {
         try
         {
-            return options.Engine.Domain == EngineDomain.Gamedata
-                ? await RunGameDataAsync(options)
-                : await RunRosterAsync(options);
+            return options.Engine.Domain switch
+            {
+                EngineDomain.Gamedata => await RunGameDataAsync(options),
+                EngineDomain.Scenario => await RunScenarioAsync(options),
+                _ => await RunRosterAsync(options),
+            };
         }
         catch (CliInputException ex)
         {
@@ -822,6 +820,233 @@ internal static class RunCommand
             }
 
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// The identity a scenario runs under when the adapter has none (an anonymous <c>exec:</c>/<c>dotnet:</c>
+    /// connectable). <see cref="ScenarioRunner"/> takes a name where the other runners take null; this is the
+    /// label they print for null, and as an override key it matches no spec's <c>engines:</c> entry, so only
+    /// the base expectations apply — what null means to them.
+    /// </summary>
+    private const string UnnamedEngine = "(unnamed engine)";
+
+    /// <summary>
+    /// <c>bs-spec run</c> on a scenario spec: one adapter process serving the family's data editor and roster
+    /// editor at once, driven by <see cref="ScenarioRunner"/> (<c>docs/adr/002-scenario-specs.md</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One connection, two wrappers.</b> The adapter keeps its roster and gamedata engines in separate
+    /// slots, so a <see cref="JsonProtocolGameDataEngine"/> and a <see cref="JsonProtocolEngine"/> over the same
+    /// process are the two editors side by side, with no protocol change. Both send <c>teardown</c> when
+    /// disposed; the second is a no-op.
+    /// </para>
+    /// <para>
+    /// <b>The roster-only artifact flags are refused, not ignored.</b> The gamedata branch warns and ignores
+    /// them; this one follows the rule the newer refusals here follow (#305: a flag is honoured or refused):
+    /// see <see cref="RefuseRosterOnlyArtifacts"/>.
+    /// </para>
+    /// </remarks>
+    private static async Task<int> RunScenarioAsync(RunOptions options)
+    {
+        RefuseRosterOnlyArtifacts(options);
+        if (options.UpdateSnapshots && options.Engine.EngineName is null)
+        {
+            throw new CliInputException(
+                "--update-snapshots on a scenario needs a named engine (<name>=exec:… or <name>=dotnet:…): " +
+                "a scenario files every snapshot it writes under the engine's name, and an unnamed adapter has none.");
+        }
+
+        ScenarioSpecFile spec;
+        try
+        {
+            spec = SpecLoading.LoadScenarioSpec(options.Spec);
+            Ui.Info($"Loaded scenario spec: {spec.Category}/{spec.Id} — {spec.Description}");
+        }
+        catch (Exception ex)
+        {
+            Ui.Error($"Error loading scenario spec: {ex.Message}");
+            return 1;
+        }
+
+        // As in the gamedata branch: an anonymous connectable has no identity to check the spec's
+        // `engines:` map against. Unlike it, a UI driver inherits its base engine's `skip` — the one rule a
+        // scenario applies to its `engines:` and to both kinds of block (ScenarioRunner, the scenario lanes).
+        if (options.Engine.EngineName is { } identityName
+            && string.Equals(spec.GetExpectation(identityName, options.Engine.AssertionEngineName), "skip", StringComparison.OrdinalIgnoreCase))
+        {
+            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{identityName}' (skipped).");
+            return 0;
+        }
+
+        var engineLabel = options.Engine.EngineName ?? options.Engine.Display;
+        Ui.Info($"Engine: {engineLabel}");
+
+        AdapterProcess? process = null;
+        DescribeResult described;
+        try
+        {
+            process = options.Engine.StartProcess();
+            described = await AdapterDescriber.DescribeAsync(process);
+        }
+        catch (Exception ex)
+        {
+            Ui.Error($"Error starting engine: {ex.Message}");
+            process?.Dispose();
+            return 1;
+        }
+
+        using (process)
+        {
+            // A scenario drives both editors. An adapter that serves one domain cannot run it, and saying
+            // so is a skip with the reason — never a pass, never an engine error halfway through the spec.
+            if (MissingScenarioDomains(described.Domains) is { Count: > 0 } missing)
+            {
+                Ui.Warn(
+                    $"engine '{options.Engine.Display}' does not support both roster and gamedata, which a " +
+                    $"scenario drives together — it does not advertise {string.Join(" or ", missing)} (skipped).");
+                return 0;
+            }
+
+            using var dataEngine = new JsonProtocolGameDataEngine(process);
+            using var rosterEngine = new JsonProtocolEngine(process);
+
+            var dumpOptions = new DumpOptions(Json: options.Format == OutputFormat.Json);
+            var lastBlockStep = LastBlockStepIndex(spec);
+            var runner = new ScenarioRunner(
+                dataEngine,
+                rosterEngine,
+                options.Engine.EngineName ?? UnnamedEngine,
+                options.Engine.AssertionEngineName)
+            {
+                UpdateSnapshots = options.UpdateSnapshots,
+                OnDiverge = DivergencePolicy(options.OnDiverge),
+                OnDataStepCompleted = (index, step, state) =>
+                {
+                    if (!options.AllSteps && index != lastBlockStep)
+                    {
+                        return;
+                    }
+
+                    // A data editor's state has one rendering, JSON, as in a gamedata run.
+                    Console.Out.Flush();
+                    Ui.Blank();
+                    Ui.Rule($"Step {index}: data {step.Action ?? "assert"}");
+                    Console.Out.WriteLine(JsonSerializer.Serialize(state, GameDataDumpJsonContext.Default.GameDataState));
+                    Console.Out.Flush();
+                },
+                OnRosterStepCompleted = (index, step, state, errors) =>
+                {
+                    if (step.Action != "dump" && !options.AllSteps && index != lastBlockStep)
+                    {
+                        return;
+                    }
+
+                    Console.Out.Flush();
+                    Ui.Blank();
+                    Ui.Rule($"Step {index}: roster {StepFormatter.DescribeStep(step)}");
+                    StateDumper.Dump(state, errors, Console.Out, dumpOptions);
+                    Console.Out.Flush();
+                },
+            };
+
+            var handoffs = spec.Steps.Count(item => item.Action is not null);
+            Ui.Info($"Running {spec.Steps.Count - handoffs} block(s) and {handoffs} hand-off(s)...");
+            Ui.Blank();
+
+            var result = runner.Run(spec);
+
+            Ui.Blank();
+            foreach (var skipped in result.SkippedSteps)
+            {
+                Ui.Warn(skipped);
+            }
+
+            if (result.Passed)
+            {
+                var skipNote = result.SkippedSteps.Count > 0
+                    ? $" ({result.SkippedSteps.Count} step(s) skipped for this engine)"
+                    : "";
+                Ui.Pass($"PASS — {spec.Id} on {engineLabel}: all assertions passed{skipNote}");
+                return 0;
+            }
+
+            Ui.Fail($"FAIL — {spec.Id} on {engineLabel}: {result.Failures.Count} failure(s):");
+            foreach (var failure in result.Failures)
+            {
+                Ui.FailItem(failure);
+            }
+
+            ReportDiagnosticDumps();
+            return 1;
+        }
+    }
+
+    /// <summary>The domains a scenario needs that <paramref name="advertised"/> lacks, in the order a reader expects.</summary>
+    internal static IReadOnlyList<string> MissingScenarioDomains(IReadOnlyList<string> advertised) =>
+        [.. new[] { EngineDomains.Roster, EngineDomains.Gamedata }.Where(d => !advertised.Contains(d, StringComparer.Ordinal))];
+
+    /// <summary>
+    /// The global index of the last step inside a block — the step whose state a run dumps by default. Counted
+    /// the way <see cref="ScenarioRunner"/> counts: every block step and every hand-off takes the next index.
+    /// -1 when no block has a step.
+    /// </summary>
+    internal static int LastBlockStepIndex(ScenarioSpecFile spec)
+    {
+        var index = 0;
+        var last = -1;
+        foreach (var item in spec.Steps)
+        {
+            var blockSteps = item.Data?.Count ?? item.Roster?.Count;
+            if (blockSteps is not { } count)
+            {
+                index++;
+                continue;
+            }
+
+            index += count;
+            if (count > 0)
+            {
+                last = index - 1;
+            }
+        }
+
+        return last;
+    }
+
+    /// <summary>
+    /// Refuse the artifact flags that follow one roster editor through a spec — a screenshot, a timeline row
+    /// and a recorded action per roster step, the roster saved at the end, a REPL before step <c>n</c>.
+    /// </summary>
+    /// <remarks>
+    /// A scenario's steps alternate between a data editor and a roster editor that restarts at every
+    /// <c>newRoster</c>/<c>openRoster</c>, and <see cref="ScenarioRunner"/> exposes no hook before a step, so
+    /// none of these has one engine to follow or one place to stop. The gamedata branch warns and carries on
+    /// (the older precedent); a scenario refuses, because a run that accepted <c>--save-roster out/</c> and
+    /// wrote nothing there is the silent drop #305 rules out, and a warning scrolled past is close to silent.
+    /// </remarks>
+    private static void RefuseRosterOnlyArtifacts(RunOptions options)
+    {
+        var given = new (bool Set, string Flag)[]
+            {
+                (options.ScreenshotsDir is not null, "--screenshots"),
+                (options.TimelinePath is not null, "--timeline"),
+                (options.RecordPath is not null, "--record"),
+                (options.SaveRosterDir is not null, "--save-roster"),
+                (options.BreakAt is not null, "--break"),
+            }
+            .Where(a => a.Set)
+            .Select(a => a.Flag)
+            .ToList();
+
+        if (given.Count > 0)
+        {
+            throw new CliInputException(
+                $"{string.Join(", ", given)} {(given.Count == 1 ? "is" : "are")} not supported for scenario specs: " +
+                "these follow one roster editor through a spec's steps, and a scenario alternates between a data " +
+                "editor and a roster editor that restarts at every newRoster/openRoster. Use --all-steps (with " +
+                "--json if you want it machine-readable) to see the state after every step.");
         }
     }
 

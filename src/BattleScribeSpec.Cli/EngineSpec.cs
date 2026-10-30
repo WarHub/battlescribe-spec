@@ -9,6 +9,40 @@ internal enum EngineDomain
 {
     Roster,
     Gamedata,
+
+    /// <summary>
+    /// A scenario spec (<c>specs/scenario/</c>): the family's data editor <b>and</b> roster editor in one
+    /// run, over one adapter connection (<c>docs/adr/002-scenario-specs.md</c>). It is not a third service:
+    /// it drives both of the others, so everything that follows the domain — the endpoint, the
+    /// <c>describe</c> requirement — is both of theirs.
+    /// </summary>
+    Scenario,
+}
+
+/// <summary>The wire/CLI names of <see cref="EngineDomain"/> — what <c>describe</c> advertises and the specs tree is split by.</summary>
+internal static class EngineDomains
+{
+    public const string Roster = "roster";
+    public const string Gamedata = "gamedata";
+    public const string Scenario = "scenario";
+
+    /// <summary>The domain's name: <c>roster</c>, <c>gamedata</c> or <c>scenario</c>.</summary>
+    public static string Name(this EngineDomain domain) => domain switch
+    {
+        EngineDomain.Roster => Roster,
+        EngineDomain.Gamedata => Gamedata,
+        EngineDomain.Scenario => Scenario,
+        _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, null),
+    };
+
+    /// <summary>The domain <see cref="SpecLoading.InferEngineType"/> named.</summary>
+    public static EngineDomain Parse(string name) => name switch
+    {
+        Roster => EngineDomain.Roster,
+        Gamedata => EngineDomain.Gamedata,
+        Scenario => EngineDomain.Scenario,
+        _ => throw new ArgumentOutOfRangeException(nameof(name), name, "not a spec domain"),
+    };
 }
 
 /// <summary>State dump rendering format.</summary>
@@ -69,10 +103,32 @@ internal sealed record EngineSelection(
     /// <see cref="EngineEndpoint.ResolveLoadTarget"/> for why the unsafe answer is the one that has to be
     /// earned.
     /// </para>
+    /// <para>
+    /// <b>A scenario is planned against the stricter of its two endpoints.</b> One scenario drives the
+    /// family's data editor and its roster editor, so its traffic lands on both services — and they can
+    /// differ: <c>newrecruit</c>'s roster side follows <c>NR_ENGINE_URL</c> to the live site while its
+    /// gamedata side is always a local static dir. Planning a scenario as either one alone would be the
+    /// bug this property exists to prevent, one domain over: a live roster editor driven at the machine's
+    /// full width because the gamedata half was local.
+    /// </para>
     /// </remarks>
-    public LoadTarget LoadTarget =>
-        Entry.EndpointFor(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")
-            .ResolveLoadTarget(LookupChildEnvironment);
+    public LoadTarget LoadTarget => Domain switch
+    {
+        EngineDomain.Scenario => Stricter(EndpointLoadTarget(EngineDomain.Roster), EndpointLoadTarget(EngineDomain.Gamedata)),
+        _ => EndpointLoadTarget(Domain),
+    };
+
+    /// <summary>Where one service of this engine lands, for the environment its children will see.</summary>
+    private LoadTarget EndpointLoadTarget(EngineDomain service) =>
+        Entry.EndpointFor(service.Name()).ResolveLoadTarget(LookupChildEnvironment);
+
+    /// <summary>
+    /// The load target that binds when a run lands on both: a third party's live service if either is one.
+    /// Spelled out rather than <c>Max</c>: what makes <see cref="LoadTarget.ThirdPartyLive"/> the stricter
+    /// is what it means, not where it sits in the enum.
+    /// </summary>
+    private static LoadTarget Stricter(LoadTarget a, LoadTarget b) =>
+        a == LoadTarget.ThirdPartyLive || b == LoadTarget.ThirdPartyLive ? LoadTarget.ThirdPartyLive : LoadTarget.Local;
 
     /// <summary>
     /// Reads the endpoint variable <b>out of the environment the child is actually handed</b> —
@@ -100,7 +156,7 @@ internal sealed record EngineSelection(
     public string? AssertionEngineName =>
         EngineName is { } n ? (n.EndsWith("-ui", StringComparison.Ordinal) ? n[..^3] : n) : null;
 
-    public string Display => $"{(Domain == EngineDomain.Gamedata ? "gamedata" : "roster")}/{EngineName ?? "adapter"}";
+    public string Display => $"{Domain.Name()}/{EngineName ?? "adapter"}";
 
     /// <summary>
     /// The plan this selection sends to the child, on <b>every</b> spawn: what
@@ -193,7 +249,7 @@ internal sealed record EngineSelection(
 
 /// <summary>
 /// The shared engine-selection options (<c>--engine</c>, <c>--ui</c>,
-/// <c>--gamedata</c>/<c>--roster</c>, <c>--headed</c>). One instance per command;
+/// <c>--gamedata</c>/<c>--roster</c>/<c>--scenario</c>, <c>--headed</c>). One instance per command;
 /// <see cref="Resolve"/> turns the parsed values plus the spec input into an
 /// <see cref="EngineSelection"/>.
 /// </summary>
@@ -230,6 +286,12 @@ internal sealed class EngineOptions(Func<EngineRegistry> registry)
     public Option<bool> Roster { get; } = new("--roster")
     {
         Description = "Force the roster domain (otherwise inferred from the spec path).",
+    };
+
+    public Option<bool> Scenario { get; } = new("--scenario")
+    {
+        Description = "Force the scenario domain — a data editor and a roster editor in one spec " +
+            "(otherwise inferred from the spec path).",
     };
 
     public Option<bool> Headed { get; } = new("--headed")
@@ -335,27 +397,52 @@ internal sealed class EngineOptions(Func<EngineRegistry> registry)
         command.Options.Add(Ui);
         command.Options.Add(Gamedata);
         command.Options.Add(Roster);
+        command.Options.Add(Scenario);
         command.Options.Add(Headed);
         command.Options.Add(TraceStore);
         command.Options.Add(EndpointDeclaration);
     }
 
+    /// <summary>
+    /// The domain the flags name — <c>--gamedata</c>, <c>--roster</c> or <c>--scenario</c> — or null when none
+    /// does. At most one may be given.
+    /// </summary>
+    /// <exception cref="CliInputException">More than one domain flag was given.</exception>
+    public EngineDomain? ExplicitDomain(ParseResult parseResult)
+    {
+        var given = new (Option<bool> Flag, EngineDomain Domain)[]
+            {
+                (Gamedata, EngineDomain.Gamedata),
+                (Roster, EngineDomain.Roster),
+                (Scenario, EngineDomain.Scenario),
+            }
+            .Where(d => parseResult.GetValue(d.Flag))
+            .ToList();
+
+        return given.Count switch
+        {
+            0 => null,
+            1 => given[0].Domain,
+            _ => throw new CliInputException(
+                $"{string.Join(" and ", given.Select(d => d.Flag.Name))} are mutually exclusive."),
+        };
+    }
+
+    /// <summary>
+    /// The domains a batch run (<c>run --all</c>, <c>compare</c>) covers: every one by default, and only the
+    /// one a domain flag names when one is given. One answer for both verbs, so they cannot disagree on
+    /// what "the suite" is.
+    /// </summary>
+    /// <exception cref="CliInputException">More than one domain flag was given.</exception>
+    public IReadOnlyList<string> BatchDomains(ParseResult parseResult) =>
+        ExplicitDomain(parseResult) is { } only
+            ? [only.Name()]
+            : [EngineDomains.Roster, EngineDomains.Gamedata, EngineDomains.Scenario];
+
     /// <summary>Resolve the parsed axes into a concrete <see cref="EngineSelection"/>.</summary>
     public EngineSelection Resolve(ParseResult parseResult, string? specInput)
     {
-        var gamedata = parseResult.GetValue(Gamedata);
-        var roster = parseResult.GetValue(Roster);
-        if (gamedata && roster)
-        {
-            throw new CliInputException("--gamedata and --roster are mutually exclusive.");
-        }
-
-        var domain = (gamedata, roster) switch
-        {
-            (true, _) => EngineDomain.Gamedata,
-            (_, true) => EngineDomain.Roster,
-            _ => SpecLoading.InferEngineType(specInput) == "gamedata" ? EngineDomain.Gamedata : EngineDomain.Roster,
-        };
+        var domain = ExplicitDomain(parseResult) ?? EngineDomains.Parse(SpecLoading.InferEngineType(specInput));
 
         EngineConnectable connectable;
         try

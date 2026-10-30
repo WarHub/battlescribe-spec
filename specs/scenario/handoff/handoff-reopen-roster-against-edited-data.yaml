@@ -1,0 +1,75 @@
+id: handoff-reopen-roster-against-edited-data
+category: handoff
+description: >
+  A saved roster reopened after its data changed is priced from the new data. A roster with one
+  10-point unit is saved; the data editor then sets the unit to 15 and saves; reopening the roster
+  shows 15, not the 10 the .ros recorded. The roster editor re-reads the data directory when it
+  opens a roster, and recomputes from it.
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 10
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "15"
+
+  - action: saveData
+
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 15
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad
+                  costs:
+                    - typeId: ct-pts
+                      value: 15

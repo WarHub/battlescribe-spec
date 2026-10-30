@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Scenario specs: the data editor and the roster editor in one spec (#273).** A spec under
+  `specs/scenario/` follows one engine family's data editor and roster editor through a single run — edit
+  data and save it, build a roster and save it, edit again, reopen the roster against the new data —
+  which neither domain could say on its own. Steps come in `data:` and `roster:` blocks that reuse the
+  two existing vocabularies unchanged, and the editors meet only at four explicit hand-offs (`saveData`,
+  `newRoster`, `saveRoster`, `openRoster`) over a data directory, as BattleScribe's two programs meet only
+  at its data folder: the roster editor sees data as of the last save, and only when it starts or opens a
+  roster. `ScenarioRunner` composes the existing runners through a new step-at-a-time entry point, so a
+  block's step runs through exactly the code that runs it elsewhere; no protocol or engine-interface
+  change, so any adapter serving both domains runs scenarios as it stands. The roster engines' file setup
+  had to become a full equal of `Setup` to carry it. Design: `docs/adr/002-scenario-specs.md`. Unblocks
+  #280 and #281.
+
 - **Proof that a guard can fail, kept instead of rewritten (#529).** The MTP migration proved each new
   guard by hand: 22 one-off mutation scripts, and three agents who restored with `git checkout --` and
   lost uncommitted work. Now the spec, GameData-spec, test-data-pin and SDK-pin lints keep broken samples

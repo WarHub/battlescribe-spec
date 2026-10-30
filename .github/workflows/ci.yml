@@ -212,6 +212,12 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
         run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-bs
+      # Every scenario spec through the in-process BattleScribe pair (data editor + roster editor): a
+      # handful of specs, seconds — the whole lane is its smoke.
+      - name: BattleScribe reference engines — scenarios
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 5
+        run: dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --test-profile smoke-scenario
       # No --policy here, deliberately: this engine is a LAUNCHABLE (dotnet:) adapter, and a plan
       # cannot be conveyed to one — there is no channel for it, so the CLI errors rather than
       # silently dropping the flag (#305). This step used to pass `--workers 2`; the flag's
@@ -638,17 +644,19 @@ jobs:
           path: artifacts/telemetry/
           if-no-files-found: ignore
 
-  # ── THOROUGH: the BS desktop UI, BOTH halves of it (opt-in). Warm start, one job per half. ──
+  # ── THOROUGH: the BS desktop UI, BOTH halves of it and the scenarios that join them (opt-in). Warm start,
+  #    one job per lane. ──
   #
   #    The `suite` axis exists because this job used to run one half. `BsGameDataUiConformanceTests`
   #    covered the Data Editor; `BsRosterUiConformanceTests` covered the Roster Editor and ran
   #    nowhere — so every change to BsUiRosterEngine and RosterActions.java reached main having been
   #    exercised by unit tests and one teardown test (#355).
   #
-  #    A matrix axis and not a second job: the two halves need identical artifacts, JDK, agent build
-  #    and xvfb, and a copy of fifty lines of setup is a copy that drifts. Only the profile and the
-  #    artifact names differ. CiWorkflowTests resolves `${{ matrix.suite.profile }}` to both legs'
-  #    profiles, so both lanes count as run and both directories must be uploaded.
+  #    A matrix axis and not a second job: the legs need identical artifacts, JDK, agent build and
+  #    xvfb, and a copy of fifty lines of setup is a copy that drifts. Only the profile and the
+  #    artifact names differ. CiWorkflowTests resolves `${{ matrix.suite.profile }}` to every leg's
+  #    profile, so every lane counts as run and every directory must be uploaded. The scenario leg
+  #    drives both apps in one spec, so it uploads both drivers' directories like the others.
   #
   #    UNSHARDED, deliberately. Each half reuses one warm app across its specs, so what a spec leaves
   #    behind is what the next one starts from — and splitting the lane splits exactly the chain the
@@ -675,6 +683,9 @@ jobs:
         suite:
           - { name: gamedata, profile: bs-ui-gamedata }
           - { name: roster, profile: bs-ui-roster }
+          # Scenario specs (docs/adr/002-scenario-specs.md): BOTH apps at once, the Data Editor and the
+          # Roster Editor, each in its own JVM and temp home. The normative lane for scenarios.
+          - { name: scenario, profile: bs-ui-scenario }
     steps:
       - uses: actions/checkout@v7
         with:

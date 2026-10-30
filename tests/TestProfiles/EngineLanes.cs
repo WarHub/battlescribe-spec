@@ -198,8 +198,33 @@ internal static class EngineLanes
             DiagnosticsSwitch = NrGameDataUiDiagnosticsSwitch,
         },
 
+        // ── Scenario specs (docs/adr/002-scenario-specs.md): one family's data editor AND roster editor in one
+        //    spec. A handful of specs, one theory row each, so each lane runs whole wherever it can run at all.
+        //    Their costs are this lane's own run on the same dev box, 2026-10-30, with one scenario in the corpus.
+        new("BsScenario", Needs.None, InPrePush: PrePushPart.Whole,
+            "both in-process IKVM reference engines, a fresh pair per scenario; 0.5s for one scenario",
+            ["BattleScribeSpec.Tests.BsScenarioConformanceTests"])
+        {
+            EmptyHint = ScenarioCorpusMissing,
+        },
+        new("FrozenNrScenario", Needs.LocalBrowser, InPrePush: PrePushPart.Whole,
+            "offline: the NR Editor snapshot as the data editor, the HAR replay as the roster editor, no network; "
+            + "0.8s for one scenario after a ~2s bring-up, serialised against FrozenNrGameData by that lane's browser gate",
+            ["BattleScribeSpec.Tests.FrozenNrScenarioConformanceTests"])
+        {
+            EmptyHint = FrozenHarOrNrEditorSnapshotMissing,
+        },
+        new("FrozenNrUiScenario", Needs.LocalBrowser, InPrePush: PrePushPart.Whole,
+            "Playwright over the NR Editor snapshot and the HAR replay, both UI drivers in one spec; ~2s bring-up and "
+            + "seconds per scenario, serialised against FrozenNrGameDataUi by that lane's browser gate",
+            ["BattleScribeSpec.Tests.FrozenNrUiScenarioConformanceTests"])
+        {
+            EmptyHint = FrozenHarNrEditorSnapshotOrBrowsersMissing,
+            DiagnosticsDir = NrUiDiagnostics,
+        },
+
         // ── Excluded: needs the BattleScribe desktop app (setup.ps1 artifacts, the Java agent and a
-        //    display). CI's `thorough-ui-bs` job runs both halves, whole.
+        //    display). CI's `thorough-ui-bs` job runs each of them, whole, as its own matrix leg.
         new("BsRosterUi", Needs.DesktopApp, InPrePush: PrePushPart.None,
             "launches the BattleScribe desktop app; 687.8s across 367 specs, sequential — it WAS the 689.2s run it joined by default (#405)",
             ["BattleScribeSpec.Tests.BsRosterUiConformanceTests"])
@@ -217,6 +242,16 @@ internal static class EngineLanes
         {
             EmptyHint = DesktopAppMissing,
             DiagnosticsDir = "artifacts/bs-gamedata-ui-diagnostics",
+        },
+        // Both apps at once — a Data Editor JVM and a Roster Editor JVM — and the Roster Editor restarted at
+        // every newRoster/openRoster. The roster driver is the half that writes diagnostics (above).
+        new("BsScenarioUi", Needs.DesktopApp, InPrePush: PrePushPart.None,
+            "launches BOTH BattleScribe desktop apps, the Data Editor and the Roster Editor, and restarts the Roster "
+            + "Editor at every newRoster/openRoster; 16.7s for one scenario, two JVM cold starts",
+            ["BattleScribeSpec.Tests.BsScenarioUiConformanceTests"])
+        {
+            EmptyHint = DesktopAppMissing,
+            DiagnosticsDir = "artifacts/bs-ui-diagnostics",
         },
 
         // ── Excluded: opens sessions on somebody else's production website. A pre-push gate runs on
@@ -267,7 +302,7 @@ internal static class EngineLanes
 
     // ── What an empty lane means (EngineLane.EmptyHint). Each names the cause a reader can act on first:
     //    what setup.ps1 provisions, or the switch the lane cannot run without. Missing Playwright browsers
-    //    skip only the two UI lanes; the HAR-replay and NR Editor engines' fixtures rethrow a failed browser
+    //    skip only the three NR UI lanes; the HAR-replay and NR Editor engines' fixtures rethrow a failed browser
     //    launch, so those lanes fail instead of going empty.
     private const string SpecCorpusMissing =
         "the in-process engine never skips, so its spec rows were never produced: the spec corpus (specs/) was not found "
@@ -285,6 +320,18 @@ internal static class EngineLanes
 
     private const string NrEditorSnapshotOrBrowsersMissing =
         "run ./setup.ps1 — the pinned NR Editor snapshot (.testdata/nr-editor/) or the Playwright browsers are missing.";
+
+    private const string ScenarioCorpusMissing =
+        "the in-process engines never skip, so the scenario rows were never produced: the scenario corpus (specs/scenario/) "
+        + "was not found from the test output folder. Run from a full checkout of this repository.";
+
+    private const string FrozenHarOrNrEditorSnapshotMissing =
+        "run ./setup.ps1 — the frozen New Recruit snapshot (.testdata/newrecruit-har/newrecruit.har) or the pinned NR "
+        + "Editor snapshot (.testdata/nr-editor/) is missing; a scenario needs both.";
+
+    private const string FrozenHarNrEditorSnapshotOrBrowsersMissing =
+        "run ./setup.ps1 — the frozen New Recruit snapshot (.testdata/newrecruit-har/newrecruit.har), the pinned NR "
+        + "Editor snapshot (.testdata/nr-editor/) or the Playwright browsers are missing; a scenario needs all three.";
 
     private const string DesktopAppMissing =
         "run ./setup.ps1 — the BattleScribe app (lib/battlescribe), the JavaFX-capable JDK (lib/liberica-jdk) or the Java "
@@ -327,6 +374,10 @@ internal static class EngineLanes
             "one contract (category node ids) on the frozen NR roster engine"),
         ("BattleScribeSpec.Tests.Features.FrozenNrUiCategoryNodeIdTests",
             "one contract (category node ids) on the frozen NR UI roster driver"),
+        ("BattleScribeSpec.Tests.Features.FrozenNrFileSetupTests",
+            "one contract (file setup, re-setup after Cleanup, reopen) on the frozen NR roster engine"),
+        ("BattleScribeSpec.Tests.Features.FrozenNrUiFileSetupTests",
+            "one contract (file setup, re-setup after Cleanup, reopen) on the frozen NR UI roster driver"),
         ("BattleScribeSpec.Tests.Features.FrozenNrRaisedOnNodeTests",
             "one contract (which node an error is raised on) on the frozen NR roster engine"),
         ("BattleScribeSpec.Tests.Features.FrozenNrRaisedOnIdentityTests",

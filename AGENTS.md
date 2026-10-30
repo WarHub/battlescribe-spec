@@ -239,8 +239,8 @@ the fix; with no Playwright browsers the browser tests fail outright (exit 2), a
 empty are named with the fix all the same. Its skips are specs that opt an engine out and, without the
 wh40k data, the real-world tests. The critical path is the in-process `BsRoster` lane, not any UI lane.
 
-**Not in `pre-push`:** the BattleScribe desktop-app lanes (`bs-ui-roster`, `bs-ui-gamedata` — run them
-when you touch the BS UI drivers or `src/bs-ui-java-agent/`), the live lanes that open sessions on
+**Not in `pre-push`:** the BattleScribe desktop-app lanes (`bs-ui-roster`, `bs-ui-gamedata`, `bs-ui-scenario` —
+run them when you touch the BS UI drivers or `src/bs-ui-java-agent/`), the live lanes that open sessions on
 third-party sites (`nr-live*`, `nr-ui-live`, `nr-editor-live`, `nr-editor-ui-live`), and all but the
 kitchen-sink half of the NR UI roster lane (`nr-ui-frozen` runs it whole, ~27 minutes).
 `dotnet run --project tests/BattleScribeSpec.Tests.csproj --no-build -- --list-test-profiles` lists every
@@ -262,8 +262,8 @@ with the same switches — `nr-ui-frozen` included, which is the full ~27-minute
 one fixed line that names its profile — and fails if a switch a profile sets appears anywhere under
 `.github/`. Two things can
 still differ. A lane the profile lets a CI runner skip whole (its `MaySkip`) runs on your machine and
-skips in CI: `core` claims `BsRosterUi`, which drives the desktop app here and skips on CI's offline
-runners, which do not provision it. And a switch exported in your own shell is yours: every
+skips in CI: `core` claims `BsRosterUi` and `BsScenarioUi`, which drive the desktop apps here and skip on
+CI's offline runners, which do not provision them. And a switch exported in your own shell is yours: every
 `NR_*`/`BS_*`/`BSSPEC_*`/`BSUI_*` variable the code names is classified in `tests/TestProfiles/Knobs.cs`
 (`TestProfileRegistryTests.EveryKnobLiteral_IsClassified`), and none changes which tests a lane runs — a
 URL, headless mode, slow-mo. To watch a live lane, set `NR_HEADLESS=false` (and `NR_VISUAL=true`); the run
@@ -314,25 +314,27 @@ the thorough jobs — the NR Editor lanes in `thorough-conformance` among them.
 
 ## BS desktop UI tests (local)
 
-Two profiles drive the **real BattleScribe desktop app** through the Java agent — the Data Editor
-and the Roster Editor. Mutations go through the real UI; state is read via the Java model. After
+Three profiles drive the **real BattleScribe desktop apps** through the Java agent — the Data Editor,
+the Roster Editor, and both at once for scenario specs. Mutations go through the real UI; state is read via the Java model. After
 `setup.ps1` (which downloads the BattleScribe app + Liberica full JDK and builds the agent), run:
 
 ```bash
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs-ui-gamedata   # Data Editor  (Engine=BsGameDataUi)
 dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs-ui-roster     # Roster Editor (Engine=BsRosterUi) — every roster spec, ~13 min
+dotnet test --project tests/BattleScribeSpec.Tests.csproj -p:TestProfile=bs-ui-scenario   # both editors (Engine=BsScenarioUi) — every scenario spec, the normative run for them
 ```
 
-**Neither is in `pre-push`**, and that is deliberate: they need the app, a display, and minutes.
-CI's `thorough-ui-bs` job runs both halves whole, but nothing runs them on your machine unless you
+**None is in `pre-push`**, and that is deliberate: they need the app, a display, and minutes.
+CI's `thorough-ui-bs` job runs all three whole, but nothing runs them on your machine unless you
 do — so run them when you touch `BsUiRosterEngine`, `BsGameDataUiEngine`, or
 `src/bs-ui-java-agent/`.
 
 The JavaFX-capable JDK is auto-discovered (`BS_UI_JAVA_PATH` → `lib/liberica-jdk` → `JAVA_HOME`),
 so neither local runs nor CI need to set anything. Without the app, the JDK or the agent jar the tests
-skip — and a profile that runs those lanes (`bs-ui-roster`, `bs-ui-gamedata`, `smoke-bs-gamedata-ui`) then
-exits 8, naming the lane and `setup.ps1`, rather than passing on nothing. `core` is the one profile that
-lets `BsRosterUi` skip: CI's offline runners do not provision the app.
+skip — and a profile that runs those lanes (`bs-ui-roster`, `bs-ui-gamedata`, `bs-ui-scenario`,
+`smoke-bs-gamedata-ui`) then exits 8, naming the lane and `setup.ps1`, rather than passing on nothing. `core`
+is the one profile that lets `BsRosterUi` and `BsScenarioUi` skip: CI's offline runners do not provision the
+app.
 
 ## Telemetry
 
@@ -391,6 +393,7 @@ pwsh -File tools/format-specs.ps1                                               
 |------|------|
 | `specs/roster/{category}/{id}.yaml` | Roster spec files (403 total, 24 categories) |
 | `specs/gamedata/{category}/{id}.yaml` | GameData spec files (120 total, 23 categories) |
+| `specs/scenario/{category}/{id}.yaml` | Scenario spec files (5 total, 1 category): one engine family's data editor and roster editor in one spec, joined by explicit hand-offs ([ADR 002](docs/adr/002-scenario-specs.md)); lanes `BsScenario`, `FrozenNrScenario`, `FrozenNrUiScenario` (pre-push) and `BsScenarioUi` (`bs-ui-scenario`) |
 | `docs/error-assertions.md` | The two ways a spec is about something going wrong, and they are not the same: `expectedState.errors` asserts the validation list of a roster the engine **accepted**; `expectFailure` asserts an action the engine **refused** |
 | `docs/running-tests.md` | How the tests run: the test app and its entry point, test profiles, environment switches, the zero-tests policy and the engine-composition check, refusals and exit codes, what CI adds. The commands themselves are in "Build & test" above |
 | `src/BattleScribeSpec.TestKit/RepoRoot.cs` | Repo-root resolution (`BattleScribeSpec.slnx` marker) — the ONE implementation; never inline another walk. Tests use `RepoRoot.FromBinaries` (`TestPaths.Root` when they need a checkout), never the working directory |

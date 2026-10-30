@@ -16,7 +16,8 @@ namespace BattleScribeSpec;
 ///   4. <c>expectedState:</c> property blocks zone-sorted: errors/errorsContain → … → forces → engines
 ///   5. Blank line inserted before <c>setup:</c> when preceded by non-blank content
 ///   6. Blank line inserted before each step item (<c>  - action:</c> / <c>  - expectedState:</c>)
-///      unless preceded by a blank line, <c>steps:</c>, or a comment
+///      unless preceded by a blank line, <c>steps:</c>, or a comment — and, in a scenario spec, before
+///      each step of a <c>data:</c> / <c>roster:</c> block unless it opens the block
 ///   7. File ends with exactly one newline
 ///
 /// Approach: C# line-based formatter, same strategy as the original PowerShell script but
@@ -25,19 +26,36 @@ namespace BattleScribeSpec;
 /// </summary>
 public static class SpecFormatter
 {
+    // `data:` / `roster:` are a scenario spec's blocks (docs/adr/002-scenario-specs.md): items of its
+    // top-level steps list, like a hand-off's `action:`.
     private static readonly Regex StepItemPattern =
-        new(@"^  - (action|expectedState|expectedFile|id):", RegexOptions.Compiled);
+        new(@"^  - (action|expectedState|expectedFile|id|data|roster):", RegexOptions.Compiled);
 
+    private static readonly Regex BlockHeaderPattern =
+        new(@"^  - (data|roster):$", RegexOptions.Compiled);
+
+    // A step inside a scenario block: the block's own list, four spaces deeper than the steps list.
+    private static readonly Regex BlockStepItemPattern =
+        new(@"^      - (action|expectedState|expectedFile|id):", RegexOptions.Compiled);
+
+    // A top-level step's expectedState, or a scenario block step's.
     private static readonly Regex ExpectedStatePattern =
-        new(@"^  - expectedState:$", RegexOptions.Compiled);
+        new(@"^(  |      )- expectedState:$", RegexOptions.Compiled);
 
-    // 6-space indent, first character is a lowercase word character (property name)
+    // An expectedState's own properties sit four spaces past its dash: 6 spaces for a top-level step,
+    // 10 inside a scenario block. First character is a lowercase word character (property name).
     private static readonly Regex EsTopPropPattern =
         new(@"^      [a-z]\w*:", RegexOptions.Compiled);
 
-    // 8-space or more indent (deeper nesting inside a property value)
+    private static readonly Regex NestedEsTopPropPattern =
+        new(@"^          [a-z]\w*:", RegexOptions.Compiled);
+
+    // Two spaces deeper than a property (nesting inside a property value).
     private static readonly Regex EsDeepIndentPattern =
         new(@"^        ", RegexOptions.Compiled);
+
+    private static readonly Regex NestedEsDeepIndentPattern =
+        new(@"^            ", RegexOptions.Compiled);
 
     /// <summary>
     /// Formats the given spec YAML text and returns the formatted result.
@@ -191,9 +209,20 @@ public static class SpecFormatter
                 continue;
             }
 
-            // Entered an expectedState block
+            // Entered an expectedState block — a top-level step's, or one inside a scenario block,
+            // whose properties and stopping points sit four spaces deeper.
             result.Add(line);
             i++;
+            var nested = line.StartsWith("      ", StringComparison.Ordinal);
+            var topProp = nested ? NestedEsTopPropPattern : EsTopPropPattern;
+            var deepIndent = nested ? NestedEsDeepIndentPattern : EsDeepIndentPattern;
+
+            // The next step: a top-level step item or top-level content — and, for a block's step,
+            // the block's next step or anything at or left of its dash.
+            bool EndsBlock(string l)
+                => StepItemPattern.IsMatch(l)
+                    || (l.Length > 0 && l[0] != ' ')
+                    || (nested && l.Length > 0 && (BlockStepItemPattern.IsMatch(l) || GetIndentationWidth(l) <= 6));
 
             // Collect property blocks until the next step item, comment, or non-indented content
             var propBlocks = new List<(string Name, List<string> Lines, int OriginalIndex)>();
@@ -205,7 +234,7 @@ public static class SpecFormatter
                 var l = lines[i];
 
                 // Stop at next step item or top-level (non-indented non-blank) content
-                if (StepItemPattern.IsMatch(l) || (l.Length > 0 && l[0] != ' '))
+                if (EndsBlock(l))
                 {
                     break;
                 }
@@ -220,16 +249,15 @@ public static class SpecFormatter
                     }
 
                     if (peekIdx >= lines.Length
-                        || StepItemPattern.IsMatch(lines[peekIdx])
-                        || lines[peekIdx].StartsWith("  #", StringComparison.Ordinal)
-                        || (lines[peekIdx].Length > 0 && lines[peekIdx][0] != ' '))
+                        || EndsBlock(lines[peekIdx])
+                        || lines[peekIdx].StartsWith("  #", StringComparison.Ordinal))
                     {
                         break;
                     }
                 }
 
-                // New top-level property (6-space indent, not deeper)
-                if (EsTopPropPattern.IsMatch(l) && !EsDeepIndentPattern.IsMatch(l))
+                // New property (at the property indent, not deeper)
+                if (topProp.IsMatch(l) && !deepIndent.IsMatch(l))
                 {
                     if (currentPropName is not null)
                     {
@@ -312,6 +340,7 @@ public static class SpecFormatter
         var lines = text.Split('\n');
         var result = new List<string>(lines.Length + 16);
         var inSteps = false;
+        var inBlock = false;
 
         for (var i = 0; i < lines.Length; i++)
         {
@@ -335,6 +364,21 @@ public static class SpecFormatter
             {
                 var prev = result[^1].Trim();
                 if (prev != "" && prev != "steps:" && !prev.StartsWith('#'))
+                {
+                    result.Add("");
+                }
+            }
+
+            // A scenario block runs from its `- data:` / `- roster:` to the next top-level step item.
+            if (inSteps && StepItemPattern.IsMatch(line))
+            {
+                inBlock = BlockHeaderPattern.IsMatch(line);
+            }
+            else if (inBlock && BlockStepItemPattern.IsMatch(line) && result.Count > 0)
+            {
+                // Blank line before each step of a block, except the one that opens it.
+                var prev = result[^1].Trim();
+                if (prev != "" && !BlockHeaderPattern.IsMatch(result[^1]) && !prev.StartsWith('#'))
                 {
                     result.Add("");
                 }

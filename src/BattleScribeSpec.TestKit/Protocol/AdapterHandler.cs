@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using BattleScribeSpec.Roster;
 using BattleScribeSpec.Telemetry;
 
@@ -79,6 +80,9 @@ public static class AdapterHandler
         IReadOnlyList<string> catalogueIds = [];
         GameData.IGameDataEngine? gdEngine = null;
 
+        // Whether the roster engine has been set up since the last teardown. See AcquireRosterEngine.
+        var rosterSetUp = false;
+
         try
         {
             while (!ct.IsCancellationRequested)
@@ -117,12 +121,12 @@ public static class AdapterHandler
 
                     response = command switch
                     {
-                        SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
-                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, out catalogueIds),
+                        SetupCommand setup => HandleSetup(setup, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, ref rosterSetUp, out catalogueIds),
+                        SetupFromFilesCommand setupFiles => HandleSetupFromFiles(setupFiles, engineFactory, options.ReuseRosterEngineAcrossSetups, ref engine, ref rosterSetUp, out catalogueIds),
                         ActionCommand action => HandleAction(action, engine, catalogueIds),
                         GetStateCommand => HandleGetState(engine),
                         GetErrorsCommand => HandleGetErrors(engine),
-                        TeardownCommand => HandleTeardown(options.ReuseRosterEngineAcrossSetups, options.ReuseGameDataEngineAcrossSetups, ref engine, ref gdEngine),
+                        TeardownCommand => HandleTeardown(options.ReuseRosterEngineAcrossSetups, options.ReuseGameDataEngineAcrossSetups, ref engine, ref gdEngine, ref rosterSetUp),
                         DescribeCommand => new DescribeResult
                         {
                             Name = options.Name,
@@ -214,18 +218,9 @@ public static class AdapterHandler
     /// <see cref="HandleTeardown"/> via the engine's Cleanup.
     /// </summary>
     private static ProtocolResponse HandleSetup(
-        SetupCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
+        SetupCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, ref bool setUp, out IReadOnlyList<string> catalogueIds)
     {
-        var sw = Stopwatch.StartNew();
-        var reused = engine is not null && reuse;
-        if (!reuse || engine is null)
-        {
-            engine?.Dispose();
-            engine = factory();
-        }
-        sw.Stop();
-        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
-        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
+        AcquireRosterEngine(factory, reuse, ref engine, ref setUp);
 
         catalogueIds = [.. cmd.Catalogues.Select(c => c.Id)];
         if (cmd.SpecId is { Length: > 0 })
@@ -238,18 +233,9 @@ public static class AdapterHandler
     }
 
     private static ProtocolResponse HandleSetupFromFiles(
-        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, out IReadOnlyList<string> catalogueIds)
+        SetupFromFilesCommand cmd, Func<IRosterEngine> factory, bool reuse, ref IRosterEngine? engine, ref bool setUp, out IReadOnlyList<string> catalogueIds)
     {
-        var sw = Stopwatch.StartNew();
-        var reused = engine is not null && reuse;
-        if (!reuse || engine is null)
-        {
-            engine?.Dispose();
-            engine = factory();
-        }
-        sw.Stop();
-        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
-        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
+        AcquireRosterEngine(factory, reuse, ref engine, ref setUp);
 
         // File-based setup: catalogue IDs unknown — actions must provide catalogueId explicitly
         catalogueIds = [];
@@ -261,6 +247,38 @@ public static class AdapterHandler
         var files = cmd.Files.Select(f => (f.FileName, f.Content)).ToList();
         var errors = engine.SetupFromFiles(files);
         return new SetupResult { Errors = [.. errors] };
+    }
+
+    /// <summary>
+    /// The roster engine a setup configures: the live one when reuse is on, else a fresh one.
+    /// <para>
+    /// A warm engine set up again with no teardown in between — a scenario spec's roster editor reading
+    /// the data directory a second time (<c>newRoster</c>, <c>openRoster</c>) — is reset first, exactly as
+    /// <see cref="HandleTeardown"/> resets it between specs. The <see cref="IRosterEngine.Cleanup"/>
+    /// contract is that a cleaned engine set up again knows only the new data; without the reset a warm
+    /// engine was reconfigured over its previous session, and the client cannot ask for the reset itself:
+    /// <c>teardown</c> resets both domains, and the gamedata engine is mid-spec.
+    /// </para>
+    /// </summary>
+    private static void AcquireRosterEngine(
+        Func<IRosterEngine> factory, bool reuse, [NotNull] ref IRosterEngine? engine, ref bool setUp)
+    {
+        var sw = Stopwatch.StartNew();
+        if (setUp)
+        {
+            engine = ResetOrDispose(engine, reuse, e => e.Cleanup());
+        }
+
+        var reused = engine is not null && reuse;
+        if (!reuse || engine is null)
+        {
+            engine?.Dispose();
+            engine = factory();
+        }
+        sw.Stop();
+        // Seconds, per OTel's duration-unit convention — NOT milliseconds.
+        ResourceMetrics.RecordEngineStart("roster-engine", reused, sw.Elapsed.TotalSeconds);
+        setUp = true;
     }
 
     private static ProtocolResponse HandleAction(ActionCommand cmd, IRosterEngine? engine, IReadOnlyList<string> catalogueIds)
@@ -406,8 +424,9 @@ public static class AdapterHandler
     }
 
     private static ProtocolResponse HandleTeardown(
-        bool reuseRoster, bool reuseGameData, ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine)
+        bool reuseRoster, bool reuseGameData, ref IRosterEngine? engine, ref GameData.IGameDataEngine? gdEngine, ref bool rosterSetUp)
     {
+        rosterSetUp = false;
         engine = ResetOrDispose(engine, reuseRoster, e => e.Cleanup());
         gdEngine = ResetOrDispose(gdEngine, reuseGameData, e => e.Cleanup());
         return new TeardownResult();

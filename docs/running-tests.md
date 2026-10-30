@@ -181,7 +181,7 @@ the run fails harder — the tests that launch Chromium themselves fail (exit 2)
 lane that went empty.
 
 The claims come from the profile's selection: `lint` and `non-conformance` claim no lane, and a lane the
-profile lets skip (`core`'s `BsRosterUi`, the only one) is exempt. The check does not run for an
+profile lets skip (`core`'s `BsRosterUi` and `BsScenarioUi`, the only ones) is exempt. The check does not run for an
 unprofiled run, a run you narrowed with `--filter` (one spec through one lane need not reach the others),
 `--list-tests`, `--help` or `--info`, or an IDE session; a run that already failed keeps its own exit code.
 After the check the app prints a `[composition]` line, appends the per-lane table to
@@ -238,8 +238,9 @@ no `Tag`, so neither spec filter can narrow them. Each test reports what it ran 
 `[i/N] <spec> <verdict> <secs>s` line per spec, which a run you start directly shows with
 `--show-live-output on`. One that selects no spec fails, and a cancelled one says how far it got.
 
-A bare `--filter "DisplayName~<id>"` reaches more than the spec's offline lanes: the desktop-app lane
-(`BsRosterUi`, which launches the BattleScribe app wherever `setup.ps1` provisioned it) and the live rows,
+A bare `--filter "DisplayName~<id>"` reaches more than the spec's offline lanes: the desktop-app lanes
+(`BsRosterUi`, and `BsScenarioUi` for a scenario spec, which launch the BattleScribe apps wherever
+`setup.ps1` provisioned them) and the live rows,
 which skip without their URL. Narrowing `pre-push` instead — AGENTS.md's one-spec line — runs the spec
 through every offline per-spec engine, plus its lint and schema rows.
 

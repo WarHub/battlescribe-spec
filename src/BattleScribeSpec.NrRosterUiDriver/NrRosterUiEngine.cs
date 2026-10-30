@@ -24,18 +24,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private bool _disposed;
     private string _rosterName = "Spec Test";
     private string? _listId;
-    private bool _systemLoaded;
-    private string? _loadedSystemId;
     private bool _rosterCreated;
 
-    // Spec data retained from Setup for deferred roster creation.
-    private ProtocolGameSystem? _gameSystem;
-    private ProtocolCatalogue[]? _catalogues;
-
-    // ID → Name lookups built from spec data during Setup.
-    // Used by UI actions that must find entries by their visible label.
-    private readonly Dictionary<string, string> _forceEntryNames = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _entryNames = new(StringComparer.Ordinal);
+    // The data this session handed NR, read from its XML on either setup path: the catalogue the
+    // deferred roster creation picks, and the id → name lookups UI actions find entries by. Null
+    // between a Cleanup and the next setup — the one flag for "NR holds this session's data".
+    private NrUiDataIndex? _data;
 
     // Tracks child selection uid → (parentSelectionUid, entryName) so SetSelectionCount
     // can route child entries to the options panel rather than the unitRow.
@@ -77,25 +71,73 @@ public sealed class NrRosterUiEngine : IRosterEngine
     public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
         => SetupAsync(gameSystem, catalogues).GetAwaiter().GetResult();
 
-    private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
+    /// <summary>
+    /// Generates the spec's <c>.gst</c>/<c>.cat</c> and loads them exactly as
+    /// <see cref="SetupFromFiles"/> loads a caller's — one path from the XML on.
+    /// </summary>
+    private Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
     {
-        _gameSystem = gameSystem;
-        _catalogues = catalogues;
-        BuildEntryLookups(gameSystem, catalogues);
-
-        var gstXml = CatXmlGenerator.GenerateGameSystemXml(gameSystem);
-
-        // Load non-library catalogues before library ones so NR uses the primary (non-library)
-        // catalogue as the default when associating a force entry with a book.
-        var sortedCatalogues = catalogues
-            .OrderBy(c => c.Library == true ? 1 : 0)
-            .ToArray();
-        var catFiles = CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, sortedCatalogues);
-        var allFiles = new List<(string FileName, string Content)>
+        var files = new List<(string FileName, string Content)>
         {
-            ($"{gameSystem.Id}.gst", gstXml),
+            ($"{gameSystem.Id}.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)),
         };
-        allFiles.AddRange(catFiles.Select(f => (f.FileName, f.Xml)));
+        files.AddRange(CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues));
+
+        return LoadAsync(NrUiDataIndex.FromFiles(files));
+    }
+
+    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
+        => SetupFromFilesAsync(files).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Loads a caller's data files — the <c>dataSource</c> path, and a scenario's data directory —
+    /// and records from them everything <see cref="Setup"/> records, so every action after it works
+    /// as it does after <see cref="Setup"/>.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> SetupFromFilesAsync(IReadOnlyList<(string FileName, string Content)> files)
+    {
+        NrUiDataIndex data;
+        try
+        {
+            data = NrUiDataIndex.FromFiles(files);
+        }
+        catch (InvalidDataException ex)
+        {
+            // Data this engine did not produce — a refusal to read it is the caller's to see.
+            return [$"SetupFromFiles: {ex.Message}"];
+        }
+
+        return await LoadAsync(data);
+    }
+
+    /// <summary>
+    /// Hands <paramref name="data"/>'s files to NR and records <paramref name="data"/> as this
+    /// session's. The one load both setup paths share.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A setup always loads.</b> This used to skip the load when the game-system id matched the
+    /// one already loaded — "same id" read as "same data". The suite runs one game-system id
+    /// (<c>gs-1</c>) across hundreds of specs with different content, and a scenario re-sets up on
+    /// the data editor's edited files under the very same id, so the id says nothing about whether
+    /// NR holds these bytes. After a <see cref="Cleanup"/> the skip could not fire anyway; without
+    /// one, it would have kept the old data and the old roster.
+    /// </para>
+    /// <para>
+    /// So a session no <see cref="Cleanup"/> closed is closed here first, as
+    /// <c>BsUiRosterEngine</c>'s setup does: a second load over the first leaves NR holding two
+    /// systems under one id, and NR's own importer resolves a system by id (see
+    /// <c>NrSystemStoreJs</c>).
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> LoadAsync(NrUiDataIndex data)
+    {
+        if (_data is not null)
+        {
+            await CleanupAsync();
+        }
+
+        _data = data;
 
         // Navigate to app and wait for Pinia
         if (!Browser.FrozenReady)
@@ -110,18 +152,12 @@ public sealed class NrRosterUiEngine : IRosterEngine
             await NrUiSetup.SuppressServerSaveNoticeAsync(Browser.Page);
         }
 
-        // Load game data into NR (only once per unique system in frozen mode)
-        if (!_systemLoaded || _loadedSystemId != gameSystem.Id)
-        {
-            await NrUiTiming.MeasureAsync("load-gamedata", () =>
-                NrUiSetup.LoadGameDataAsync(Browser, allFiles, gameSystem.Id));
-            _systemLoaded = true;
-            _loadedSystemId = gameSystem.Id;
+        await NrUiTiming.MeasureAsync("load-gamedata", () =>
+            NrUiSetup.LoadGameDataAsync(Browser, data.LoadOrder, data.GameSystemId));
 
-            if (Browser.IsFrozen)
-            {
-                Browser.FrozenReady = true;
-            }
+        if (Browser.IsFrozen)
+        {
+            Browser.FrozenReady = true;
         }
 
         // Arm the store tracer for this spec (no-op unless NR_TRACE_STORE is set). Installed here,
@@ -147,20 +183,14 @@ public sealed class NrRosterUiEngine : IRosterEngine
             return;
         }
 
-        if (_gameSystem is null)
+        if (_data is null)
         {
             throw new InvalidOperationException("Setup must be called before any mutation.");
         }
 
         // Use the catalogue from the first AddForce call to select the right faction.
         // Fall back to the first non-library catalogue if not specified.
-        string? catalogueName = null;
-        if (catalogueId != null)
-        {
-            catalogueName = _catalogues?.FirstOrDefault(c => c.Id == catalogueId)?.Name;
-        }
-
-        catalogueName ??= _catalogues?.FirstOrDefault(c => c.Library != true)?.Name;
+        var catalogueName = _data.CatalogueNameFor(catalogueId);
 
         // The force from that same first AddForce, so NR's Create List dialog builds the force the
         // spec asked for rather than whichever one it would default to. Null for a step-0 read,
@@ -177,29 +207,6 @@ public sealed class NrRosterUiEngine : IRosterEngine
             NrUiSetup.BypassSupporterPaywallAsync(Browser.Page));
 
         _rosterCreated = true;
-    }
-
-    public IReadOnlyList<string> SetupFromFiles(IReadOnlyList<(string FileName, string Content)> files)
-        => SetupFromFilesAsync(files).GetAwaiter().GetResult();
-
-    private async Task<IReadOnlyList<string>> SetupFromFilesAsync(IReadOnlyList<(string FileName, string Content)> files)
-    {
-        if (!Browser.FrozenReady)
-        {
-            await Browser.NavigateToAppAsync();
-            await Browser.WaitForPiniaAsync();
-        }
-
-        await NrUiSetup.LoadGameDataAsync(Browser, files, systemId: null);
-        _systemLoaded = true;
-
-        if (Browser.IsFrozen)
-        {
-            Browser.FrozenReady = true;
-        }
-
-        // Roster creation is deferred to the first AddForce call.
-        return [];
     }
 
     // ===== IRosterEngine: Roster mutations (all UI-driven) =====
@@ -311,7 +318,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
                 // It is not. Add the requested one through the UI and drop NR's, so the id this
                 // method returns is the force the spec actually named. Both paths are the ones
                 // every other step already uses.
-                var requestedName = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
+                var requestedName = ForceEntryName(forceEntryId);
                 uid = await NrUiActions.AddForceByNameAsync(
                     Browser.Page, requestedName, forceEntryId, catalogueId);
 
@@ -323,7 +330,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         }
         else
         {
-            var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
+            var name = ForceEntryName(forceEntryId);
             uid = await NrUiActions.AddForceByNameAsync(Browser.Page, name, forceEntryId, catalogueId);
         }
 
@@ -381,7 +388,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
     private async Task<ActionOutputs> AddChildForceAsync(string parentForceId, string forceEntryId, string catalogueId)
     {
         await NrUiActions.RequireNodesAsync(Browser.Page, parentForceId);
-        var name = _forceEntryNames.GetValueOrDefault(forceEntryId, forceEntryId);
+        var name = ForceEntryName(forceEntryId);
         var uid = await NrUiActions.AddChildForceByNameAsync(Browser.Page, parentForceId, name, forceEntryId, catalogueId);
         return new ActionOutputs { ForceId = uid, Categories = await ReadCategoryIdsAsync(uid) };
     }
@@ -446,26 +453,35 @@ public sealed class NrRosterUiEngine : IRosterEngine
             ? null
             : await NewRecruitStateReader.ReadSelectionDescendantIdsAsync(Browser.Page, forceId, selectionUid);
 
+    /// <summary>The visible name of force entry <paramref name="forceEntryId"/>, or the id itself.</summary>
+    private string ForceEntryName(string forceEntryId)
+        => _data?.ForceEntryName(forceEntryId) ?? forceEntryId;
+
     /// <summary>
     /// Resolves a spec entry ID (possibly composite e.g. "groupLink::linkId::targetId")
-    /// to its display name by checking <see cref="_entryNames"/> from right-to-left on each
-    /// "::" segment. Falls back to the raw entry ID if no match is found.
+    /// to its display name by checking the loaded data's entry names (<see cref="NrUiDataIndex"/>)
+    /// from right-to-left on each "::" segment. Falls back to the raw entry ID if no match is found.
     /// </summary>
     /// <remarks>
     /// <b>Not a duplicate of <c>BsUiRosterEngine.ResolveEntryLabel</c>, though it reads like one.</b>
     /// That method splits the same composite id on <c>::</c> and walks the segments right-to-left
     /// too, and the two must NOT be unified: they resolve a link's name in opposite directions,
-    /// because their apps do. Here <see cref="RegisterEntryLink"/> stores the LINK's own name
-    /// against the link id and only falls back to the target's when the link is unnamed — NR's UI
-    /// shows the link's name. BattleScribe's driver does the reverse: its <c>NameOfResolved</c>
-    /// follows the link to its target and takes the TARGET's name, because BattleScribe labels the
-    /// control with what the link resolves to. Sharing one implementation would hand one of the two
-    /// apps a label its DOM does not contain, and the failure would read as "entry not found", not
-    /// as a naming disagreement.
+    /// because their apps do. Here <see cref="NrUiDataIndex"/> stores the LINK's own name against
+    /// the link id and only falls back to the target's when the link is unnamed — NR's UI shows the
+    /// link's name. BattleScribe's driver does the reverse: its <c>NameOfResolved</c> follows the
+    /// link to its target and takes the TARGET's name, because BattleScribe labels the control with
+    /// what the link resolves to. Sharing one implementation would hand one of the two apps a label
+    /// its DOM does not contain, and the failure would read as "entry not found", not as a naming
+    /// disagreement.
     /// </remarks>
     private string ResolveEntryName(string entryId)
     {
-        if (_entryNames.TryGetValue(entryId, out var name))
+        if (_data is null)
+        {
+            return entryId;
+        }
+
+        if (_data.TryGetEntryName(entryId, out var name))
         {
             return name;
         }
@@ -476,7 +492,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
             var segments = entryId.Split("::");
             for (var i = segments.Length - 1; i >= 0; i--)
             {
-                if (_entryNames.TryGetValue(segments[i], out var segName))
+                if (_data.TryGetEntryName(segments[i], out var segName))
                 {
                     return segName;
                 }
@@ -583,10 +599,11 @@ public sealed class NrRosterUiEngine : IRosterEngine
     /// </remarks>
     private async Task EnsureRosterMaterialisedForReadAsync()
     {
-        // `_gameSystem is null` is the SetupFromFiles (dataSource) path, which records none of the
-        // spec's model and so cannot pick a faction for the Create List dialog. Leave those reads as
-        // they were rather than throwing out of a state read.
-        if (_rosterCreated || _gameSystem is null)
+        // No data is a read with no setup behind it, which has no faction to create a roster on.
+        // Leave it as it was rather than throwing out of a state read. Both setup paths record the
+        // data, so a scenario's `newRoster` followed by an assertion reads an empty roster exactly
+        // as a roster spec's first-step assertion does.
+        if (_rosterCreated || _data is null)
         {
             return;
         }
@@ -1245,7 +1262,9 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
     // ===== Lifecycle =====
 
-    public void Cleanup()
+    public void Cleanup() => CleanupAsync().GetAwaiter().GetResult();
+
+    private async Task CleanupAsync()
     {
         // Capture the list id BEFORE clearing local state — the browser reset needs it to ask NR
         // to delete the list this spec created.
@@ -1253,12 +1272,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         _listId = null;
         _rosterCreated = false;
-        _systemLoaded = false;
-        _loadedSystemId = null;
-        _gameSystem = null;
-        _catalogues = null;
-        _forceEntryNames.Clear();
-        _entryNames.Clear();
+        _data = null;
         _childSelectionParent.Clear();
 
         // The UI engine shares one browser across specs. Delete any lists this spec created and return
@@ -1266,8 +1280,7 @@ public sealed class NrRosterUiEngine : IRosterEngine
         // (e.g. the Create List dialog's controls become ambiguous once a prior list is present).
         try
         {
-            NrUiTiming.MeasureAsync("cleanup-reset-browser", () => ResetBrowserStateAsync(listId))
-                .GetAwaiter().GetResult();
+            await NrUiTiming.MeasureAsync("cleanup-reset-browser", () => ResetBrowserStateAsync(listId));
         }
         catch (Exception ex)
         {
@@ -1422,133 +1435,5 @@ public sealed class NrRosterUiEngine : IRosterEngine
 
         _disposed = true;
         Browser.DisposeAsync().AsTask().GetAwaiter().GetResult();
-    }
-
-    // ===== Internal: entry name lookups =====
-
-    private void BuildEntryLookups(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
-    {
-        _forceEntryNames.Clear();
-        _entryNames.Clear();
-
-        foreach (var fe in gameSystem.ForceEntries ?? [])
-        {
-            RegisterForceEntry(fe);
-        }
-
-        foreach (var se in gameSystem.SelectionEntries ?? [])
-        {
-            RegisterSelectionEntry(se);
-        }
-
-        // Shared entries defined on the GAME SYSTEM, which this used to skip while
-        // RegisterCatalogue registered the catalogue-level equivalents — an asymmetry with a real
-        // cost. Every UI action addresses entries by their visible NAME (the DOM does not carry
-        // BattleScribe ids), so an unregistered entry falls back to its raw id: the driver went
-        // looking for a label "se-shared-weapon" in a panel that says "Shared Weapon", found
-        // nothing, and reported it as a hidden entry. Measured on gamesystem/gamesystem-shared-entry.
-        foreach (var se in gameSystem.SharedSelectionEntries ?? [])
-        {
-            RegisterSelectionEntry(se);
-        }
-
-        foreach (var grp in gameSystem.SharedSelectionEntryGroups ?? [])
-        {
-            RegisterSelectionEntryGroup(grp);
-        }
-
-        foreach (var el in gameSystem.EntryLinks ?? [])
-        {
-            RegisterEntryLink(el);
-        }
-
-        foreach (var cat in catalogues)
-        {
-            RegisterCatalogue(cat);
-        }
-    }
-
-    private void RegisterForceEntry(ProtocolForceEntry fe)
-    {
-        _forceEntryNames[fe.Id] = fe.Name;
-        foreach (var child in fe.ForceEntries ?? [])
-        {
-            RegisterForceEntry(child);
-        }
-    }
-
-    private void RegisterSelectionEntry(ProtocolSelectionEntry se)
-    {
-        _entryNames[se.Id] = se.Name;
-        foreach (var child in se.SelectionEntries ?? [])
-        {
-            RegisterSelectionEntry(child);
-        }
-
-        foreach (var grp in se.SelectionEntryGroups ?? [])
-        {
-            RegisterSelectionEntryGroup(grp);
-        }
-
-        foreach (var link in se.EntryLinks ?? [])
-        {
-            RegisterEntryLink(link);
-        }
-    }
-
-    private void RegisterSelectionEntryGroup(ProtocolSelectionEntryGroup grp)
-    {
-        _entryNames[grp.Id] = grp.Name;
-        foreach (var child in grp.SelectionEntries ?? [])
-        {
-            RegisterSelectionEntry(child);
-        }
-
-        foreach (var nested in grp.SelectionEntryGroups ?? [])
-        {
-            RegisterSelectionEntryGroup(nested);
-        }
-
-        foreach (var link in grp.EntryLinks ?? [])
-        {
-            RegisterEntryLink(link);
-        }
-    }
-
-    private void RegisterEntryLink(ProtocolEntryLink link)
-    {
-        // An entry link's name overrides the target's name (or falls back to it)
-        var name = string.IsNullOrEmpty(link.Name)
-            ? _entryNames.GetValueOrDefault(link.TargetId, link.TargetId)
-            : link.Name;
-        _entryNames[link.Id] = name;
-    }
-
-    private void RegisterCatalogue(ProtocolCatalogue cat)
-    {
-        foreach (var se in cat.SelectionEntries ?? [])
-        {
-            RegisterSelectionEntry(se);
-        }
-
-        foreach (var grp in cat.SharedSelectionEntryGroups ?? [])
-        {
-            RegisterSelectionEntryGroup(grp);
-        }
-
-        foreach (var se in cat.SharedSelectionEntries ?? [])
-        {
-            RegisterSelectionEntry(se);
-        }
-
-        foreach (var link in cat.EntryLinks ?? [])
-        {
-            RegisterEntryLink(link);
-        }
-
-        foreach (var fe in cat.ForceEntries ?? [])
-        {
-            RegisterForceEntry(fe);
-        }
     }
 }
