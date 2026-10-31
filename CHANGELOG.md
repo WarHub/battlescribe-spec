@@ -1020,6 +1020,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Every layer of a GitHub-native stack runs the thorough suites again.** The gate read the PR's base
+  from `github.base_ref`, which for a PR in a `gh stack` stack names the trunk, while the PR targets the
+  layer below and the files API is computed against that layer. A stack layer therefore looked like a PR
+  to `main` with a small diff, and skipped the thorough jobs AGENTS.md says every stack layer runs. The
+  gate now takes the base from the PR's own record. Found running the #273 follow-up stack, where every
+  layer after a restack reported `BASE_REF: main`. Also: `setup.ps1` retries the ASM download, which
+  Maven Central rate-limited (HTTP 429) when the stack's jobs started at once.
+
 - **The NR Editor UI driver makes the data edits two migration specs need (#579)** — on `newrecruit-ui`,
   `migration-constraint-tightened` and `migration-mandatory-child-added` failed in their data block and
   never reached the roster editor, though the store-direct `newrecruit` engine makes both edits. Three
