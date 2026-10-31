@@ -3031,7 +3031,8 @@ public class RosterActions {
      * DONE. It is answered only when every item is a data-change notice ({@link #isDataChangeNotice});
      * anything else it lists fails the action with the app's own words, and the dialog is left standing
      * for the diagnostics to show. That keeps a roster loaded against data the harness got wrong a
-     * failure rather than a green run with a warning in its log.
+     * failure rather than a green run with a warning in its log — and a harness fault, which no
+     * {@code expectFailure} accepts: the app did not decline the load, it made it and then asked.
      */
     private List<String> applyLoadedRoster(Object controller, Method apply, Object loadParams) {
         AtomicReference<RuntimeException> failure = new AtomicReference<>();
@@ -3071,7 +3072,11 @@ public class RosterActions {
                 if (!isDataChangeNotice(problem)) unexpected.add(problem);
             }
             if (problems.isEmpty() || !unexpected.isEmpty()) {
-                throw new RuntimeException("Failed to load roster: BattleScribe reported a problem with the data files: "
+                // A gap, not a refusal: by now the app has applied the roster, and stands waiting behind
+                // a dialog this driver does not know how to answer. An expectFailure must not read that as
+                // BattleScribe declining the load.
+                throw new RuntimeException(AGENT_GAP + "BattleScribe loaded the roster but reported a problem with the "
+                        + "data files this driver does not answer: "
                         + (problems.isEmpty() ? message : String.join(" | ", unexpected)));
             }
             notices.addAll(problems);

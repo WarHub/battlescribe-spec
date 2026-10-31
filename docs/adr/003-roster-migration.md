@@ -49,8 +49,9 @@ when every item the dialog lists is a data-change notice:
 - "Some selections have been removed from your roster because they no longer exist in the data file(s)."
 - "No force entry found", under its "The catalogue data file is invalid:" header.
 
-Anything else fails the load with the app's own words. A roster loaded against data the harness got wrong
-should be a failure, not a green run with a warning in its log. The notices go to the run log, because no
+Anything else fails the load with the app's own words, as a harness fault that no `expectFailure` accepts:
+the app did not decline the load, it made it and then asked. A roster loaded against data the harness got
+wrong should be a failure, not a green run with a warning in its log — nor an asserted refusal. The notices go to the run log, because no
 engine contract carries them yet (#578).
 
 ## What the migration scenarios found
