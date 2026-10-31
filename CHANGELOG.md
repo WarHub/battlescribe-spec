@@ -1012,6 +1012,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The `battlescribe-ui` Data Editor driver answers its own reload prompt wherever it appears.** The
+  Data Editor watches its open file with a monitor that polls once a second, so the prompt the harness's
+  own writes provoke — "A file was modified outside of BattleScribe. Would you like to reload your data
+  file?", after `reload` serializes the open file, or after a warm start stages over the files the last
+  spec left open — arrives a poll later. The reopen loop answered it only when it landed there; landing
+  after, it failed the action's post-condition as an unexpected modal, which flaked a scenario's
+  `saveData` on CI. It is now answered NO at every modal check, as the Roster Editor's twin already was.
+
 - **The NR UI drivers pick a row by its whole name, not by a name it contains (#567)** — on
   `newrecruit-ui`, `real-world/wh40k-10e-space-marines-army` selected "Intercessor Squad" and got
   "Assault Intercessor Squad", 5 points short. The spec names the shared entry; the catalogue panel's row

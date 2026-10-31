@@ -216,7 +216,7 @@ public final class DialogInspector {
      * naturally becomes the summary (parts[0]) and the button labels fall into the truncated
      * "details" suffix, without needing to special-case buttons vs. message.
      */
-    private static String scrapeText(Stage stage) {
+    static String scrapeText(Stage stage) {
         if (stage.getScene() == null || stage.getScene().getRoot() == null) return null;
         List<String> parts = new ArrayList<>();
         collectText(stage.getScene().getRoot(), parts, new LinkedHashSet<>());
