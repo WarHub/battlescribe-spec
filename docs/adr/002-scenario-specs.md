@@ -318,6 +318,9 @@ Follow-ups:
 
 - #568: the live reload prompt.
 - #569: a scenario schema.
-- #570: `bs-spec run --break` on scenarios. It is refused today; `ScenarioRunner` has no before-step
-  hook.
+- #570: `bs-spec run --break` on scenarios — done. `ScenarioRunner.OnBeforeStep` fires once before
+  every block step and every hand-off, with the global index, and can stop the run. The REPL reaches
+  both editors over the one connection: `data state` and `roster state`, with bare `state` meaning the
+  paused step's editor. It refuses the roster editor before the first `newRoster`/`openRoster`, and an
+  unnamed editor at a hand-off.
 - #280 and #281, which this unblocks.

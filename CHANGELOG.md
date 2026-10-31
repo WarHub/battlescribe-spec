@@ -21,6 +21,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   had to become a full equal of `Setup` to carry it. Design: `docs/adr/002-scenario-specs.md`. Unblocks
   #280 and #281.
 
+- **`bs-spec run --break <n>` on scenario specs (#570).** It pauses before global step *n*, the index
+  the run's failures name, counted across blocks and hand-offs. `ScenarioRunner` gained the before-step
+  hook it lacked (`OnBeforeStep`, the contract of `RosterRunner`'s). It fires once per step: the inner
+  roster runner's hook stays unset. One adapter connection serves both editors, so the REPL addresses
+  either by name: `data state`/`data errors` and `roster state`/`roster errors`, with bare
+  `state`/`errors` meaning the editor the paused step runs in. It refuses what it cannot answer: the
+  roster editor before the first `newRoster`/`openRoster`, an unnamed editor at a hand-off, the data
+  editor on a roster spec. `quit` exits 130, as on a roster spec. A `--break` that names no step of the
+  spec is now refused before the engine starts, on roster specs too: it used to run the spec through
+  and print a verdict as if it had been honoured. A run that stops at a failure before reaching the
+  break says it never paused.
+
 - **Proof that a guard can fail, kept instead of rewritten (#529).** The MTP migration proved each new
   guard by hand: 22 one-off mutation scripts, and three agents who restored with `git checkout --` and
   lost uncommitted work. Now the spec, GameData-spec, test-data-pin and SDK-pin lints keep broken samples

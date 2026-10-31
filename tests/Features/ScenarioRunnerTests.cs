@@ -282,6 +282,141 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
         Assert.StartsWith("Step 2:", Assert.Single(result.Failures), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <b>The before-step hook fires once for every step of every block and every hand-off, in order, with the
+    /// global index.</b> Once is the point: the roster block's steps run through the roster runner, which has a
+    /// hook of its own, and a scenario that announced them both there and here would open a <c>--break</c> REPL
+    /// twice at one index. The index is the one the run's failures name — the failing assertion is "Step 5".
+    /// </summary>
+    [Fact]
+    public void OnBeforeStep_FiresOncePerStepAndHandoff_WithTheIndexFailuresName()
+    {
+        var seen = new List<(int Index, ScenarioStepKind Kind, bool RosterEditorStarted, string What)>();
+        var (_, _, result) = Run(
+            """
+              - data:
+                  - action: setFields
+                    entryId: cat-1
+                    fields:
+                      name: Edited
+              - action: saveData
+              - action: newRoster
+              - roster:
+                  - action: addForce
+                    forceEntryId: fe-1
+                  - action: dump
+                  - expectedState:
+                      forceCount: 5
+            """,
+            configure: runner => runner.OnBeforeStep = (index, step) =>
+            {
+                seen.Add((index, step.Kind, step.RosterEditorStarted, step.Kind switch
+                {
+                    ScenarioStepKind.Data => step.DataStep!.Action!,
+                    ScenarioStepKind.Roster => step.RosterStep!.Action ?? "expectedState",
+                    _ => step.Handoff!.Action!,
+                }));
+                return true;
+            });
+
+        Assert.Equal(
+            [
+                (0, ScenarioStepKind.Data, false, "setFields"),
+                (1, ScenarioStepKind.Handoff, false, "saveData"),
+                (2, ScenarioStepKind.Handoff, false, "newRoster"),
+                (3, ScenarioStepKind.Roster, true, "addForce"),
+                (4, ScenarioStepKind.Roster, true, "dump"),
+                (5, ScenarioStepKind.Roster, true, "expectedState"),
+            ],
+            seen);
+        Assert.StartsWith("Step 5:", Assert.Single(result.Failures), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>A hook that returns false stops the run before the step</b>: a stop at a hand-off means the roster
+    /// editor never reads the data directory, and nothing after it is announced or run. The result carries no
+    /// failure for the stop — the contract of <c>RosterRunner.OnBeforeStep</c>; the caller reports it.
+    /// </summary>
+    [Fact]
+    public void OnBeforeStep_ReturningFalse_AtAHandoff_StopsTheRunBeforeIt()
+    {
+        var seen = new List<int>();
+        var (data, roster, result) = Run(
+            """
+              - data:
+                  - action: setFields
+                    entryId: cat-1
+                    fields:
+                      name: Edited
+              - action: saveData
+              - action: newRoster
+              - roster:
+                  - action: addForce
+                    forceEntryId: fe-1
+            """,
+            configure: runner => runner.OnBeforeStep = (index, _) =>
+            {
+                seen.Add(index);
+                return index != 2;
+            });
+
+        Assert.Empty(result.Failures);
+        Assert.Equal([0, 1, 2], seen);
+        Assert.Equal(["reload cat-1", "export cat-1"], data.Log.TakeLast(2));
+        Assert.DoesNotContain("setup", roster.Log);
+        Assert.Empty(roster.Forces);
+    }
+
+    /// <summary>
+    /// A stop inside a block: the step does not reach the engine, and no completion callback fires for it —
+    /// a <c>--break</c> that quits must not dump a state for a step that never ran.
+    /// </summary>
+    [Fact]
+    public void OnBeforeStep_ReturningFalse_InABlock_StopsBeforeTheStep_WithNoCompletionCallback()
+    {
+        var completed = new List<int>();
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - roster:
+                  - action: addForce
+                    forceEntryId: fe-1
+                  - action: addForce
+                    forceEntryId: fe-1
+            """,
+            configure: runner =>
+            {
+                runner.OnBeforeStep = (index, _) => index != 2;
+                runner.OnRosterStepCompleted = (index, _, _, _) => completed.Add(index);
+            });
+
+        Assert.Empty(result.Failures);
+        Assert.Equal([1], completed);
+        Assert.Equal(["fe-1@cat-1"], roster.Forces);
+    }
+
+    /// <summary>
+    /// A hook that throws is a failure at the step it was announcing — not the "Setup failed" the run's own
+    /// catch-all would call it — and stops the run.
+    /// </summary>
+    [Fact]
+    public void OnBeforeStep_Throwing_FailsThatStep_AndStops()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - action: saveRoster
+                file: my-list
+            """,
+            configure: runner => runner.OnBeforeStep = (index, _) =>
+                index == 1 ? throw new IOException("stdin went away") : true);
+
+        var failure = Assert.Single(result.Failures);
+        Assert.StartsWith("Step 1: before-step hook failed: IOException: stdin went away", failure, StringComparison.Ordinal);
+        Assert.NotNull(result.HarnessError);
+        Assert.DoesNotContain("export", roster.Log);
+    }
+
     [Fact]
     public void AddForce_DefaultsCatalogue_FromDataDirectory()
     {
@@ -370,11 +505,17 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
         => Setup.Replace("{MORE_CATALOGUES}", moreCatalogues, StringComparison.Ordinal) + "\n" + steps;
 
     private (RecordingDataEditor Data, RecordingRosterEditor Roster, SpecResult Result) Run(
-        string steps, string moreCatalogues = "", RecordingDataEditor? data = null, RecordingRosterEditor? roster = null)
+        string steps,
+        string moreCatalogues = "",
+        RecordingDataEditor? data = null,
+        RecordingRosterEditor? roster = null,
+        Action<ScenarioRunner>? configure = null)
     {
         data ??= new RecordingDataEditor();
         roster ??= new RecordingRosterEditor();
-        var result = new ScenarioRunner(data, roster, "battlescribe").Run(SpecLoader.LoadScenarioFromYaml(Spec(steps, moreCatalogues)));
+        var runner = new ScenarioRunner(data, roster, "battlescribe");
+        configure?.Invoke(runner);
+        var result = runner.Run(SpecLoader.LoadScenarioFromYaml(Spec(steps, moreCatalogues)));
         foreach (var failure in result.Failures)
         {
             output.WriteLine(failure);

@@ -24,15 +24,18 @@ dump, `--screenshots`, and the diagnostic files below. For live JSON-RPC calls, 
 
 ## Mid-run inspection
 
-`run --engine battlescribe --ui --break N my-spec-id` runs to step *N-1*, then pauses with the
-window open and visible:
+`run --engine battlescribe --ui --break N my-spec-id` runs steps *0* to *N-1*, then pauses before
+step *N* with the window open and visible, in the adapter-protocol REPL ("`--break <n>`" in
+[the skill](../SKILL.md)):
 
 ```
-═══ Stopped before step 5: selectEntry "Commander" ═══
-Press Enter to continue execution, or Ctrl+C to abort…
+── Stopped before step 5: selectEntry entryId=se-commander ──
+Commands: state | errors | screenshot <file.png> | {"type":"..."} raw JSON | continue | quit
+>
 ```
 
-Inspect the window, read the latest `artifacts/bs-ui-diagnostics/` dump, then press Enter.
+Inspect the window, read the latest `artifacts/bs-ui-diagnostics/` dump, ask for `state`, then
+`continue`.
 
 A common pattern: pause before the failing step and look for an unexpected modal dialog
 (`"modality": "APPLICATION_MODAL"` in the all-windows scene dump) blocking the expected node.

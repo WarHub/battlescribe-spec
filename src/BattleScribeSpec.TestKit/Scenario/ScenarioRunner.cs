@@ -74,6 +74,19 @@ public sealed class ScenarioRunner
     /// <summary>Called after each step of a <c>roster:</c> block: global step index, step, roster state, errors.</summary>
     public Action<int, StepDef, RosterState, IReadOnlyList<ValidationErrorState>>? OnRosterStepCompleted { get; set; }
 
+    /// <summary>
+    /// Called before each step of a block and before each hand-off, with the global step index the run's
+    /// failures name (<c>Step N:</c>) and what is about to run. Return false to stop the run there: the step
+    /// does not run, no completion callback fires for it, and the result holds what ran before it — the
+    /// contract of <see cref="RosterRunner.OnBeforeStep"/>. Like that one, the result does not say the run was
+    /// stopped; a caller that stops it says so itself (<c>bs-spec run --break</c> exits 130).
+    /// <para>
+    /// This is the one place a scenario step is announced. The inner roster runner's own hook stays unset,
+    /// so a step in a <c>roster:</c> block fires once, not once here and again inside the block.
+    /// </para>
+    /// </summary>
+    public Func<int, ScenarioStepView, bool>? OnBeforeStep { get; set; }
+
     /// <summary>Run a complete scenario spec. The result's failures are empty when it passed.</summary>
     public SpecResult Run(ScenarioSpecFile spec)
     {
@@ -92,6 +105,7 @@ public sealed class ScenarioRunner
         _rosterRunner.UpdateSnapshots = UpdateSnapshots;
         _rosterRunner.OnDiverge = OnDiverge;
         _rosterRunner.OnStepCompleted = OnRosterStepCompleted;
+        _rosterRunner.OnBeforeStep = null; // announced here instead: see OnBeforeStep
         _dataRunner.BeginSteps(spec.Id, spec.SourceDirectory);
         _rosterRunner.BeginSteps(spec.Id, spec.SourceDirectory);
 
@@ -201,7 +215,13 @@ public sealed class ScenarioRunner
         {
             foreach (var step in dataSteps)
             {
-                var proceed = _dataRunner.ExecuteStep(step, stepIndex++);
+                var index = stepIndex++;
+                if (!BeforeStep(index, new ScenarioStepView(ScenarioStepKind.Data, _rosterEditorStarted, dataStep: step)))
+                {
+                    return false;
+                }
+
+                var proceed = _dataRunner.ExecuteStep(step, index);
                 CollectFailures();
                 if (!proceed)
                 {
@@ -222,7 +242,13 @@ public sealed class ScenarioRunner
 
             foreach (var step in rosterSteps)
             {
-                var proceed = _rosterRunner.ExecuteStep(step, stepIndex++);
+                var index = stepIndex++;
+                if (!BeforeStep(index, new ScenarioStepView(ScenarioStepKind.Roster, _rosterEditorStarted, rosterStep: step)))
+                {
+                    return false;
+                }
+
+                var proceed = _rosterRunner.ExecuteStep(step, index);
                 CollectFailures();
                 if (!proceed)
                 {
@@ -233,7 +259,33 @@ public sealed class ScenarioRunner
             return true;
         }
 
-        return ExecuteHandoff(item, item.Action!, stepIndex++);
+        var handoffIndex = stepIndex++;
+        return BeforeStep(handoffIndex, new ScenarioStepView(ScenarioStepKind.Handoff, _rosterEditorStarted, handoff: item))
+            && ExecuteHandoff(item, item.Action!, handoffIndex);
+    }
+
+    /// <summary>
+    /// <see cref="OnBeforeStep"/> for the step at <paramref name="stepIndex"/>; false when the run must stop.
+    /// A hook that throws stops the run with a failure at that step — not with the "Setup failed" the run's
+    /// own catch would otherwise report for it.
+    /// </summary>
+    private bool BeforeStep(int stepIndex, ScenarioStepView step)
+    {
+        if (OnBeforeStep is not { } hook)
+        {
+            return true;
+        }
+
+        try
+        {
+            return hook(stepIndex, step);
+        }
+        catch (Exception ex)
+        {
+            _errors.Add($"Step {stepIndex}: before-step hook failed: {ex.GetType().Name}: {ex.Message}");
+            _harnessError ??= $"{ex.GetType().Name}: {ex.Message}";
+            return false;
+        }
     }
 
     /// <summary>Copy the failures each runner added since the last look into the one list, in step order.</summary>
@@ -422,4 +474,59 @@ public sealed class ScenarioRunner
             Console.Error.WriteLine($"[ScenarioRunner] {editor} cleanup error after spec '{specId}': {ex}");
         }
     }
+}
+
+/// <summary>Which editor a scenario step runs in, or neither: a hand-off runs between them.</summary>
+public enum ScenarioStepKind
+{
+    /// <summary>A step of a <c>data:</c> block, run by the data editor.</summary>
+    Data,
+
+    /// <summary>A step of a <c>roster:</c> block, run by the roster editor.</summary>
+    Roster,
+
+    /// <summary>One of the <see cref="ScenarioHandoffs"/>, which carries data or a roster between the editors.</summary>
+    Handoff,
+}
+
+/// <summary>
+/// The step a scenario is about to run, as <see cref="ScenarioRunner.OnBeforeStep"/> reports it. Exactly one
+/// of <see cref="DataStep"/>, <see cref="RosterStep"/> and <see cref="Handoff"/> is set, the one
+/// <see cref="Kind"/> names.
+/// </summary>
+public sealed class ScenarioStepView
+{
+    internal ScenarioStepView(
+        ScenarioStepKind kind,
+        bool rosterEditorStarted,
+        GameDataStepDef? dataStep = null,
+        StepDef? rosterStep = null,
+        ScenarioStepDef? handoff = null)
+    {
+        Kind = kind;
+        RosterEditorStarted = rosterEditorStarted;
+        DataStep = dataStep;
+        RosterStep = rosterStep;
+        Handoff = handoff;
+    }
+
+    /// <summary>Which editor runs the step, or <see cref="ScenarioStepKind.Handoff"/>.</summary>
+    public ScenarioStepKind Kind { get; }
+
+    /// <summary>The step of a <c>data:</c> block; set when <see cref="Kind"/> is <see cref="ScenarioStepKind.Data"/>.</summary>
+    public GameDataStepDef? DataStep { get; }
+
+    /// <summary>The step of a <c>roster:</c> block; set when <see cref="Kind"/> is <see cref="ScenarioStepKind.Roster"/>.</summary>
+    public StepDef? RosterStep { get; }
+
+    /// <summary>The hand-off item, its <c>file</c> and <c>expectFailure</c> included; set when <see cref="Kind"/> is <see cref="ScenarioStepKind.Handoff"/>.</summary>
+    public ScenarioStepDef? Handoff { get; }
+
+    /// <summary>
+    /// Whether a <c>newRoster</c> or <c>openRoster</c> has run before this step — an <c>openRoster</c> the spec
+    /// declared refused included, after which the roster editor holds what the refusal left. Until one has,
+    /// the roster editor has read no data and there is nothing on the roster side to ask about: the rule that
+    /// makes a <c>roster:</c> block there a spec error.
+    /// </summary>
+    public bool RosterEditorStarted { get; }
 }
