@@ -446,20 +446,12 @@ public static class NrGameDataUiActions
             Timeout = 5_000,
         });
 
-        // Click the suggestion whose text contains the display name (or fall back to ID)
-        var matchingSuggestion = suggestions
-            .Filter(new LocatorFilterOptions { HasText = displayName ?? id });
-        try
-        {
-            await matchingSuggestion.First.ClickAsync(new() { Timeout = 3_000 });
-        }
-        catch (TimeoutException)
-        {
-            var available = await suggestions.AllTextContentsAsync();
-            throw new InvalidOperationException(
-                $"NR Editor UI: no '{rowLabel}' suggestion matched '{displayName ?? id}' " +
-                $"(displayName={(displayName ?? "<null>")}, id={id}). Available: [{string.Join(", ", available)}]");
-        }
+        // Click the suggestion NAMED the display name (or the id when there is none) — exactly, with
+        // NR Editor's annotations set aside (NrEditorNames). This was a `HasText` filter, a substring
+        // match, so "Bolter" would also take "Bolter Template [Test Catalogue]" if NR listed it first.
+        var matchingSuggestion = await NrEditorNames.PickAsync(
+            suggestions, displayName ?? id, $"'{rowLabel}' suggestion (displayName={displayName ?? "<null>"}, id={id})");
+        await matchingSuggestion.ClickAsync(new() { Timeout = 3_000 });
         // The pick is done when NR closes the popup: targetSelected() emits update:modelValue and
         // the v-click-outside handler sets editing=false, re-hiding .suggestions.
         await fieldRow.Locator(".suggestions:not(.hidden)").WaitForAsync(
@@ -833,17 +825,22 @@ public static class NrGameDataUiActions
         // Leaf entries:   <div class="title normalTitle">
         // Parent entries: <div class="title arrowTitle collapsed">  (can also be "opened")
         // Both variants are matched with :is(.normalTitle, .arrowTitle); the section-header
-        // title row (e.g. "Root Selection Entries") is excluded by the entry-name text filter.
-        var nodeLocator = page.Locator($".{collectionCssClass} .title:is(.normalTitle, .arrowTitle)")
+        // title row (e.g. "Root Selection Entries") is excluded by the entry-name match.
+        //
+        // The substring filter is only the wait: every title CONTAINING the name, so its first
+        // becoming visible says the tree has rendered the node. The pick is the title NAMED it
+        // (NrEditorNames). Returning that filter's `.First` would click "Sub-detachment" for
+        // "Detachment" had NR listed it first — the #567 flaw in the Editor's tree.
+        var containing = page.Locator($".{collectionCssClass} .title:is(.normalTitle, .arrowTitle)")
             .Filter(new LocatorFilterOptions { HasText = entryName });
 
-        await nodeLocator.First.WaitForAsync(new LocatorWaitForOptions
+        await containing.First.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = 10_000,
         });
 
-        return nodeLocator.First;
+        return await NrEditorNames.PickAsync(containing, entryName, $"'{collectionCssClass}' tree node for '{entryId}'");
     }
 
     private sealed record EntryLocationInfo(string? Name, string? Col);

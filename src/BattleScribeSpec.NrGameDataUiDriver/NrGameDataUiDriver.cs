@@ -853,16 +853,11 @@ public sealed class NrGameDataUiDriver
         await container.Locator(".autocomplete-input").First.ClickAsync();
         var suggestions = container.Locator(".suggestions:not(.hidden) > div");
         await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
-        var pick = suggestions.Filter(new LocatorFilterOptions
-        {
-            HasTextRegex = new System.Text.RegularExpressions.Regex(
-                $"^\\s*{System.Text.RegularExpressions.Regex.Escape(match)}\\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase),
-        });
-        if (await pick.CountAsync() == 0)
-        {
-            pick = suggestions.Filter(new LocatorFilterOptions { HasText = match });
-        }
-        await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
+        // By name, exactly (NrEditorNames). This matched the whole text exactly and then, finding
+        // nothing, fell back to a SUBSTRING — which is the only branch an entry suggestion ever took,
+        // since NR prints "(same ancestor)" or "(shared)" beside its name.
+        var pick = await NrEditorNames.PickAsync(suggestions, match, "suggestion");
+        await pick.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
         await WaitPopupClosedAsync(container);
     }
 
@@ -1179,8 +1174,12 @@ public sealed class NrGameDataUiDriver
         await container.Locator(".autocomplete-input").First.ClickAsync();
         var suggestions = container.Locator(".suggestions:not(.hidden) > div");
         await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
-        var pick = suggestions.Filter(new LocatorFilterOptions { HasText = match });
-        await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
+        // By name, exactly (NrEditorNames) — this was a bare `HasText` substring filter. A null
+        // match still takes the first suggestion, as the unfiltered locator always did.
+        var pick = match is null
+            ? suggestions.First
+            : await NrEditorNames.PickAsync(suggestions, match, $"'{rowLabel}' suggestion");
+        await pick.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
         await WaitPopupClosedAsync(container);
     }
 
@@ -1196,15 +1195,11 @@ public sealed class NrGameDataUiDriver
         await container.Locator(".iconselect-input").First.ClickAsync();
         var suggestions = container.Locator(".suggestions:not(.hidden) > div");
         await suggestions.First.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 5_000 });
-        var pick = suggestions.Filter(new LocatorFilterOptions
-        {
-            HasTextRegex = new System.Text.RegularExpressions.Regex($"^\\s*{System.Text.RegularExpressions.Regex.Escape(value)}\\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase),
-        });
-        if (await pick.CountAsync() == 0)
-        {
-            pick = suggestions.Filter(new LocatorFilterOptions { HasText = value });
-        }
-        await pick.First.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
+        // By name, exactly (NrEditorNames), case-sensitive first. The case-insensitive match this
+        // replaced found both "category" and "Category" and took the first; its substring fallback
+        // would have taken "pts (display)" for "pts" had NR listed it first.
+        var pick = await NrEditorNames.PickAsync(suggestions, value, "field option");
+        await pick.ClickAsync(new LocatorClickOptions { Timeout = 4_000 });
         await WaitPopupClosedAsync(container);
     }
 

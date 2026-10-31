@@ -153,11 +153,25 @@ public static class NrUiActions
         // the correct book internally when clicked". It does not.
         await SelectForceCatalogueAsync(page, catalogueId);
 
-        // Find the force row with matching name and click its addButton (+)
-        var forceRow = forcesPanel.Locator(".unit-wrap.force").Filter(new() { Has = page.Locator(".name", new() { HasTextString = forceName }) });
-        if (await forceRow.CountAsync() > 0)
+        // Find the force row NAMED forceName — exactly (NrExactText): a substring match also takes
+        // "Combat Patrol" for "Patrol" — and click its addButton (+). Two rows with that exact name
+        // are refused rather than resolved by order, for the reason FindEntryRowAsync gives.
+        var forceRow = forcesPanel.Locator(".unit-wrap.force").WhereNameIs(".name", forceName);
+        var forceRows = await forceRow.CountAsync();
+        if (forceRows > 1)
         {
-            await forceRow.First.Locator(".addButton").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
+            var offered = await forcesPanel.Locator(".unit-wrap.force .name").AllTextContentsAsync();
+            await page.Keyboard.PressAsync("Escape");
+            throw new HarnessFaultException(
+                $"NR UI: {forceRows} rows in the forces panel are named exactly '{forceName}' "
+                + $"(entryId={forceEntryId}), and the panel carries no force-entry id to tell them apart. "
+                + "Address the force by id rather than by name before adding one. "
+                + $"Offered: [{string.Join(", ", offered.Select(o => o.Trim()))}].");
+        }
+
+        if (forceRows == 1)
+        {
+            await forceRow.Locator(".addButton").ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         }
         else if (forceEntryId is not null)
         {
@@ -345,7 +359,22 @@ public static class NrUiActions
             var unitList = parentBookForce.Locator(".childForces .unitList");
             await unitList.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
 
-            var forceRow = unitList.Locator(".unit-wrap").Filter(new() { HasText = forceName });
+            // By the row's NAME element, exactly (NrExactText). This was `HasText` on the whole row —
+            // a substring match over its text, cost and labels included — so "Patrol" also took
+            // "Combat Patrol" and the click went to whichever NR rendered first.
+            var forceRow = unitList.Locator(".unit-wrap").WhereNameIs(".name", forceName);
+            await forceRow.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
+            var forceRows = await forceRow.CountAsync();
+            if (forceRows > 1)
+            {
+                var offered = await unitList.Locator(".unit-wrap .name").AllTextContentsAsync();
+                throw new HarnessFaultException(
+                    $"NR UI: {forceRows} child-force rows under force '{parentForceId}' are named exactly "
+                    + $"'{forceName}' (entryId={forceEntryId}), and the picker carries no force-entry id to "
+                    + "tell them apart. Address the child force by id rather than by name before adding one. "
+                    + $"Offered: [{string.Join(", ", offered.Select(o => o.Trim()))}].");
+            }
+
             await forceRow.Locator(".addButton").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
         }
         catch (TimeoutException ex)
@@ -427,32 +456,10 @@ public static class NrUiActions
         // rather than display name (which may differ after modifiers are applied)
         await TagUnitListEntriesAsync(page);
 
-        // Scope the locator to the specific force's bookForce container using attribute selector.
-        // NR's force UIDs can start with a digit (e.g. "5ttp79g"), which makes "#uid" an invalid
-        // CSS selector; use [id='uid'] instead which has no such restriction.
-        // In multi-force rosters every bookForce has its own .unitList; without scoping we
-        // would always click force[0]'s entry list.
-        // `:not([data-nrui-force-row])` keeps both lookups off the child-force picker rows, which
-        // share this markup and sit in the same .bookForce (see TagUnitListEntriesAsync).
-        var idLocator = page.Locator(
-            $"[id='{forceUid}'] .unitList .unit-wrap:not([data-nrui-force-row])[data-spec-entry-id='{entryId}']");
-        var nameLocator = page.Locator($"[id='{forceUid}'] .unitList .unit-wrap:not([data-nrui-force-row])")
-            .Filter(new() { HasText = entryName }).First;
-
-        ILocator entryRow;
-        if (await idLocator.CountAsync() > 0)
-        {
-            entryRow = idLocator.First;
-        }
-        else
-        {
-            // ID annotation missed this entry — fall back to name search within the force
-            entryRow = nameLocator;
-        }
+        var entryRow = await FindEntryRowAsync(page, forceUid, entryId, entryName);
 
         // Check if the entry is visible in the UI (hidden entries won't be)
-        var isVisible = await entryRow.CountAsync() > 0 && await entryRow.IsVisibleAsync();
-        if (isVisible)
+        if (entryRow is not null && await entryRow.IsVisibleAsync())
         {
             await entryRow.Locator(".addButton").First.ClickAsync(new() { Timeout = NrUiTimeouts.Interaction });
             var selectionUid = await WaitForNewSelectionUidAsync(page, before);
@@ -507,7 +514,66 @@ public static class NrUiActions
             $"NR UI: no selectable row for entry '{entryId}' ('{entryName}') in force '{forceUid}'. "
             + "NR renders a row only when the entry is not hidden AND its primary category is one of "
             + "the force's own categories; everything else goes to NR's '(Illegal Units)' group, which "
-            + $"it builds hidden and never renders. Panel offered: {offered}");
+            + "it builds hidden and never renders. The row is looked up by the entry id "
+            + "TagUnitListEntriesAsync stamps on it, then by a name reading EXACTLY "
+            + $"'{entryName}'. If the panel below does list the entry under another name (a `set name` "
+            + "modifier), the fix is to have TagUnitListEntriesAsync tag that row with this id. A "
+            + "looser name match is not: it is what clicked 'Assault Intercessor Squad' for "
+            + $"'Intercessor Squad' (#567). Panel offered: {offered}");
+    }
+
+    /// <summary>
+    /// The catalogue-panel row for <paramref name="entryId"/> in force <paramref name="forceUid"/>:
+    /// the row tagged with that id, else the one row whose name is exactly
+    /// <paramref name="entryName"/>, else null.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The id comes first because it is the only identity the panel can be given: NR writes no entry
+    /// id into the DOM, so <see cref="TagUnitListEntriesAsync"/> stamps one from the store. It misses
+    /// whenever the spec names an entry the panel shows only through a LINK — the panel's row is the
+    /// entryLink, tagged with the link's id, while the spec names the shared entry it targets (which
+    /// is the same id the store-direct engine resolves, through <c>getId()</c>). wh40k-10e lists most
+    /// of its units that way, so on real data the name is not a rare fallback; it is the common path.
+    /// </para>
+    /// <para>
+    /// So the name has to be exact (<see cref="NrExactText"/>). It was a <c>HasText</c> filter on the
+    /// whole row — a substring match — and <c>.First</c> clicked the first row CONTAINING the name
+    /// (#567). For the same reason two rows both named exactly <paramref name="entryName"/> are
+    /// refused rather than resolved by order: nothing on the page says which of them the spec means,
+    /// and a guessed row builds a wrong roster that is reported steps later as a wrong total.
+    /// </para>
+    /// <para>
+    /// Scoped to the force's own <c>.bookForce</c> by <c>[id='uid']</c> — NR's force uids can start
+    /// with a digit, which makes <c>#uid</c> an invalid selector — because in a multi-force roster
+    /// every force has its own <c>.unitList</c>, and an unscoped lookup clicks force[0]'s.
+    /// <c>:not([data-nrui-force-row])</c> keeps it off the child-force picker rows, which share this
+    /// markup and sit in the same <c>.bookForce</c> (see <see cref="TagUnitListEntriesAsync"/>).
+    /// </para>
+    /// </remarks>
+    internal static async Task<ILocator?> FindEntryRowAsync(IPage page, string forceUid, string entryId, string entryName)
+    {
+        var rows = page.Locator($"[id='{forceUid}'] .unitList .unit-wrap:not([data-nrui-force-row])");
+
+        var byId = page.Locator(
+            $"[id='{forceUid}'] .unitList .unit-wrap:not([data-nrui-force-row])[data-spec-entry-id='{entryId}']");
+        if (await byId.CountAsync() > 0)
+        {
+            return byId.First;
+        }
+
+        var byName = rows.WhereNameIs(".name", entryName);
+        return await byName.CountAsync() switch
+        {
+            0 => null,
+            1 => byName,
+            var n => throw new HarnessFaultException(
+                $"NR UI: {n} catalogue rows in force '{forceUid}' are named exactly '{entryName}' and none "
+                + $"carries entry id '{entryId}', so the name cannot say which one the spec means, and "
+                + "clicking the first would build a roster the spec did not ask for. Fix the tagging "
+                + "(TagUnitListEntriesAsync) so this row carries the id; do not pick by position. "
+                + $"Panel offered: {await DescribeUnitListAsync(page, forceUid)}"),
+        };
     }
 
     /// <summary>
@@ -659,10 +725,11 @@ public static class NrUiActions
             ? null
             : await FindChildOptionUidAsync(page, parentSelectionUid, entryId, excludeInstanced: true);
 
+        // The label match is exact (NrExactText): asked for "Bolt Pistol", a substring one also takes
+        // "Heavy Bolt Pistol" — the #567 flaw, one panel over.
         var entryOption = childUid is not null && await TagOptionRowAsync(page, childUid)
             ? page.Locator($"[data-nrui-option='{childUid}']")
-            : page.Locator(".inputOption")
-                .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) });
+            : page.Locator(".inputOption").WhereNameIs("span.optionLabel", entryName);
 
         if (!await entryOption.First.IsVisibleAsync())
         {
@@ -752,8 +819,7 @@ public static class NrUiActions
             return;
         }
 
-        var entryOption = page.Locator(".inputOption")
-            .Filter(new() { Has = page.Locator("span.optionLabel", new() { HasTextString = entryName }) });
+        var entryOption = page.Locator(".inputOption").WhereNameIs("span.optionLabel", entryName);
         var numInput = entryOption.Locator("input[type='number']");
         await numInput.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = NrUiTimeouts.Interaction });
         await numInput.First.FillAsync(count.ToString());

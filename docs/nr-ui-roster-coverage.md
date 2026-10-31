@@ -33,7 +33,7 @@ working through the groups took the six measured categories to 178/188 — then 
 applied to the rest took the whole suite to 340/363.
 
 **Almost every remaining failure is a limitation of NR's own UI**, not of this driver; the two
-exceptions are named as driver gaps in §6. Each is declared in the spec itself, and almost all are
+exceptions §6 named as driver gaps are both fixed now. Each is declared in the spec itself, and almost all are
 declared `fail` rather than `skip`, so the spec still RUNS and an NR release that lifts a limitation
 is reported as an unexpected pass rather than going quiet.
 
@@ -448,7 +448,7 @@ Everything else was a declaration, and which KIND it got was a decision each tim
 |---|---:|---|
 | NR-UI limitation | 11 | `fail`, because a future NR release could plausibly lift it — and `fail` still RUNS the spec, so that arrives as an unexpected pass rather than as nothing. Seven hidden-entry/hidden-modifier cases, plus four that hit the empty-catalogue limitation of §1. |
 | NR behaviour, by design | 2 | `skip`. Both engines fail byte-identically and both NR drivers `return` early on the relevant input on purpose. No NR release can flip a call the drivers no-op deliberately, so `fail` there would be an alarm that cannot ring. |
-| Driver gap | 1 | `fail`. Both `real-world/wh40k-10e-*` specs needed `SetupFromFilesAsync` to record the spec's model, which it did not — an unimplemented feature, not a patch. Declared so implementing it is reported, and it was: since both setup paths read the loaded XML (`NrUiDataIndex`, #273), `wh40k-10e-create-army` passes and its declaration is gone. `wh40k-10e-space-marines-army` still fails, on a different gap, not yet traced: its `selectEntry` for `Intercessor Squad` adds `Assault Intercessor Squad` (155 pts against 160) — the shape of `SelectEntryByNameAsync`'s by-name fallback, whose `HasText` is a substring match. |
+| Driver gap | 0 | `fail`, while it lasted. Both `real-world/wh40k-10e-*` specs needed `SetupFromFilesAsync` to record the spec's model, which it did not — an unimplemented feature, not a patch. Declared so implementing it is reported, and it was: since both setup paths read the loaded XML (`NrUiDataIndex`, #273), `wh40k-10e-create-army` passes and its declaration is gone. `wh40k-10e-space-marines-army` then failed on a second gap (#567): its `selectEntry` for `Intercessor Squad` added `Assault Intercessor Squad` (155 pts against 160). The spec names the shared entry, the panel's row is the entryLink to it, so the id tag missed and `SelectEntryByNameAsync` fell back to a `HasText` filter — a substring match — taking the first row containing the name. The fallback now matches the row's name exactly (`NrExactText`), so the spec passes and its declaration is gone too. |
 
 **One of them was nearly mis-declared, which is the argument for settling open questions rather
 than declaring around them.** `catalogue/catalogue-category-entries` looked like the same
