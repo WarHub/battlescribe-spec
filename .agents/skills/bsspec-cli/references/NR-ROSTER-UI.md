@@ -26,8 +26,10 @@ Entering REPL — type JS expressions to evaluate, 'exit' to quit:
 0
 ```
 
-`run --engine newrecruit --ui --break N` opens the **same REPL** before step *N*, with the
-spec run up to that point. Type `exit`/`quit` to continue.
+`run --engine newrecruit --ui --break N` is a different REPL: it pauses before step *N* and speaks
+the adapter protocol (`state`, `errors`, `screenshot <file.png>`, raw `{"type":"..."}` JSON,
+`continue`, `quit`), not JS — see "`--break <n>`" in [the skill](../SKILL.md). For JS against the
+page mid-run, use `probe`.
 
 ## `NrUiProbe` (C# class)
 
