@@ -15,8 +15,20 @@ public abstract class GameDataConformanceTestBase
         _output = output;
     }
 
-    /// <summary>Engine name used in spec YAML 'engines' field for applicability checks.</summary>
+    /// <summary>The engine this lane drives, as specs address it — <c>battlescribe-ui</c>, not <c>battlescribe</c>.</summary>
     protected abstract string EngineName { get; }
+
+    /// <summary>
+    /// <see cref="EngineName"/> in its family: the spec's <c>engines:</c> and every per-engine override resolve
+    /// through it — the driver's own entry, else its family's (<see cref="ConformanceTestBase.Engine"/>).
+    /// </summary>
+    /// <remarks>
+    /// This base used to read the exact name alone, and hand the runner no family, so a <c>battlescribe:</c>
+    /// override never reached the <c>battlescribe-ui</c> lane and <c>battlescribe: skip</c> did not skip it —
+    /// the lane defect <see cref="ConformanceTestBase"/> had already fixed for roster specs, one base over
+    /// (#573). Specs coped by restating the family's entry under the driver's name.
+    /// </remarks>
+    protected EngineIdentity Engine => EngineIdentity.Of(EngineName);
 
     /// <summary>Optional prefix for log messages.</summary>
     protected virtual string LogPrefix => "";
@@ -71,17 +83,25 @@ public abstract class GameDataConformanceTestBase
     });
 
     /// <summary>Run the GameData spec named <paramref name="specName"/> (<c>category/id</c>) on this lane.</summary>
-    protected void RunSpec(string specName)
+    protected void RunSpec(string specName) => RunSpec(SpecLoader.ResolveGameDataSpec(specName), specName);
+
+    /// <summary>
+    /// Run a GameData spec file that is not in the corpus — <c>ConformanceLaneEngineIdentityTests</c> writes its
+    /// own — on this lane, reporting it as <paramref name="specName"/>.
+    /// </summary>
+    protected void RunSpec(string specPath, string specName)
     {
-        var spec = SpecLoader.LoadGameData(SpecLoader.ResolveGameDataSpec(specName));
+        var spec = SpecLoader.LoadGameData(specPath);
+
+        var expectation = spec.ExpectationFor(Engine);
 
         // A skip, not a return: a returned row is Passed (ConformanceTestBase.EngineOrSkip's remarks).
-        if (!spec.IsApplicableTo(EngineName))
+        if (expectation == EngineExpectation.Skip)
         {
-            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{EngineName}: skip}})");
+            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{spec.DeclaringKey(Engine)}: skip}})");
         }
 
-        var expectedToFail = spec.IsExpectedToFail(EngineName);
+        var expectedToFail = expectation == EngineExpectation.Fail;
         _output.WriteLine($"{LogPrefix}Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engine = GetEngine();
@@ -90,7 +110,7 @@ public abstract class GameDataConformanceTestBase
             Assert.Skip($"{LogPrefix}no {EngineName} engine on this machine ({GetType().Name}.GetEngine returned none)");
         }
 
-        var runner = new GameDataRunner(engine, EngineName);
+        var runner = new GameDataRunner(engine, Engine);
         var result = runner.Run(spec);
 
         if (result.Passed && expectedToFail)

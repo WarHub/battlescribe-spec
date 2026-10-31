@@ -18,7 +18,11 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly LiveNrUiRosterFixture _fixture;
-    private const string EngineName = "newrecruit";
+    /// <summary>
+    /// The engine this lane drives — the NR UI driver, in the <c>newrecruit</c> family (<see cref="EngineIdentity"/>).
+    /// It used to read every spec as <c>newrecruit</c>, so a <c>newrecruit-ui</c> entry never reached it.
+    /// </summary>
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("newrecruit-ui");
     private const string LogPrefix = "[SEQ-UI] ";
 
     /// <summary>
@@ -42,14 +46,14 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
         var spec = SpecLoader.Load(SpecLoader.ResolveRosterSpec(specName));
 
         // A skip, not a return: a returned row is Passed (ConformanceTestBase.EngineOrSkip's remarks).
-        Assert.SkipWhen(!spec.IsApplicableTo(EngineName), $"{LogPrefix}{specName} is not applicable to the {EngineName} engine");
+        Assert.SkipWhen(!spec.IsApplicableTo(Engine), $"{LogPrefix}{specName} is not applicable to the {Engine.Name} engine");
 
-        var expectedToFail = spec.IsExpectedToFail(EngineName);
+        var expectedToFail = spec.IsExpectedToFail(Engine);
         _output.WriteLine($"{LogPrefix}Running spec: {specName}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engine = _fixture.Engine!;
         engine.SetTestContext(specName);
-        var runner = new RosterRunner(engine, new DataSourceResolver(), EngineName);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), Engine);
         var result = runner.Run(spec);
         engine.Cleanup();
 
@@ -60,7 +64,7 @@ public sealed class SequentialLiveNrUiRosterConformanceTests
 
         if (result.Passed && expectedToFail)
         {
-            Assert.Fail($"{LogPrefix}Spec '{specName}' expected to fail on {EngineName} but now passes!");
+            Assert.Fail($"{LogPrefix}Spec '{specName}' expected to fail on {Engine.Name} but now passes!");
         }
 
         if (!result.Passed && expectedToFail)

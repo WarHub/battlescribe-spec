@@ -8,11 +8,11 @@ namespace BattleScribeSpec.GameData;
 ///
 /// <para><b>Reading / comparison is engine-agnostic.</b> For any engine we prefer, in order: an
 /// exact-engine override (<c>.{engine}.</c>, including any <c>-ui</c> suffix), then a shared
-/// <em>family</em> override (the name with <c>-ui</c> stripped, so <c>newrecruit</c> and
-/// <c>newrecruit-ui</c> share one file), then the base file (no infix). The base engine name is
-/// <em>not</em> consulted when reading: whichever engine runs must match the base unless it owns an
-/// override. So when a new engine is introduced it is held to the base file until someone adds an
-/// override for it.</para>
+/// <em>family</em> override (<see cref="EngineIdentity.Family"/>, so <c>newrecruit</c> and
+/// <c>newrecruit-ui</c> share one file), then the base file (no infix) — the engine's own entry, else its
+/// family's, the rule every per-engine declaration follows. The base engine name is <em>not</em> consulted
+/// when reading: whichever engine runs must match the base unless it owns an override. So when a new engine
+/// is introduced it is held to the base file until someone adds an override for it.</para>
 ///
 /// <para><b>The base engine name matters only when generating/updating snapshots</b> (see
 /// <see cref="ExportSnapshotAssertion"/>): the base (no-infix) file holds the
@@ -28,26 +28,24 @@ public static class GameDataSnapshotResolver
     public const string BaseEngineName = "newrecruit";
 
     /// <summary>
-    /// The snapshot family an engine belongs to: its name with any trailing <c>-ui</c> removed. Engines
-    /// in the same family share a serializer (the editor's headless and UI surfaces) and so share one
-    /// override file. A divergence between variants therefore fails the byte compare instead of hiding.
-    /// </summary>
-    public static string Family(string engine)
-        => engine.EndsWith("-ui", StringComparison.Ordinal) ? engine[..^"-ui".Length] : engine;
-
-    /// <summary>
     /// True for the engines whose output IS the base (the base engine family's headless and UI
     /// surfaces). Only these engines write the base file when a snapshot is generated; every other
-    /// engine writes an override.
+    /// engine writes an override. Engines in one family share a serializer (the editor's headless and UI
+    /// surfaces) and so share one override file: a divergence between them fails the byte compare instead
+    /// of hiding.
     /// </summary>
-    public static bool IsBaseEngine(string engine) => Family(engine) == BaseEngineName;
+    public static bool IsBaseEngine(EngineIdentity engine)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        return engine.Family == BaseEngineName;
+    }
 
     /// <summary>
     /// Resolve the existing snapshot file for an engine, preferring a per-engine override over the
     /// base, and the flat layout over the folder layout. Returns null when none exists. A null engine
     /// resolves the base file only.
     /// </summary>
-    public static string? Resolve(string specDir, string specId, string key, string? engine, string ext)
+    public static string? Resolve(string specDir, string specId, string key, EngineIdentity? engine, string ext)
     {
         foreach (var candidate in Candidates(specDir, specId, key, engine, ext))
         {
@@ -65,7 +63,7 @@ public static class GameDataSnapshotResolver
     /// null if the engine currently has no override and is served by the base. Used by snapshot updates
     /// to prefer rewriting an override that already exists over touching the base.
     /// </summary>
-    public static string? ExistingOverride(string specDir, string specId, string key, string engine, string ext)
+    public static string? ExistingOverride(string specDir, string specId, string key, EngineIdentity engine, string ext)
     {
         foreach (var candidate in OverrideCandidates(specDir, specId, key, engine, ext))
         {
@@ -83,7 +81,7 @@ public static class GameDataSnapshotResolver
     /// family override, then the base — each tried flat before folder. A null engine yields the base
     /// candidates only.
     /// </summary>
-    public static IEnumerable<string> Candidates(string specDir, string specId, string key, string? engine, string ext)
+    public static IEnumerable<string> Candidates(string specDir, string specId, string key, EngineIdentity? engine, string ext)
     {
         if (engine is not null)
         {
@@ -98,16 +96,12 @@ public static class GameDataSnapshotResolver
     }
 
     /// <summary>Override candidate paths (no base): exact-engine, then family — each flat before folder.</summary>
-    private static IEnumerable<string> OverrideCandidates(string specDir, string specId, string key, string engine, string ext)
+    private static IEnumerable<string> OverrideCandidates(string specDir, string specId, string key, EngineIdentity engine, string ext)
     {
-        yield return Flat(specDir, specId, key, engine, ext);
-        yield return Folder(specDir, specId, key, engine, ext);
-
-        var family = Family(engine);
-        if (family != engine)
+        foreach (var name in engine.Names)
         {
-            yield return Flat(specDir, specId, key, family, ext);
-            yield return Folder(specDir, specId, key, family, ext);
+            yield return Flat(specDir, specId, key, name, ext);
+            yield return Folder(specDir, specId, key, name, ext);
         }
     }
 

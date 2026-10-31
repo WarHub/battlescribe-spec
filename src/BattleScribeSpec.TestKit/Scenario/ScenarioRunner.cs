@@ -23,8 +23,7 @@ public sealed class ScenarioRunner
 {
     private readonly IGameDataEngine _data;
     private readonly IRosterEngine _roster;
-    private readonly string _engineName;
-    private readonly string? _baseEngineName;
+    private readonly EngineIdentity? _identity;
     private readonly GameDataRunner _dataRunner;
     private readonly RosterRunner _rosterRunner;
     private readonly List<string> _errors = [];
@@ -46,21 +45,23 @@ public sealed class ScenarioRunner
 
     /// <param name="dataEngine">The family's data editor.</param>
     /// <param name="rosterEngine">The family's roster editor.</param>
-    /// <param name="engineName">The engine actually running — <c>battlescribe-ui</c>, not <c>battlescribe</c>.</param>
-    /// <param name="baseEngineName">
-    /// The engine whose per-engine declarations apply when the spec has none for
-    /// <paramref name="engineName"/>. One rule for both kinds of block: see
-    /// <see cref="GameDataRunner(IGameDataEngine, string?, string?)"/>.
+    /// <param name="identity">
+    /// The engine the spec is read for — <c>battlescribe-ui</c>, in the <c>battlescribe</c> family. Both kinds of
+    /// block and the hand-offs resolve per-engine declarations through it, by the one rule
+    /// (<see cref="EngineIdentity"/>): the driver's own entry, else its family's. Null — an anonymous adapter —
+    /// applies no engine's declarations.
     /// </param>
-    public ScenarioRunner(IGameDataEngine dataEngine, IRosterEngine rosterEngine, string engineName, string? baseEngineName = null)
+    public ScenarioRunner(IGameDataEngine dataEngine, IRosterEngine rosterEngine, EngineIdentity? identity)
     {
         _data = dataEngine;
         _roster = rosterEngine;
-        _engineName = engineName;
-        _baseEngineName = baseEngineName;
-        _dataRunner = new GameDataRunner(dataEngine, engineName, baseEngineName);
-        _rosterRunner = new RosterRunner(rosterEngine, dataSourceResolver: null, baseEngineName ?? engineName, engineName);
+        _identity = identity;
+        _dataRunner = new GameDataRunner(dataEngine, identity);
+        _rosterRunner = new RosterRunner(rosterEngine, dataSourceResolver: null, identity);
     }
+
+    /// <summary>What a message calls the engine running this scenario.</summary>
+    private string EngineLabel => _identity?.Name ?? EngineIdentity.Unnamed;
 
     /// <summary>Mirrors <see cref="RosterRunner.UpdateSnapshots"/>, for <c>expectedFile</c> steps in either kind of block.</summary>
     public bool UpdateSnapshots { get; set; }
@@ -178,8 +179,8 @@ public sealed class ScenarioRunner
         {
             _errors.Add(
                 $"Setup error: a scenario's data directory is the data editor's own export of its files, but " +
-                $"engine '{_engineName}' reports none ({ex.Message}). Implement ExportActiveFile, or opt this " +
-                $"engine out with 'engines: {{{_engineName}: skip}}' on the spec.");
+                $"engine '{EngineLabel}' reports none ({ex.Message}). Implement ExportActiveFile, or opt this " +
+                $"engine out with 'engines: {{{EngineLabel}: skip}}' on the spec.");
             return false;
         }
 
@@ -359,7 +360,7 @@ public sealed class ScenarioRunner
         }
         catch (Exception ex)
         {
-            _errors.Add(ExpectFailure.Explain(ex, expected, stepIndex, action, _engineName));
+            _errors.Add(ExpectFailure.Explain(ex, expected, stepIndex, action, EngineLabel));
             if (ExpectFailure.IsHarnessFault(ex))
             {
                 _harnessError ??= $"{ex.GetType().Name}: {ex.Message}";
@@ -368,7 +369,7 @@ public sealed class ScenarioRunner
             return false;
         }
 
-        _errors.Add(ExpectFailure.ExplainUnexpectedSuccess(stepIndex, action, _engineName));
+        _errors.Add(ExpectFailure.ExplainUnexpectedSuccess(stepIndex, action, EngineLabel));
         return false;
     }
 
@@ -459,9 +460,8 @@ public sealed class ScenarioRunner
         }
     }
 
-    /// <summary>The per-engine key that applies: the running engine's own entry if declared, else the base's.</summary>
-    private string? OverrideKeyFor<T>(Dictionary<string, T>? engines)
-        => engines is not null && engines.ContainsKey(_engineName) ? _engineName : _baseEngineName ?? _engineName;
+    /// <summary>The per-engine override key that applies (<see cref="EngineIdentity.KeyIn{T}"/>); null applies none.</summary>
+    private string? OverrideKeyFor<T>(Dictionary<string, T>? engines) => _identity?.KeyIn(engines);
 
     private static void CleanUp(Action cleanup, string editor, string specId)
     {

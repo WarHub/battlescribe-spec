@@ -513,7 +513,7 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
     {
         data ??= new RecordingDataEditor();
         roster ??= new RecordingRosterEditor();
-        var runner = new ScenarioRunner(data, roster, "battlescribe");
+        var runner = new ScenarioRunner(data, roster, EngineIdentity.Of("battlescribe"));
         configure?.Invoke(runner);
         var result = runner.Run(SpecLoader.LoadScenarioFromYaml(Spec(steps, moreCatalogues)));
         foreach (var failure in result.Failures)

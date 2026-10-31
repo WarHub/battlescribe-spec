@@ -167,7 +167,7 @@ public sealed class LiveNrRosterSmokeTests
             _output.WriteLine($"Running spec: {category}/{id}");
             var spec = SpecLoader.Load(path);
 
-            if (!spec.IsApplicableTo("newrecruit"))
+            if (!spec.IsApplicableTo(EngineIdentity.Of("newrecruit")))
             {
                 _output.WriteLine($"  Skipped (not applicable to newrecruit)");
                 continue;

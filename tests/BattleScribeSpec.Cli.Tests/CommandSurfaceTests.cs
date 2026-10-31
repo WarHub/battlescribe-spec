@@ -142,7 +142,7 @@ public sealed class CommandSurfaceTests
     {
         // Regression test: an anonymous exec:/dotnet: connectable has no registry identity
         // (EngineSelection.EngineName is null), so a gamedata spec with an `engines:` map used
-        // to NRE deep in SpecFileBase.ShouldSkip (Dictionary<string,string>.TryGetValue(null))
+        // to NRE deep in the spec's engines lookup (Dictionary<string,string>.TryGetValue(null))
         // when RunCommand.RunGameDataAsync called spec.IsApplicableTo(engineName!). The fix
         // only checks applicability when an identity exists; here the downstream "unknown
         // gamedata engine" failure is expected and fine — the NRE/ArgumentNullException crash

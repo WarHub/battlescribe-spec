@@ -268,7 +268,7 @@ public class ErrorAssertionAddressingTests(ITestOutputHelper output)
         var yaml = SpecTemplate.Replace("ASSERTIONS", assertions, StringComparison.Ordinal);
 
         using var engine = new ScriptedEngine(errors);
-        return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
+        return new RosterRunner(engine, identity: EngineIdentity.Of("battlescribe")).Run(SpecLoader.LoadFromYaml(yaml));
     }
 
     private const string SpecTemplate = """
@@ -468,7 +468,7 @@ public class ErrorAssertionWrongNodeTests(ITestOutputHelper output)
     {
         var yaml = SpecTemplate.Replace("ADDRESSED", stepId, StringComparison.Ordinal);
         using var engine = new BattleScribeRosterEngine();
-        return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
+        return new RosterRunner(engine, identity: EngineIdentity.Of("battlescribe")).Run(SpecLoader.LoadFromYaml(yaml));
     }
 }
 
@@ -602,7 +602,7 @@ public class SiblingSelectionAddressingTests(ITestOutputHelper output)
             .Replace(" FIRST ", $"{first} ", StringComparison.Ordinal)
             .Replace(" SECOND ", $"{second} ", StringComparison.Ordinal);
         using var engine = new BattleScribeRosterEngine();
-        return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
+        return new RosterRunner(engine, identity: EngineIdentity.Of("battlescribe")).Run(SpecLoader.LoadFromYaml(yaml));
     }
 
     private static void AssertPassed(SpecResult result)

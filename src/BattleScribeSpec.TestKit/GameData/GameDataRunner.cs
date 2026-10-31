@@ -9,8 +9,7 @@ namespace BattleScribeSpec.GameData;
 public sealed class GameDataRunner
 {
     private readonly IGameDataEngine _engine;
-    private readonly string? _engineName;
-    private readonly string? _baseEngineName;
+    private readonly EngineIdentity? _identity;
     private readonly List<string> _errors = [];
     private readonly GameDataExpressionResolver _exprResolver = new();
     private string _specId = "";
@@ -22,7 +21,7 @@ public sealed class GameDataRunner
     /// </summary>
     private bool _abortRun;
 
-    private string EngineLabel => _engineName ?? "(unnamed engine)";
+    private string EngineLabel => _identity?.Name ?? EngineIdentity.Unnamed;
 
     /// <summary>
     /// When true, <c>expectedFile</c> assertions (re)write the expected side-file from the actual
@@ -44,33 +43,22 @@ public sealed class GameDataRunner
     public Action<int, GameDataStepDef, GameDataState>? OnStepCompleted { get; set; }
 
     /// <param name="engine">The engine under test.</param>
-    /// <param name="engineName">
-    /// The engine actually running (<c>battlescribe-ui</c>): the name per-engine overrides are looked up
-    /// by first, and the one <c>expectedFile</c> snapshots resolve against (exact → family → base).
+    /// <param name="identity">
+    /// The engine the spec is read for — <c>battlescribe-ui</c>, in the <c>battlescribe</c> family. Per-engine
+    /// overrides and <c>expectedFile</c> side-files resolve through it: the driver's own entry, else its
+    /// family's (<see cref="EngineIdentity"/>) — the rule <see cref="RosterRunner"/> and every scenario run
+    /// apply. The gamedata lanes used to look up the exact name alone, so a <c>battlescribe:</c> override
+    /// never reached <c>battlescribe-ui</c> (#573). Null — an anonymous adapter — applies no engine's
+    /// overrides, only the steps' own.
     /// </param>
-    /// <param name="baseEngineName">
-    /// The engine whose overrides apply when the spec has none for <paramref name="engineName"/>
-    /// (<c>battlescribe-ui</c> → <c>battlescribe</c>) — the most-specific-wins rule
-    /// <see cref="RosterRunner"/> already follows. Null keeps the gamedata lanes' rule, under which only
-    /// an entry for the exact name applies. Scenario runs pass it, so one rule covers both kinds of block
-    /// in a scenario spec; gamedata specs, whose overrides were written against the exact name, are
-    /// unaffected.
-    /// </param>
-    public GameDataRunner(IGameDataEngine engine, string? engineName = null, string? baseEngineName = null)
+    public GameDataRunner(IGameDataEngine engine, EngineIdentity? identity = null)
     {
         _engine = engine;
-        _engineName = engineName;
-        _baseEngineName = baseEngineName;
+        _identity = identity;
     }
 
-    /// <summary>
-    /// Which per-engine override key applies: the running engine's own entry when the spec declares one,
-    /// else the base engine's. Without a base name this is always <see cref="_engineName"/>.
-    /// </summary>
-    private string? OverrideKeyFor<T>(Dictionary<string, T>? engines)
-        => _engineName is { } name && engines is not null && engines.ContainsKey(name)
-            ? name
-            : _baseEngineName ?? _engineName;
+    /// <summary>The per-engine override key that applies (<see cref="EngineIdentity.KeyIn{T}"/>); null applies none.</summary>
+    private string? OverrideKeyFor<T>(Dictionary<string, T>? engines) => _identity?.KeyIn(engines);
 
     /// <summary>
     /// Run a complete GameData spec. Returns list of assertion failures (empty = pass).
@@ -251,7 +239,7 @@ public sealed class GameDataRunner
         }
         catch (NotSupportedException ex)
         {
-            var engine = _engineName ?? "(unnamed engine)";
+            var engine = EngineLabel;
             _errors.Add(
                 $"Step {stepIndex}: expectedFile needs a file export, but engine '{engine}' reports " +
                 $"none ({ex.Message}). Implement ExportActiveFile, or opt this engine out explicitly " +
@@ -262,7 +250,7 @@ public sealed class GameDataRunner
         var error = ExportSnapshotAssertion.AssertOrUpdate(
             step.ExpectedFile!.ForEngine(OverrideKeyFor(step.ExpectedFile.Engines)),
             activeFile,
-            _engineName,
+            _identity,
             _specId,
             _specDir,
             step.Id,
@@ -305,10 +293,10 @@ public sealed class GameDataRunner
         if (step.Id is { Length: > 0 } key && _specDir is not null)
         {
             // Engine-agnostic: an override matching the engine wins, else the base file (no matter the engine).
-            var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _engineName, "cat")
-                ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _engineName, "gst")
+            var path = GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _identity, "cat")
+                ?? GameDataSnapshotResolver.Resolve(_specDir, _specId, key, _identity, "gst")
                 ?? throw new InvalidOperationException(
-                    $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{_engineName}', .cat/.gst) next to the spec");
+                    $"Step {stepIndex}: openFile found no side-file for key '{key}' (engine '{EngineLabel}', .cat/.gst) next to the spec");
             var raw = File.ReadAllText(path);
             var xml = _exprResolver.Resolve(raw) ?? raw;
             return () => new GameDataActionOutputs { EntryId = _engine.LoadFile(xml) };

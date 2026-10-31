@@ -18,9 +18,8 @@ public sealed class SpecSuiteRunnerTests
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
             FilterPatterns = ["protocol/protocol-kitchen-sink"],
-            EngineFilter = "battlescribe",
-            ExpectedFailuresEngine = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
+            ExpectedFailures = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
@@ -67,9 +66,8 @@ public sealed class SpecSuiteRunnerTests
             Domains = ["roster", "gamedata"],
             Workers = 2,
             FilterPatterns = ["protocol/protocol-kitchen-sink", "entry/add-entry-basic"],
-            EngineFilter = "battlescribe",
-            ExpectedFailuresEngine = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
+            ExpectedFailures = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
@@ -166,7 +164,7 @@ public sealed class SpecSuiteRunnerTests
             gameDataSpecsByResult: new Dictionary<SpecResult, GameDataSpecFile>(),
             scenarioSpecsByResult: new Dictionary<SpecResult, ScenarioSpecFile>(),
             durationsByResult: new Dictionary<SpecResult, double>(),
-            totalSpecs: 1, selected: 1, elapsed: TimeSpan.Zero, expectedFailuresEngine: "xfail-engine");
+            totalSpecs: 1, selected: 1, elapsed: TimeSpan.Zero, expectedFailures: EngineIdentity.Of("xfail-engine"));
 
         Assert.Equal(0, result.Passed + result.Failed);
         Assert.Equal(1, result.ExpectedFailures);
@@ -186,8 +184,7 @@ public sealed class SpecSuiteRunnerTests
         {
             Domains = ["roster", "gamedata", "scenario"],
             FilterPatterns = [ScenarioFilter],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
@@ -213,8 +210,7 @@ public sealed class SpecSuiteRunnerTests
             Domains = ["roster", "gamedata", "scenario"],
             Workers = 2,
             FilterPatterns = ["protocol/protocol-kitchen-sink", "entry/add-entry-basic", ScenarioFilter],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
@@ -254,36 +250,48 @@ public sealed class SpecSuiteRunnerTests
     }
 
     /// <summary>
-    /// <b>A scenario's <c>engines:</c> lets a UI driver inherit its base engine's skip</b> — the rule the
-    /// scenario's blocks and the scenario lanes apply. A spec that opts <c>battlescribe</c> out is opted out
-    /// under <c>battlescribe-ui</c> too, rather than run there and counted as a real failure.
+    /// <b>A UI driver inherits its family's <c>skip</c>, in every domain</b> — the one rule every runner applies
+    /// (<see cref="EngineIdentity"/>). A spec that opts <c>battlescribe</c> out is opted out under
+    /// <c>battlescribe-ui</c> too, rather than run there and counted as a real failure.
     /// </summary>
-    /// <remarks>Falsifiable: filter scenarios by the exact engine name and this spec runs.</remarks>
-    [Fact]
+    /// <remarks>
+    /// Falsifiable: filter by the exact engine name and the spec runs. That was this runner's rule for roster and
+    /// gamedata specs until #573; only scenarios applied the family's entry.
+    /// </remarks>
+    [Theory]
     [Trait("Category", "Integration")]
-    public async Task ScenarioSkip_ForTheBaseEngine_AppliesToItsUiDriver()
+    [InlineData("roster", "protocol/protocol-kitchen-sink")]
+    [InlineData("gamedata", "entry/add-entry-basic")]
+    [InlineData("scenario", ScenarioFilter)]
+    public async Task SkipForTheFamily_AppliesToItsUiDriver(string domain, string specName)
     {
-        var root = Directory.CreateTempSubdirectory("bsspec-scenario-skip-");
+        var root = Directory.CreateTempSubdirectory($"bsspec-{domain}-skip-");
         try
         {
-            var handoff = Directory.CreateDirectory(Path.Combine(root.FullName, "scenario", "handoff"));
-            var source = SpecLoader.ResolveScenarioSpec(ScenarioFilter);
+            var source = domain switch
+            {
+                "roster" => SpecLoader.ResolveRosterSpec(specName),
+                "gamedata" => SpecLoader.ResolveGameDataSpec(specName),
+                _ => SpecLoader.ResolveScenarioSpec(specName),
+            };
+            var category = Directory.CreateDirectory(Path.Combine(root.FullName, domain, specName.Split('/')[0]));
             var yaml = File.ReadAllText(source).Replace(
                 "\nsetup:", "\nengines:\n  battlescribe: skip\n\nsetup:", StringComparison.Ordinal);
-            File.WriteAllText(Path.Combine(handoff.FullName, Path.GetFileName(source)), yaml);
+            File.WriteAllText(Path.Combine(category.FullName, Path.GetFileName(source)), yaml);
 
             var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
             {
-                Domains = ["scenario"],
+                Domains = [domain],
                 SpecsDirectory = root.FullName,
-                EngineFilter = "battlescribe-ui",
-                AssertionEngine = "battlescribe",
+                Engine = EngineIdentity.Of("battlescribe-ui"),
                 AdapterFactory = _ => AdapterProcess.Start("dotnet", AdapterTestHost.ReferenceAdapterDll),
             });
 
-            var skipped = Assert.Single(result.ReportResults, r => r.SpecId == "handoff-saved-edit-reaches-new-roster");
-            Assert.Equal(("scenario", "skipped"), (skipped.Domain, skipped.Status));
-            Assert.Contains("engine filter", Assert.Single(skipped.Failures), StringComparison.Ordinal);
+            var skipped = Assert.Single(result.ReportResults, r => r.SpecId == specName.Split('/')[1]);
+            Assert.Equal((domain, "skipped"), (skipped.Domain, skipped.Status));
+            Assert.Equal(
+                "Skipped by engine filter 'battlescribe-ui' (the spec says engines: {battlescribe: skip})",
+                Assert.Single(skipped.Failures));
             Assert.Empty(result.Results);
         }
         finally
@@ -343,8 +351,7 @@ public sealed class SpecSuiteRunnerTests
             SpecsDirectory = specsRoot,
             Domains = ["roster", "gamedata", "scenario"],
             FilterPatterns = [ScenarioFilter, "protocol/protocol-kitchen-sink"],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 
@@ -358,8 +365,7 @@ public sealed class SpecSuiteRunnerTests
             SpecsDirectory = rosterTree,
             Domains = ["roster", "gamedata", "scenario"],
             FilterPatterns = ["protocol/protocol-kitchen-sink"],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterProcess.Start("dotnet", dll),
         });
 

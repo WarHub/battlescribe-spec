@@ -40,9 +40,21 @@ public sealed class SpecSuiteOptions
     public string? SpecsDirectory { get; init; }
     public IReadOnlyList<string>? FilterPatterns { get; init; }
     public TagFilter? TagFilter { get; init; }
-    public string? EngineFilter { get; init; }
-    public string? ExpectedFailuresEngine { get; init; }
-    public string? AssertionEngine { get; init; }
+
+    /// <summary>
+    /// The engine every spec is read for: which specs it skips (<c>engines:</c>), and which per-engine
+    /// overrides apply inside them — its own entry, else its family's (<see cref="EngineIdentity"/>), in every
+    /// domain. Null — an anonymous adapter — skips no spec and applies no engine's overrides.
+    /// </summary>
+    public EngineIdentity? Engine { get; init; }
+
+    /// <summary>
+    /// The engine whose <c>engines: {…: fail}</c> entries make a failing spec an expected failure and a passing
+    /// one an unexpected pass (<c>--expected-failures</c>), by the same rule as <see cref="Engine"/>. Null — the
+    /// default — classifies nothing: every failure is a failure.
+    /// </summary>
+    public EngineIdentity? ExpectedFailures { get; init; }
+
     public int Workers { get; init; } = 1;
     /// <summary>
     /// Creates one adapter process per worker; the argument is the zero-based worker index.
@@ -181,8 +193,8 @@ public sealed class SpecSuiteResult
             : $"selected {Selected} of {TotalSpecs} specs, executed 0: every selected spec was skipped " +
               $"(the skip reasons are in the report). A batch run that checks nothing fails (exit {NothingExecutedExitCode}).";
 
-    /// <summary>Engine name used for spec-level expected-failure classification (null when unused).</summary>
-    internal string? ExpectedFailuresEngine { get; private init; }
+    /// <summary>The engine used for spec-level expected-failure classification (null when unused).</summary>
+    internal EngineIdentity? ExpectedFailuresEngine { get; private init; }
 
     /// <summary>
     /// Computes the passed/failed/expected-failure/unexpected-pass counts once, running the same
@@ -198,13 +210,13 @@ public sealed class SpecSuiteResult
         int totalSpecs,
         int selected,
         TimeSpan elapsed,
-        string? expectedFailuresEngine)
+        EngineIdentity? expectedFailures)
     {
         var passed = results.Count(r => r.Passed);
         int failed;
         var expectedFailureCount = 0;
         var unexpectedPassCount = 0;
-        if (expectedFailuresEngine is not null)
+        if (expectedFailures is not null)
         {
             failed = 0;
             foreach (var r in results)
@@ -213,7 +225,7 @@ public sealed class SpecSuiteResult
                     : gameDataSpecsByResult.TryGetValue(r, out var gs) ? gs
                     : scenarioSpecsByResult.TryGetValue(r, out var ss) ? ss
                     : null;
-                var isExpectedFail = spec?.IsExpectedToFail(expectedFailuresEngine) ?? false;
+                var isExpectedFail = spec?.IsExpectedToFail(expectedFailures) ?? false;
                 if (!r.Passed && !isExpectedFail)
                 {
                     failed++;
@@ -252,7 +264,7 @@ public sealed class SpecSuiteResult
             Failed = failed,
             ExpectedFailures = expectedFailureCount,
             UnexpectedPasses = unexpectedPassCount,
-            ExpectedFailuresEngine = expectedFailuresEngine,
+            ExpectedFailuresEngine = expectedFailures,
         };
     }
 }

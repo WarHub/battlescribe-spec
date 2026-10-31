@@ -19,9 +19,11 @@ description: >
 # newrecruit-ui runs this spec: NR's own importer refuses the payload, and says so in the one place
 # it says anything — a console.error from the single catch in its upload handler. newrecruit (store
 # direct) stays out, because its LoadFile parses the payload with a DOMParser call inside our own
-# adapter, so what it accepts or refuses would be our parser's answer and not NewRecruit's.
+# adapter, so what it accepts or refuses would be our parser's answer and not NewRecruit's. A UI
+# driver inherits its family's entry, so newrecruit-ui says `pass` to stay in.
 engines:
   newrecruit: skip
+  newrecruit-ui: pass
 
 setup:
   edit: cat-1

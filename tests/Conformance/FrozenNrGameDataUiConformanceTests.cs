@@ -27,7 +27,8 @@ public sealed class FrozenNrGameDataUiConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly FrozenNrGameDataUiFixture _fixture;
-    private const string EngineName = "newrecruit-ui";
+    /// <summary>The engine this lane drives, in its family (<see cref="EngineIdentity"/>).</summary>
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("newrecruit-ui");
     private const string LogPrefix = "[FROZEN-NR-EDITOR-UI] ";
 
     public FrozenNrGameDataUiConformanceTests(
@@ -73,8 +74,8 @@ public sealed class FrozenNrGameDataUiConformanceTests
         var loadedSpecs = corpus.Where(s => AggregateLaneRun.Drives(part, s.Name)).ToList();
 
         var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrGameDataUi", part,
-            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
-            applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
+            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(Engine)),
+            applicable: corpus.Count(s => s.spec.IsApplicableTo(Engine)));
         var stop = TestContext.Current.CancellationToken;
 
         try
@@ -86,24 +87,24 @@ public sealed class FrozenNrGameDataUiConformanceTests
                 {
                     var (specPath, specName, spec) = item;
 
-                    if (!spec.IsApplicableTo(EngineName))
+                    if (!spec.IsApplicableTo(Engine))
                     {
                         Interlocked.Increment(ref skipped);
                         return;
                     }
 
-                    var expectedToFail = spec.IsExpectedToFail(EngineName);
+                    var expectedToFail = spec.IsExpectedToFail(Engine);
 
                     using var pooled = await _fixture.AcquireAsync(ct);
                     var engine = pooled.Engine;
                     var clock = Stopwatch.StartNew();
 
-                    var runner = new GameDataRunner(engine, EngineName);
+                    var runner = new GameDataRunner(engine, Engine);
                     var result = runner.Run(spec);
 
                     if (result.Passed && expectedToFail)
                     {
-                        failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes! " +
+                        failures.Add($"Spec '{specName}' was expected to fail on {Engine.Name} but now passes! " +
                             "Update the spec's engines field to remove the 'fail' expectation.");
                         lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                         return;

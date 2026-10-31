@@ -581,7 +581,7 @@ public sealed class EngineRegistry
         {
             // A LAUNCHABLE IS A FOREIGN BINARY, AND ITS NAME IS NOT EVIDENCE ABOUT IT.
             //
-            // To the user and to RunBatch (`EngineFilter = selection.EngineName`), the name is an
+            // To the user and to RunBatch (`Engine = selection.Identity`), the name is an
             // APPLICABILITY LABEL: it selects which specs apply and which assertion set is used. That is
             // precisely why a third party writing their own NewRecruit adapter has no choice but to call
             // it `newrecruit` — the documented `<name>=<connectable>` usage. It says what the adapter is

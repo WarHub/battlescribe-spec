@@ -201,22 +201,27 @@ internal static class VerifyCommand
             }
 
             IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
+
+            // The column's engine, by the one rule every runner applies (EngineIdentity): a UI driver inherits
+            // its family's `engines:` entries and overrides unless a spec names the driver itself. An anonymous
+            // connectable has none, so every spec runs on it and no engine's overrides apply.
+            var identity = selection.Identity;
             try
             {
                 foreach (var spec in specs)
                 {
-                    if (!spec.IsApplicableTo(engineName))
+                    if (identity is not null && !spec.IsApplicableTo(identity))
                     {
                         cells[spec.Id] = new Cell(Outcome.Skip, []);
                         Ui.Info($"  {spec.Id}: skip (not applicable)");
                         continue;
                     }
 
-                    var xfail = spec.IsExpectedToFail(engineName);
+                    var xfail = identity is not null && spec.IsExpectedToFail(identity);
                     SpecResult result;
                     try
                     {
-                        result = new GameDataRunner(engine, engineName).Run(spec);
+                        result = new GameDataRunner(engine, identity).Run(spec);
                     }
                     catch (Exception ex)
                     {
