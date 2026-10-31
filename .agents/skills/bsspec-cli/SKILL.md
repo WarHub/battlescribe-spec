@@ -123,9 +123,17 @@ The NR REPL is drivable non-interactively for DOM discovery:
 
 ## `--break <n>` — pause mid-run
 
-Runs the spec up to step *n-1*, then pauses before step *n*. For NR UI it opens the same JS
-REPL against the live page; for other engines it waits for Enter (inspect diagnostics /
-screenshots, then continue). Step indices are 0-based, matching `--all-steps` output.
+Runs the spec up to step *n-1*, then pauses before step *n* in a REPL that speaks the adapter
+protocol, the same for every engine: `state`, `errors`, `screenshot <file.png>`, a raw
+`{"type":"..."}` JSON line, `continue` (or Enter) to resume, `quit` to abort (exit 130). Step
+indices are 0-based, matching `--all-steps` output and the `Step N:` of failures; an `n` that names
+no step is refused before the engine starts.
+
+On a **scenario spec** *n* counts across blocks and hand-offs, and the REPL reaches both editors:
+`data state`/`data errors`, `roster state`/`roster errors`. Bare `state`/`errors` mean the editor the
+paused step runs in. The REPL refuses, with the reason, the roster editor before the first
+`newRoster`/`openRoster`, and a bare command at a hand-off, which names neither editor.
+`screenshot` is the roster editor's.
 
 ## Which engine, which reference
 

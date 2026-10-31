@@ -50,6 +50,25 @@ public sealed class RunProtocolTests
         Assert.DoesNotContain("PASS — all assertions passed", stdOut + stdErr);
     }
 
+    /// <summary>
+    /// A <c>--break</c> that names no step can never pause. It used to run the spec through and print its
+    /// verdict as if the flag had been honoured; it is refused before the engine starts, naming the range.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task Run_BreakOutOfRange_IsRefusedBeforeTheEngineStarts()
+    {
+        var spec = CliProcess.SpecPath("roster", "protocol", "protocol-kitchen-sink.yaml");
+
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
+            "run", spec, "--engine", "battlescribe", "--break", "9999");
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--break 9999 names no step of this spec", stdErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Engine:", stdOut + stdErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public async Task RunAll_OverReferenceAdapter_FilteredToKitchenSink_Passes()

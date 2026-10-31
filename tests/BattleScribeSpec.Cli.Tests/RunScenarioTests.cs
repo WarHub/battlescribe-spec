@@ -64,7 +64,6 @@ public sealed class RunScenarioTests
     [InlineData("--screenshots", "shots")]
     [InlineData("--timeline", "t.html")]
     [InlineData("--record", "r.json")]
-    [InlineData("--break", "1")]
     public async Task Run_ScenarioSpec_RefusesRosterOnlyArtifactFlags(string flag, string value)
     {
         var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
@@ -72,6 +71,74 @@ public sealed class RunScenarioTests
 
         Assert.Equal(1, exitCode);
         Assert.Contains($"{flag} is not supported for scenario specs", stdErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Engine:", stdOut + stdErr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b><c>--break</c> pauses a scenario before a hand-off, and the REPL there reaches the data editor and
+    /// refuses the roster editor</b>, which has read no data yet. Step 1 of the spec is <c>saveData</c>: bare
+    /// <c>state</c> names neither editor at a hand-off, so it is refused too. <c>continue</c> resumes, and the
+    /// run reports its verdict as a run without the break would.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Run_ScenarioSpec_BreakAtAHandoff_ReachesTheDataEditor_RefusesTheRosterEditor()
+    {
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
+            ["run", ScenarioPath, "--engine", "battlescribe", "--break", "1"],
+            stdin: "state\nroster state\ndata state\ndata errors\ncontinue\n");
+
+        var combined = stdOut + stdErr;
+        var unwrapped = Regex.Replace(combined, @"\s+", " ");
+        Assert.True(exitCode == 0, $"exit code {exitCode}; output:\n{combined}");
+        Assert.Contains("Stopped before step 1: hand-off saveData", unwrapped, StringComparison.Ordinal);
+        Assert.Contains("'state' names neither: say 'data state' or 'roster state'", unwrapped, StringComparison.Ordinal);
+        Assert.Contains("the roster editor holds no roster before step 1", unwrapped, StringComparison.Ordinal);
+        Assert.Contains("\"Catalogues\"", stdOut, StringComparison.Ordinal);
+        Assert.Contains("PASS", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <b>Inside a roster block, bare <c>state</c> is the roster editor's</b>, and <c>quit</c> aborts the run
+    /// exactly as it does on a roster spec: exit 130, "aborted at step N", never the PASS of a run whose
+    /// remaining steps simply did not happen. Step 4 is the block's <c>selectEntry</c>; the roster holds the
+    /// force step 3 added.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task Run_ScenarioSpec_BreakInARosterBlock_StateIsTheRoster_QuitExits130()
+    {
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
+            ["run", ScenarioPath, "--engine", "battlescribe", "--break", "4"],
+            stdin: "state\nquit\n");
+
+        var combined = stdOut + stdErr;
+        Assert.True(exitCode == 130, $"exit code {exitCode}; output:\n{combined}");
+        Assert.Contains("Stopped before step 4: roster selectEntry", combined, StringComparison.Ordinal);
+        Assert.Contains("roster editor:", stdErr, StringComparison.Ordinal);
+        Assert.Contains("Detachment", stdOut, StringComparison.Ordinal);
+        Assert.Contains("aborted at step 4", combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("PASS", combined, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A <c>--break</c> past the last step can never pause; it is refused before an engine starts, naming the
+    /// range — counted across blocks and hand-offs, six steps in this spec.
+    /// </summary>
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("6")]
+    [InlineData("-1")]
+    public async Task Run_ScenarioSpec_BreakOutOfRange_IsRefused(string step)
+    {
+        var (exitCode, stdOut, stdErr) = await CliProcess.RunAsync(
+            "run", ScenarioPath, "--engine", "battlescribe", "--break", step);
+
+        var unwrapped = Regex.Replace(stdErr, @"\s+", " ");
+        Assert.Equal(1, exitCode);
+        Assert.Contains($"--break {step} names no step of this spec: its steps are numbered 0 to 5, counted across blocks and hand-offs", unwrapped, StringComparison.Ordinal);
         Assert.DoesNotContain("Engine:", stdOut + stdErr, StringComparison.Ordinal);
         Assert.DoesNotContain("Unhandled exception", stdErr, StringComparison.Ordinal);
     }

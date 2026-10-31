@@ -506,6 +506,7 @@ internal static class RunCommand
             return 1;
         }
 
+        RefuseBreakOutOfRange(options.BreakAt, spec.Steps.Count, counted: "");
         Ui.Info($"Engine: {options.Engine.EngineName ?? options.Engine.Display}");
 
         // Spawn the engine as a child adapter process (bs-engine-host for built-ins, or any
@@ -614,6 +615,7 @@ internal static class RunCommand
             };
 
             var aborted = false;
+            var breakReached = false;
             if (options.BreakAt is { } breakStep)
             {
                 // Give the REPL's own engine the same longer timeout as setup when the spec
@@ -623,8 +625,11 @@ internal static class RunCommand
                 {
                     if (stepIndex == breakStep)
                     {
+                        breakReached = true;
+
                         // Returns false when the user types `quit`, which aborts the run.
-                        var resume = ProtocolBreakRepl.Run(process, stepIndex, StepFormatter.DescribeStep(step), replTimeout);
+                        var resume = ProtocolBreakRepl.Run(
+                            process, stepIndex, StepFormatter.DescribeStep(step), BreakScope.RosterSpec, replTimeout);
                         if (!resume)
                         {
                             aborted = true;
@@ -689,6 +694,8 @@ internal static class RunCommand
                 Ui.Warn($"Run aborted at step {options.BreakAt} (quit).");
                 return 130;
             }
+
+            WarnBreakNotReached(options.BreakAt, breakReached);
 
             // Printed before the verdict, and on pass as well as fail: "all assertions passed" is a
             // smaller claim when the spec opted this engine out of some of them, and the reader can
@@ -847,6 +854,12 @@ internal static class RunCommand
     /// them; this one follows the rule the newer refusals here follow (#305: a flag is honoured or refused):
     /// see <see cref="RefuseRosterOnlyArtifacts"/>.
     /// </para>
+    /// <para>
+    /// <b><c>--break n</c> pauses before global step <c>n</c></b> — the index the run's failures name, counted
+    /// across blocks and hand-offs — through <see cref="ScenarioRunner.OnBeforeStep"/>. Its REPL reaches both
+    /// editors over the one connection, scoped by <see cref="BreakScope.ForScenario"/>; <c>quit</c> exits 130,
+    /// as on a roster spec.
+    /// </para>
     /// </remarks>
     private static async Task<int> RunScenarioAsync(RunOptions options)
     {
@@ -869,6 +882,8 @@ internal static class RunCommand
             Ui.Error($"Error loading scenario spec: {ex.Message}");
             return 1;
         }
+
+        RefuseBreakOutOfRange(options.BreakAt, StepCount(spec), counted: ", counted across blocks and hand-offs");
 
         // As in the gamedata branch: an anonymous connectable has no identity to check the spec's
         // `engines:` map against. Unlike it, a UI driver inherits its base engine's `skip` — the one rule a
@@ -951,6 +966,26 @@ internal static class RunCommand
                 },
             };
 
+            var aborted = false;
+            var breakReached = false;
+            if (options.BreakAt is { } breakStep)
+            {
+                // One connection serves both editors, so the REPL can ask either; the scope says which
+                // one the paused step runs in and whether the roster editor holds anything to ask about.
+                runner.OnBeforeStep = (index, step) =>
+                {
+                    if (index != breakStep)
+                    {
+                        return true;
+                    }
+
+                    breakReached = true;
+                    var resume = ProtocolBreakRepl.Run(process, index, DescribeScenarioStep(step), BreakScope.ForScenario(step));
+                    aborted = !resume;
+                    return resume;
+                };
+            }
+
             var handoffs = spec.Steps.Count(item => item.Action is not null);
             Ui.Info($"Running {spec.Steps.Count - handoffs} block(s) and {handoffs} hand-off(s)...");
             Ui.Blank();
@@ -958,6 +993,13 @@ internal static class RunCommand
             var result = runner.Run(spec);
 
             Ui.Blank();
+            if (aborted)
+            {
+                Ui.Warn($"Run aborted at step {options.BreakAt} (quit).");
+                return 130;
+            }
+
+            WarnBreakNotReached(options.BreakAt, breakReached);
             foreach (var skipped in result.SkippedSteps)
             {
                 Ui.Warn(skipped);
@@ -1016,15 +1058,67 @@ internal static class RunCommand
     }
 
     /// <summary>
+    /// How many steps a scenario numbers: every block step and every hand-off, the way
+    /// <see cref="ScenarioRunner"/> counts them, so the last is <c>Step StepCount - 1</c>.
+    /// </summary>
+    internal static int StepCount(ScenarioSpecFile spec) =>
+        spec.Steps.Sum(item => item.Data?.Count ?? item.Roster?.Count ?? 1);
+
+    /// <summary>The paused step as the REPL banner names it, in the words the run's dumps use for it.</summary>
+    private static string DescribeScenarioStep(ScenarioStepView step) => step.Kind switch
+    {
+        ScenarioStepKind.Data => $"data {step.DataStep!.Action ?? "assert"}",
+        ScenarioStepKind.Roster => $"roster {StepFormatter.DescribeStep(step.RosterStep!)}",
+        _ => step.Handoff!.File is { } file
+            ? $"hand-off {step.Handoff.Action} file={file}"
+            : $"hand-off {step.Handoff.Action}",
+    };
+
+    /// <summary>
+    /// Refuse a <c>--break</c> that names no step of the spec, before an engine is started. Such a break can
+    /// never fire, and a run that went through and printed a verdict would have dropped the flag silently,
+    /// which #305 rules out.
+    /// </summary>
+    /// <param name="breakAt">The <c>--break</c> value, or null when it was not given.</param>
+    /// <param name="stepCount">How many steps the spec numbers.</param>
+    /// <param name="counted">How the spec's steps are counted, when that is not plain (a scenario's).</param>
+    internal static void RefuseBreakOutOfRange(int? breakAt, int stepCount, string counted)
+    {
+        if (breakAt is not { } n || (n >= 0 && n < stepCount))
+        {
+            return;
+        }
+
+        throw new CliInputException(stepCount == 0
+            ? $"--break {n}: this spec has no steps to pause before."
+            : $"--break {n} names no step of this spec: its steps are numbered 0 to {stepCount - 1}{counted}, " +
+              "as its failures number them ('Step N:').");
+    }
+
+    /// <summary>
+    /// Say that a <c>--break</c> never paused because the run stopped before reaching it. The step is in
+    /// range (<see cref="RefuseBreakOutOfRange"/>), so only a failure stops the run first, and the failures
+    /// printed after this say where.
+    /// </summary>
+    private static void WarnBreakNotReached(int? breakAt, bool reached)
+    {
+        if (breakAt is { } n && !reached)
+        {
+            Ui.Warn($"--break {n} never paused: the run stopped before step {n}.");
+        }
+    }
+
+    /// <summary>
     /// Refuse the artifact flags that follow one roster editor through a spec — a screenshot, a timeline row
-    /// and a recorded action per roster step, the roster saved at the end, a REPL before step <c>n</c>.
+    /// and a recorded action per roster step, the roster saved at the end.
     /// </summary>
     /// <remarks>
     /// A scenario's steps alternate between a data editor and a roster editor that restarts at every
-    /// <c>newRoster</c>/<c>openRoster</c>, and <see cref="ScenarioRunner"/> exposes no hook before a step, so
-    /// none of these has one engine to follow or one place to stop. The gamedata branch warns and carries on
-    /// (the older precedent); a scenario refuses, because a run that accepted <c>--save-roster out/</c> and
-    /// wrote nothing there is the silent drop #305 rules out, and a warning scrolled past is close to silent.
+    /// <c>newRoster</c>/<c>openRoster</c>, so none of these has one engine to follow. The gamedata branch warns
+    /// and carries on (the older precedent); a scenario refuses, because a run that accepted
+    /// <c>--save-roster out/</c> and wrote nothing there is the silent drop #305 rules out, and a warning
+    /// scrolled past is close to silent. <c>--break</c> is not among them: a pause is one place in the run,
+    /// not a trail through one editor, and its REPL addresses both editors (<see cref="ProtocolBreakRepl"/>).
     /// </remarks>
     private static void RefuseRosterOnlyArtifacts(RunOptions options)
     {
@@ -1034,7 +1128,6 @@ internal static class RunCommand
                 (options.TimelinePath is not null, "--timeline"),
                 (options.RecordPath is not null, "--record"),
                 (options.SaveRosterDir is not null, "--save-roster"),
-                (options.BreakAt is not null, "--break"),
             }
             .Where(a => a.Set)
             .Select(a => a.Flag)
