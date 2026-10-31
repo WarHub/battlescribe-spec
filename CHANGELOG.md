@@ -27,13 +27,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **BattleScribe's live reload of an open roster: the `reloadRoster` hand-off (#568).** When the data
   under an open roster changes on disk, BattleScribe's Roster Editor asks "A file was modified outside of
-  BattleScribe. Would you like to reload your roster?", and on YES reads the roster back from its file and
-  loads it against the new data. A fifth scenario hand-off says it, and a new roster action carries it —
+  BattleScribe. Would you like to reload your roster?", and on YES writes the roster as it stands to a
+  temporary file, reads it back and loads it against the new data — the roster on screen, not its file. A fifth scenario hand-off says it, and a new roster action carries it —
   `IRosterEngine.ReloadRosterFromFiles`, `reloadRosterFromFiles` on the wire, with no re-setup. The
   `battlescribe-ui` driver drives the real prompt: it writes the new data over the old files in place
   (the usual staging swaps the directory, which the app's modification-only file monitor can miss) and
   answers YES, the one place it does; the in-process engine does what YES does; NewRecruit, which watches
-  nothing under an open list, refuses it as unsupported and the specs opt it out. Three `reload` specs pass
+  nothing under an open list, refuses it as unsupported and the specs opt it out. Four `reload` specs pass
   on `battlescribe-ui` through the prompt and on `battlescribe`. The mechanism, read with `javap`, is in
   `docs/adr/003-roster-migration.md`, "Live reload".
 

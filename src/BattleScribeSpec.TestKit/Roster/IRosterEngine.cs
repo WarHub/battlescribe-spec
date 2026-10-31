@@ -215,15 +215,16 @@ public interface IRosterEngine : IDisposable
 
     /// <summary>
     /// The data files under the open roster changed on disk and the user accepted the application's offer
-    /// to reload it: rebuild the roster from <paramref name="rosterXml"/>, the roster as it stands in its
-    /// file, against <paramref name="files"/>, the data directory as it now stands. Backs a scenario spec's
-    /// <c>reloadRoster</c> hand-off (<c>docs/adr/003-roster-migration.md</c>, "Live reload").
+    /// to reload it: rebuild the roster from <paramref name="rosterXml"/>, the roster as it stands (exported a
+    /// moment before), against <paramref name="files"/>, the data directory as it now stands. Backs a scenario
+    /// spec's <c>reloadRoster</c> hand-off (<c>docs/adr/003-roster-migration.md</c>, "Live reload").
     /// <para>
     /// BattleScribe's Roster Editor watches the data files of its open roster, asks "A file was modified
-    /// outside of BattleScribe. Would you like to reload your roster?", and on YES reads the roster back from
-    /// its file and loads it against the data on disk — the load an open does. An engine driving that app
-    /// answers the prompt through its UI; the in-process engine, which is BattleScribe's own code with no
-    /// window to ask in, does the read and the load. An engine whose application offers no such thing
+    /// outside of BattleScribe. Would you like to reload your roster?", and on YES writes the roster as it
+    /// stands to a temporary file, reads it back and loads it against the data on disk — the load an open does.
+    /// Not the roster's own file: that is read back only when the changed file is a roster. An engine driving
+    /// that app answers the prompt through its UI, and the app reloads the roster it holds; the in-process
+    /// engine, which is BattleScribe's own code with no window to ask in, loads <paramref name="rosterXml"/>. An engine whose application offers no such thing
     /// throws, and the spec opts it out by name: a reload emulated by a reopen would assert a feature the
     /// application does not have.
     /// </para>

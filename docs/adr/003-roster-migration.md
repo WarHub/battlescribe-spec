@@ -123,50 +123,56 @@ roster, and when one changes on disk it asks:
   wait for window focus.
 - **The prompt:** `handleFileChanged` shows it. A guard flag keeps a second changed file from stacking a
   second prompt while the first is showing.
-- **On YES:** the app reads the roster back **from its file** (`readRosterFlat(filePath)`) and loads it
-  with the same `a(Roster)` an Open ends in. A roster with no file, one never saved, is first written to
-  `TempRoster.rosz` and read back from there.
+- **On YES:** the handler looks at the changed path. A roster file (`.ros`/`.rosz`) is read back from disk
+  (`readRosterFlat`). A data file — every reload a scenario can provoke — makes the app write the roster
+  **as it stands** to `TempRoster.rosz`, read that back, and load it with the same `a(Roster)` an Open ends
+  in.
 
-So a live reload is a reopen of the roster's file against the data now on disk, in the running app.
+So a live reload re-resolves the roster on screen, unsaved changes included, against the data now on disk:
+a reopen of the roster as it stands, in the running app. It does **not** read the file the roster was
+opened from or saved to. (The first reading of the bytecode said it did; a spec built on that reading —
+an entry restored to the data coming back to a roster that had lost it — failed on the app, and the full
+listing showed the `.ros` test applies to the changed path, not the roster's.)
 
 **A fifth hand-off, `reloadRoster`,** says it: the roster editor, its roster still open, accepts the
-offer after a `saveData` changed a file under it. The runner decides what comes back as the app does:
-
-- the roster's file, the last one it was opened from or saved to;
-- or, for a roster never saved, the roster as it stands.
-
-These are spec errors, never an `expectFailure` the engine can satisfy:
+offer after a `saveData` changed a file under it, and the roster as it stands comes back against the new
+data. These are spec errors, never an `expectFailure` the engine can satisfy:
 
 - a `reloadRoster` with no `saveData` since the roster editor last read the data, because nothing changed
   and the app offers nothing;
-- a reload of a roster that stands in a file but was changed since. The app would reload the file and drop
-  those changes, and that loss is not something this hand-off asserts yet.
+- a `reloadRoster` after an `openRoster` or `reloadRoster` that failed — the refusal a spec declared — since
+  the roster editor then holds no roster the reload could be about (the lint refuses it after any open that
+  declares `expectFailure`).
 
 **The wire is one roster action, `reloadRosterFromFiles` (`files`, `xml`),** on the roster engine already
 set up: no `setupFromFiles`, no restart. Each engine answers it as its application does:
 
-- **`battlescribe-ui`** opens the roster from its file on the data the app already holds, then writes the
-  new data **over the old files in place** (`BsUiDataStaging.UpdateInPlaceAsync`). It does not use the
+- **`battlescribe-ui`** writes the new data **over the old files in place**
+  (`BsUiDataStaging.UpdateInPlaceAsync`, each file written beside its old one and moved over it). It does not use the
   usual staging, which replaces the directory in one rename: a monitor poll landing between the removal
   and the arrival would see the files deleted and created, never modified, and never ask. The Java agent
   then waits for the prompt, answers YES, answers the data-problems dialog if the reload ends in one, and
-  waits for the roster object to be replaced. This is the one place the prompt is answered YES; everywhere
-  else it is the harness's own staging showing through, and is answered NO.
-- **`battlescribe`** (in-process) has no window to ask in. It does what YES does: reads the file into a
-  clean setup of the new data and loads it.
+  waits for the roster object to be replaced and one more monitor poll to pass without a second prompt.
+  This is the one place the prompt is answered YES; everywhere else it is the harness's own staging showing
+  through, and is answered NO. No prompt within ten polls, or a data problem it does not recognise, is a
+  harness fault: BattleScribe was not asked, or did not decline.
+- **`battlescribe`** (in-process) has no window to ask in. It does what YES does: loads the roster as it
+  stands, exported by the runner a moment before, into a clean setup of the new data.
 - **`newrecruit`** and **`newrecruit-ui`** refuse it as unsupported. NewRecruit's roster editor does not
   watch the data under an open list; a list meets changed data only when it is opened again. Emulating a
   reload with a reopen would assert a feature NewRecruit does not have, so the `reload` specs opt the
   family out by name, and the `migration` specs cover what NewRecruit does instead.
 
-Three specs under `specs/scenario/reload/` pass on `battlescribe-ui` (through the real prompt) and
+Four specs under `specs/scenario/reload/` pass on `battlescribe-ui` (through the real prompt) and
 `battlescribe`:
 
 - a cost changed under a saved roster;
 - an entry deleted under it, which goes through the data-problems dialog during the reload;
-- a roster never saved, which goes through the temporary-file path.
-
-Each comes back as a reopen of the same file would.
+- a roster never saved;
+- the roster on screen, not its file. A roster opened on data that had lost one of its entries, then given a
+  second Squad and not saved, comes back after the data editor restores the entry with the second Squad and
+  without the entry: the reload re-resolves what is on screen, and the file that still has the entry is not
+  read.
 
 ## Not decided here
 
@@ -183,4 +189,4 @@ This ADR lands with:
 - #578 (load notices) and #579 (the NR Editor UI gaps) as follow-ups;
 - and, for #568, the `reloadRoster` hand-off, `IRosterEngine.ReloadRosterFromFiles` and its protocol
   action, the `battlescribe-ui` driver's answer to the reload prompt (`RosterActions.acceptReloadPromptAction`),
-  and the three `reload` specs.
+  and the four `reload` specs.

@@ -1,0 +1,123 @@
+id: reload-keeps-the-roster-on-screen
+category: reload
+description: >
+  A live reload brings back the roster on screen, not its file. A Squad and a Scout are saved; the data
+  editor deletes the Scout entry and saves, and the roster opened on that data has lost the Scout. A
+  second Squad is added and not saved. The data editor then adds the Scout back and saves, and YES to
+  BattleScribe's reload prompt brings back what was on screen against data that has the Scout again:
+  two Squads, no Scout. For a changed data file BattleScribe writes the roster it holds to a temporary
+  file and reads that back; the file that still has the Scout is not read.
+tags: [reload, migration]
+
+engines:
+  # NewRecruit's roster editor does not watch the data under an open list and offers no reload: a list
+  # meets changed data only when it is opened again, which the migration scenarios cover.
+  newrecruit: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+        - id: se-scout
+          name: Scout
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 5
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-scout
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: removeEntry
+        entryId: se-scout
+
+  - action: saveData
+
+  # Opened on data without the Scout: the roster on screen has lost it, the file has not. A second Squad
+  # goes into a force added after the open — NewRecruit-style fresh ids are not a concern here, but a force
+  # captured before a reopen is not addressed after it anywhere in these specs.
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          forces:
+            - name: Detachment
+              selectionCount: 1
+
+      - action: addForce
+        id: add-second-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-second-detachment.forceId }}
+        entryId: se-squad
+
+  - data:
+      - action: addEntry
+        id: add-scout
+        parentId: cat-1
+        entryType: selectionEntry
+        name: Scout
+        entryId: se-scout
+
+      - action: setFields
+        entryId: se-scout
+        costs:
+          ct-pts: "5"
+
+  - action: saveData
+
+  - action: reloadRoster
+
+  - roster:
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 20
+          forceCount: 2
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad
+            - name: Detachment
+              selections:
+                - name: Squad

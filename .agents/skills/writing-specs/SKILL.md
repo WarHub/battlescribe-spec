@@ -235,10 +235,10 @@ to save another, `openFile` it in a `data:` block first.
 - **Migration** (`specs/scenario/migration/`): save a roster, change one thing in the data, reopen it;
   one change per spec ([ADR 003](../../../docs/adr/003-roster-migration.md)).
 - **Live reload** (`reloadRoster`, `specs/scenario/reload/`): the one exception to the rule above. After a
-  `saveData`, the open roster comes back from its file (or, never saved, as it stands) against the new
-  data, as BattleScribe's "A file was modified outside" prompt does on YES. It needs a `saveData` since
-  the roster editor last read the data, and no roster changes since the roster's file. NewRecruit has no
-  live reload: opt it out (`newrecruit: skip`).
+  `saveData`, the open roster comes back as it stands — unsaved changes included, not its file — against
+  the new data, as BattleScribe's "A file was modified outside" prompt does on YES. It needs a `saveData`
+  since the roster editor last read the data, and an open roster (not after an open that may be refused).
+  NewRecruit has no live reload: opt it out (`newrecruit: skip`).
 - Per-engine overrides use one rule in both kinds of block: the running engine's entry
   (`battlescribe-ui`) wins, else its base engine's (`battlescribe`).
 - Expectations come from `battlescribe-ui` (the desktop apps): run the `bs-ui-scenario` profile.

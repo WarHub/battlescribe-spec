@@ -211,7 +211,7 @@ public sealed class BsUiDataStagingTests : IDisposable
         var staging = new BsUiDataStaging();
         await staging.StageDataFilesAsync(_outputDir, "system-a", FilesFor("system-a"));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<HarnessFaultException>(
             () => staging.UpdateInPlaceAsync(_outputDir, "system-b", FilesFor("system-b")));
     }
 

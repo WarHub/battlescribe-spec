@@ -77,7 +77,8 @@ public static class ScenarioHandoffs
 
     /// <summary>
     /// The roster editor, its roster still open, accepts BattleScribe's offer to reload it after a data file under
-    /// it changed: the roster comes back from its file against the data as of the last <see cref="SaveData"/>
+    /// it changed: the roster as it stands, unsaved changes included, comes back against the data as of the last
+    /// <see cref="SaveData"/>
     /// (<c>docs/adr/003-roster-migration.md</c>, "Live reload").
     /// </summary>
     public const string ReloadRoster = "reloadRoster";

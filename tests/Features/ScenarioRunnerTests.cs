@@ -115,11 +115,12 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
     }
 
     /// <summary>
-    /// <c>reloadRoster</c> reads the roster back from the file it stands in, against the data directory as the last
-    /// <c>saveData</c> left it — and on the roster engine that is still open: no cleanup, no setup in between.
+    /// <c>reloadRoster</c> brings back the roster as it stands — exported at the reload, not the saved file —
+    /// against the data directory as the last <c>saveData</c> left it, on the roster engine that is still open:
+    /// no cleanup, no setup in between.
     /// </summary>
     [Fact]
-    public void ReloadRoster_ReadsTheRosterFile_AgainstTheSavedData_WithoutRestartingTheEditor()
+    public void ReloadRoster_ReloadsTheRosterAsItStands_AgainstTheSavedData_WithoutRestartingTheEditor()
     {
         var (_, roster, result) = Run(
             """
@@ -136,7 +137,7 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
             """);
 
         AssertPassed(result);
-        string[] expected = ["cleanup", "setup", "export", "reload <roster id=\"saved-1\"/>", "cleanup"];
+        string[] expected = ["cleanup", "setup", "export", "export", "reload <roster id=\"saved-2\"/>", "cleanup"];
         Assert.Equal(expected, roster.Log);
         Assert.Contains("name=\"Edited\"", CatalogueOf(roster.Setups[1]), StringComparison.Ordinal);
     }
@@ -174,16 +175,6 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
             file: my-list
         """, "no roster was saved as 'my-list'")]
     [InlineData("""
-          - action: newRoster
-          - action: saveRoster
-            file: my-list
-          - roster:
-              - action: addForce
-                forceEntryId: fe-1
-          - action: saveData
-          - action: reloadRoster
-        """, "would drop the roster changes made since it was opened or saved")]
-    [InlineData("""
           - action: saveData
           - action: reloadRoster
         """, "reloadRoster needs an open roster")]
@@ -194,6 +185,56 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
         var failure = Assert.Single(result.Failures);
         output.WriteLine(failure);
         Assert.Contains(expected, failure, StringComparison.Ordinal);
+        Assert.DoesNotContain(roster.Log, l => l.StartsWith("reload ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Roster changes made since the roster was saved survive a reload: BattleScribe reloads the roster on screen,
+    /// not its file.
+    /// </summary>
+    [Fact]
+    public void ReloadRoster_AfterChangesSinceTheSave_ReloadsThemToo()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - action: saveRoster
+                file: my-list
+              - roster:
+                  - action: addForce
+                    forceEntryId: fe-1
+              - action: saveData
+              - action: reloadRoster
+            """);
+
+        AssertPassed(result);
+        Assert.Contains("reload <roster id=\"saved-2\"/>", roster.Log);
+    }
+
+    /// <summary>
+    /// After an <c>openRoster</c> the spec declared refused, the roster editor holds no roster a reload could be
+    /// about (BattleScribe holds none at all): a <c>reloadRoster</c> then is the spec's mistake, not a reload of
+    /// the file that failed to open.
+    /// </summary>
+    [Fact]
+    public void ReloadRoster_AfterARefusedOpen_IsSpecError()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - action: saveRoster
+                file: my-list
+              - action: openRoster
+                file: my-list
+                expectFailure: true
+              - action: saveData
+              - action: reloadRoster
+            """,
+            roster: new RecordingRosterEditor { LoadThrows = new InvalidOperationException("catalogue missing") });
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("reloadRoster after an openRoster or reloadRoster that failed", failure, StringComparison.Ordinal);
         Assert.DoesNotContain(roster.Log, l => l.StartsWith("reload ", StringComparison.Ordinal));
     }
 

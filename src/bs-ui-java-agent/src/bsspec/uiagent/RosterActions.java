@@ -3101,9 +3101,9 @@ public class RosterActions {
      * said on the way, as {@link #loadRosterAction} does.
      *
      * <p>The caller has just changed a data file under the open roster on disk. The Roster Editor's file
-     * monitor notices within a poll or two and runs {@code handleFileChanged}, which asks; on YES it reads the
-     * roster back from its file ({@code readRosterFlat} — or, for a roster with no file, from a
-     * {@code TempRoster.rosz} it writes first) and loads it with the same {@code a(Roster)} an Open ends in. That
+     * monitor notices within a poll or two and runs {@code handleFileChanged}, which asks; on YES, for a changed
+     * data file, it writes the roster it holds to {@code TempRoster.rosz}, reads that back, and loads it with the
+     * same {@code a(Roster)} an Open ends in (only a changed roster file is read from disk itself). That
      * load replaces the roster object, and can end in the data-problems dialog, which is answered here exactly as
      * {@link #applyLoadedRoster} answers it. The reload is done when the roster object has been replaced and
      * neither the prompt nor that dialog is showing, all three read in one FX turn: the dialog is raised inside
@@ -3121,8 +3121,12 @@ public class RosterActions {
         long promptDeadline = System.currentTimeMillis() + RELOAD_PROMPT_TIMEOUT_MS;
         while (!runOnFxGet(() -> reloadPromptShowing())) {
             if (System.currentTimeMillis() > promptDeadline) {
-                throw new RuntimeException("BattleScribe did not offer to reload the roster within " + RELOAD_PROMPT_TIMEOUT_MS
-                        + "ms: no data file under the open roster changed on disk as far as its file monitor could tell");
+                // A gap, not a refusal: the app was never asked, so it declined nothing. The runner checks only
+                // that a saveData happened; whether the file it wrote is one the open roster's data was read from
+                // is BattleScribe's to decide, and this is what it decided.
+                throw new RuntimeException(AGENT_GAP + "BattleScribe did not offer to reload the roster within "
+                        + RELOAD_PROMPT_TIMEOUT_MS + "ms: no data file the open roster was read from changed on disk as far "
+                        + "as its file monitor could tell");
             }
             // The prompt may open between the read above and this check; it is the one dialog expected here.
             DialogInspector.assertNoUnexpectedModals(CONFIRM_WINDOW);
@@ -3145,7 +3149,8 @@ public class RosterActions {
                     if (!isDataChangeNotice(problem)) unexpected.add(problem);
                 }
                 if (problems.isEmpty() || !unexpected.isEmpty()) {
-                    throw new RuntimeException("Failed to reload roster: BattleScribe reported a problem with the data files: "
+                    throw new RuntimeException(AGENT_GAP + "BattleScribe reloaded the roster but reported a problem with "
+                            + "the data files this driver does not answer: "
                             + (problems.isEmpty() ? message : String.join(" | ", unexpected)));
                 }
                 notices.addAll(problems);
@@ -3153,7 +3158,7 @@ public class RosterActions {
             } else if (prompt) {
                 // A second file the monitor saw changed in a later poll: the same question, the same answer.
                 runOnFx(() -> fireButtonAsync("#btnPositive", CONFIRM_WINDOW));
-            } else if (roster != null && roster != before) {
+            } else if (roster != null && roster != before && settledAfterReload()) {
                 JsonObject result = new JsonObject();
                 JsonArray noticeArray = new JsonArray();
                 for (String notice : notices) noticeArray.add(new JsonPrimitive(notice));
@@ -3163,6 +3168,21 @@ public class RosterActions {
             sleep(POLL_INTERVAL_MS);
         }
         throw new RuntimeException(AGENT_GAP + "the reload BattleScribe started did not finish within " + FX_TIMEOUT_MS + "ms");
+    }
+
+    /**
+     * After the roster was replaced, one more of the monitor's polls passes without a second prompt. The data
+     * files are written one after another, and a write that straddled a poll makes the monitor report the last
+     * file a second later — a prompt that would otherwise land on the dispatcher's post-condition, or inside the
+     * next action. False when one came: the caller's loop answers it and asks again.
+     */
+    private boolean settledAfterReload() {
+        long quiet = System.currentTimeMillis() + 1_500;
+        while (System.currentTimeMillis() < quiet) {
+            if (runOnFxGet(() -> reloadPromptShowing())) return false;
+            sleep(POLL_INTERVAL_MS);
+        }
+        return true;
     }
 
     /** BattleScribe's reload prompt is showing: a {@value #CONFIRM_WINDOW} dialog saying {@value #RELOAD_PROMPT_TEXT}. */

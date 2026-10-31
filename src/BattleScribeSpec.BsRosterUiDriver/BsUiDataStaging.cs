@@ -130,7 +130,7 @@ public sealed class BsUiDataStaging
     {
         if (!string.Equals(_stagedGameSystemId, gameSystemId, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(
+            throw new HarnessFaultException(
                 $"UpdateInPlaceAsync updates the game system this stager staged ('{_stagedGameSystemId}'), not '{gameSystemId}'.");
         }
 
@@ -141,7 +141,11 @@ public sealed class BsUiDataStaging
             var path = Path.Combine(gameSystemDirectory, fileName);
             if (!File.Exists(path) || await File.ReadAllTextAsync(path) != content)
             {
-                await File.WriteAllTextAsync(path, content);
+                // Written beside it and moved over it: the app never sees half a file (it deletes one it
+                // cannot read), and to the monitor a replaced file is a modified one — same name, new time.
+                var incoming = Path.Combine(gameSystemDirectory, $".{fileName}.incoming");
+                await File.WriteAllTextAsync(incoming, content);
+                File.Move(incoming, path, overwrite: true);
             }
         }
 

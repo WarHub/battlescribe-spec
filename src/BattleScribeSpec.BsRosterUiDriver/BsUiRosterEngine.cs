@@ -824,21 +824,20 @@ public sealed class BsUiRosterEngine : IRosterEngine
         => RunAsync(() => ReloadRosterFromFilesAsync(files, rosterXml));
 
     /// <summary>
-    /// BattleScribe's live reload, through its own prompt. The roster is opened from its file on the data the
-    /// app already holds, the new data is written over that data in place, and the app's file monitor notices
-    /// and asks "A file was modified outside of BattleScribe. Would you like to reload your roster?"; the agent
-    /// answers YES and waits for the reload — the roster read back from its file and loaded as an Open loads it.
+    /// BattleScribe's live reload, through its own prompt. The new data is written over the data the app holds,
+    /// in place; its file monitor notices and asks "A file was modified outside of BattleScribe. Would you like
+    /// to reload your roster?"; the agent answers YES and waits for the reload — the roster the app holds,
+    /// written to <c>TempRoster.rosz</c>, read back and loaded as an Open loads it.
     /// </summary>
     /// <remarks>
-    /// The open first is what makes the reload this roster's: the app reads back the roster's FILE, and a roster
-    /// this driver built through the UI has none. Opening <paramref name="rosterXml"/> on the old data is the
-    /// state the scenario describes — the roster as it stands in its file, open in the editor — and it changes
-    /// nothing the reload then shows.
+    /// <paramref name="rosterXml"/> is not sent: it is the roster the app holds, exported by the runner a moment
+    /// before, and the app reloads that roster itself. (An earlier version opened it first, on the reading that
+    /// the app reloads the roster's file; <c>javap</c> says it does so only when the changed file is a roster.)
     /// </remarks>
     private async Task ReloadRosterFromFilesAsync(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
     {
-        var app = _app ?? throw new InvalidOperationException("reloadRosterFromFiles: engine not set up.");
-        await LoadRosterAsync(rosterXml);
+        _ = rosterXml;
+        var app = _app ?? throw new HarnessFaultException("reloadRosterFromFiles: engine not set up.");
 
         ClearDefinitionIndexes();
         IndexDefinitionsFromXml(files);
