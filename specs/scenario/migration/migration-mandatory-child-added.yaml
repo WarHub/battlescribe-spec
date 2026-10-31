@@ -1,0 +1,126 @@
+id: migration-mandatory-child-added
+category: migration
+description: >
+  A child the data has since made mandatory is not added to a reopened roster by BattleScribe, which
+  reports the shortfall instead; NewRecruit adds it. A Squad is saved; the data editor gives the
+  Squad a new Sergeant entry with min 1 and saves; on reopen BattleScribe shows the Squad without a
+  Sergeant and the min violation, and NewRecruit shows a Sergeant it selected on load, with nothing
+  to report. BattleScribe selects mandatory children when an entry is selected, and a saved roster's
+  selections are loaded, not selected.
+tags: [migration, reopen, constraint, min, auto-select, design-difference]
+
+engines:
+  # NR Editor UI driver gap: addEntry under a root entry that has children times out (#579).
+  newrecruit-ui: fail
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            name: Troops
+            targetId: ce-troops
+          - id: cl-fe-elites
+            name: Elites
+            targetId: ce-elites
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              name: Troops
+              targetId: ce-troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-plasma
+              name: Plasma
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 2
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: addEntry
+        id: add-sergeant
+        parentId: se-squad
+        entryType: selectionEntry
+        name: Sergeant
+        entryId: se-sergeant
+
+      - action: addEntry
+        id: add-sergeant-min
+        parentId: se-sergeant
+        entryType: constraint
+        entryId: con-sergeant-min
+
+      - action: setFields
+        entryId: ${{ steps.add-sergeant-min.entryId }}
+        fields:
+          type: min
+          value: "1"
+          field: selections
+          scope: parent
+
+  - action: saveData
+
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          errors:
+            - on: selection ${{ steps.select-squad.selectionId }}
+              from: se-sergeant/con-sergeant-min
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad
+                  childCount: 0
+          engines:
+            newrecruit:
+              errors: []
+              forces:
+                - name: Detachment
+                  selections:
+                    - name: Squad
+                      children:
+                        - name: Sergeant

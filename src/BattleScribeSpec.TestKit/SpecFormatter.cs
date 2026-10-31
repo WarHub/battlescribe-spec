@@ -224,8 +224,11 @@ public static class SpecFormatter
                     || (l.Length > 0 && l[0] != ' ')
                     || (nested && l.Length > 0 && (BlockStepItemPattern.IsMatch(l) || GetIndentationWidth(l) <= 6));
 
-            // Collect property blocks until the next step item, comment, or non-indented content
+            // Collect property blocks until the next step item, comment, or non-indented content.
+            // Lines ahead of the first property — a comment heading the block — belong to no property
+            // and stay where they are, at the head, whatever the sort does.
             var propBlocks = new List<(string Name, List<string> Lines, int OriginalIndex)>();
+            var leading = new List<string>();
             string? currentPropName = null;
             var currentPropLines = new List<string>();
 
@@ -263,6 +266,10 @@ public static class SpecFormatter
                     {
                         propBlocks.Add((currentPropName, currentPropLines, propBlocks.Count));
                     }
+                    else
+                    {
+                        leading.AddRange(currentPropLines);
+                    }
 
                     currentPropName = l.TrimStart().Split(':')[0];
                     currentPropLines = [l];
@@ -279,6 +286,12 @@ public static class SpecFormatter
             {
                 propBlocks.Add((currentPropName, currentPropLines, propBlocks.Count));
             }
+            else
+            {
+                leading.AddRange(currentPropLines);
+            }
+
+            result.AddRange(leading);
 
             if (propBlocks.Count < 2)
             {

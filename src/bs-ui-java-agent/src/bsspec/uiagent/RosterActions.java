@@ -70,6 +70,29 @@ public class RosterActions {
      */
     private static final String UNSAVED_PROMPT_TEXT = "has not been saved";
 
+    /** The title of the app's exception dialog: {@code showExceptionDialog}, with its DONE button. */
+    private static final String ERROR_WINDOW = "Error";
+
+    /**
+     * What the app says, as one item of its "There was a problem with one or more of your data files"
+     * dialog, when it fitted a loaded roster to the data on hand by dropping selections whose entries
+     * the data no longer has.
+     */
+    private static final String SELECTIONS_REMOVED_NOTICE =
+            "Some selections have been removed from your roster because they no longer exist in the data file(s).";
+
+    /**
+     * The items of that dialog {@link #applyLoadedRoster} answers DONE to: what the app says when a
+     * roster saved against older data no longer fits it. A force whose force entry is gone reaches the
+     * dialog as a header naming the catalogue, then its reason as an item of its own; the header carries
+     * no reason, so it passes only beside reasons that pass themselves.
+     */
+    private static boolean isDataChangeNotice(String problem) {
+        return problem.endsWith(SELECTIONS_REMOVED_NOTICE)
+                || problem.equals("No force entry found")
+                || problem.endsWith(": The catalogue data file is invalid:");
+    }
+
     /** Passed as currentCount when the control must be a spinner and no count applies. */
     private static final int NO_COUNT_CONTEXT = -1;
 
@@ -2978,13 +3001,7 @@ public class RosterActions {
                             + "catalogue it names is not loaded. " + describeLoadErrors(loadParams));
         }
 
-        runOnFx(() -> {
-            try {
-                apply.invoke(controller, loadParams, true);
-            } catch (java.lang.reflect.InvocationTargetException e) {
-                throw describeAppFailure("Failed to apply the loaded roster", e);
-            }
-        });
+        List<String> notices = applyLoadedRoster(controller, apply, loadParams);
 
         // The roster is in hand only once the engine reports it. Same poll every other action ends
         // with, so "loaded" means the same thing here as "selected" does there.
@@ -2992,7 +3009,114 @@ public class RosterActions {
                 state -> loadedName == null || loadedName.equals(getStringField(state, "name")),
                 state -> "the engine still reports roster '" + getStringField(state, "name")
                         + "' after loading '" + loadedName + "'");
-        return "{}";
+        JsonObject result = new JsonObject();
+        JsonArray noticeArray = new JsonArray();
+        for (String notice : notices) noticeArray.add(new JsonPrimitive(notice));
+        result.add("notices", noticeArray);
+        return result.toString();
+    }
+
+    /**
+     * Applies loaded LoadDataParams the way the app does — {@code a(params, true)} — and answers the
+     * one dialog that apply can end in. Returns what that dialog said, one item per problem.
+     *
+     * <p>The apply sets the roster and rebuilds the tree, and only THEN lists what it changed to fit
+     * the roster to the data on hand, in a modal "There was a problem with one or more of your data
+     * files" dialog it waits on ({@code showExceptionDialog}). A roster saved against data that has
+     * since lost an entry ends there: the app drops the selection and says
+     * {@value #SELECTIONS_REMOVED_NOTICE}. Run inside {@link #runOnFx}, that wait never returns and
+     * the action times out with the roster already loaded behind the dialog.
+     *
+     * <p>So the apply is posted rather than awaited, and the dialog is answered as a user answers it:
+     * DONE. It is answered only when every item is a data-change notice ({@link #isDataChangeNotice});
+     * anything else it lists fails the action with the app's own words, and the dialog is left standing
+     * for the diagnostics to show. That keeps a roster loaded against data the harness got wrong a
+     * failure rather than a green run with a warning in its log — and a harness fault, which no
+     * {@code expectFailure} accepts: the app did not decline the load, it made it and then asked.
+     */
+    private List<String> applyLoadedRoster(Object controller, Method apply, Object loadParams) {
+        AtomicReference<RuntimeException> failure = new AtomicReference<>();
+        CountDownLatch applied = new CountDownLatch(1);
+        Platform.runLater(() -> {
+            try {
+                apply.invoke(controller, loadParams, true);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                failure.set(describeAppFailure("Failed to apply the loaded roster", e));
+            } catch (Exception e) {
+                failure.set(new RuntimeException("Failed to apply the loaded roster: " + e, e));
+            } finally {
+                applied.countDown();
+            }
+        });
+
+        List<String> notices = new ArrayList<>();
+        boolean answered = false;
+        long deadline = System.currentTimeMillis() + FX_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                if (applied.await(POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)) {
+                    if (failure.get() != null) throw failure.get();
+                    return notices;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while applying the loaded roster", e);
+            }
+            if (answered) continue;
+            // The dialog runs a nested event loop, so the FX thread still serves this read.
+            String message = runOnFxGet(this::dataProblemsDialogMessage);
+            if (message == null) continue;
+            List<String> problems = dataProblems(message);
+            List<String> unexpected = new ArrayList<>();
+            for (String problem : problems) {
+                if (!isDataChangeNotice(problem)) unexpected.add(problem);
+            }
+            if (problems.isEmpty() || !unexpected.isEmpty()) {
+                // A gap, not a refusal: by now the app has applied the roster, and stands waiting behind
+                // a dialog this driver does not know how to answer. An expectFailure must not read that as
+                // BattleScribe declining the load.
+                throw new RuntimeException(AGENT_GAP + "BattleScribe loaded the roster but reported a problem with the "
+                        + "data files this driver does not answer: "
+                        + (problems.isEmpty() ? message : String.join(" | ", unexpected)));
+            }
+            notices.addAll(problems);
+            runOnFx(() -> fireButtonAsync("#btnDone", ERROR_WINDOW));
+            answered = true;
+        }
+        throw new RuntimeException(AGENT_GAP + "applying the loaded roster did not finish within " + FX_TIMEOUT_MS + "ms"
+                + (answered ? " after its data-problems dialog was answered" : ""));
+    }
+
+    /** The message of a showing data-problems dialog ({@value #ERROR_WINDOW}, {@code #txtErrorMessage}), or null. */
+    private String dataProblemsDialogMessage() {
+        Scene scene = findScene(ERROR_WINDOW);
+        if (scene == null) return null;
+        Node node = scene.getRoot().lookup("#txtErrorMessage");
+        String text = node instanceof TextInputControl ? ((TextInputControl) node).getText()
+                : node instanceof Labeled ? ((Labeled) node).getText() : null;
+        return text != null && text.startsWith("There was a problem with one or more of your data files") ? text : null;
+    }
+
+    /**
+     * The numbered items of a data-problems message ({@code "1) Squad:<id>:<object>: <what>"}), each
+     * without its number and without the Java object identity ({@code :net.battlescribe…@1a2b}) the
+     * app prints, which changes every run.
+     */
+    static List<String> dataProblems(String message) {
+        List<String> problems = new ArrayList<>();
+        StringBuilder current = null;
+        for (String line : message.split("\n")) {
+            java.util.regex.Matcher numbered = java.util.regex.Pattern.compile("^(\\d+)\\) (.*)$").matcher(line);
+            if (numbered.matches()) {
+                if (current != null) problems.add(current.toString().trim());
+                current = new StringBuilder(numbered.group(2));
+            } else if (current != null && !line.isBlank()) {
+                current.append(' ').append(line.trim());
+            }
+        }
+        if (current != null) problems.add(current.toString().trim());
+        problems.replaceAll(p -> p.replaceAll(":net\\.battlescribe\\.[\\w.$]+@[0-9a-f]+", ""));
+        return problems;
     }
 
     /**

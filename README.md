@@ -1,8 +1,8 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 529 spec files — 404 roster specs,
-120 GameData specs and 5 scenario specs — covering the complete BattleScribe data model, its editing
+Any engine, in any language, can validate its behavior against 537 spec files — 404 roster specs,
+120 GameData specs and 13 scenario specs — covering the complete BattleScribe data model, its editing
 operations, and what crosses from the data editor to the roster editor.
 
 ## Quick Start
@@ -106,7 +106,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 529 declarative spec files (404 roster + 120 GameData + 5 scenario) covering all BattleScribe operations |
+| **YAML Specs** | 537 declarative spec files (404 roster + 120 GameData + 13 scenario) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -180,17 +180,18 @@ asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 | type-def | 1 | Cost types, profile types, characteristic types |
 | validation | 12 | Referential integrity and validation errors (broken links, bad scopes) |
 
-### Scenario specs — 5 across 1 category
+### Scenario specs — 13 across 2 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
 | handoff | 5 | What crosses from the data editor to the roster editor, and when: saved and unsaved edits, an added entry, per-file saves, a saved roster reopened against edited data |
+| migration | 8 | What a saved roster becomes when its data changes under it: entries deleted, renamed or hidden, a limit tightened, a child made mandatory, a force entry deleted ([ADR 003](docs/adr/003-roster-migration.md)) |
 
 ## Project Structure
 
 ```
 battlescribe-spec/
-├── specs/                          # 529 YAML spec files (404 roster + 120 gamedata + 5 scenario)
+├── specs/                          # 537 YAML spec files (404 roster + 120 gamedata + 13 scenario)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

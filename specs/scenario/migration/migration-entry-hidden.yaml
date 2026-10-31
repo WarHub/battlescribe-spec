@@ -1,0 +1,95 @@
+id: migration-entry-hidden
+category: migration
+description: >
+  A selection whose entry the data has since hidden is kept when the roster is reopened, and
+  reported. Hiding an entry stops it being chosen; it does not take away a choice already made.
+  Every engine keeps the Squad, marks it hidden, and raises the one hidden violation.
+tags: [migration, reopen, hidden]
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            name: Troops
+            targetId: ce-troops
+          - id: cl-fe-elites
+            name: Elites
+            targetId: ce-elites
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              name: Troops
+              targetId: ce-troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-plasma
+              name: Plasma
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 2
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: setFields
+        entryId: se-squad
+        fields:
+          hidden: "true"
+
+  - action: saveData
+
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          # One violation, the hidden one. BattleScribe raises it on the category the Squad is filed
+          # under, whose node the reopen mints afresh, so no step output can name it; NewRecruit raises
+          # it on the selection. Where is the families' usual difference, not a migration one.
+          errorCount: 1
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad
+                  hidden: true

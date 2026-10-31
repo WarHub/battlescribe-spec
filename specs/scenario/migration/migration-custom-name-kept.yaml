@@ -1,0 +1,119 @@
+id: migration-custom-name-kept
+category: migration
+description: >
+  What the user typed survives a reopen against changed data, while what the data decides follows
+  the data. A Squad renamed Red Squad, with notes, is saved; the data editor raises its cost to 15
+  and saves; reopening the roster shows Red Squad at 15 points. BattleScribe keeps the notes too.
+  NewRecruit keeps the custom name but not the notes: they do not come back from the saved file.
+tags: [migration, reopen, customization]
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            name: Troops
+            targetId: ce-troops
+          - id: cl-fe-elites
+            name: Elites
+            targetId: ce-elites
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              name: Troops
+              targetId: ce-troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-plasma
+              name: Plasma
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 2
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+      - action: setCustomization
+        forceId: ${{ steps.add-detachment.forceId }}
+        selectionId: ${{ steps.select-squad.selectionId }}
+        customName: Red Squad
+        customNotes: Holds the left flank
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "15"
+
+  - action: saveData
+
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          costs:
+            - typeId: ct-pts
+              value: 15
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad
+                  customName: Red Squad
+                  customNotes: Holds the left flank
+                  costs:
+                    - typeId: ct-pts
+                      value: 15
+          engines:
+            newrecruit:
+              costs:
+                - typeId: ct-pts
+                  value: 15
+              forces:
+                - name: Detachment
+                  selections:
+                    - name: Squad
+                      customName: Red Squad
+                      customNotes: ""
+                      costs:
+                        - typeId: ct-pts
+                          value: 15
