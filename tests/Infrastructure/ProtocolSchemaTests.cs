@@ -132,6 +132,13 @@ public sealed class ProtocolSchemaTests
             Action = "reload",
         }));
 
+        yield return ("action-reloadRosterFromFiles", SerializeCommand(new ActionCommand
+        {
+            Action = "reloadRosterFromFiles",
+            Xml = "<?xml version=\"1.0\"?><roster id=\"r1\" name=\"Saved\"/>",
+            Files = [new ProtocolDataFile { FileName = "gs-1.gst", Content = "<gameSystem id=\"gs-1\"/>" }],
+        }));
+
         yield return ("getState", SerializeCommand(new GetStateCommand()));
 
         yield return ("getErrors", SerializeCommand(new GetErrorsCommand()));

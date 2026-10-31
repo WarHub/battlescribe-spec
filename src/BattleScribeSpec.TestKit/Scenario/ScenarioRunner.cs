@@ -43,6 +43,21 @@ public sealed class ScenarioRunner
     /// </summary>
     private bool _rosterEditorStarted;
 
+    /// <summary>
+    /// The saved roster the roster editor's roster stands in — named by the last <c>openRoster</c> or
+    /// <c>saveRoster</c>, none after a <c>newRoster</c> — which is what a <c>reloadRoster</c> reads back.
+    /// </summary>
+    private string? _rosterFile;
+
+    /// <summary>A roster action ran since the roster last stood in <see cref="_rosterFile"/>.</summary>
+    private bool _rosterChangedSinceFile;
+
+    /// <summary>
+    /// The step of the last <c>saveData</c> since the roster editor last read the data directory, or null:
+    /// BattleScribe offers a reload only when a file under the open roster changed.
+    /// </summary>
+    private int? _dataSavedSinceRosterRead;
+
     /// <param name="dataEngine">The family's data editor.</param>
     /// <param name="rosterEngine">The family's roster editor.</param>
     /// <param name="identity">
@@ -98,6 +113,7 @@ public sealed class ScenarioRunner
         _rosterErrorsSeen = 0;
         _harnessError = null;
         _rosterEditorStarted = false;
+        RosterReadTheData(file: null);
         _setupEdit = spec.Setup.Edit;
 
         _dataRunner.UpdateSnapshots = UpdateSnapshots;
@@ -247,6 +263,11 @@ public sealed class ScenarioRunner
                 if (!BeforeStep(index, new ScenarioStepView(ScenarioStepKind.Roster, _rosterEditorStarted, rosterStep: step)))
                 {
                     return false;
+                }
+
+                if (step.Action is { } rosterAction && rosterAction != "dump")
+                {
+                    _rosterChangedSinceFile = true;
                 }
 
                 var proceed = _rosterRunner.ExecuteStep(step, index);
@@ -408,10 +429,15 @@ public sealed class ScenarioRunner
                 {
                     _data.Reload();
                     _dataDirectory.Write(_data.ExportActiveFile(), replaces: _dataRunner.OpenedFileId ?? _setupEdit);
+                    if (_rosterEditorStarted)
+                    {
+                        _dataSavedSinceRosterRead = stepIndex;
+                    }
                 };
 
             case ScenarioHandoffs.NewRoster:
                 _rosterEditorStarted = true;
+                RosterReadTheData(file: null);
                 return () => StartRosterEditor(savedRoster: null);
 
             case ScenarioHandoffs.SaveRoster:
@@ -421,7 +447,15 @@ public sealed class ScenarioRunner
                         "saveRoster needs a roster — start one with 'newRoster' or 'openRoster' first");
                 }
 
-                return () => _savedRosters[file!] = _roster.ExportRosterXml();
+                return () =>
+                {
+                    _savedRosters[file!] = _roster.ExportRosterXml();
+                    _rosterFile = file;
+                    _rosterChangedSinceFile = false;
+                };
+
+            case ScenarioHandoffs.ReloadRoster:
+                return PrepareReload();
 
             default: // OpenRoster
                 var xml = _savedRosters.TryGetValue(file!, out var saved)
@@ -430,8 +464,64 @@ public sealed class ScenarioRunner
                         $"openRoster: no roster was saved as '{file}' by an earlier saveRoster " +
                         $"(saved: [{string.Join(", ", _savedRosters.Keys)}])");
                 _rosterEditorStarted = true;
+                RosterReadTheData(file);
                 return () => StartRosterEditor(xml);
         }
+    }
+
+    /// <summary>
+    /// The spec half of a <c>reloadRoster</c>: what the roster editor reads back, decided as BattleScribe decides
+    /// it. On YES the Roster Editor reads its roster from the roster's file; a roster that has none (one started
+    /// with <c>newRoster</c> and never saved) it first writes to a temporary file, so what comes back is the
+    /// roster as it stands. A roster that stands in a file but was changed since would come back as the file has
+    /// it, without those changes — a loss this hand-off does not yet assert, so it is refused rather than
+    /// asserted by accident.
+    /// </summary>
+    private Action PrepareReload()
+    {
+        if (!_rosterEditorStarted)
+        {
+            throw new InvalidOperationException(
+                "reloadRoster needs an open roster — start one with 'newRoster' or 'openRoster' first");
+        }
+
+        if (_dataSavedSinceRosterRead is null)
+        {
+            throw new InvalidOperationException(
+                "reloadRoster: no saveData since the roster editor last read the data directory, so no file under the " +
+                "open roster changed and BattleScribe offers no reload");
+        }
+
+        string? fileXml = null;
+        if (_rosterFile is { } file)
+        {
+            if (_rosterChangedSinceFile)
+            {
+                throw new InvalidOperationException(
+                    $"reloadRoster reads the roster back from its file '{file}', which would drop the roster changes made " +
+                    "since it was opened or saved; save it first (saveRoster)");
+            }
+
+            fileXml = _savedRosters[file];
+        }
+
+        return () =>
+        {
+            // Read before the reload: the roster as it stands is the one written to the temporary file.
+            var rosterXml = fileXml ?? _roster.ExportRosterXml();
+            _dataSavedSinceRosterRead = null;
+            _roster.ReloadRosterFromFiles(_dataDirectory.Files, rosterXml);
+            _rosterRunner.SetCatalogueIds(_dataDirectory.CatalogueIds);
+            _rosterChangedSinceFile = false;
+        };
+    }
+
+    /// <summary>The roster editor reads the data directory now, with its roster standing in <paramref name="file"/>.</summary>
+    private void RosterReadTheData(string? file)
+    {
+        _rosterFile = file;
+        _rosterChangedSinceFile = false;
+        _dataSavedSinceRosterRead = null;
     }
 
     /// <summary>

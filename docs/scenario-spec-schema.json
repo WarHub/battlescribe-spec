@@ -55,8 +55,8 @@
     },
     "handoffAction": {
       "type": "string",
-      "description": "A hand-off between the editors (ScenarioHandoffs.All). saveData: the data editor saves its open file into the data directory. newRoster: the roster editor reads the data directory and starts an empty roster. saveRoster: the roster editor saves its roster as file. openRoster: the roster editor reads the data directory and opens the roster saved as file.",
-      "enum": ["saveData", "newRoster", "saveRoster", "openRoster"]
+      "description": "A hand-off between the editors (ScenarioHandoffs.All). saveData: the data editor saves its open file into the data directory. newRoster: the roster editor reads the data directory and starts an empty roster. saveRoster: the roster editor saves its roster as file. openRoster: the roster editor reads the data directory and opens the roster saved as file. reloadRoster: the roster editor, its roster still open, accepts BattleScribe's offer to reload it after saveData changed a file under it.",
+      "enum": ["saveData", "newRoster", "saveRoster", "openRoster", "reloadRoster"]
     },
     "fileHandoffAction": {
       "type": "string",

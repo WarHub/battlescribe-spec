@@ -183,8 +183,11 @@ public sealed class ActionCommand : ProtocolCommand
 
     public string? CategoryEntryId { get; set; }
 
-    /// <summary>loadRoster: the BattleScribe <c>.ros</c> XML payload.</summary>
+    /// <summary>loadRoster, reloadRosterFromFiles: the BattleScribe <c>.ros</c> XML payload.</summary>
     public string? Xml { get; set; }
+
+    /// <summary>reloadRosterFromFiles: the data directory as it now stands under the open roster.</summary>
+    public List<ProtocolDataFile>? Files { get; set; }
 }
 
 public sealed class GetStateCommand : ProtocolCommand

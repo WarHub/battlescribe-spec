@@ -182,6 +182,18 @@ public sealed class JsonProtocolEngine : IRosterEngine
         SendAction(new ActionCommand { Action = "reload" });
     }
 
+    public void ReloadRosterFromFiles(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
+    {
+        SendAction(
+            new ActionCommand
+            {
+                Action = "reloadRosterFromFiles",
+                Xml = rosterXml,
+                Files = [.. files.Select(f => new ProtocolDataFile { FileName = f.FileName, Content = f.Content })],
+            },
+            TimeSpan.FromMinutes(5));
+    }
+
     public RosterState GetRosterState()
     {
         var response = SendCommand(new GetStateCommand());
@@ -257,9 +269,9 @@ public sealed class JsonProtocolEngine : IRosterEngine
         }
     }
 
-    private ActionOutputs SendAction(ActionCommand cmd)
+    private ActionOutputs SendAction(ActionCommand cmd, TimeSpan? timeout = null)
     {
-        var response = SendCommand(cmd);
+        var response = SendCommand(cmd, timeout);
         return response switch
         {
             ActionResult { Ok: true } ar => ar.Outputs ?? new ActionOutputs(),

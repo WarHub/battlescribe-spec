@@ -354,15 +354,21 @@ public sealed class BsUiRosterEngine : IRosterEngine
     {
         _engineLocated = false;
         _pendingCostLimits.Clear();
+        ClearDefinitionIndexes();
+        _gameSystem = null;
+        _gameSystemId = null;
+        _gameSystemName = null;
+    }
+
+    /// <summary>What the driver derived from the data files to address entries; rebuilt whenever the data changes.</summary>
+    private void ClearDefinitionIndexes()
+    {
         _entryNamesById.Clear();
         _groupEntryIds.Clear();
         _linkTargetsById.Clear();
         _siblingGroups.Clear();
         _labelOccurrenceById.Clear();
         _costNamesById.Clear();
-        _gameSystem = null;
-        _gameSystemId = null;
-        _gameSystemName = null;
     }
 
     private async Task<IReadOnlyList<string>> SetupAsync(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
@@ -812,6 +818,38 @@ public sealed class BsUiRosterEngine : IRosterEngine
         // destroyed the roster the load had just brought in. A spec that needs both should assert
         // its costLimits, which fails loudly rather than passing short.
         _engineLocated = true;
+    }
+
+    public void ReloadRosterFromFiles(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
+        => RunAsync(() => ReloadRosterFromFilesAsync(files, rosterXml));
+
+    /// <summary>
+    /// BattleScribe's live reload, through its own prompt. The roster is opened from its file on the data the
+    /// app already holds, the new data is written over that data in place, and the app's file monitor notices
+    /// and asks "A file was modified outside of BattleScribe. Would you like to reload your roster?"; the agent
+    /// answers YES and waits for the reload — the roster read back from its file and loaded as an Open loads it.
+    /// </summary>
+    /// <remarks>
+    /// The open first is what makes the reload this roster's: the app reads back the roster's FILE, and a roster
+    /// this driver built through the UI has none. Opening <paramref name="rosterXml"/> on the old data is the
+    /// state the scenario describes — the roster as it stands in its file, open in the editor — and it changes
+    /// nothing the reload then shows.
+    /// </remarks>
+    private async Task ReloadRosterFromFilesAsync(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
+    {
+        var app = _app ?? throw new InvalidOperationException("reloadRosterFromFiles: engine not set up.");
+        await LoadRosterAsync(rosterXml);
+
+        ClearDefinitionIndexes();
+        IndexDefinitionsFromXml(files);
+        await _dataStaging.UpdateInPlaceAsync(app.DataDirectoryPath, _gameSystemId!, files);
+
+        EnsureSetup();
+        var reloaded = await CallAgentAsync("rosterAcceptReloadPromptAction", []);
+        foreach (var notice in reloaded?["notices"]?.AsArray() ?? [])
+        {
+            Console.Error.WriteLine($"[bs-ui] BattleScribe, reloading the roster: {notice}");
+        }
     }
 
     public void ReloadRoster() => RunAsync(ReloadRosterAsync);

@@ -70,6 +70,12 @@ public class RosterActions {
      */
     private static final String UNSAVED_PROMPT_TEXT = "has not been saved";
 
+    /**
+     * How long BattleScribe has to notice a changed data file and ask about it. Its file monitor is a commons-io
+     * {@code FileAlterationMonitor} polling once a second, so this is ten of its polls.
+     */
+    private static final int RELOAD_PROMPT_TIMEOUT_MS = 10_000;
+
     /** The title of the app's exception dialog: {@code showExceptionDialog}, with its DONE button. */
     private static final String ERROR_WINDOW = "Error";
 
@@ -180,6 +186,8 @@ public class RosterActions {
                 return setCustomizationAction(params);
             case "rosterLoadRosterAction":
                 return loadRosterAction(params);
+            case "rosterAcceptReloadPromptAction":
+                return acceptReloadPromptAction(params);
             default:
                 throw new IllegalArgumentException("Unknown action: " + method);
         }
@@ -3085,6 +3093,87 @@ public class RosterActions {
         }
         throw new RuntimeException(AGENT_GAP + "applying the loaded roster did not finish within " + FX_TIMEOUT_MS + "ms"
                 + (answered ? " after its data-problems dialog was answered" : ""));
+    }
+
+    /**
+     * Answers BattleScribe's "A file was modified outside of BattleScribe. Would you like to reload your
+     * roster?" with YES, and waits for the reload it starts to finish. Returns what the data-problems dialog
+     * said on the way, as {@link #loadRosterAction} does.
+     *
+     * <p>The caller has just changed a data file under the open roster on disk. The Roster Editor's file
+     * monitor notices within a poll or two and runs {@code handleFileChanged}, which asks; on YES it reads the
+     * roster back from its file ({@code readRosterFlat} — or, for a roster with no file, from a
+     * {@code TempRoster.rosz} it writes first) and loads it with the same {@code a(Roster)} an Open ends in. That
+     * load replaces the roster object, and can end in the data-problems dialog, which is answered here exactly as
+     * {@link #applyLoadedRoster} answers it. The reload is done when the roster object has been replaced and
+     * neither the prompt nor that dialog is showing, all three read in one FX turn: the dialog is raised inside
+     * the apply, so a turn that runs at all after the roster changed sees it if it is coming.
+     *
+     * <p>This is the one place that says YES. Everywhere else the prompt is the harness's own staging showing
+     * through and is answered NO ({@link #dismissWarmReusePromptIfPresent}).
+     */
+    public String acceptReloadPromptAction(String params) {
+        Object before = runOnFxGet(() -> engineAccessor.getCurrentRoster());
+        if (before == null) {
+            throw new RuntimeException("rosterAcceptReloadPromptAction: no roster is open, so BattleScribe has none to offer to reload");
+        }
+
+        long promptDeadline = System.currentTimeMillis() + RELOAD_PROMPT_TIMEOUT_MS;
+        while (!runOnFxGet(() -> reloadPromptShowing())) {
+            if (System.currentTimeMillis() > promptDeadline) {
+                throw new RuntimeException("BattleScribe did not offer to reload the roster within " + RELOAD_PROMPT_TIMEOUT_MS
+                        + "ms: no data file under the open roster changed on disk as far as its file monitor could tell");
+            }
+            // The prompt may open between the read above and this check; it is the one dialog expected here.
+            DialogInspector.assertNoUnexpectedModals(CONFIRM_WINDOW);
+            sleep(POLL_INTERVAL_MS);
+        }
+        runOnFx(() -> fireButtonAsync("#btnPositive", CONFIRM_WINDOW));
+
+        List<String> notices = new ArrayList<>();
+        long deadline = System.currentTimeMillis() + FX_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            Object[] seen = runOnFxGet(() -> new Object[] {
+                    engineAccessor.getCurrentRoster(), reloadPromptShowing(), dataProblemsDialogMessage() });
+            Object roster = seen[0];
+            boolean prompt = (Boolean) seen[1];
+            String message = (String) seen[2];
+            if (message != null) {
+                List<String> problems = dataProblems(message);
+                List<String> unexpected = new ArrayList<>();
+                for (String problem : problems) {
+                    if (!isDataChangeNotice(problem)) unexpected.add(problem);
+                }
+                if (problems.isEmpty() || !unexpected.isEmpty()) {
+                    throw new RuntimeException("Failed to reload roster: BattleScribe reported a problem with the data files: "
+                            + (problems.isEmpty() ? message : String.join(" | ", unexpected)));
+                }
+                notices.addAll(problems);
+                runOnFx(() -> fireButtonAsync("#btnDone", ERROR_WINDOW));
+            } else if (prompt) {
+                // A second file the monitor saw changed in a later poll: the same question, the same answer.
+                runOnFx(() -> fireButtonAsync("#btnPositive", CONFIRM_WINDOW));
+            } else if (roster != null && roster != before) {
+                JsonObject result = new JsonObject();
+                JsonArray noticeArray = new JsonArray();
+                for (String notice : notices) noticeArray.add(new JsonPrimitive(notice));
+                result.add("notices", noticeArray);
+                return result.toString();
+            }
+            sleep(POLL_INTERVAL_MS);
+        }
+        throw new RuntimeException(AGENT_GAP + "the reload BattleScribe started did not finish within " + FX_TIMEOUT_MS + "ms");
+    }
+
+    /** BattleScribe's reload prompt is showing: a {@value #CONFIRM_WINDOW} dialog saying {@value #RELOAD_PROMPT_TEXT}. */
+    private boolean reloadPromptShowing() {
+        for (DialogInspector.DialogInfo dialog : DialogInspector.listOpenDialogs()) {
+            if (dialog.title != null && dialog.text != null
+                    && dialog.title.contains(CONFIRM_WINDOW) && dialog.text.contains(RELOAD_PROMPT_TEXT)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The message of a showing data-problems dialog ({@value #ERROR_WINDOW}, {@code #txtErrorMessage}), or null. */

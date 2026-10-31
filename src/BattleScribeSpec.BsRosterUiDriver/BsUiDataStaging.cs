@@ -111,6 +111,50 @@ public sealed class BsUiDataStaging
             && !await HoldsExactlyAsync(gameSystemDirectory, WithIndex(files));
     }
 
+    /// <summary>
+    /// Writes <paramref name="files"/> over the game system directory this stager staged, file by file, as the
+    /// Data Editor saves over the files it edits: a changed file is rewritten in place, an unchanged one left
+    /// alone, a new one added, and one the set no longer has deleted.
+    /// </summary>
+    /// <remarks>
+    /// This is how the data changes under a roster a running Roster Editor holds open, for its reload prompt
+    /// (#568). <see cref="StageDataFilesAsync"/> cannot do it: it replaces the directory in one rename so that an
+    /// app never reads half of it, and the app's file monitor — a commons-io observer polling once a second,
+    /// listening for modifications only — that polls between the old directory's removal and the new one's
+    /// arrival sees the files deleted and then created, never modified, and never asks.
+    /// </remarks>
+    public async Task UpdateInPlaceAsync(
+        string dataDirectoryPath,
+        string gameSystemId,
+        IReadOnlyList<(string FileName, string Content)> files)
+    {
+        if (!string.Equals(_stagedGameSystemId, gameSystemId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"UpdateInPlaceAsync updates the game system this stager staged ('{_stagedGameSystemId}'), not '{gameSystemId}'.");
+        }
+
+        var gameSystemDirectory = Path.Combine(dataDirectoryPath, gameSystemId);
+        var staged = WithIndex(files);
+        foreach (var (fileName, content) in staged)
+        {
+            var path = Path.Combine(gameSystemDirectory, fileName);
+            if (!File.Exists(path) || await File.ReadAllTextAsync(path) != content)
+            {
+                await File.WriteAllTextAsync(path, content);
+            }
+        }
+
+        var names = staged.Select(f => f.FileName).ToHashSet(StringComparer.Ordinal);
+        foreach (var existing in Directory.EnumerateFiles(gameSystemDirectory).ToList())
+        {
+            if (!names.Contains(Path.GetFileName(existing)))
+            {
+                File.Delete(existing);
+            }
+        }
+    }
+
     private static List<(string FileName, string Content)> WithIndex(
         IReadOnlyList<(string FileName, string Content)> files)
         => [.. files, ("index.bsi", BuildIndexXml(files))];

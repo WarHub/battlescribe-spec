@@ -801,7 +801,7 @@ public class EngineAccessor {
      * still propagates, because "the engine has no roster" and "we could not ask" must not read the
      * same.
      */
-    private Object getCurrentRoster() throws Exception {
+    Object getCurrentRoster() throws Exception {
         ensureEngineFound();
         if (getRosterMethod == null) {
             return null;
