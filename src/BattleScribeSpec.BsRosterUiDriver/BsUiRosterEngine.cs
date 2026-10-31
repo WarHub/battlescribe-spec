@@ -779,7 +779,16 @@ public sealed class BsUiRosterEngine : IRosterEngine
         var path = Path.Combine(app.RosterDirectoryPath, $"{_specId ?? "spec"}.ros");
         await File.WriteAllTextAsync(path, xml);
 
-        await CallActionAsync("rosterLoadRosterAction", new JsonObject { ["path"] = path });
+        EnsureSetup();
+        var loaded = await CallAgentAsync("rosterLoadRosterAction", new JsonObject { ["path"] = path });
+
+        // What BattleScribe told the user while fitting the roster to the data on hand: the
+        // selections it dropped because their entries are gone. The agent answers that dialog and
+        // no other. Logged, not asserted — no engine contract carries a load notice yet (#578).
+        foreach (var notice in loaded?["notices"]?.AsArray() ?? [])
+        {
+            Console.Error.WriteLine($"[bs-ui] BattleScribe, loading the roster: {notice}");
+        }
 
         // The roster exists now, and on this engine that has to be said out loud. Nothing here is
         // lazy about the APP: the agent builds the app's LoadDataParams and applies them on the FX
