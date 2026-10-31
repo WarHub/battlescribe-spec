@@ -25,6 +25,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scope` limited to the keyword list, where BattleScribe also takes an ancestor entry's id. Before this,
   the roster schema refused data the loader accepts.
 
+- **Roster migration: what a saved roster becomes when its data changes (#280).** Eight scenario specs
+  under `specs/scenario/migration/` each save a roster, make one change in the data editor, and reopen
+  the roster: an entry deleted, renamed or hidden, a max tightened below the count, a cost changed under
+  a custom name, a child entry deleted, a child made mandatory, a force entry deleted. Expectations are
+  the BattleScribe app's, run through `battlescribe-ui` first. Both families re-resolve a saved roster
+  against the data on hand; four NewRecruit differences are pinned as overrides with their reasons —
+  selection notes lost through the file, a newly mandatory child selected on load, a roster whose force
+  entry is gone refused, and nothing said about what was dropped. The `battlescribe-ui` driver now
+  answers the app's data-problems dialog when it lists only data-change notices, instead of timing out
+  behind it with the roster already loaded; the notices are logged until an engine contract can carry
+  them (#578). Design: `docs/adr/003-roster-migration.md`.
+
 - **Scenario specs: the data editor and the roster editor in one spec (#273).** A spec under
   `specs/scenario/` follows one engine family's data editor and roster editor through a single run — edit
   data and save it, build a roster and save it, edit again, reopen the roster against the new data —
@@ -987,6 +999,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   bump path is a slow leak rather than a fix.
 
 ### Fixed
+
+- **`bs-spec format` no longer deletes a comment heading an `expectedState`.** The zone sort collected
+  the lines of each property and dropped whatever stood between `- expectedState:` and the first one,
+  so a comment there vanished whenever the properties were out of order, top-level or inside a
+  scenario block. Lines ahead of the first property now stay at the head of the block.
 
 - **The in-process `battlescribe` adapter selects and counts children of the game system's own entries
   (#566).** It looked up a parent entry in an index of catalogue entries, as the files declare them, so a

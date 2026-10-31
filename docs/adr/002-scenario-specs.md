@@ -272,7 +272,8 @@ All five `handoff` scenarios pass on every family, `battlescribe-ui` (the deskto
 - **NR loads NR Editor output.** Both NR roster engines load the NR Editor's own exports, edited and
   reloaded ones included.
 - **For #280, not yet checked against the app:** the in-process adapter's `LoadRoster` keeps the
-  force and silently drops a selection whose entry the edited data no longer has.
+  force and silently drops a selection whose entry the edited data no longer has. Checked since: the
+  app drops it too, and says so in a dialog ([ADR 003](003-roster-migration.md)).
 
 Found along the way and filed:
 

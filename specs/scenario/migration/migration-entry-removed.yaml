@@ -1,0 +1,91 @@
+id: migration-entry-removed
+category: migration
+description: >
+  A selection whose entry the data no longer has is dropped when the roster is reopened. A roster
+  holding one Squad is saved; the data editor deletes the Squad entry and saves; reopening the
+  roster gives back the force with no selections and no validation errors. Every engine drops it.
+  BattleScribe also tells the user, in an Error dialog listing 'Some selections have been removed
+  from your roster because they no longer exist in the data file(s).', which the others do not; no
+  spec can assert that yet (#578).
+tags: [migration, reopen]
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            name: Troops
+            targetId: ce-troops
+          - id: cl-fe-elites
+            name: Elites
+            targetId: ce-elites
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              name: Troops
+              targetId: ce-troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          selectionEntries:
+            - id: se-plasma
+              name: Plasma
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 2
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: removeEntry
+        entryId: se-squad
+
+  - action: saveData
+
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          errors: []
+          forces:
+            - name: Detachment
+              selectionCount: 0

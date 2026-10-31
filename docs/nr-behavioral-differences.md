@@ -826,6 +826,22 @@ used to keep `importBs`'s return value, and was for that reason the only lane re
 Veterans (`roundtrip-load-number-on-parent-selection`). It calls `selectList` now, so both NR
 lanes open the imported list through the same action the app uses.
 
+### Reopening a roster against changed data
+
+The `migration` scenarios (`specs/scenario/migration/`, [ADR 003](adr/003-roster-migration.md)) save a
+roster, change its data, and open it again. Both families re-resolve it against the data on hand; four
+things differ, and each spec carries its NewRecruit override with the reason:
+
+- **Selection notes do not survive the saved file.** A selection's custom name comes back; its notes
+  do not (`migration-custom-name-kept`).
+- **A child the data has since made mandatory is selected on load.** BattleScribe loads the roster as
+  saved and reports the min violation; NewRecruit adds the child and reports nothing
+  (`migration-mandatory-child-added`).
+- **A force whose force entry is gone refuses the load** with "Couldn't add Force"; BattleScribe drops
+  the force and opens the rest (`migration-force-entry-removed`).
+- **Nothing is said about what was dropped.** A selection whose entry is gone is dropped by both
+  families; BattleScribe lists it in a dialog, NewRecruit drops it silently (#578).
+
 ---
 
 ## 8. Invalid and Edge-of-Range Input (#25)

@@ -1,0 +1,115 @@
+id: migration-constraint-tightened
+category: migration
+description: >
+  A roster that a tightened constraint no longer allows is kept as it is and reported, not trimmed
+  to fit. Two Squads are saved under a max-3 constraint; the data editor drops the max to 1 and
+  saves; reopening the roster gives back both Squads and the max violation. BattleScribe raises it
+  on the force the constraint counts in, NewRecruit on the first Squad, as each does for any max.
+tags: [migration, reopen, constraint, max]
+
+engines:
+  # NR Editor UI driver gap: setFields cannot address a constraint the setup declared (#579).
+  newrecruit-ui: fail
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    categoryEntries:
+      - id: ce-troops
+        name: Troops
+      - id: ce-elites
+        name: Elites
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+        categoryLinks:
+          - id: cl-fe-troops
+            name: Troops
+            targetId: ce-troops
+          - id: cl-fe-elites
+            name: Elites
+            targetId: ce-elites
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          categoryLinks:
+            - id: cl-squad-troops
+              name: Troops
+              targetId: ce-troops
+              primary: true
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+          constraints:
+            - id: con-squad-max
+              type: max
+              value: 3
+              field: selections
+              scope: force
+          selectionEntries:
+            - id: se-plasma
+              name: Plasma
+              type: upgrade
+              costs:
+                - name: pts
+                  typeId: ct-pts
+                  value: 2
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: setFields
+        entryId: con-squad-max
+        fields:
+          value: "1"
+
+  - action: saveData
+
+  - action: openRoster
+    file: detachment
+
+  - roster:
+      - expectedState:
+          errors:
+            - on: force ${{ steps.add-detachment.forceId }}
+              from: se-squad/con-squad-max
+          costs:
+            - typeId: ct-pts
+              value: 20
+          forces:
+            - name: Detachment
+              selectionCount: 2
+          engines:
+            newrecruit:
+              errors:
+                - on: selection ${{ steps.select-squad.selectionId }}
+                  from: se-squad/con-squad-max
