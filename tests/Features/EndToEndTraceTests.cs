@@ -50,8 +50,7 @@ public sealed class EndToEndTraceTests
                     new SpecSuiteOptions
                     {
                         FilterPatterns = [$"protocol/{SpecId}"],
-                        EngineFilter = "battlescribe",
-                        AssertionEngine = "battlescribe",
+                        Engine = EngineIdentity.Of("battlescribe"),
                         Workers = 1,
                         AdapterFactory = workerIndex =>
                         {

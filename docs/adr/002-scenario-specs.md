@@ -197,11 +197,15 @@ which is why declared ids exist.
 
 A scenario's identity is the family's concrete engine name (`battlescribe`, `battlescribe-ui`,
 `newrecruit`, `newrecruit-ui`). Overrides follow one rule in both kinds of block: the concrete name's
-entry wins, otherwise the base engine's entry applies (`battlescribe-ui` → `battlescribe`). That is
-the roster runner's existing rule. The gamedata runner takes the same optional base identity, which
-only scenario runs pass, so gamedata specs are unaffected.
+entry wins, otherwise the family's entry applies (`battlescribe-ui` → `battlescribe`). That was the
+roster runner's existing rule, and scenarios adopted it for their `engines:`, their blocks and their
+hand-offs.
 
-Spec-level `engines: {name: skip|fail}` is unchanged.
+**Superseded in scope by #573.** When this ADR was written the gamedata runner took the family only from
+scenario runs, so gamedata specs kept an exact-name rule, as did `bs-spec run`, `run --all`, `verify` and
+several NR lanes. #573 made the scenario rule the only one: every runner, in every domain, reads a
+per-engine entry through `EngineIdentity` — its own entry, else its family's — and the spec lints refuse a
+driver entry that restates its family's.
 
 ### Where scenarios run
 

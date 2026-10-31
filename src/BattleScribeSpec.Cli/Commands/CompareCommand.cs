@@ -85,14 +85,14 @@ internal static class CompareCommand
         };
         var expectedFailures = new Option<string?>("--expected-failures")
         {
-            Description = "Engine name for spec-level expected failures, applied to both arms " +
-                "(mirrors 'run --all'; a spec annotated as expected-to-fail reports expected-failure/" +
-                "unexpected-pass here instead of failed/passed).",
+            Description = "Engine whose 'engines: {…: fail}' entries mark expected failures — its own entry, " +
+                "else its family's — applied to both arms (mirrors 'run --all'; a spec annotated as " +
+                "expected-to-fail reports expected-failure/unexpected-pass here instead of failed/passed).",
         };
         var assertionEngine = new Option<string?>("--assertion-engine")
         {
-            Description = "Engine name for step-level assertion overrides, applied to both arms " +
-                "(mirrors 'run --all'; defaults to the engine identity).",
+            Description = "Engine family whose declarations apply where a spec names none for the engine " +
+                "itself, applied to both arms (mirrors 'run --all'; defaults to the engine's name without -ui).",
         };
         var policyA = new Option<string?>("--policy-a")
         {
@@ -402,9 +402,8 @@ internal static class CompareCommand
                 {
                     SpecsDirectory = options.SpecsDir,
                     FilterPatterns = filterPatterns,
-                    EngineFilter = selection.EngineName,
-                    ExpectedFailuresEngine = options.ExpectedFailures,
-                    AssertionEngine = options.AssertionEngine ?? selection.AssertionEngineName,
+                    Engine = selection.IdentityWithFamily(options.AssertionEngine),
+                    ExpectedFailures = options.ExpectedFailures is { Length: > 0 } xfail ? EngineIdentity.Of(xfail) : null,
                     Workers = workers,
                     Domains = options.Domains,
                     AdapterFactory = workerIndex =>

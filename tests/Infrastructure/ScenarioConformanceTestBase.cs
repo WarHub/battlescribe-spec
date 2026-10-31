@@ -39,12 +39,10 @@ public abstract class ScenarioConformanceTestBase
     protected abstract string EngineName { get; }
 
     /// <summary>
-    /// The engine whose declarations apply when a spec names none for <see cref="EngineName"/>. Defaults to
-    /// <see cref="EngineName"/>; a UI lane overrides it with the engine it drives. One rule for the spec's
-    /// <c>engines:</c> and for both kinds of block — the one <see cref="ConformanceTestBase.BaseEngineName"/>
-    /// documents, and the one <see cref="ScenarioRunner"/> applies inside the run.
+    /// <see cref="EngineName"/> in its family: the spec's <c>engines:</c>, both kinds of block and the hand-offs
+    /// resolve through it — the driver's own entry, else its family's (<see cref="ConformanceTestBase.Engine"/>).
     /// </summary>
-    protected virtual string BaseEngineName => EngineName;
+    protected EngineIdentity Engine => EngineIdentity.Of(EngineName);
 
     /// <summary>Optional prefix for log messages (e.g., <c>[BS-SCENARIO] </c>).</summary>
     protected virtual string LogPrefix => "";
@@ -55,12 +53,6 @@ public abstract class ScenarioConformanceTestBase
     /// pass (see <c>ConformanceTestBase.EngineOrSkip</c> for why a row that drove no engine must not return).
     /// </summary>
     protected abstract ScenarioEngines? GetEngines();
-
-    /// <summary>
-    /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c> — resolved
-    /// most-specific-first: this engine's own entry, else the base engine's.
-    /// </summary>
-    private string ExpectationFor(ScenarioSpecFile spec) => spec.GetExpectation(EngineName, BaseEngineName);
 
     /// <summary>
     /// One row per scenario spec, carrying and labelled with its name (<c>category/id</c>) — see
@@ -111,16 +103,15 @@ public abstract class ScenarioConformanceTestBase
     protected void RunSpec(string specName)
     {
         var spec = SpecLoader.LoadScenario(SpecLoader.ResolveScenarioSpec(specName));
-        var expectation = ExpectationFor(spec);
+        var expectation = spec.ExpectationFor(Engine);
 
         // A skip, not a return: a returned row is Passed (ConformanceTestBase.EngineOrSkip's remarks).
-        if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
+        if (expectation == EngineExpectation.Skip)
         {
-            var opted = spec.Engines?.ContainsKey(EngineName) == true ? EngineName : BaseEngineName;
-            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{opted}: skip}})");
+            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{spec.DeclaringKey(Engine)}: skip}})");
         }
 
-        var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
+        var expectedToFail = expectation == EngineExpectation.Fail;
         _output.WriteLine($"{LogPrefix}Running scenario: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engines = GetEngines();
@@ -132,7 +123,7 @@ public abstract class ScenarioConformanceTestBase
         SpecResult result;
         try
         {
-            result = new ScenarioRunner(engines.Data, engines.Roster, EngineName, BaseEngineName).Run(spec);
+            result = new ScenarioRunner(engines.Data, engines.Roster, Engine).Run(spec);
         }
         finally
         {

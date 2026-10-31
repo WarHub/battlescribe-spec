@@ -48,14 +48,6 @@ namespace BattleScribeSpec.Batch;
 /// </remarks>
 public static class SpecSuiteRunner
 {
-    /// <summary>
-    /// The identity a scenario runs under when the run names no engine (an anonymous adapter with no
-    /// <see cref="SpecSuiteOptions.AssertionEngine"/>). <see cref="ScenarioRunner"/> takes a name where the
-    /// other runners take null; this is the label they print for null, and as an override key it matches no
-    /// spec's <c>engines:</c> entry, so only the base expectations apply — which is what null means to them.
-    /// </summary>
-    public const string UnnamedEngine = "(unnamed engine)";
-
     /// <summary>The skip reason of a gamedata spec on an adapter that does not advertise the gamedata domain.</summary>
     public const string GameDataUnsupportedReason = "Skipped: engine does not support gamedata domain";
 
@@ -157,9 +149,8 @@ public static class SpecSuiteRunner
 
         var filterPatterns = options.FilterPatterns;
         var tagFilter = options.TagFilter;
-        var engineFilter = options.EngineFilter;
-        var expectedFailuresEngine = options.ExpectedFailuresEngine;
-        var assertionEngine = options.AssertionEngine;
+        var engine = options.Engine;
+        var expectedFailures = options.ExpectedFailures;
         var workers = options.Workers;
 
         // Shared across every worker (sequential has exactly one) so the adapter-death recovery
@@ -199,11 +190,9 @@ public static class SpecSuiteRunner
 
         // Pre-filter specs (filtering doesn't need the adapter)
         var filterLabel = filterPatterns is not null ? string.Join(",", filterPatterns) : "";
-        var filteredSpecs = PreFilterSpecs(specSources, SpecDomain.Roster, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
-        var filteredGameDataSpecs = PreFilterSpecs(gameDataSpecSources, SpecDomain.GameData, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults);
-        // A scenario's `engines:` follows the rule its blocks do: a UI driver inherits its base engine's
-        // entry (ScenarioRunner, the scenario lanes). Roster and gamedata keep this runner's exact-name rule.
-        var filteredScenarioSpecs = PreFilterSpecs(scenarioSpecSources, SpecDomain.Scenario, filterPatterns, filterLabel, tagFilter, engineFilter, results, reportResults, baseEngine: assertionEngine);
+        var filteredSpecs = PreFilterSpecs(specSources, SpecDomain.Roster, filterPatterns, filterLabel, tagFilter, engine, results, reportResults);
+        var filteredGameDataSpecs = PreFilterSpecs(gameDataSpecSources, SpecDomain.GameData, filterPatterns, filterLabel, tagFilter, engine, results, reportResults);
+        var filteredScenarioSpecs = PreFilterSpecs(scenarioSpecSources, SpecDomain.Scenario, filterPatterns, filterLabel, tagFilter, engine, results, reportResults);
 
         // Counted before the describe gate below can still skip some of them: "selected" is what the
         // filters asked to run, so the nothing-executed message can tell "matched nothing" from
@@ -276,8 +265,8 @@ public static class SpecSuiteRunner
                     try
                     {
                         var (result, status, durationMs, deaths) = RunOneSpec(
-                            ref proc, pooled.WorkerIndex, item.Spec, domain, assertionEngine, engineFilter,
-                            expectedFailuresEngine, options.AdapterFactory, deathBudget, progressWriter);
+                            ref proc, pooled.WorkerIndex, item.Spec, domain, engine, expectedFailures,
+                            options.AdapterFactory, deathBudget, progressWriter);
                         if (!ReferenceEquals(proc, pooled.Process))
                         {
                             lock (allProcessesLock)
@@ -329,7 +318,7 @@ public static class SpecSuiteRunner
                 foreach (var (_, _, spec) in specs)
                 {
                     var (result, status, durationMs, deaths) = RunOneSpec(
-                        ref proc, 0, spec, domain, assertionEngine, engineFilter, expectedFailuresEngine,
+                        ref proc, 0, spec, domain, engine, expectedFailures,
                         options.AdapterFactory, deathBudget, progressWriter);
                     allProcesses.Add(proc);
                     Record(result, spec, domain, status, durationMs, deaths);
@@ -356,7 +345,7 @@ public static class SpecSuiteRunner
 
         sw.Stop();
 
-        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, scenarioSpecsByResult, durationsByResult, totalSpecs, selected, sw.Elapsed, expectedFailuresEngine);
+        return SpecSuiteResult.Create(results, reportResults, specsByResult, gameDataSpecsByResult, scenarioSpecsByResult, durationsByResult, totalSpecs, selected, sw.Elapsed, expectedFailures);
     }
 
     /// <summary>
@@ -373,10 +362,9 @@ public static class SpecSuiteRunner
         IReadOnlyList<string>? filterPatterns,
         string filterLabel,
         TagFilter? tagFilter,
-        string? engineFilter,
+        EngineIdentity? engine,
         List<SpecResult> results,
-        List<SpecResultSummary> reportResults,
-        string? baseEngine = null)
+        List<SpecResultSummary> reportResults)
         where TSpec : SpecFileBase
     {
         var domainName = domain.Name();
@@ -412,10 +400,12 @@ public static class SpecSuiteRunner
                 continue;
             }
 
-            if (engineFilter is not null && string.Equals(spec.GetExpectation(engineFilter, baseEngine), "skip", StringComparison.OrdinalIgnoreCase))
+            // The one rule every runner applies (EngineIdentity): a UI driver inherits its family's `skip`
+            // unless the spec names the driver itself.
+            if (engine is not null && !spec.IsApplicableTo(engine))
             {
                 reportResults.Add(new SpecResultSummary(id, category, spec.Description, "skipped",
-                    [$"Skipped by engine filter '{engineFilter}'"], spec.Tags, Domain: domainName));
+                    [$"Skipped by engine filter '{engine.Name}' (the spec says engines: {{{spec.DeclaringKey(engine)}: skip}})"], spec.Tags, Domain: domainName));
                 continue;
             }
 
@@ -519,9 +509,8 @@ public static class SpecSuiteRunner
         int workerIndex,
         SpecFileBase spec,
         SpecDomain domain,
-        string? assertionEngine,
-        string? engineFilter,
-        string? expectedFailuresEngine,
+        EngineIdentity? engine,
+        EngineIdentity? expectedFailures,
         Func<int, AdapterProcess> adapterFactory,
         AdapterDeathBudget deathBudget,
         TextWriter? progressWriter)
@@ -529,7 +518,7 @@ public static class SpecSuiteRunner
         var wasAlreadyDead = proc.HasExited;
 
         var (result, status, durationMs) = RunOneSpecAttempt(
-            proc, spec, domain, assertionEngine, engineFilter, expectedFailuresEngine);
+            proc, spec, domain, engine, expectedFailures);
         if (!proc.HasExited)
         {
             return (result, status, durationMs, 0);
@@ -595,7 +584,7 @@ public static class SpecSuiteRunner
         }
 
         var (retryResult, retryStatus, retryDurationMs) = RunOneSpecAttempt(
-            proc, spec, domain, assertionEngine, engineFilter, expectedFailuresEngine);
+            proc, spec, domain, engine, expectedFailures);
         if (!proc.HasExited)
         {
             // Retried on a fresh process and it did not die — the retry's verdict wins, but the
@@ -624,9 +613,8 @@ public static class SpecSuiteRunner
         AdapterProcess proc,
         SpecFileBase spec,
         SpecDomain domain,
-        string? assertionEngine,
-        string? engineFilter,
-        string? expectedFailuresEngine)
+        EngineIdentity? identity,
+        EngineIdentity? expectedFailures)
     {
         using var activity = HarnessTelemetry.StartSpec(spec.Id, spec.Category, domain.Name());
 
@@ -635,18 +623,17 @@ public static class SpecSuiteRunner
         if (domain == SpecDomain.GameData)
         {
             using var engine = new JsonProtocolGameDataEngine(proc, null);
-            var runner = new GameDataRunner(engine, assertionEngine ?? engineFilter);
+            var runner = new GameDataRunner(engine, identity);
             result = runner.Run((GameDataSpecFile)spec);
         }
         else if (domain == SpecDomain.Scenario)
         {
             // One process, both editors: the adapter keeps its roster and gamedata engines in separate
             // slots, so the two wrappers drive them side by side. Each sends `teardown` when disposed, which
-            // resets both slots; the second is a no-op. The scenario's identity is the concrete engine, with
-            // the assertion engine as the base whose declarations apply when the spec names no concrete one.
+            // resets both slots; the second is a no-op.
             using var dataEngine = new JsonProtocolGameDataEngine(proc, null);
             using var rosterEngine = new JsonProtocolEngine(proc, null);
-            var runner = new ScenarioRunner(dataEngine, rosterEngine, engineFilter ?? assertionEngine ?? UnnamedEngine, assertionEngine);
+            var runner = new ScenarioRunner(dataEngine, rosterEngine, identity);
             result = runner.Run((ScenarioSpecFile)spec);
         }
         else
@@ -654,13 +641,13 @@ public static class SpecSuiteRunner
             var rosterSpec = (SpecFile)spec;
             var timeout = rosterSpec.Setup.DataSource is not null ? TimeSpan.FromMinutes(5) : (TimeSpan?)null;
             using var engine = new JsonProtocolEngine(proc, timeout);
-            var runner = new RosterRunner(engine, new DataSourceResolver(), assertionEngine ?? engineFilter, engineFilter);
+            var runner = new RosterRunner(engine, new DataSourceResolver(), identity);
             result = runner.Run(rosterSpec);
         }
 
         sw.Stop();
 
-        var status = ComputeStatus(result, spec, expectedFailuresEngine);
+        var status = ComputeStatus(result, spec, expectedFailures);
         HarnessTelemetry.SetVerdict(activity, status);
 
         // Checked here (right where `proc` is in scope) rather than by the caller re-deriving it —
@@ -745,7 +732,7 @@ public static class SpecSuiteRunner
     /// verdict. <b>Deliberately NOT used</b> for <see cref="AdapterDeathResult"/>/
     /// <see cref="CapExceededResult"/>/<see cref="ReplacementFailedResult"/> (code review follow-up,
     /// MINOR 4 in the #304 hygiene review): those three always report <c>"failed"</c> even when
-    /// <see cref="SpecSuiteOptions.ExpectedFailuresEngine"/> is set and the spec is marked
+    /// <see cref="SpecSuiteOptions.ExpectedFailures"/> is set and the spec is marked
     /// expected-to-fail. This is a deliberate choice, not an oversight — an adapter death (a process
     /// crash) is a categorically different outcome from an "expected failure" (a known, semantic
     /// assertion mismatch), and routing it through <see cref="ComputeStatus"/> would let a genuine
@@ -755,12 +742,12 @@ public static class SpecSuiteRunner
     /// these results via <c>spec.IsExpectedToFail</c>, so the exit code is correct either way; only
     /// the display string is affected.
     /// </summary>
-    private static string ComputeStatus(SpecResult result, SpecFileBase spec, string? expectedFailuresEngine)
+    private static string ComputeStatus(SpecResult result, SpecFileBase spec, EngineIdentity? expectedFailures)
     {
         var status = result.Passed ? "passed" : "failed";
-        if (expectedFailuresEngine is not null)
+        if (expectedFailures is not null)
         {
-            var isExpectedFail = spec.IsExpectedToFail(expectedFailuresEngine);
+            var isExpectedFail = spec.IsExpectedToFail(expectedFailures);
             if (!result.Passed && isExpectedFail)
             {
                 status = "expected-failure";

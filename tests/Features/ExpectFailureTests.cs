@@ -246,7 +246,7 @@ public class ExpectFailureTests(ITestOutputHelper output)
             ],
         };
 
-        var result = new GameDataRunner(engine, "battlescribe").Run(spec);
+        var result = new GameDataRunner(engine, EngineIdentity.Of("battlescribe")).Run(spec);
 
         var failure = Assert.Single(result.Failures);
         output.WriteLine(failure);
@@ -366,7 +366,7 @@ public class ExpectFailureTests(ITestOutputHelper output)
     public void ARefusedStep_LeavesTheRunAliveForTheNextAssertion()
     {
         using var engine = new ScriptedEngine(new InvalidOperationException("Content is not allowed in prolog."));
-        var result = new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml("""
+        var result = new RosterRunner(engine, identity: EngineIdentity.Of("battlescribe")).Run(SpecLoader.LoadFromYaml("""
             id: expect-failure-continues
             category: roundtrip
             description: harness
@@ -575,7 +575,7 @@ public class ExpectFailureTests(ITestOutputHelper output)
             """.Replace("DECLARATION", Indent(expectFailure, 4), StringComparison.Ordinal);
 
         using var engine = new ScriptedEngine(throws);
-        return new RosterRunner(engine, engineName: engineName).Run(SpecLoader.LoadFromYaml(yaml));
+        return new RosterRunner(engine, identity: EngineIdentity.Of(engineName)).Run(SpecLoader.LoadFromYaml(yaml));
     }
 
     /// <summary>Runs <paramref name="steps"/> — a YAML step list, written flat — against <paramref name="engine"/>.</summary>
@@ -602,7 +602,7 @@ public class ExpectFailureTests(ITestOutputHelper output)
             STEPS
             """.Replace("STEPS", Indent(steps, 2), StringComparison.Ordinal);
 
-        return new RosterRunner(engine, engineName: "battlescribe").Run(SpecLoader.LoadFromYaml(yaml));
+        return new RosterRunner(engine, identity: EngineIdentity.Of("battlescribe")).Run(SpecLoader.LoadFromYaml(yaml));
     }
 
     private static string Indent(string yaml, int spaces)

@@ -16,7 +16,6 @@ tags: [edge-case]
 
 engines:
   newrecruit: fail
-  newrecruit-ui: fail
 
 setup:
   gameSystem:

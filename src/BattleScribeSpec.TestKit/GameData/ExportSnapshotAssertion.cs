@@ -90,7 +90,7 @@ public static class ExportSnapshotAssertion
     public static string? AssertOrUpdate(
         ExpectedFileDef def,
         string actualRaw,
-        string? engineName,
+        EngineIdentity? engine,
         string specId,
         string? specDir,
         string? stepId,
@@ -126,15 +126,15 @@ public static class ExportSnapshotAssertion
             // Roster snapshots are stored templated (volatile ids → ${{ … }} tokens) so they stay
             // deterministic and diffable; gamedata writes verbatim (templatizeForWrite is identity).
             var toWrite = NormalizeNewlines(templatizeForWrite?.Invoke(actual) ?? actual);
-            WriteSnapshot(engineName, specDir, specId, key, ext, toWrite, onDiverge ?? DefaultOnDiverge);
+            WriteSnapshot(engine, specDir, specId, key, ext, toWrite, onDiverge ?? DefaultOnDiverge);
             return null;
         }
 
         // Read/compare: engine-agnostic (never consults the base-engine name).
-        var path = GameDataSnapshotResolver.Resolve(specDir, specId, key, engineName, ext);
+        var path = GameDataSnapshotResolver.Resolve(specDir, specId, key, engine, ext);
         if (path is null)
         {
-            return $"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engineName}', .{ext}); " +
+            return $"Step {stepIndex}: no expected file for snapshot '{key}' (engine '{engine?.Name ?? EngineIdentity.Unnamed}', .{ext}); " +
                 "create it with `bs-spec run --update-snapshots <spec>` on this engine";
         }
 
@@ -190,7 +190,7 @@ public static class ExportSnapshotAssertion
     /// the base or pin a new family override.
     /// </summary>
     private static void WriteSnapshot(
-        string? engine, string specDir, string specId, string key, string ext, string actual,
+        EngineIdentity? engine, string specDir, string specId, string key, string ext, string actual,
         Func<SnapshotDivergence, SnapshotWriteTarget> onDiverge)
     {
         var basePath = GameDataSnapshotResolver.BasePath(specDir, specId, key, ext);
@@ -229,16 +229,15 @@ public static class ExportSnapshotAssertion
         if (baseContent is null)
         {
             Console.Error.WriteLine(
-                $"[snapshot] no base for '{key}'; writing it from engine '{engine}'. Regenerate with the base " +
+                $"[snapshot] no base for '{key}'; writing it from engine '{engine.Name}'. Regenerate with the base " +
                 $"engine ('{GameDataSnapshotResolver.BaseEngineName}') if this is not the reference.");
             SafeWriteSnapshot(basePath, actual);
             return;
         }
 
         // 4. Diverges from the base with no override yet — ask base-vs-override.
-        var family = GameDataSnapshotResolver.Family(engine);
-        var overridePath = GameDataSnapshotResolver.OverridePath(specDir, specId, key, family, ext);
-        var target = onDiverge(new SnapshotDivergence(engine, specId, key, basePath, overridePath));
+        var overridePath = GameDataSnapshotResolver.OverridePath(specDir, specId, key, engine.Family, ext);
+        var target = onDiverge(new SnapshotDivergence(engine.Name, specId, key, basePath, overridePath));
         SafeWriteSnapshot(target == SnapshotWriteTarget.Base ? basePath : overridePath, actual);
     }
 

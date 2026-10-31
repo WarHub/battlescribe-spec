@@ -64,8 +64,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
             FilterPatterns = ["protocol/protocol-kitchen-sink"],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ =>
             {
                 callCount++;
@@ -92,8 +91,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
             FilterPatterns = ["protocol/protocol-kitchen-sink", "catalogue/catalogue-cost-types"],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ => AdapterTestHost.StartReferenceAdapter(
                 new Dictionary<string, string> { [KillEnvVar] = "protocol-kitchen-sink" }),
         });
@@ -124,8 +122,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
                 "catalogue/catalogue-cost-types",
                 "category/category-entry-hidden",
             ],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ =>
             {
                 callCount++;
@@ -149,8 +146,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
             FilterPatterns = ["protocol/protocol-kitchen-sink"],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             Workers = 2,
             AdapterFactory = _ =>
             {
@@ -180,8 +176,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
                 "category/category-entry-hidden",
                 "condition/condition-at-least",
             ],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             Workers = 2,
             AdapterFactory = _ => AdapterTestHost.StartReferenceAdapter(
                 new Dictionary<string, string> { [KillEnvVar] = "protocol-kitchen-sink" }),
@@ -212,8 +207,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
                 "catalogue/catalogue-cost-types",
                 "category/category-entry-hidden",
             ],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             MaxAdapterDeaths = 1,
             AdapterFactory = _ =>
             {
@@ -303,8 +297,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
                 "category/category-entry-hidden",
                 "condition/condition-at-least",
             ],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             Workers = 2,
             MaxAdapterDeaths = 1,
             AdapterFactory = _ =>
@@ -360,8 +353,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
         var result = await SpecSuiteRunner.RunAsync(new SpecSuiteOptions
         {
             FilterPatterns = ["protocol/protocol-kitchen-sink", "catalogue/catalogue-cost-types"],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             AdapterFactory = _ =>
             {
                 var n = Interlocked.Increment(ref callCount);
@@ -413,8 +405,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
                 "catalogue/catalogue-cost-types",
                 "category/category-entry-hidden",
             ],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             MaxAdapterDeaths = 1,
             AdapterFactory = _ =>
             {
@@ -496,8 +487,7 @@ public sealed class SpecSuiteRunnerAdapterDeathTests
                 "category/category-entry-hidden",
                 "condition/condition-at-least",
             ],
-            EngineFilter = "battlescribe",
-            AssertionEngine = "battlescribe",
+            Engine = EngineIdentity.Of("battlescribe"),
             Workers = 2,
             MaxAdapterDeaths = 0,
             AdapterFactory = _ =>

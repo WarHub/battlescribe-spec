@@ -62,7 +62,7 @@
     "engineExpectation": { "type": "string", "enum": ["pass", "fail", "skip"] },
     "specEngines": {
       "type": "object",
-      "description": "Per-engine expectation for the whole spec. An engine not listed is expected to pass.",
+      "description": "Per-engine expectation: pass (the default), fail or skip. Every runner reads it by one rule: an engine's own entry, else its family's (a UI driver's family is its name without -ui, so battlescribe: skip covers battlescribe-ui). Give a UI driver an entry only where its value differs from its family's; the lint refuses a restatement.",
       "propertyNames": { "$ref": "#/$defs/engineName" },
       "additionalProperties": { "$ref": "#/$defs/engineExpectation" }
     },

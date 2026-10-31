@@ -46,25 +46,14 @@ public sealed class FrozenNrUiRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly FrozenNrUiRosterFixture _fixture;
-    private const string EngineName = "newrecruit";
     private const string LogPrefix = "[FROZEN-UI] ";
 
-    /// <summary>The concrete engine this lane drives, as specs address it.</summary>
-    private const string EngineIdentity = "newrecruit-ui";
-
     /// <summary>
-    /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c>.
-    /// <para>
-    /// Most specific wins, matching <see cref="RosterRunner"/>: a spec that names
-    /// <c>newrecruit-ui</c> means this driver specifically; otherwise it inherits whatever it says
-    /// for the base <c>newrecruit</c> engine. Checking only the base name is why a
-    /// <c>newrecruit-ui</c> entry used to have no effect here at all.
-    /// </para>
+    /// The engine this lane drives, in its family: a spec that names <c>newrecruit-ui</c> means this driver
+    /// specifically; otherwise it inherits whatever it says for <c>newrecruit</c> (<see cref="EngineIdentity"/>).
+    /// Checking only the family name is why a <c>newrecruit-ui</c> entry once had no effect here at all.
     /// </summary>
-    private static string ExpectationFor(SpecFile spec)
-        => spec.Engines is not null && spec.Engines.ContainsKey(EngineIdentity)
-            ? spec.GetExpectation(EngineIdentity)
-            : spec.GetExpectation(EngineName);
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("newrecruit-ui");
 
     public FrozenNrUiRosterConformanceTests(ITestOutputHelper output, FrozenNrUiRosterFixture fixture)
     {
@@ -89,7 +78,7 @@ public sealed class FrozenNrUiRosterConformanceTests
         var allSpecs = ConformanceTestBase.AllSpecPaths();
         var resolver = new DataSourceResolver();
 
-        static bool Applies(SpecFile spec) => !string.Equals(ExpectationFor(spec), "skip", StringComparison.OrdinalIgnoreCase);
+        static bool Applies(SpecFile spec) => spec.IsApplicableTo(Engine);
 
         // The whole corpus is read for either part: it is what the [lane] line counts `applicable` from.
         var corpus = allSpecs.Select(s => (s.Path, s.Name, spec: SpecLoader.Load(s.Path))).ToList();
@@ -113,29 +102,25 @@ public sealed class FrozenNrUiRosterConformanceTests
         foreach (var (specPath, specName, spec) in loadedSpecs)
         {
             lane.ThrowIfStopped(stop);
-            var expectation = ExpectationFor(spec);
-            if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
+            var expectation = spec.ExpectationFor(Engine);
+            if (expectation == EngineExpectation.Skip)
             {
                 skipped++;
                 continue;
             }
 
-            var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
+            var expectedToFail = expectation == EngineExpectation.Fail;
             var clock = Stopwatch.StartNew();
             engine.SetTestContext(specName);
 
-            // Both identities: this drives `newrecruit-ui`, and a spec addressing that name by its
-            // own must be honoured. Passing only the base name is what made
-            // `engines: {newrecruit-ui: …}` silently inert here — the same collapse RosterRunner's
-            // own remarks describe.
-            var runner = new RosterRunner(engine, resolver, EngineName, EngineIdentity);
+            var runner = new RosterRunner(engine, resolver, Engine);
             var result = runner.Run(spec);
             engine.Cleanup();
             skippedSteps.Record(specName, result);
 
             if (result.Passed && expectedToFail)
             {
-                failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                failures.Add($"Spec '{specName}' was expected to fail on {Engine.Name} but now passes!");
                 lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                 continue;
             }
@@ -200,7 +185,7 @@ public sealed class FrozenNrUiRosterConformanceTests
         foreach (var scenario in AddressingScenarios.All)
         {
             engine.SetTestContext($"addressing/{scenario}");
-            var result = new RosterRunner(engine, new DataSourceResolver(), EngineName, EngineIdentity)
+            var result = new RosterRunner(engine, new DataSourceResolver(), Engine)
                 .Run(AddressingScenarios.Load(scenario));
             engine.Cleanup();
             foreach (var failure in result.Failures)

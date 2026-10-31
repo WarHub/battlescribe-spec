@@ -28,7 +28,7 @@ public sealed class GameDataCapabilityRegressionTests
     public void ExpectedFile_WhenTheEngineCannotExport_Fails()
     {
         var engine = new NonExportingGameDataEngine();
-        var runner = new GameDataRunner(engine, "battlescribe");
+        var runner = new GameDataRunner(engine, EngineIdentity.Of("battlescribe"));
 
         var result = runner.Run(FileAssertionSpec());
 
@@ -43,7 +43,7 @@ public sealed class GameDataCapabilityRegressionTests
     public void ExpectedFile_WhenTheEngineExports_ActuallyCompares()
     {
         var engine = new NonExportingGameDataEngine { Xml = "<catalogue>actual</catalogue>" };
-        var runner = new GameDataRunner(engine, "battlescribe");
+        var runner = new GameDataRunner(engine, EngineIdentity.Of("battlescribe"));
         var spec = FileAssertionSpec();
         spec.Steps[^1].ExpectedFile!.Content = "<catalogue>expected</catalogue>";
 

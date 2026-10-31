@@ -1000,6 +1000,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **One engine-expectation rule for every runner: a UI driver inherits its family's entry (#573).** Whether
+  `battlescribe: skip` covered `battlescribe-ui` depended on which runner read the spec. The roster lanes
+  and every scenario run used the driver's own entry, else its family's; the GameData lanes, `bs-spec run`,
+  `run --all`/`compare` for roster and gamedata, `verify` and the NR aggregate lanes read the exact name
+  alone — and `run --all` handed the gamedata runner the *family* name where the lanes handed it the
+  driver's, so the two disagreed in opposite directions. The GameData lanes never applied a `battlescribe:`
+  override on `battlescribe-ui` (the lane defect the roster lanes had already fixed), the live NR UI roster
+  lanes read every spec as `newrecruit`, and `bs-spec run` on a roster spec checked no `engines:` at all.
+  Now one type in the TestKit, `EngineIdentity` (a name and its family), carries the rule — own entry, else
+  family's — and every lookup takes one, so there is no exact-name form left to call: `SpecFileBase`
+  (`ExpectationFor`, `IsApplicableTo`, `IsExpectedToFail`), `RosterRunner`, `GameDataRunner`,
+  `ScenarioRunner`, `expectedFile` side-file tiers, `SpecSuiteOptions.Engine`/`ExpectedFailures`, every
+  lane base (which derives the family instead of declaring a `BaseEngineName`), every NR aggregate lane,
+  and the CLI (`EngineSelection.Identity`; `--assertion-engine` now names the family, `--expected-failures`
+  resolves by the same rule). 23 restated driver entries are gone (15 spec-level, 8 `expectedState`
+  overrides), and a lint shared by the roster, gamedata and scenario lints refuses a restatement. Verdict
+  impact on the CI lanes: none on the frozen and in-process lanes; on the desktop `BsGameDataUi` lane,
+  `roundtrip/roundtrip-category-link`'s `battlescribe:` override now applies. Six `load/` specs gain
+  `newrecruit-ui: pass` so the NR UI driver keeps running what its store-direct sibling skips.
+
 - **`bs-spec format` no longer deletes a comment heading an `expectedState`.** The zone sort collected
   the lines of each property and dropped whatever stood between `- expectedState:` and the first one,
   so a comment there vanished whenever the properties were out of order, top-level or inside a

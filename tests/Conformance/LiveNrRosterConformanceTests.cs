@@ -16,7 +16,8 @@ public sealed class LiveNrRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly LiveNrRosterFixture _fixture;
-    private const string EngineName = "newrecruit";
+    /// <summary>The engine this lane drives, in its family (<see cref="EngineIdentity"/>).</summary>
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("newrecruit");
     private const string LogPrefix = "[LIVE] ";
 
     public LiveNrRosterConformanceTests(ITestOutputHelper output, LiveNrRosterFixture fixture)
@@ -51,7 +52,7 @@ public sealed class LiveNrRosterConformanceTests
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
         // Always the whole suite: this lane has no smoke subset (nr-live-smoke is its own class).
-        var applicable = loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName));
+        var applicable = loadedSpecs.Count(s => s.spec.IsApplicableTo(Engine));
         var lane = AggregateLaneRun.Start(_output, LogPrefix, "LiveNrRoster", AggregateMode.Full, selected: applicable, applicable: applicable);
         var stop = TestContext.Current.CancellationToken;
 
@@ -64,25 +65,25 @@ public sealed class LiveNrRosterConformanceTests
                 {
                     var (specPath, specName, spec) = item;
 
-                    if (!spec.IsApplicableTo(EngineName))
+                    if (!spec.IsApplicableTo(Engine))
                     {
                         Interlocked.Increment(ref skipped);
                         return;
                     }
 
-                    var expectedToFail = spec.IsExpectedToFail(EngineName);
+                    var expectedToFail = spec.IsExpectedToFail(Engine);
 
                     using var pooled = await _fixture.AcquireAsync(ct);
                     var engine = pooled.Engine;
                     var clock = Stopwatch.StartNew();
 
-                    var runner = new RosterRunner(engine, resolver, EngineName);
+                    var runner = new RosterRunner(engine, resolver, Engine);
                     var result = runner.Run(spec);
                     skippedSteps.Record(specName, result);
 
                     if (result.Passed && expectedToFail)
                     {
-                        failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                        failures.Add($"Spec '{specName}' was expected to fail on {Engine.Name} but now passes!");
                         lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                         return;
                     }

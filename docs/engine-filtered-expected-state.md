@@ -25,6 +25,12 @@ fields for that engine. Fields not specified in the override fall through to the
 base assertion. Engine names are open-ended strings; unlisted engines default to
 the base assertion.
 
+The override that applies is the engine's own, else its family's: a UI driver
+(`newrecruit-ui`) uses the `newrecruit` override unless the spec gives it one of
+its own. That rule is the same in every runner and every domain (`EngineIdentity`),
+so write a driver override only where the driver differs — the spec lint refuses
+one that restates its family's.
+
 ## YAML Syntax
 
 ### Basic: override errors only
@@ -222,9 +228,11 @@ that subclasses override. It passes this to `SpecRunner` automatically.
   constraint metadata for all error types.
 
 Engine **names** are open-ended strings (as the Solution section notes) and are
-**not** validated against a fixed list. The only engine-related lint is on the
+**not** validated against a fixed list. The engine-related lints are on the
 spec-level `engines:` *expectation value*, which must be `pass`, `fail`, or `skip`
-(`CheckEngineExpectations`).
+(`CheckEngineExpectations`), and on restatement: a UI driver's entry — spec-level or
+an override — may not repeat its family's (`CheckNoRestatedFamilyEntries`,
+`RestatedOverrides`), in roster, gamedata and scenario specs alike.
 
 ## Examples in the Spec Suite
 

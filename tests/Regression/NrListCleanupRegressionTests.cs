@@ -167,7 +167,7 @@ public sealed class NrListCleanupRegressionTests(ITestOutputHelper output, Froze
 
             // dataSource specs read game data off disk through a different setup path; the inline
             // ones exercise the addList/removeList round trip this test is about.
-            if (spec.Setup.DataSource is { Length: > 0 } || !spec.IsApplicableTo("newrecruit"))
+            if (spec.Setup.DataSource is { Length: > 0 } || !spec.IsApplicableTo(EngineIdentity.Of("newrecruit")))
             {
                 continue;
             }

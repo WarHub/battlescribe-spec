@@ -105,6 +105,8 @@ public sealed class ScenarioSpecLintTests
             violations.AddRange(SpecLintTests.CheckIdMatchesFilename(spec, filename));
             violations.AddRange(SpecLintTests.CheckCategoryMatchesDirectory(spec, dirName));
             violations.AddRange(SpecLintTests.CheckEngineExpectations(spec));
+            violations.AddRange(SpecLintTests.CheckNoRestatedFamilyEntries(spec));
+            violations.AddRange(CheckNoRestatedOverrides(spec));
             violations.AddRange(GameDataSpecLintTests.CheckSetupHasGameSystem(spec.Setup));
             violations.AddRange(GameDataSpecLintTests.CheckSetupHasEdit(spec.Setup));
             violations.AddRange(CheckItems(spec));
@@ -112,6 +114,25 @@ public sealed class ScenarioSpecLintTests
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// No override map in a block or on a hand-off restates its family's: each block by its own domain's walk, a
+    /// hand-off's <c>expectFailure</c> directly (<see cref="SpecLintTests.CheckNoRestatedFamilyEntries"/>).
+    /// </summary>
+    private static IEnumerable<string> CheckNoRestatedOverrides(ScenarioSpecFile spec)
+    {
+        for (var i = 0; i < spec.Steps.Count; i++)
+        {
+            var item = spec.Steps[i];
+            var where = $"item {i + 1}";
+            foreach (var finding in GameDataSpecLintTests.DataStepRestatements(item.Data, $"{where} (data): ")
+                .Concat(SpecLintTests.RosterStepRestatements(item.Roster, $"{where} (roster): "))
+                .Concat(SpecLintTests.RestatedOverrides(item.ExpectFailure?.Engines, $"{where} ({item.Action}) expectFailure")))
+            {
+                yield return finding;
+            }
+        }
     }
 
     // ── No duplicate IDs (cross-spec check) ─────────────────────────
@@ -379,6 +400,15 @@ public sealed class ScenarioSpecLintTests
         ("category: sample", "category: other", "expected category 'sample' but got 'other'"),
         ("description: Every rule accepts this spec\n", "description: Every rule accepts this spec\nengines:\n  battlescribe: flaky\n",
             "engine 'battlescribe' has invalid expectation 'flaky'"),
+
+        // a UI driver's entry never restates its family's, on the spec or in a block
+        ("description: Every rule accepts this spec\n",
+            "description: Every rule accepts this spec\nengines:\n  newrecruit: fail\n  newrecruit-ui: fail\n",
+            "engines: 'newrecruit-ui: fail' restates 'newrecruit: fail' — newrecruit-ui inherits its family's entry"),
+        ("              value: 15\n",
+            "              value: 15\n          engines:\n            battlescribe:\n              costs: []\n"
+            + "            battlescribe-ui:\n              costs: []\n",
+            "item 7 (roster): step 1 expectedState: engines 'battlescribe-ui' restates 'battlescribe'"),
 
         // setup.edit names a loaded file
         ("edit: cat-1", "edit: cat-9", "setup.edit 'cat-9' must be the game system id or one of the catalogue ids"),

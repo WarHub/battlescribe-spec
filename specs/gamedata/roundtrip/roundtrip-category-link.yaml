@@ -11,8 +11,9 @@ description: >
 # Category-link field surface (see specs/gamedata/links/links-create-and-fields.yaml):
 #  - targetId — stable across all engines; asserted everywhere as the primary arg-order signal.
 #  - name     — the counterpart of targetId; NR derives a link's name from its target, so name is
-#               asserted only on the in-process `battlescribe` reference engine.
-#  - primary  — not modelled by NR's editor; asserted only on `battlescribe`.
+#               asserted only on the BattleScribe family (`battlescribe`, and `battlescribe-ui`,
+#               which inherits its family's override).
+#  - primary  — not modelled by NR's editor; asserted only on the BattleScribe family.
 
 setup:
   edit: cat-1

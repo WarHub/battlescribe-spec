@@ -13,7 +13,7 @@ namespace BattleScribeSpec.Tests;
 /// </para>
 /// <para>
 /// It inherits what specs say about <c>battlescribe</c> unless they name <c>battlescribe-ui</c> itself
-/// (<see cref="ScenarioConformanceTestBase.BaseEngineName"/>). Not in <c>pre-push</c>: it needs the app, a
+/// (<see cref="ScenarioConformanceTestBase.Engine"/>). Not in <c>pre-push</c>: it needs the app, a
 /// display and minutes. The <c>bs-ui-scenario</c> profile runs it, and CI's <c>thorough-ui-bs</c> job.
 /// </para>
 /// </remarks>
@@ -31,9 +31,6 @@ public sealed class BsScenarioUiConformanceTests : ScenarioConformanceTestBase
     }
 
     protected override string EngineName => "battlescribe-ui";
-
-    /// <summary>This drives BattleScribe, so it inherits what specs say about <c>battlescribe</c>.</summary>
-    protected override string BaseEngineName => "battlescribe";
 
     protected override string LogPrefix => "[BS-SCENARIO-UI] ";
 

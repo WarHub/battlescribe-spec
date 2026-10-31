@@ -14,7 +14,11 @@ public sealed class LiveNrUiRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly LiveNrUiRosterFixture _fixture;
-    private const string EngineName = "newrecruit";
+    /// <summary>
+    /// The engine this lane drives — the NR UI driver, in the <c>newrecruit</c> family (<see cref="EngineIdentity"/>).
+    /// It used to read every spec as <c>newrecruit</c>, so a <c>newrecruit-ui</c> entry never reached it.
+    /// </summary>
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("newrecruit-ui");
     private const string LogPrefix = "[LIVE-UI] ";
 
     /// <summary>
@@ -49,8 +53,8 @@ public sealed class LiveNrUiRosterConformanceTests
             $"No matching specs found for targets: {string.Join(", ", TargetSpecs)}");
 
         var lane = AggregateLaneRun.Start(_output, LogPrefix, "LiveNrUiRoster", AggregateMode.KitchenSink,
-            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
-            applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
+            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(Engine)),
+            applicable: corpus.Count(s => s.spec.IsApplicableTo(Engine)));
         var stop = TestContext.Current.CancellationToken;
 
         var passed = 0;
@@ -62,24 +66,24 @@ public sealed class LiveNrUiRosterConformanceTests
         foreach (var (specPath, specName, spec) in loadedSpecs)
         {
             lane.ThrowIfStopped(stop);
-            if (!spec.IsApplicableTo(EngineName))
+            if (!spec.IsApplicableTo(Engine))
             {
                 skipped++;
                 continue;
             }
 
-            var expectedToFail = spec.IsExpectedToFail(EngineName);
+            var expectedToFail = spec.IsExpectedToFail(Engine);
             var clock = Stopwatch.StartNew();
             engine.SetTestContext(specName);
 
-            var runner = new RosterRunner(engine, resolver, EngineName);
+            var runner = new RosterRunner(engine, resolver, Engine);
             var result = runner.Run(spec);
             engine.Cleanup();
             skippedSteps.Record(specName, result);
 
             if (result.Passed && expectedToFail)
             {
-                failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                failures.Add($"Spec '{specName}' was expected to fail on {Engine.Name} but now passes!");
                 lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                 continue;
             }

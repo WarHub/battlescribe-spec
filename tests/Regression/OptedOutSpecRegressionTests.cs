@@ -47,22 +47,22 @@ public sealed class OptedOutSpecRegressionTests
     [Fact]
     public void RosterLane_ReportsAnOptedOutSpecAsSkipped()
     {
-        var skip = RunRoster(new RosterLane("battlescribe", "battlescribe", engine: null), RosterSpecYaml);
+        var skip = RunRoster(new RosterLane("battlescribe", engine: null), RosterSpecYaml);
         Assert.Contains("regression/opted-out is not applicable to the battlescribe engine", skip.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>A UI lane inherits its base engine's opt-out — the same resolution as its expectations.</summary>
+    /// <summary>A UI lane inherits its family's opt-out — the same resolution as its expectations.</summary>
     [Fact]
-    public void UiRosterLane_ReportsItsBaseEnginesOptOutAsSkipped()
+    public void UiRosterLane_ReportsItsFamilysOptOutAsSkipped()
     {
-        var skip = RunRoster(new RosterLane("battlescribe-ui", "battlescribe", engine: null), RosterSpecYaml);
+        var skip = RunRoster(new RosterLane("battlescribe-ui", engine: null), RosterSpecYaml);
         Assert.Contains("not applicable to the battlescribe-ui engine (the spec says engines: {battlescribe: skip})", skip.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void RosterLane_WithNoEngine_ReportsTheRowAsSkipped()
     {
-        var skip = RunRoster(new RosterLane("newrecruit", "newrecruit", engine: null), RosterSpecYaml);
+        var skip = RunRoster(new RosterLane("newrecruit", engine: null), RosterSpecYaml);
         Assert.Contains("no newrecruit engine on this machine", skip.Message, StringComparison.Ordinal);
     }
 
@@ -72,6 +72,26 @@ public sealed class OptedOutSpecRegressionTests
         // A corpus spec that opts newrecruit out: GameData lanes run specs by name only.
         var skip = SkipOf(() => new GameDataLane("newrecruit").Run("load/load-malformed-catalogue"));
         Assert.Contains("load/load-malformed-catalogue is not applicable to the newrecruit engine", skip.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A GameData UI lane inherits its family's opt-out too. It used to read the exact name alone, so a spec that
+    /// opted <c>battlescribe</c> out ran on <c>battlescribe-ui</c> unless it restated the entry under the
+    /// driver's name (#573) — the corpus spec here no longer does.
+    /// </summary>
+    [Fact]
+    public void UiGameDataLane_ReportsItsFamilysOptOutAsSkipped()
+    {
+        var skip = SkipOf(() => new GameDataLane("battlescribe-ui").Run("nr/nr-condition-types"));
+        Assert.Contains("not applicable to the battlescribe-ui engine (the spec says engines: {battlescribe: skip})", skip.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A driver's own entry overrides its family's: <c>newrecruit-ui: pass</c> over <c>newrecruit: skip</c>.</summary>
+    [Fact]
+    public void UiGameDataLane_RunsASpecItsOwnEntryKeeps_ThoughItsFamilyIsOptedOut()
+    {
+        var skip = SkipOf(() => new GameDataLane("newrecruit-ui").Run("load/load-malformed-catalogue"));
+        Assert.Contains("no newrecruit-ui engine on this machine", skip.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,12 +135,10 @@ public sealed class OptedOutSpecRegressionTests
     }
 
     /// <summary>A roster lane under a chosen identity whose engine is gated off (<see cref="GetEngine"/> returns none).</summary>
-    private sealed class RosterLane(string engineName, string baseEngineName, IRosterEngine? engine)
+    private sealed class RosterLane(string engineName, IRosterEngine? engine)
         : ConformanceTestBase(TestContext.Current.TestOutputHelper!)
     {
         protected override string EngineName => engineName;
-
-        protected override string BaseEngineName => baseEngineName;
 
         protected override IRosterEngine? GetEngine() => engine;
 

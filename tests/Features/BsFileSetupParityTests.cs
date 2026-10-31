@@ -31,7 +31,8 @@ namespace BattleScribeSpec.Tests;
 [Trait("Category", "Unit")]
 public sealed class BsFileSetupParityTests(ITestOutputHelper output)
 {
-    private const string EngineName = "battlescribe";
+    /// <summary>Both runs are the in-process BattleScribe engine, read as the BsRoster lane reads it.</summary>
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("battlescribe");
 
     /// <summary>
     /// Every inline roster spec reaches the same verdict through file setup as through Protocol
@@ -76,7 +77,7 @@ public sealed class BsFileSetupParityTests(ITestOutputHelper output)
             }
 
             // engines: {battlescribe: skip} skips both runs, as the BsRoster lane skips the row.
-            if (!spec.IsApplicableTo(EngineName))
+            if (!spec.IsApplicableTo(Engine))
             {
                 skipped++;
                 continue;
@@ -95,7 +96,7 @@ public sealed class BsFileSetupParityTests(ITestOutputHelper output)
             }
         }
 
-        output.WriteLine($"{compared} inline roster specs compared, {skipped} opted out of {EngineName}.");
+        output.WriteLine($"{compared} inline roster specs compared, {skipped} opted out of {Engine.Name}.");
 
         // The corpus is ~400 specs. A discovery that came back nearly empty compared nothing and must
         // not read as parity.
@@ -264,7 +265,7 @@ public sealed class BsFileSetupParityTests(ITestOutputHelper output)
         using (engine)
         {
             // Loaded per run: the runner fills setup defaults into the spec it is handed.
-            return new RosterRunner(engine, null, EngineName, EngineName).Run(SpecLoader.Load(specPath));
+            return new RosterRunner(engine, null, Engine).Run(SpecLoader.Load(specPath));
         }
     }
 

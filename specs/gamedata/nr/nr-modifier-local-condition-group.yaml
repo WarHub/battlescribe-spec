@@ -9,7 +9,6 @@ tags: [newrecruit-addition, localConditionGroup, constraint]
 
 engines:
   battlescribe: skip
-  battlescribe-ui: skip
 
 setup:
   edit: cat-1

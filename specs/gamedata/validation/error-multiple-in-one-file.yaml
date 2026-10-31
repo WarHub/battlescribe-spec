@@ -46,6 +46,3 @@ steps:
         newrecruit:
           errors:
             - message: EntryLink must have a target that exists
-        newrecruit-ui:
-          errors:
-            - message: EntryLink must have a target that exists

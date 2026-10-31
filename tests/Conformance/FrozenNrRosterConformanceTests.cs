@@ -23,7 +23,8 @@ public sealed class FrozenNrRosterConformanceTests
 {
     private readonly ITestOutputHelper _output;
     private readonly FrozenNrRosterFixture _fixture;
-    private const string EngineName = "newrecruit";
+    /// <summary>The engine this lane drives, in its family (<see cref="EngineIdentity"/>).</summary>
+    private static readonly EngineIdentity Engine = EngineIdentity.Of("newrecruit");
     private const string LogPrefix = "[FROZEN] ";
 
     public FrozenNrRosterConformanceTests(ITestOutputHelper output, FrozenNrRosterFixture fixture)
@@ -61,8 +62,8 @@ public sealed class FrozenNrRosterConformanceTests
         resolver.WarmCache(loadedSpecs.Select(s => s.spec));
 
         var lane = AggregateLaneRun.Start(_output, LogPrefix, "FrozenNrRoster", part,
-            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(EngineName)),
-            applicable: corpus.Count(s => s.spec.IsApplicableTo(EngineName)));
+            selected: loadedSpecs.Count(s => s.spec.IsApplicableTo(Engine)),
+            applicable: corpus.Count(s => s.spec.IsApplicableTo(Engine)));
         var stop = TestContext.Current.CancellationToken;
 
         try
@@ -74,25 +75,25 @@ public sealed class FrozenNrRosterConformanceTests
                 {
                     var (specPath, specName, spec) = item;
 
-                    if (!spec.IsApplicableTo(EngineName))
+                    if (!spec.IsApplicableTo(Engine))
                     {
                         Interlocked.Increment(ref skipped);
                         return;
                     }
 
-                    var expectedToFail = spec.IsExpectedToFail(EngineName);
+                    var expectedToFail = spec.IsExpectedToFail(Engine);
 
                     using var pooled = await _fixture.AcquireAsync(ct);
                     var engine = pooled.Engine;
                     var clock = Stopwatch.StartNew();
 
-                    var runner = new RosterRunner(engine, resolver, EngineName);
+                    var runner = new RosterRunner(engine, resolver, Engine);
                     var result = runner.Run(spec);
                     skippedSteps.Record(specName, result);
 
                     if (result.Passed && expectedToFail)
                     {
-                        failures.Add($"Spec '{specName}' was expected to fail on {EngineName} but now passes!");
+                        failures.Add($"Spec '{specName}' was expected to fail on {Engine.Name} but now passes!");
                         lane.Completed(specName, AggregateLaneRun.UnexpectedPass, clock.Elapsed);
                         return;
                     }
@@ -150,7 +151,7 @@ public sealed class FrozenNrRosterConformanceTests
         foreach (var scenario in AddressingScenarios.All)
         {
             using var pooled = await _fixture.AcquireAsync(TestContext.Current.CancellationToken);
-            var result = new RosterRunner(pooled.Engine, new DataSourceResolver(), EngineName)
+            var result = new RosterRunner(pooled.Engine, new DataSourceResolver(), Engine)
                 .Run(AddressingScenarios.Load(scenario));
             foreach (var failure in result.Failures)
             {

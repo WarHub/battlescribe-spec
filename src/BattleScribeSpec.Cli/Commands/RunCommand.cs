@@ -94,11 +94,13 @@ internal static class RunCommand
         };
         var expectedFailures = new Option<string?>("--expected-failures")
         {
-            Description = "Engine name for spec-level expected failures (--all).",
+            Description = "Engine whose 'engines: {…: fail}' entries mark expected failures — its own entry, else " +
+                "its family's (--all).",
         };
         var assertionEngine = new Option<string?>("--assertion-engine")
         {
-            Description = "Engine name for step-level assertion overrides (--all; defaults to the engine identity).",
+            Description = "Engine family whose declarations apply where a spec names none for the engine itself: " +
+                "'engines:' skips and per-engine overrides (--all; defaults to the engine's name without -ui).",
         };
         var policy = new Option<string?>("--policy")
         {
@@ -507,6 +509,17 @@ internal static class RunCommand
         }
 
         RefuseBreakOutOfRange(options.BreakAt, spec.Steps.Count, counted: "");
+
+        // The spec's `engines:` decides whether it runs here, by the one rule every runner applies
+        // (EngineIdentity): a UI driver inherits its family's `skip` unless the spec names the driver itself.
+        // This branch used to run every roster spec regardless, so `bs-spec run --engine battlescribe --ui`
+        // failed a spec the BsRosterUi lane skips.
+        if (SkipNotice(spec, options.Engine.Identity) is { } notApplicable)
+        {
+            Ui.Warn(notApplicable);
+            return 0;
+        }
+
         Ui.Info($"Engine: {options.Engine.EngineName ?? options.Engine.Display}");
 
         // Spawn the engine as a child adapter process (bs-engine-host for built-ins, or any
@@ -539,11 +552,7 @@ internal static class RunCommand
             var timeline = options.TimelinePath is not null ? new TimelineReport(spec.Id) : null;
 
             var dumpOptions = new DumpOptions(Json: options.Format == OutputFormat.Json);
-            var runner = new RosterRunner(
-                engine,
-                new DataSourceResolver(),
-                options.Engine.AssertionEngineName,
-                options.Engine.EngineName)
+            var runner = new RosterRunner(engine, new DataSourceResolver(), options.Engine.Identity)
             {
                 UpdateSnapshots = options.UpdateSnapshots,
                 OnDiverge = DivergencePolicy(options.OnDiverge),
@@ -748,12 +757,9 @@ internal static class RunCommand
             return 1;
         }
 
-        // Only named registry entries carry an identity for spec applicability; anonymous
-        // exec:/dotnet: connectables (no `name=` prefix) have no identity to check against
-        // the spec's `engines:` map, so skip the check rather than NRE/throw looking one up.
-        if (options.Engine.EngineName is { } identityName && !spec.IsApplicableTo(identityName))
+        if (SkipNotice(spec, options.Engine.Identity) is { } notApplicable)
         {
-            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{identityName}' (skipped).");
+            Ui.Warn(notApplicable);
             return 0;
         }
 
@@ -789,10 +795,7 @@ internal static class RunCommand
 
             IGameDataEngine engine = new JsonProtocolGameDataEngine(process);
             var lastStepIndex = spec.Steps.Count - 1;
-            // GameDataRunner's engineName parameter is nullable and used only for tiered
-            // snapshot lookup (falls back to the base tier when unset), so pass the identity
-            // through as-is rather than coercing to "".
-            var runner = new GameDataRunner(engine, options.Engine.EngineName)
+            var runner = new GameDataRunner(engine, options.Engine.Identity)
             {
                 UpdateSnapshots = options.UpdateSnapshots,
                 OnDiverge = DivergencePolicy(options.OnDiverge),
@@ -831,12 +834,15 @@ internal static class RunCommand
     }
 
     /// <summary>
-    /// The identity a scenario runs under when the adapter has none (an anonymous <c>exec:</c>/<c>dotnet:</c>
-    /// connectable). <see cref="ScenarioRunner"/> takes a name where the other runners take null; this is the
-    /// label they print for null, and as an override key it matches no spec's <c>engines:</c> entry, so only
-    /// the base expectations apply — what null means to them.
+    /// Why a single-spec run of <paramref name="spec"/> stops before starting an engine, or null when it runs:
+    /// the spec's <c>engines:</c> says <c>skip</c> for this engine — its own entry, else its family's
+    /// (<see cref="EngineIdentity"/>). One check for all three domains. An anonymous connectable has no identity
+    /// to check the map against, so every spec runs on it.
     /// </summary>
-    private const string UnnamedEngine = "(unnamed engine)";
+    internal static string? SkipNotice(SpecFileBase spec, EngineIdentity? engine)
+        => engine is not null && !spec.IsApplicableTo(engine)
+            ? $"Spec '{spec.Id}' is not applicable to engine '{engine.Name}' (the spec says engines: {{{spec.DeclaringKey(engine)}: skip}}; skipped)."
+            : null;
 
     /// <summary>
     /// <c>bs-spec run</c> on a scenario spec: one adapter process serving the family's data editor and roster
@@ -885,13 +891,9 @@ internal static class RunCommand
 
         RefuseBreakOutOfRange(options.BreakAt, StepCount(spec), counted: ", counted across blocks and hand-offs");
 
-        // As in the gamedata branch: an anonymous connectable has no identity to check the spec's
-        // `engines:` map against. Unlike it, a UI driver inherits its base engine's `skip` — the one rule a
-        // scenario applies to its `engines:` and to both kinds of block (ScenarioRunner, the scenario lanes).
-        if (options.Engine.EngineName is { } identityName
-            && string.Equals(spec.GetExpectation(identityName, options.Engine.AssertionEngineName), "skip", StringComparison.OrdinalIgnoreCase))
+        if (SkipNotice(spec, options.Engine.Identity) is { } notApplicable)
         {
-            Ui.Warn($"Spec '{spec.Id}' is not applicable to engine '{identityName}' (skipped).");
+            Ui.Warn(notApplicable);
             return 0;
         }
 
@@ -929,11 +931,7 @@ internal static class RunCommand
 
             var dumpOptions = new DumpOptions(Json: options.Format == OutputFormat.Json);
             var lastBlockStep = LastBlockStepIndex(spec);
-            var runner = new ScenarioRunner(
-                dataEngine,
-                rosterEngine,
-                options.Engine.EngineName ?? UnnamedEngine,
-                options.Engine.AssertionEngineName)
+            var runner = new ScenarioRunner(dataEngine, rosterEngine, options.Engine.Identity)
             {
                 UpdateSnapshots = options.UpdateSnapshots,
                 OnDiverge = DivergencePolicy(options.OnDiverge),

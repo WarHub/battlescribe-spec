@@ -16,36 +16,27 @@ public abstract class ConformanceTestBase
         _output = output;
     }
 
-    /// <summary>Engine name used in spec YAML 'engines' field for applicability/expectation checks.</summary>
+    /// <summary>The engine this lane drives, as specs address it — <c>battlescribe-ui</c>, not <c>battlescribe</c>.</summary>
     protected abstract string EngineName { get; }
 
     /// <summary>
-    /// The engine whose expectations this lane inherits when a spec says nothing about
-    /// <see cref="EngineName"/> specifically. Defaults to <see cref="EngineName"/>; a UI lane
-    /// overrides it with the engine it drives.
+    /// <see cref="EngineName"/> in its family (<see cref="EngineIdentity.Of"/>): every spec expectation and
+    /// per-engine override this lane reads resolves through it — the driver's own entry, else its family's.
     /// </summary>
     /// <remarks>
-    /// A UI driver <em>produces</em> what its base engine produces but does not necessarily
-    /// <em>support</em> what its base engine supports, so specs address the two separately and the
-    /// most specific one wins — the rule <see cref="RosterRunner"/> and
-    /// <c>FrozenNrUiRosterConformanceTests</c> already apply.
+    /// A UI driver <em>produces</em> what its family's engine produces but does not necessarily
+    /// <em>support</em> what it supports, so specs address the two separately and the most specific one wins.
     /// <para>
-    /// Without this, a lane running <c>battlescribe-ui</c> resolved every per-engine
-    /// <c>expectedState</c> under its own name alone, found none, and fell through to the BASE
-    /// assertion — the one written for the engine whose behaviour differs. Twenty roster specs
-    /// carry a <c>battlescribe:</c> override precisely because BattleScribe diverges there; each
-    /// was being asserted against the divergence rather than against it. That is a lane defect,
-    /// not a driver one, and it is invisible from the failure text: the spec reports a plain
-    /// value mismatch with no hint that a correct expectation for this engine exists in the file.
+    /// Derived, never declared, so a lane cannot forget it. This lane once passed one name for both, and a
+    /// lane running <c>battlescribe-ui</c> resolved every per-engine <c>expectedState</c> under its own name
+    /// alone, found none, and fell through to the BASE assertion — the one written for the engine whose
+    /// behaviour differs. Twenty roster specs carry a <c>battlescribe:</c> override precisely because
+    /// BattleScribe diverges there; each was being asserted against the divergence rather than against it. A
+    /// lane defect, not a driver one, and invisible from the failure text. The gamedata lanes then had the
+    /// same defect until #573, because each base declared its own rule.
     /// </para>
     /// </remarks>
-    protected virtual string BaseEngineName => EngineName;
-
-    /// <summary>
-    /// The spec's expectation for this lane — <c>pass</c>, <c>fail</c> or <c>skip</c> — resolved
-    /// most-specific-first: this driver's own entry, else the base engine's.
-    /// </summary>
-    private string ExpectationFor(SpecFile spec) => spec.GetExpectation(EngineName, BaseEngineName);
+    protected EngineIdentity Engine => EngineIdentity.Of(EngineName);
 
     /// <summary>Optional prefix for log messages (e.g., "[FROZEN]").</summary>
     protected virtual string LogPrefix => "";
@@ -151,7 +142,7 @@ public abstract class ConformanceTestBase
     protected void RunAddressingScenario(string scenario)
     {
         var engine = EngineOrSkip();
-        var result = new RosterRunner(engine, new DataSourceResolver(), BaseEngineName, EngineName)
+        var result = new RosterRunner(engine, new DataSourceResolver(), Engine)
             .Run(AddressingScenarios.Load(scenario));
         foreach (var failure in result.Failures)
         {
@@ -174,21 +165,20 @@ public abstract class ConformanceTestBase
     protected void RunSpec(string specPath, string specName)
     {
         var spec = SpecLoader.Load(specPath);
-        var expectation = ExpectationFor(spec);
+        var expectation = spec.ExpectationFor(Engine);
 
         // A skip, not a return: a returned row is Passed, and a lane whose every other row skipped would
         // count as executed on this one (EngineOrSkip's remarks).
-        if (string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase))
+        if (expectation == EngineExpectation.Skip)
         {
-            var opted = spec.Engines?.ContainsKey(EngineName) == true ? EngineName : BaseEngineName;
-            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{opted}: skip}})");
+            Assert.Skip($"{LogPrefix}{specName} is not applicable to the {EngineName} engine (the spec says engines: {{{spec.DeclaringKey(Engine)}: skip}})");
         }
 
-        var expectedToFail = string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
+        var expectedToFail = expectation == EngineExpectation.Fail;
         _output.WriteLine($"{LogPrefix}Running spec: {specName} — {spec.Description}{(expectedToFail ? " [EXPECTED FAILURE]" : "")}");
 
         var engine = EngineOrSkip();
-        var runner = new RosterRunner(engine, new DataSourceResolver(), BaseEngineName, EngineName);
+        var runner = new RosterRunner(engine, new DataSourceResolver(), Engine);
         var result = runner.Run(spec);
 
         // What this engine was opted out of, printed on pass as well as fail — a green spec that

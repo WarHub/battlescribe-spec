@@ -166,7 +166,9 @@ xunit's own console runner.
 The app adds it to a run of the executable that names no policy, and refuses a `dotnet test` run that
 arrives without it: the profile travels by the same route, so a run without the policy is one whose
 MSBuild-carried arguments were dropped. A spec an engine opts out of (`engines: <engine>: skip`) is a skipped row, never
-a passed one, so it cannot make a lane look executed.
+a passed one, so it cannot make a lane look executed. Which entry opts it out is the same answer in every lane and every
+`bs-spec` verb (`run`, `run --all`, `compare`, `verify`): the engine's own entry, else its family's, so `battlescribe: skip`
+skips the `battlescribe-ui` row too and the skip message names the entry that decided (`EngineIdentity`).
 
 ### The engine-composition check
 

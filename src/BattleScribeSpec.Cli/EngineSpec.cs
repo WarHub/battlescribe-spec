@@ -152,9 +152,25 @@ internal sealed record EngineSelection(
     private string? LookupChildEnvironment(string variable) =>
         Protocol.AdapterProcess.ComposeChildEnvironment(ChildEnvironment).GetValueOrDefault(variable);
 
-    /// <summary>Assertion engine: strip a trailing "-ui" from the identity.</summary>
-    public string? AssertionEngineName =>
-        EngineName is { } n ? (n.EndsWith("-ui", StringComparison.Ordinal) ? n[..^3] : n) : null;
+    /// <summary>
+    /// The engine every spec is read for — this selection's name, in the family <see cref="EngineIdentity.Of"/>
+    /// derives (<c>battlescribe-ui</c> inherits <c>battlescribe</c>'s declarations). Null for an anonymous
+    /// adapter, which skips no spec and applies no engine's overrides.
+    /// </summary>
+    public EngineIdentity? Identity => EngineName is { } name ? EngineIdentity.Of(name) : null;
+
+    /// <summary>
+    /// <see cref="Identity"/> with its family named by <c>--assertion-engine</c> instead of derived from the
+    /// name — what lets an adapter registered under its own name be held to, say, <c>newrecruit</c>'s
+    /// declarations. An anonymous adapter given a family is read as that engine. Without one this is
+    /// <see cref="Identity"/>.
+    /// </summary>
+    public EngineIdentity? IdentityWithFamily(string? family) => (EngineName, family) switch
+    {
+        (_, null or "") => Identity,
+        ({ } name, { } f) => new EngineIdentity(name, f),
+        (null, { } f) => new EngineIdentity(f, f),
+    };
 
     public string Display => $"{Domain.Name()}/{EngineName ?? "adapter"}";
 

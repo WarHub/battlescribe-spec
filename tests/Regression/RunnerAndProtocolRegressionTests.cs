@@ -30,28 +30,30 @@ public class RunnerAndProtocolRegressionTests
         Assert.Equal(0, engine.ActionCalls);
     }
 
-    // ── Engine identity: base vs concrete ────────────────────────────────
-    // A UI driver asserts under its BASE engine's name (so it inherits every `engines: battlescribe:`
-    // expectation) but must be gateable by its CONCRETE name, because it does not necessarily support
-    // what the base engine supports. Collapsing the two made `skipEngines: [battlescribe-ui]` and
+    // ── Engine identity: own name vs family ──────────────────────────────
+    // A UI driver inherits its family's declarations (every `engines: battlescribe:` expectation) but
+    // must be gateable by its own name, because it does not necessarily support what its family's
+    // engine supports. Collapsing the two made `skipEngines: [battlescribe-ui]` and
     // `engines: {battlescribe-ui: …}` silently inert under `bs-spec run --engine battlescribe --ui`.
 
     [Theory]
-    // Concrete identity named → skip fires.
-    [InlineData("battlescribe", "battlescribe-ui", "battlescribe-ui", 0)]
-    // Base identity named → still fires, as it always did.
-    [InlineData("battlescribe", "battlescribe-ui", "battlescribe", 0)]
-    // Neither identity named → the step runs. An engine that genuinely cannot do this must FAIL
+    // The driver's own name → skip fires.
+    [InlineData("battlescribe-ui", "battlescribe-ui", 0)]
+    // Its family named → still fires, as it always did.
+    [InlineData("battlescribe-ui", "battlescribe", 0)]
+    // Neither named → the step runs. An engine that genuinely cannot do this must FAIL
     // loudly, not be skipped by accident.
-    [InlineData("battlescribe", "battlescribe-ui", "newrecruit", 1)]
-    // No -ui in play: the single identity behaves exactly as before.
-    [InlineData("battlescribe", null, "battlescribe", 0)]
-    [InlineData("battlescribe", null, "newrecruit", 1)]
-    public void SpecRunner_SkipEngines_MatchesBaseOrConcreteEngineIdentity(
-        string engineName, string? engineIdentity, string skipName, int expectedActionCalls)
+    [InlineData("battlescribe-ui", "newrecruit", 1)]
+    // No -ui in play: the single name behaves exactly as before.
+    [InlineData("battlescribe", "battlescribe", 0)]
+    [InlineData("battlescribe", "newrecruit", 1)]
+    // A family entry never reaches a driver of another family, nor a driver's entry its family's engine.
+    [InlineData("battlescribe", "battlescribe-ui", 1)]
+    public void SpecRunner_SkipEngines_MatchesTheEnginesOwnNameOrItsFamily(
+        string engineName, string skipName, int expectedActionCalls)
     {
         var engine = new FakeEngine();
-        var runner = new RosterRunner(engine, null, engineName, engineIdentity);
+        var runner = new RosterRunner(engine, null, EngineIdentity.Of(engineName));
         var spec = new SpecFile
         {
             Id = "skip-identity",
@@ -78,7 +80,7 @@ public class RunnerAndProtocolRegressionTests
         {
             State = new RosterState("roster", "gs", [], [], []),
         };
-        var runner = new RosterRunner(engine, null, "battlescribe", engineIdentity);
+        var runner = new RosterRunner(engine, null, new EngineIdentity(engineIdentity, "battlescribe"));
         var spec = new SpecFile
         {
             Id = "override-identity",
@@ -121,7 +123,7 @@ public class RunnerAndProtocolRegressionTests
         // RosterXml unset → ExportRosterXml throws NotSupportedException, exactly as the interface
         // default does for an engine that never implemented it.
         var engine = new FakeEngine();
-        var runner = new RosterRunner(engine, null, "battlescribe");
+        var runner = new RosterRunner(engine, null, EngineIdentity.Of("battlescribe"));
         var result = runner.Run(FileAssertionSpec());
 
         Assert.False(result.Passed);
@@ -141,7 +143,7 @@ public class RunnerAndProtocolRegressionTests
     public void ExpectedFile_WhenTheSpecOptsTheEngineOut_PassesAndSaysSo()
     {
         var engine = new FakeEngine();
-        var runner = new RosterRunner(engine, null, "battlescribe");
+        var runner = new RosterRunner(engine, null, EngineIdentity.Of("battlescribe"));
         var spec = FileAssertionSpec();
         spec.Steps[^1].SkipEngines = ["battlescribe"];
 
@@ -166,7 +168,7 @@ public class RunnerAndProtocolRegressionTests
     public void SkipEngines_IsHonoredOnExpectedStateSteps()
     {
         var engine = new FakeEngine();
-        var runner = new RosterRunner(engine, null, "battlescribe");
+        var runner = new RosterRunner(engine, null, EngineIdentity.Of("battlescribe"));
         var spec = new SpecFile
         {
             Id = "skip-assertion",
@@ -200,7 +202,7 @@ public class RunnerAndProtocolRegressionTests
     public void ExpectedFile_WhenTheEngineExports_ActuallyCompares()
     {
         var engine = new FakeEngine { RosterXml = "<roster>actual</roster>" };
-        var runner = new RosterRunner(engine, null, "battlescribe");
+        var runner = new RosterRunner(engine, null, EngineIdentity.Of("battlescribe"));
         var spec = FileAssertionSpec();
         spec.Steps[^1].ExpectedFile!.Content = "<roster>expected</roster>";
 
@@ -220,7 +222,7 @@ public class RunnerAndProtocolRegressionTests
     public void SkippedAction_StillRegistersItsStepId()
     {
         var engine = new FakeEngine();
-        var runner = new RosterRunner(engine, null, "battlescribe");
+        var runner = new RosterRunner(engine, null, EngineIdentity.Of("battlescribe"));
         var spec = new SpecFile
         {
             Id = "skip-outputs",

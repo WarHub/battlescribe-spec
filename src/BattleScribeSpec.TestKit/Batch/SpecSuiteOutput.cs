@@ -136,7 +136,7 @@ public static class SpecSuiteOutput
             foreach (var r in result.Results)
             {
                 var spec = result.SpecFor(r);
-                var isExpectedFail = result.ExpectedFailuresEngine is not null && (spec?.IsExpectedToFail(result.ExpectedFailuresEngine) ?? false);
+                var isExpectedFail = result.ExpectedFailuresEngine is { } expectedFailures && (spec?.IsExpectedToFail(expectedFailures) ?? false);
                 var isRealFailure = !r.Passed && !isExpectedFail;
                 var isUnexpectedPass = r.Passed && isExpectedFail;
                 if (isRealFailure || isUnexpectedPass)

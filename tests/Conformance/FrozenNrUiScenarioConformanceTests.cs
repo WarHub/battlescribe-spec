@@ -7,7 +7,7 @@ namespace BattleScribeSpec.Tests;
 /// </summary>
 /// <remarks>
 /// A UI driver produces what its base engine produces, so a spec's <c>newrecruit</c> declarations apply here
-/// unless it names <c>newrecruit-ui</c> itself (<see cref="ScenarioConformanceTestBase.BaseEngineName"/>).
+/// unless it names <c>newrecruit-ui</c> itself (<see cref="ScenarioConformanceTestBase.Engine"/>).
 /// </remarks>
 [Collection("FrozenNrUiScenario")]
 [Trait("Category", "Conformance")]
@@ -23,9 +23,6 @@ public sealed class FrozenNrUiScenarioConformanceTests : ScenarioConformanceTest
     }
 
     protected override string EngineName => "newrecruit-ui";
-
-    /// <summary>This drives New Recruit, so it inherits what specs say about <c>newrecruit</c>.</summary>
-    protected override string BaseEngineName => "newrecruit";
 
     protected override string LogPrefix => "[FROZEN-NR-UI-SCENARIO] ";
 

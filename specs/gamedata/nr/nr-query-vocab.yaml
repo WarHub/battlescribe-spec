@@ -10,7 +10,6 @@ tags: [newrecruit-addition, query, scope]
 
 engines:
   battlescribe: skip
-  battlescribe-ui: skip
 
 setup:
   edit: cat-1

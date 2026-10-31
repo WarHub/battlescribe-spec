@@ -29,70 +29,48 @@ public abstract class SpecFileBase
     public List<string>? Tags { get; set; }
 
     /// <summary>
-    /// Per-engine expectations. Null means all engines expected to pass.
-    /// Map of engine name to expectation: "pass" (default), "fail", or "skip".
-    /// Engine names are open-ended strings (e.g. "battlescribe", "newrecruit").
-    /// Unlisted engines are expected to pass.
+    /// Per-engine expectations: engine name to <c>pass</c>, <c>fail</c> or <c>skip</c>. Engine names are
+    /// open-ended strings (<c>battlescribe</c>, <c>newrecruit-ui</c>, an adapter's own). An engine the map does
+    /// not cover, by its own name or its family's, is expected to pass. Read it through
+    /// <see cref="ExpectationFor"/>, never by key: an entry for a family covers the family's UI driver.
     /// </summary>
     public Dictionary<string, string>? Engines { get; set; }
 
     /// <summary>
-    /// Check if this spec should run on the given engine (not "skip").
-    /// Null/empty engines means applicable to all engines.
+    /// What the spec expects of <paramref name="engine"/>: its own entry when the spec declares one, else its
+    /// family's (<see cref="EngineIdentity.KeyIn{T}"/>), else <see cref="EngineExpectation.Pass"/>. A UI
+    /// driver inherits <c>battlescribe: skip</c> and can still say <c>battlescribe-ui: pass</c>.
     /// </summary>
-    public bool IsApplicableTo(string engineName)
-        => !ShouldSkip(engineName);
-
-    /// <summary>
-    /// Check if this spec should be skipped entirely for the given engine.
-    /// </summary>
-    public bool ShouldSkip(string engineName)
+    public EngineExpectation ExpectationFor(EngineIdentity engine)
     {
-        if (Engines is null || Engines.Count == 0)
-        {
-            return false;
-        }
-
-        return Engines.TryGetValue(engineName, out var expectation)
-            && string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(engine);
+        return Engines is not null && Engines.TryGetValue(DeclaringKey(engine), out var expectation)
+            ? Parse(expectation)
+            : EngineExpectation.Pass;
     }
 
     /// <summary>
-    /// Check if this spec is expected to fail on the given engine.
+    /// The <c>engines:</c> key <see cref="ExpectationFor"/> reads for <paramref name="engine"/> — the name a
+    /// message cites when it says why a spec was skipped (<c>the spec says engines: {battlescribe: skip}</c>).
     /// </summary>
-    public bool IsExpectedToFail(string engineName)
+    public string DeclaringKey(EngineIdentity engine)
     {
-        if (Engines is null || Engines.Count == 0)
-        {
-            return false;
-        }
-
-        return Engines.TryGetValue(engineName, out var expectation)
-            && string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(engine);
+        return engine.KeyIn(Engines);
     }
 
-    /// <summary>
-    /// Get the expectation for a given engine: "pass", "fail", or "skip".
-    /// Defaults to "pass" if engine is not listed or engines is null.
-    /// </summary>
-    public string GetExpectation(string engineName)
-    {
-        if (Engines is null || Engines.Count == 0)
-        {
-            return "pass";
-        }
+    /// <summary>Whether the spec runs on <paramref name="engine"/> at all: anything but <see cref="EngineExpectation.Skip"/>.</summary>
+    public bool IsApplicableTo(EngineIdentity engine) => ExpectationFor(engine) != EngineExpectation.Skip;
 
-        return Engines.TryGetValue(engineName, out var expectation) ? expectation : "pass";
-    }
+    /// <summary>Whether the spec is expected to fail on <paramref name="engine"/>.</summary>
+    public bool IsExpectedToFail(EngineIdentity engine) => ExpectationFor(engine) == EngineExpectation.Fail;
 
     /// <summary>
-    /// The expectation for <paramref name="engineName"/>, resolved most-specific-first: its own entry when
-    /// the spec declares one, else <paramref name="baseEngineName"/>'s (<c>battlescribe-ui</c> →
-    /// <c>battlescribe</c>). A UI driver inherits its base engine's declarations by default and can still
-    /// state its own — the rule the roster lanes and every scenario run apply.
+    /// An <c>engines:</c> value as an expectation. Case-insensitive, as the runners always compared it; a value
+    /// that is none of the three reads as <c>pass</c>, and the spec lint refuses it before any runner sees it.
     /// </summary>
-    public string GetExpectation(string engineName, string? baseEngineName)
-        => baseEngineName is not null && Engines?.ContainsKey(engineName) != true
-            ? GetExpectation(baseEngineName)
-            : GetExpectation(engineName);
+    private static EngineExpectation Parse(string expectation)
+        => string.Equals(expectation, "skip", StringComparison.OrdinalIgnoreCase) ? EngineExpectation.Skip
+            : string.Equals(expectation, "fail", StringComparison.OrdinalIgnoreCase) ? EngineExpectation.Fail
+            : EngineExpectation.Pass;
 }

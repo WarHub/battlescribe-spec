@@ -67,10 +67,34 @@ public sealed class EngineSpecTests
     [InlineData("battlescribe-ui", "battlescribe")]
     [InlineData("newrecruit", "newrecruit")]
     [InlineData("newrecruit-ui", "newrecruit")]
-    public void AssertionEngineName_DropsTheUiSuffix(string engineName, string expected)
+    public void Identity_IsTheEngineInItsFamily(string engineName, string family)
     {
         var selection = Resolve("plain-spec-id", "--engine", engineName);
-        Assert.Equal(expected, selection.AssertionEngineName);
+        Assert.Equal(new EngineIdentity(engineName, family), selection.Identity);
+    }
+
+    /// <summary>An anonymous connectable has no identity: no spec is skipped for it and no engine's overrides apply.</summary>
+    [Fact]
+    public void Identity_OfAnAnonymousConnectable_IsNull()
+    {
+        var selection = Resolve("plain-spec-id", "--engine", "exec:node adapter.js");
+        Assert.Null(selection.Identity);
+    }
+
+    /// <summary>
+    /// <c>--assertion-engine</c> names the family whose declarations apply where a spec names none for the
+    /// engine itself; the engine keeps its own name, so its own entries still win.
+    /// </summary>
+    [Theory]
+    [InlineData("--engine", "newrecruit-ui", null, "newrecruit-ui", "newrecruit")]
+    [InlineData("--engine", "newrecruit-ui", "battlescribe", "newrecruit-ui", "battlescribe")]
+    [InlineData("--engine", "mine=exec:node adapter.js", "newrecruit", "mine", "newrecruit")]
+    [InlineData("--engine", "exec:node adapter.js", "newrecruit", "newrecruit", "newrecruit")]
+    public void IdentityWithFamily_KeepsTheNameAndStatesTheFamily(
+        string flag, string engine, string? family, string expectedName, string expectedFamily)
+    {
+        var selection = Resolve("plain-spec-id", flag, engine);
+        Assert.Equal(new EngineIdentity(expectedName, expectedFamily), selection.IdentityWithFamily(family));
     }
 
     [Theory]

@@ -53,7 +53,7 @@ internal static class RunBatch
 
         var filterPatterns = options.Filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             is { Length: > 0 } patterns ? patterns : null;
-        var assertionEngine = options.AssertionEngine ?? selection.AssertionEngineName;
+        var identity = selection.IdentityWithFamily(options.AssertionEngine);
 
         Ui.Info($"Engine: {engineLabel}");
         Ui.Info($"Domains: {string.Join(", ", options.Domains)}");
@@ -120,9 +120,8 @@ internal static class RunBatch
                         SpecsDirectory = options.SpecsDir,
                         FilterPatterns = filterPatterns,
                         TagFilter = TagFilter.Parse(options.Tags),
-                        EngineFilter = selection.EngineName,
-                        ExpectedFailuresEngine = options.ExpectedFailures,
-                        AssertionEngine = assertionEngine,
+                        Engine = identity,
+                        ExpectedFailures = options.ExpectedFailures is { Length: > 0 } xfail ? EngineIdentity.Of(xfail) : null,
                         Workers = workers,
                         Domains = options.Domains,
                         AdapterFactory = workerIndex =>
@@ -166,7 +165,7 @@ internal static class RunBatch
 
             if (options.ReportPath is not null)
             {
-                SpecSuiteOutput.WriteConformanceReport(result, options.ReportPath, selection.EngineName, assertionEngine, Console.Out);
+                SpecSuiteOutput.WriteConformanceReport(result, options.ReportPath, selection.EngineName, identity?.Family, Console.Out);
             }
 
             // After the summary, so the last line on stderr says why an empty run is red: the summary
