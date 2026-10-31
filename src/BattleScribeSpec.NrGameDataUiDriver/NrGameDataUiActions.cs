@@ -662,15 +662,17 @@ public static class NrGameDataUiActions
     /// <summary>
     /// Finds the <c>.title.normalTitle</c> row for an entry in the NR Editor catalogue tree.
     ///
-    /// The NR Editor does NOT render <c>data-id</c> attributes on tree nodes — entries can only
-    /// be located by their display name. This method:
+    /// The NR Editor does NOT render <c>data-id</c> attributes on tree nodes — a named entry is
+    /// located by its display name. This method:
     /// <list type="number">
-    ///   <item>Queries the Pinia store to get the entry's display name and which top-level
-    ///     collection it belongs to (e.g. <c>selectionEntries</c>).</item>
-    ///   <item>Expands every <c>depth-0</c> section whose CSS class matches that collection,
-    ///     so entries become visible.</item>
-    ///   <item>Returns a Playwright locator for the <c>.title.normalTitle</c> row inside
-    ///     a <c>depth-1</c> container whose text matches the entry name.</item>
+    ///   <item>Queries the Pinia store to get the entry's display name, the collection that holds
+    ///     it (e.g. <c>selectionEntries</c>, <c>constraints</c>) and the top-level collection its
+    ///     outermost ancestor sits in.</item>
+    ///   <item>Expands every <c>depth-0</c> section of that top-level collection, then every
+    ///     collapsed node, so the entry's row renders.</item>
+    ///   <item>Returns a Playwright locator for the title row named exactly the entry's name — or,
+    ///     for an entry with no name (a constraint), the row rendering that entry
+    ///     (<see cref="NrEditorTreeRows"/>).</item>
     /// </list>
     ///
     /// After this method returns, callers can click the locator to select the entry and
@@ -691,29 +693,34 @@ public static class NrGameDataUiActions
                     const cId = new URLSearchParams(window.location.search).get('id');
                     const cat = ed?.gameSystems?.[sId]?.loadedCatalogues?.[cId];
                     if (!cat) return null;
+                    // `constraints` is the one id-bearing collection whose members have no name: a
+                    // constraint lives inside an entry, and a spec addresses one its setup declared.
                     const cols = [
                         'selectionEntries','categoryEntries','selectionEntryGroups',
                         'forceEntries','entryLinks','infoLinks','categoryLinks',
                         'rules','profiles','infoGroups','profileTypes','costTypes','publications',
                         'sharedSelectionEntries','sharedSelectionEntryGroups',
-                        'sharedProfiles','sharedRules','sharedInfoGroups'
+                        'sharedProfiles','sharedRules','sharedInfoGroups','constraints'
                     ];
                     // Recursive search so nested entries (children of children) resolve too.
-                    // Returns the entry name and the key of the collection that directly holds it.
+                    // Returns the entry name, the key of the collection that directly holds it, and
+                    // the key of the catalogue's own collection its outermost ancestor sits in (the
+                    // section to expand: a constraint has no `.constraints` section of its own).
                     let result = null;
-                    const search = (obj) => {
+                    const search = (obj, root) => {
                         if (result || !obj || typeof obj !== 'object') return;
                         for (const col of cols) {
                             const arr = obj[col];
                             if (!Array.isArray(arr)) continue;
+                            const section = root ?? col;
                             for (const e of arr) {
-                                if (e && e.id === entryId) { result = { name: e.name, col: col }; return; }
-                                search(e);
+                                if (e && e.id === entryId) { result = { name: e.name, col: col, root: section }; return; }
+                                search(e, section);
                                 if (result) return;
                             }
                         }
                     };
-                    search(cat);
+                    search(cat, null);
                     return result ? JSON.stringify(result) : null;
                 } catch (ex) {
                     return null;
@@ -727,16 +734,17 @@ public static class NrGameDataUiActions
         var info = System.Text.Json.JsonSerializer.Deserialize<EntryLocationInfo>(entryJson,
             JsonOptions) ?? throw new InvalidOperationException(
                 $"NR Editor UI: failed to deserialize entry info for '{entryId}'.");
-        var entryName = info.Name ?? entryId;
         var collectionCssClass = info.Col!;
 
-        // Step 2: Expand all depth-0 section containers for this collection type so entries
-        // become visible. Sections start collapsed and must be expanded before their children
-        // render as .title.normalTitle rows in the DOM.
+        // Step 2: Expand the depth-0 section containers the entry's outermost ancestor sits in, so
+        // entries become visible. Sections start collapsed and must be expanded before their
+        // children render as .title.normalTitle rows in the DOM. The section is the ancestor's, not
+        // the holding collection's: there is no constraints section at all, and a nested profile or
+        // rule lives under its entry, not in the section named after its kind.
         //
         // Vue.js may not have finished rendering when we get here. Wait for the first
         // section element to appear before counting, otherwise CountAsync returns 0.
-        var sections = page.Locator($".{collectionCssClass}.depth-0");
+        var sections = page.Locator($".{info.Root ?? collectionCssClass}.depth-0");
         try
         {
             await sections.First.WaitForAsync(new LocatorWaitForOptions
@@ -820,6 +828,16 @@ public static class NrGameDataUiActions
             }
         }
 
+        // Step 3, for an entry with no name (a constraint): its title is prose NR composes from its
+        // fields and its parent ("max 3 selections in force"), so there is no name to pick by. The
+        // row is found by the entry it renders instead (NrEditorTreeRows).
+        if (string.IsNullOrEmpty(info.Name))
+        {
+            return await NrEditorTreeRows.RenderingAsync(page, entryId);
+        }
+
+        var entryName = info.Name;
+
         // Step 3: Return a locator for the entry title element. Entries render as
         // collapsible-box divs containing a .title row, at any tree depth.
         // Leaf entries:   <div class="title normalTitle">
@@ -843,7 +861,7 @@ public static class NrGameDataUiActions
         return await NrEditorNames.PickAsync(containing, entryName, $"'{collectionCssClass}' tree node for '{entryId}'");
     }
 
-    private sealed record EntryLocationInfo(string? Name, string? Col);
+    private sealed record EntryLocationInfo(string? Name, string? Col, string? Root);
 
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
     {

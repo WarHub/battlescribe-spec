@@ -1012,6 +1012,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The NR Editor UI driver makes the data edits two migration specs need (#579)** — on `newrecruit-ui`,
+  `migration-constraint-tightened` and `migration-mandatory-child-added` failed in their data block and
+  never reached the roster editor, though the store-direct `newrecruit` engine makes both edits. Three
+  causes, all in `src/BattleScribeSpec.NrGameDataUiDriver/`. **A constraint the setup declared could not
+  be selected:** the tree lookup searched the store's entry collections, not `constraints`, and finding
+  one would not have helped, because the lookup picks a row by name and a constraint's tree title is prose
+  NR composes ("max 3 selections in force"). A row for an entry with no name is now found by the entry it
+  renders — NR stamps every tree box with its component, whose `payload` is the entry, the path its own
+  range selection walks (`NrEditorTreeRows`) — and a tree whose boxes carry no entry fails naming that
+  assumption. **An entry given a declared id lost its tree selection:** NR keys tree rows by id, so the
+  re-id remounts the selected row unselected while the store keeps the unmounted one, and the next add
+  under the entry right-clicked no `.selected` row and timed out. The issue placed it at the add under
+  `se-squad`, an entry with a child; it was the add under `se-sergeant`, created with a declared id the
+  step before, and any spec adding under an entry it created with one hits it. The driver re-selects the
+  row after a re-id, and its selection wait now requires the selected row to be in the document, since
+  the id check alone passes against the unmounted one. **`removeEntry` went around the driver**, which
+  went on claiming the node selected before it — NR's `remove()` unselects — so the next edit of that node
+  skipped its click and found no right panel. Removal now goes through the driver and drops the claim, as
+  `Reload` and `LoadFile` now do too. Both specs pass on `newrecruit-ui` and their `fail` declarations are
+  removed; the data edits of #281's end-to-end spec, which hit the second and third, pass there as well.
+  `NrEditorTreeRowsRegressionTests` holds the row lookup on the Editor's markup, each case mutation-checked
+  red.
+
 - **The `battlescribe-ui` Data Editor driver answers its own reload prompt wherever it appears.** The
   Data Editor watches its open file with a monitor that polls once a second, so the prompt the harness's
   own writes provoke — "A file was modified outside of BattleScribe. Would you like to reload your data

@@ -7,10 +7,6 @@ description: >
   on the force the constraint counts in, NewRecruit on the first Squad, as each does for any max.
 tags: [migration, reopen, constraint, max]
 
-engines:
-  # NR Editor UI driver gap: setFields cannot address a constraint the setup declared (#579).
-  newrecruit-ui: fail
-
 setup:
   edit: cat-1
   gameSystem:

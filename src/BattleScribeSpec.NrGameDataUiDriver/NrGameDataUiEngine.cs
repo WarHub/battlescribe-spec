@@ -242,7 +242,7 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         => Run($"addEntry-{entryType}", () => _ui.AddEntryAsync(parentId, entryType, name, id));
 
     public void RemoveEntry(string entryId)
-        => Run($"removeEntry", () => NrGameDataUiActions.RemoveEntryAsync(_page!, entryId));
+        => Run($"removeEntry", () => _ui.RemoveEntryAsync(entryId));
 
     public void SetField(string entryId, string field, string? value)
         => Run($"setField-{field}", () => _ui.SetFieldAsync(entryId, field, value));
@@ -368,6 +368,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
         var fileName = isGameSystem ? stem + ".gst" : stem + ".cat";
 
         var outcome = await NrEditorStore.LoadFileAsync(_page, fileName, xml);
+        // The upload goes through the import view, so whatever the driver had selected is gone.
+        _ui.ForgetSelection();
         if (outcome.Errors.Count > 0)
         {
             // Uploading has to happen from the import view, so a refusal leaves the editor there rather
@@ -428,6 +430,8 @@ public sealed class NrGameDataUiEngine : IGameDataEngine
 
         var reopenId = _openId ?? throw new InvalidOperationException("Reload: no loaded file to reopen.");
         var errors = await NrEditorStore.ReloadFromXmlAsync(_page, BaseUrl, files, reopenId);
+        // The reload rebuilds every entry and row, so whatever the driver had selected is gone.
+        _ui.ForgetSelection();
         if (errors.Count > 0)
         {
             throw new InvalidOperationException("Reload failed: " + string.Join("; ", errors));

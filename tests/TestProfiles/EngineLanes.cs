@@ -366,6 +366,8 @@ internal static class EngineLanes
             "one rule (a catalogue row is picked by its whole name, #567) on NR's panel markup set as page content; passes without the HAR"),
         ("BattleScribeSpec.Tests.Regression.NrEditorExactNameRegressionTests",
             "one rule (a tree node or suggestion is picked by its whole name, #567) on NR Editor markup set as page content; passes without the snapshot"),
+        ("BattleScribeSpec.Tests.Regression.NrEditorTreeRowsRegressionTests",
+            "one rule (a tree row for an entry with no name is found by the entry it renders, #579) on NR Editor markup set as page content; passes without the snapshot"),
         ("BattleScribeSpec.Tests.Regression.NrListCleanupRegressionTests",
             "one regression (Cleanup deletes the roster row a spec created) on the frozen NR roster engine"),
         ("BattleScribeSpec.Tests.Features.BsRosterUiLinkReachedErrorTests",

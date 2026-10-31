@@ -9,10 +9,6 @@ description: >
   selections are loaded, not selected.
 tags: [migration, reopen, constraint, min, auto-select, design-difference]
 
-engines:
-  # NR Editor UI driver gap: addEntry under a root entry that has children times out (#579).
-  newrecruit-ui: fail
-
 setup:
   edit: cat-1
   gameSystem:
