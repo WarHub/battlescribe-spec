@@ -1,0 +1,84 @@
+id: reload-entry-removed
+category: reload
+description: >
+  A live reload drops a selection whose entry the saved data no longer has, as a reopen does. A
+  Squad and a Scout are saved and the roster stays open; the data editor deletes the Scout entry and
+  saves; YES to BattleScribe's reload prompt brings the roster back with the Squad alone.
+  BattleScribe then lists the dropped selection in its data-problems dialog, which no spec can
+  assert yet (#578).
+tags: [reload, migration]
+
+engines:
+  # NewRecruit's roster editor does not watch the data under an open list and offers no reload: a list
+  # meets changed data only when it is opened again, which the migration scenarios cover.
+  newrecruit: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+        - id: se-scout
+          name: Scout
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 5
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+      - action: selectEntry
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-scout
+
+  - action: saveRoster
+    file: detachment
+
+  - data:
+      - action: removeEntry
+        entryId: se-scout
+
+  - action: saveData
+
+  - action: reloadRoster
+
+  - roster:
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 10
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad

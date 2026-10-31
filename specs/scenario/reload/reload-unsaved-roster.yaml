@@ -1,0 +1,77 @@
+id: reload-unsaved-roster
+category: reload
+description: >
+  A roster never saved is reloaded as it stands. BattleScribe reloads a roster from its file, and a
+  roster with no file it first writes to a temporary one; so a Squad selected on a new roster, never
+  saved, comes back from the reload when the data under it changes, priced by the new data.
+tags: [reload, migration]
+
+engines:
+  # NewRecruit's roster editor does not watch the data under an open list and offers no reload: a list
+  # meets changed data only when it is opened again, which the migration scenarios cover.
+  newrecruit: skip
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+        - id: se-scout
+          name: Scout
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 5
+
+steps:
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-detachment
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        id: select-squad
+        forceId: ${{ steps.add-detachment.forceId }}
+        entryId: se-squad
+
+  - data:
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "15"
+
+  - action: saveData
+
+  - action: reloadRoster
+
+  - roster:
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 15
+          forces:
+            - name: Detachment
+              selections:
+                - name: Squad

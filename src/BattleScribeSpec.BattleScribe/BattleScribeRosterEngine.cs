@@ -331,6 +331,23 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
 
     public void ReloadRoster() => Engine.ReloadRoster();
 
+    /// <summary>
+    /// BattleScribe's answer to YES on "A file was modified outside of BattleScribe": write the roster as it
+    /// stands to a temporary file, read it back, and load it against the data now on disk. The Roster Editor
+    /// does that with <c>TempRoster.rosz</c> and the same load its Open uses; here <paramref name="rosterXml"/>
+    /// is that roster, so it is the file setup this engine always starts clean from, then
+    /// <see cref="LoadRoster"/> — what the app does, minus the window it asks in.
+    /// </summary>
+    public void ReloadRosterFromFiles(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
+    {
+        if (SetupFromFiles(files) is { Count: > 0 } errors)
+        {
+            throw new HarnessFaultException($"reloadRosterFromFiles: the data directory could not be read: {string.Join("; ", errors)}");
+        }
+
+        LoadRoster(rosterXml);
+    }
+
     // ===== DataSource support (file-based setup + name-based actions) =====
 
     /// <summary>

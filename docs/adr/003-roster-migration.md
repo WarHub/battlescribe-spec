@@ -2,8 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-31
-- **Issue:** #280 (spike). Builds on ADR 002 (scenario specs). Feeds #281 (the end-to-end kitchen-sink
-  spec) and #568 (BattleScribe's live reload).
+- **Issue:** #280 (spike), and #568 (BattleScribe's live reload, "Live reload" below). Builds on ADR 002
+  (scenario specs). Feeds #281 (the end-to-end kitchen-sink spec).
 
 ## Context
 
@@ -109,11 +109,73 @@ engine.
 - A category change is not covered. Neither data-editor UI driver can retarget a category link, and an
   expectation the app never ran is not one this suite keeps.
 
+## Live reload (#568)
+
+BattleScribe has a second way into migration. Its Roster Editor watches the data files of the open
+roster, and when one changes on disk it asks:
+
+> A file was modified outside of BattleScribe. Would you like to reload your roster?
+
+`javap` on `RosterEditor.jar` and `DataUtils.jar` gives the whole mechanism:
+
+- **The watch:** a commons-io `FileAlterationMonitor` polling once a second, with an observer per watched
+  file's directory that listens for **modifications only** (`onFileChange`). The prompt therefore does not
+  wait for window focus.
+- **The prompt:** `handleFileChanged` shows it. A guard flag keeps a second changed file from stacking a
+  second prompt while the first is showing.
+- **On YES:** the handler looks at the changed path. A roster file (`.ros`/`.rosz`) is read back from disk
+  (`readRosterFlat`). A data file — every reload a scenario can provoke — makes the app write the roster
+  **as it stands** to `TempRoster.rosz`, read that back, and load it with the same `a(Roster)` an Open ends
+  in.
+
+So a live reload re-resolves the roster on screen, unsaved changes included, against the data now on disk:
+a reopen of the roster as it stands, in the running app. It does **not** read the file the roster was
+opened from or saved to. (The first reading of the bytecode said it did; a spec built on that reading —
+an entry restored to the data coming back to a roster that had lost it — failed on the app, and the full
+listing showed the `.ros` test applies to the changed path, not the roster's.)
+
+**A fifth hand-off, `reloadRoster`,** says it: the roster editor, its roster still open, accepts the
+offer after a `saveData` changed a file under it, and the roster as it stands comes back against the new
+data. These are spec errors, never an `expectFailure` the engine can satisfy:
+
+- a `reloadRoster` with no `saveData` since the roster editor last read the data, because nothing changed
+  and the app offers nothing;
+- a `reloadRoster` after an `openRoster` or `reloadRoster` that failed — the refusal a spec declared — since
+  the roster editor then holds no roster the reload could be about (the lint refuses it after any open that
+  declares `expectFailure`).
+
+**The wire is one roster action, `reloadRosterFromFiles` (`files`, `xml`),** on the roster engine already
+set up: no `setupFromFiles`, no restart. Each engine answers it as its application does:
+
+- **`battlescribe-ui`** writes the new data **over the old files in place**
+  (`BsUiDataStaging.UpdateInPlaceAsync`, each file written beside its old one and moved over it). It does not use the
+  usual staging, which replaces the directory in one rename: a monitor poll landing between the removal
+  and the arrival would see the files deleted and created, never modified, and never ask. The Java agent
+  then waits for the prompt, answers YES, answers the data-problems dialog if the reload ends in one, and
+  waits for the roster object to be replaced and one more monitor poll to pass without a second prompt.
+  This is the one place the prompt is answered YES; everywhere else it is the harness's own staging showing
+  through, and is answered NO. No prompt within ten polls, or a data problem it does not recognise, is a
+  harness fault: BattleScribe was not asked, or did not decline.
+- **`battlescribe`** (in-process) has no window to ask in. It does what YES does: loads the roster as it
+  stands, exported by the runner a moment before, into a clean setup of the new data.
+- **`newrecruit`** and **`newrecruit-ui`** refuse it as unsupported. NewRecruit's roster editor does not
+  watch the data under an open list; a list meets changed data only when it is opened again. Emulating a
+  reload with a reopen would assert a feature NewRecruit does not have, so the `reload` specs opt the
+  family out by name, and the `migration` specs cover what NewRecruit does instead.
+
+Four specs under `specs/scenario/reload/` pass on `battlescribe-ui` (through the real prompt) and
+`battlescribe`:
+
+- a cost changed under a saved roster;
+- an entry deleted under it, which goes through the data-problems dialog during the reload;
+- a roster never saved;
+- the roster on screen, not its file. A roster opened on data that had lost one of its entries, then given a
+  second Squad and not saved, comes back after the data editor restores the entry with the second Squad and
+  without the entry: the reload re-resolves what is on screen, and the file that still has the entry is not
+  read.
+
 ## Not decided here
 
-- **Live reload.** BattleScribe offers a second way into migration: change the data under an open roster,
-  and it asks "A file was modified outside of BattleScribe. Would you like to reload your roster?" #568
-  covers what accepting it does.
 - **Read-only open.** When the data cannot edit a roster at all (a catalogue it names is missing), the app
   offers to open it read-only. The protocol has no read-only roster, and the driver refuses that load.
 
@@ -124,4 +186,7 @@ This ADR lands with:
 - the eight `migration` specs;
 - the `battlescribe-ui` driver's answer to the data-problems dialog (`RosterActions.applyLoadedRoster`,
   with the notices logged by `BsUiRosterEngine.LoadRosterAsync`);
-- #578 (load notices) and #579 (the NR Editor UI gaps) as follow-ups.
+- #578 (load notices) and #579 (the NR Editor UI gaps) as follow-ups;
+- and, for #568, the `reloadRoster` hand-off, `IRosterEngine.ReloadRosterFromFiles` and its protocol
+  action, the `battlescribe-ui` driver's answer to the reload prompt (`RosterActions.acceptReloadPromptAction`),
+  and the four `reload` specs.

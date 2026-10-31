@@ -213,6 +213,31 @@ public interface IRosterEngine : IDisposable
     void ReloadRoster()
         => throw new NotSupportedException("This engine does not support roster reload.");
 
+    /// <summary>
+    /// The data files under the open roster changed on disk and the user accepted the application's offer
+    /// to reload it: rebuild the roster from <paramref name="rosterXml"/>, the roster as it stands (exported a
+    /// moment before), against <paramref name="files"/>, the data directory as it now stands. Backs a scenario
+    /// spec's <c>reloadRoster</c> hand-off (<c>docs/adr/003-roster-migration.md</c>, "Live reload").
+    /// <para>
+    /// BattleScribe's Roster Editor watches the data files of its open roster, asks "A file was modified
+    /// outside of BattleScribe. Would you like to reload your roster?", and on YES writes the roster as it
+    /// stands to a temporary file, reads it back and loads it against the data on disk — the load an open does.
+    /// Not the roster's own file: that is read back only when the changed file is a roster. An engine driving
+    /// that app answers the prompt through its UI, and the app reloads the roster it holds; the in-process
+    /// engine, which is BattleScribe's own code with no window to ask in, loads <paramref name="rosterXml"/>. An engine whose application offers no such thing
+    /// throws, and the spec opts it out by name: a reload emulated by a reopen would assert a feature the
+    /// application does not have.
+    /// </para>
+    /// <para>
+    /// Setup errors from <paramref name="files"/> throw a <see cref="HarnessFaultException"/>, as the
+    /// scenario runner's own reading of the data directory does: they are the harness's data, not the
+    /// engine refusing the roster. A refused load throws as <see cref="LoadRoster"/> does.
+    /// </para>
+    /// </summary>
+    void ReloadRosterFromFiles(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
+        => throw new NotSupportedException(
+            "This engine's application has no live reload of an open roster (BattleScribe's \"A file was modified outside of BattleScribe\" prompt).");
+
     // ===== Lifecycle =====
 
     /// <summary>

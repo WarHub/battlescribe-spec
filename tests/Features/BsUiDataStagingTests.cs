@@ -161,6 +161,63 @@ public sealed class BsUiDataStagingTests : IDisposable
         Assert.False(await BsUiDataStaging.WouldReplaceAsync(_outputDir, "system-b", FilesFor("system-b")));
     }
 
+    /// <summary>
+    /// The reload's update rewrites what changed, in place, and nothing else: an unchanged file keeps its write
+    /// time, so a running app's file monitor reports a modification of the changed file and only of it (#568).
+    /// </summary>
+    [Fact]
+    public async Task UpdateInPlaceAsync_RewritesOnlyTheChangedFile_InTheSameDirectory()
+    {
+        var staging = new BsUiDataStaging();
+        await staging.StageDataFilesAsync(_outputDir, "system-a", FilesFor("system-a"));
+        var directory = Path.Combine(_outputDir, "system-a");
+        var gameSystemFile = Path.Combine(directory, "system-a.gst");
+        var catalogueFile = Path.Combine(directory, "system-a-cat.cat");
+        var past = DateTime.UtcNow.AddMinutes(-5);
+        File.SetLastWriteTimeUtc(gameSystemFile, past);
+        File.SetLastWriteTimeUtc(catalogueFile, past);
+        // A directory the update leaves standing keeps what it holds: a subdirectory (the update touches files
+        // only) survives in place and vanishes with a replacement. Creation time would say the same on Windows,
+        // but .NET on Linux reports the inode's change time, which the write itself moves.
+        var marker = Directory.CreateDirectory(Path.Combine(directory, "still-here")).FullName;
+
+        var edited = FilesFor("system-a");
+        edited[1] = (edited[1].FileName, edited[1].Content.Replace("revision=\"1\"", "revision=\"2\"", StringComparison.Ordinal));
+        await staging.UpdateInPlaceAsync(_outputDir, "system-a", edited);
+
+        Assert.Equal(past, File.GetLastWriteTimeUtc(gameSystemFile));
+        Assert.NotEqual(past, File.GetLastWriteTimeUtc(catalogueFile));
+        Assert.Contains("revision=\"2\"", await File.ReadAllTextAsync(catalogueFile, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.True(Directory.Exists(marker), "the update replaced the directory instead of writing into it");
+    }
+
+    [Fact]
+    public async Task UpdateInPlaceAsync_AddsNewFiles_AndDeletesOnesTheSetNoLongerHas()
+    {
+        var staging = new BsUiDataStaging();
+        await staging.StageDataFilesAsync(_outputDir, "system-a", FilesFor("system-a"));
+
+        (string, string)[] next =
+        [
+            FilesFor("system-a")[0],
+            ("system-a-other.cat", """<catalogue id="system-a-other" name="other" battleScribeVersion="2.03" revision="1"/>"""),
+        ];
+        await staging.UpdateInPlaceAsync(_outputDir, "system-a", next);
+
+        var names = Directory.GetFiles(Path.Combine(_outputDir, "system-a")).Select(Path.GetFileName).Order();
+        Assert.Equal(["index.bsi", "system-a-other.cat", "system-a.gst"], names);
+    }
+
+    [Fact]
+    public async Task UpdateInPlaceAsync_RefusesAGameSystemItDidNotStage()
+    {
+        var staging = new BsUiDataStaging();
+        await staging.StageDataFilesAsync(_outputDir, "system-a", FilesFor("system-a"));
+
+        await Assert.ThrowsAsync<HarnessFaultException>(
+            () => staging.UpdateInPlaceAsync(_outputDir, "system-b", FilesFor("system-b")));
+    }
+
     private static (string FileName, string Content)[] FilesFor(string gameSystemId) =>
     [
         ($"{gameSystemId}.gst",

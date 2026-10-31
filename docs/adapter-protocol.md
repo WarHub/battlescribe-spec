@@ -197,6 +197,7 @@ use BattleScribe data model IDs from the setup data. Instance references (e.g., 
 | `setCostLimit` | `costTypeId`, `value` | — | Set cost limit for a cost type |
 | `loadRoster` | `xml` | — | Load a `.ros` XML payload, replacing the current roster wholesale and re-linking it against the setup data. Adapters that cannot load a roster must return `{"ok":false,"error":...}` — never a silent success |
 | `reload` | — | — | Serialize the current roster and load it straight back. Round-trip specs assert the same `expectedState` before and after |
+| `reloadRosterFromFiles` | `files`, `xml` | — | The data under the open roster changed on disk and the user accepted the application's offer to reload it: rebuild the roster from `xml` (the roster as it stands, exported a moment before) against `files` (the data directory now). BattleScribe's "A file was modified outside of BattleScribe" prompt; an adapter whose application has none refuses it as unsupported (`kind: "unsupported"`), and the spec opts that engine out. Setup errors from `files` are a harness fault, not a refusal |
 
 #### Action outputs
 
@@ -839,6 +840,7 @@ What the client sends, in the order the spec's steps make it:
 | a `roster:` block's steps | `action` / `getState` / `getErrors`, as for a roster spec |
 | `saveRoster` | `exportRosterXml` |
 | `openRoster` | `setupFromFiles`, then `action` `loadRoster` |
+| `reloadRoster` | `exportRosterXml`, then `action` `reloadRosterFromFiles` with the data directory's files and that roster — on the roster engine already set up, with no `setupFromFiles` |
 
 So an adapter must keep its two engines independent: `setup` / `setupFromFiles` replace the roster
 engine and leave the gamedata engine alone, and `gamedataSetup` the reverse, which is how `AdapterHandler`

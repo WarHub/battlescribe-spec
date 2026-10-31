@@ -359,6 +359,11 @@ public static class AdapterHandler
                 case "reload":
                     engine.ReloadRoster();
                     break;
+                case "reloadRosterFromFiles":
+                    engine.ReloadRosterFromFiles(
+                        [.. (cmd.Files ?? throw MalformedCommand("reloadRosterFromFiles requires files")).Select(f => (f.FileName, f.Content))],
+                        cmd.Xml ?? throw MalformedCommand("reloadRosterFromFiles requires xml"));
+                    break;
                 default:
                     return new ActionResult { Ok = false, Error = $"Unknown action: {cmd.Action}" };
             }

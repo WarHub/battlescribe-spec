@@ -31,6 +31,7 @@ Counts are of roster spec files that drive the member: for an action, files carr
 | `ExportRosterXml` | 2 | `expectedFile` byte-compare: roster-fractional-cost-export, protocol-kitchen-sink |
 | `LoadRoster` | 9 | The `roundtrip` category, plus protocol-kitchen-sink |
 | `ReloadRoster` | 2 | roundtrip-reload-roster, protocol-kitchen-sink |
+| `ReloadRosterFromFiles` | 4 | The scenario `reload` category: a reload BattleScribe offers when the data under an open roster changes (#568) |
 
 ---
 

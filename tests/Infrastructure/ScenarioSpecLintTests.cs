@@ -160,7 +160,8 @@ public sealed class ScenarioSpecLintTests
     /// each item is exactly one kind; a block is not empty and its steps pass their own domain's per-step rules;
     /// a hand-off is known, carries <c>file</c> exactly where it takes one, and comes in an order that makes
     /// sense (no roster block or <c>saveRoster</c> before a roster exists, no <c>openRoster</c> of a roster
-    /// nobody saved); and the spec ends asserting something.
+    /// nobody saved, no <c>reloadRoster</c> without a <c>saveData</c> since the roster editor last read the data or
+    /// after an open that may be refused); and the spec ends asserting something.
     /// </summary>
     private static IEnumerable<string> CheckItems(ScenarioSpecFile spec)
     {
@@ -179,6 +180,8 @@ public sealed class ScenarioSpecLintTests
         var catalogueCount = spec.Setup?.Catalogues?.Count ?? 0;
         var rosterStarted = false;
         var saved = new List<string>();
+        var dataSavedSinceRosterRead = false;
+        var rosterMayBeRefused = false;
         var step = 1;
 
         for (var i = 0; i < spec.Steps.Count; i++)
@@ -261,8 +264,34 @@ public sealed class ScenarioSpecLintTests
 
             switch (action)
             {
+                case ScenarioHandoffs.SaveData:
+                    dataSavedSinceRosterRead |= rosterStarted;
+                    break;
+
                 case ScenarioHandoffs.NewRoster:
                     rosterStarted = true;
+                    (dataSavedSinceRosterRead, rosterMayBeRefused) = (false, false);
+                    break;
+
+                case ScenarioHandoffs.ReloadRoster:
+                    if (!rosterStarted)
+                    {
+                        yield return $"{here}: reloadRoster needs an open roster — start one with 'newRoster' or 'openRoster' first";
+                    }
+                    else if (!dataSavedSinceRosterRead)
+                    {
+                        yield return $"{here}: reloadRoster without a saveData since the roster editor last read the data "
+                            + "directory — no file under the open roster changed, so BattleScribe offers no reload";
+                    }
+                    else if (rosterMayBeRefused)
+                    {
+                        yield return $"{here}: reloadRoster after an openRoster or reloadRoster that may be refused "
+                            + "(it declares expectFailure) — the roster editor may hold no roster to reload; start, open "
+                            + "or save one first";
+                    }
+
+                    dataSavedSinceRosterRead = false;
+                    rosterMayBeRefused = item.ExpectFailure is not null;
                     break;
 
                 case ScenarioHandoffs.SaveRoster:
@@ -274,6 +303,7 @@ public sealed class ScenarioSpecLintTests
                     if (file is not null)
                     {
                         saved.Add(file);
+                        rosterMayBeRefused = false;
                     }
 
                     break;
@@ -286,6 +316,8 @@ public sealed class ScenarioSpecLintTests
                     }
 
                     rosterStarted = true;
+                    dataSavedSinceRosterRead = false;
+                    rosterMayBeRefused = item.ExpectFailure is not null;
                     break;
             }
         }
@@ -435,6 +467,16 @@ public sealed class ScenarioSpecLintTests
         // openRoster opens a roster an earlier saveRoster saved
         ("action: openRoster\n    file: my-list", "action: openRoster\n    file: your-list",
             "item 6 (step 7): openRoster names 'your-list', which no earlier saveRoster saved (saved: [my-list])"),
+
+        // reloadRoster: an open roster, a saveData since the roster editor read the data, no unsaved roster changes
+        ("  - action: saveData\n\n  - action: newRoster\n", "  - action: saveData\n\n  - action: reloadRoster\n\n  - action: newRoster\n",
+            "reloadRoster needs an open roster"),
+        ("action: openRoster\n    file: my-list", "action: reloadRoster",
+            "reloadRoster without a saveData since the roster editor last read the data directory"),
+        ("action: openRoster\n    file: my-list",
+            "action: openRoster\n    file: my-list\n    expectFailure: true\n\n  - data:\n      - action: setFields\n        entryId: se-squad\n"
+            + "        costs:\n          ct-pts: \"20\"\n\n  - action: saveData\n\n  - action: reloadRoster",
+            "reloadRoster after an openRoster or reloadRoster that may be refused"),
 
         // step ids are one namespace
         ("        entryId: se-squad\n        costs:", "        id: add-detachment\n        entryId: se-squad\n        costs:",

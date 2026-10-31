@@ -115,6 +115,151 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// <c>reloadRoster</c> brings back the roster as it stands — exported at the reload, not the saved file —
+    /// against the data directory as the last <c>saveData</c> left it, on the roster engine that is still open:
+    /// no cleanup, no setup in between.
+    /// </summary>
+    [Fact]
+    public void ReloadRoster_ReloadsTheRosterAsItStands_AgainstTheSavedData_WithoutRestartingTheEditor()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - action: saveRoster
+                file: my-list
+              - data:
+                  - action: setFields
+                    entryId: cat-1
+                    fields:
+                      name: Edited
+              - action: saveData
+              - action: reloadRoster
+            """);
+
+        AssertPassed(result);
+        string[] expected = ["cleanup", "setup", "export", "export", "reload <roster id=\"saved-2\"/>", "cleanup"];
+        Assert.Equal(expected, roster.Log);
+        Assert.Contains("name=\"Edited\"", CatalogueOf(roster.Setups[1]), StringComparison.Ordinal);
+    }
+
+    /// <summary>A roster with no file is reloaded as it stands: BattleScribe writes it to a temporary file first.</summary>
+    [Fact]
+    public void ReloadRoster_OfARosterNeverSaved_ReloadsItAsItStands()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - data:
+                  - action: setFields
+                    entryId: cat-1
+                    fields:
+                      name: Edited
+              - action: saveData
+              - action: reloadRoster
+            """);
+
+        AssertPassed(result);
+        string[] expected = ["cleanup", "setup", "export", "reload <roster id=\"saved-1\"/>", "cleanup"];
+        Assert.Equal(expected, roster.Log);
+    }
+
+    [Theory]
+    [InlineData("""
+          - action: newRoster
+          - action: reloadRoster
+        """, "no saveData since the roster editor last read the data directory")]
+    [InlineData("""
+          - action: newRoster
+          - action: saveData
+          - action: openRoster
+            file: my-list
+        """, "no roster was saved as 'my-list'")]
+    [InlineData("""
+          - action: saveData
+          - action: reloadRoster
+        """, "reloadRoster needs an open roster")]
+    public void ReloadRoster_SpecMistakes_AreSpecErrors_EvenUnderExpectFailure(string steps, string expected)
+    {
+        var (_, roster, result) = Run(steps.Replace("- action: reloadRoster", "- action: reloadRoster\n    expectFailure: true", StringComparison.Ordinal));
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains(expected, failure, StringComparison.Ordinal);
+        Assert.DoesNotContain(roster.Log, l => l.StartsWith("reload ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Roster changes made since the roster was saved survive a reload: BattleScribe reloads the roster on screen,
+    /// not its file.
+    /// </summary>
+    [Fact]
+    public void ReloadRoster_AfterChangesSinceTheSave_ReloadsThemToo()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - action: saveRoster
+                file: my-list
+              - roster:
+                  - action: addForce
+                    forceEntryId: fe-1
+              - action: saveData
+              - action: reloadRoster
+            """);
+
+        AssertPassed(result);
+        Assert.Contains("reload <roster id=\"saved-2\"/>", roster.Log);
+    }
+
+    /// <summary>
+    /// After an <c>openRoster</c> the spec declared refused, the roster editor holds no roster a reload could be
+    /// about (BattleScribe holds none at all): a <c>reloadRoster</c> then is the spec's mistake, not a reload of
+    /// the file that failed to open.
+    /// </summary>
+    [Fact]
+    public void ReloadRoster_AfterARefusedOpen_IsSpecError()
+    {
+        var (_, roster, result) = Run(
+            """
+              - action: newRoster
+              - action: saveRoster
+                file: my-list
+              - action: openRoster
+                file: my-list
+                expectFailure: true
+              - action: saveData
+              - action: reloadRoster
+            """,
+            roster: new RecordingRosterEditor { LoadThrows = new InvalidOperationException("catalogue missing") });
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("reloadRoster after an openRoster or reloadRoster that failed", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain(roster.Log, l => l.StartsWith("reload ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An engine whose application has no live reload refuses it as unsupported — the spec opts it out by name —
+    /// and that never satisfies <c>expectFailure</c>.
+    /// </summary>
+    [Fact]
+    public void ReloadRoster_OnAnEngineWithoutOne_IsUnsupported()
+    {
+        var (_, _, result) = Run(
+            """
+              - action: newRoster
+              - action: saveData
+              - action: reloadRoster
+                expectFailure: true
+            """,
+            roster: new RecordingRosterEditor { CanReload = false });
+
+        var failure = Assert.Single(result.Failures);
+        output.WriteLine(failure);
+        Assert.Contains("no live reload", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A misspelled roster name is the spec's mistake. It must never satisfy <c>expectFailure</c> — the
     /// rule #25 established for actions — or a spec could assert its own typo on every engine at once.
     /// </summary>
@@ -588,6 +733,40 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
     }
 
     /// <summary>A roster editor that records what it read, saved and loaded.</summary>
+    /// <summary>An engine that keeps every interface default — here, the reload it does not have.</summary>
+    private sealed class NoReload : IRosterEngine
+    {
+        public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues) => [];
+
+        public ActionOutputs AddForce(string forceEntryId, string catalogueId) => new();
+
+        public ActionOutputs AddChildForce(string parentForceId, string forceEntryId, string catalogueId) => new();
+
+        public void RemoveForce(string forceId) { }
+
+        public ActionOutputs SelectEntry(string forceId, string entryId) => new();
+
+        public ActionOutputs SelectChildEntry(string forceId, string parentSelectionId, string entryId) => new();
+
+        public void DeselectSelection(string forceId, string selectionId) { }
+
+        public void SetSelectionCount(string forceId, string selectionId, int count) { }
+
+        public ActionOutputs DuplicateSelection(string forceId, string selectionId) => new();
+
+        public ActionOutputs DuplicateForce(string forceId) => new();
+
+        public void SetCostLimit(string costTypeId, decimal value) { }
+
+        public void SetCustomization(string forceId, string? selectionId, string? categoryEntryId, string? customName, string? customNotes) { }
+
+        public RosterState GetRosterState() => throw new NotSupportedException();
+
+        public IReadOnlyList<ValidationErrorState> GetValidationErrors() => [];
+
+        public void Dispose() { }
+    }
+
     private sealed class RecordingRosterEditor : IRosterEngine
     {
         private int _saves;
@@ -603,6 +782,9 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
         public Exception? LoadThrows { get; init; }
 
         public IReadOnlyList<string> SetupErrors { get; init; } = [];
+
+        /// <summary>Whether this engine's application has a live reload; the interface's default throws.</summary>
+        public bool CanReload { get; init; } = true;
 
         public IReadOnlyList<string> Setup(ProtocolGameSystem gameSystem, ProtocolCatalogue[] catalogues)
             => throw new InvalidOperationException("A scenario's roster editor reads files, never the Protocol model.");
@@ -631,6 +813,17 @@ public sealed class ScenarioRunnerTests(ITestOutputHelper output)
             }
 
             Log.Add($"load {xml}");
+        }
+
+        public void ReloadRosterFromFiles(IReadOnlyList<(string FileName, string Content)> files, string rosterXml)
+        {
+            if (!CanReload)
+            {
+                ((IRosterEngine)new NoReload()).ReloadRosterFromFiles(files, rosterXml);
+            }
+
+            Log.Add($"reload {rosterXml}");
+            Setups.Add(files);
         }
 
         public ActionOutputs AddForce(string forceEntryId, string catalogueId)
