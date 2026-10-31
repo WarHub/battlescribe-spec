@@ -72,7 +72,7 @@ The NR Editor is a Vue/Nuxt SPA with no test hooks, so several intuitive selecto
 
 | Element | Selector | Trap to avoid |
 |---------|----------|---------------|
-| Tree node by id | resolve in the Pinia store → match `.{collectionClass} .title:is(.normalTitle,.arrowTitle)` by name | no `data-id` / `role=treeitem` in the DOM |
+| Tree node by id | resolve in the Pinia store → match `.{collectionClass} .title:is(.normalTitle,.arrowTitle)` by name; an entry with **no name** (a constraint) → the `#editor-entries .collapsible-box` whose `vnode.payload.id` is the id (`NrEditorTreeRows`) | no `data-id` / `role=treeitem` in the DOM; a constraint's title is prose NR composes ("max 3 selections in force"), not a name to match |
 | Context-menu items | `.context-menu > div` filtered by **anchored** text (`^\s*Group\s*$`) | not `role=menuitem`; unanchored "Group" also matches "Modifier Group" / "Info Group" |
 | Entry id / name fields | `td:last-child input[type='text']` in the editor-table row | no `name`/`id` attribute on the input |
 | Delete / Save confirm | `GetByRole(Button, Name="Confirm"\|"Delete"\|"Yes")` (`"OK"\|"Save"\|"Close"` for saves) | button label varies by dialog |
@@ -92,6 +92,14 @@ Notes baked into `FindTreeNodeByIdAsync` / `AddEntry`:
   (un-skipped in `da9da15`) — do not "fix" it by adding a skip.
 - A new entry's id/name live in the editor table on the right; fill the name input, then
   `PressAsync("Tab")` — the panel commits on blur/Enter, not on input.
+- **Tree rows are keyed by id.** Changing an entry's Unique ID remounts its row *unselected*, while
+  the store's `selectedItem` keeps the unmounted row (the right panel still shows the entry). The
+  driver re-selects the row after a re-id (`ApplyDeclaredIdAsync`), and its selection wait requires
+  `selectedItem.$el.isConnected`; anything that adds under or right-clicks "the selected row" needs
+  both (#579).
+- **The driver's selected-node claim must follow NR's selection.** An action that moves it outside
+  the driver — `removeEntry` (NR's `remove()` unselects), `Reload`, `LoadFile` — calls
+  `ForgetSelection()`, or the next edit skips its click and finds no right panel.
 
 ## Diagnostics
 

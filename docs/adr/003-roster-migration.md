@@ -103,9 +103,6 @@ engine.
 ### Negative
 
 - The dialog's contents are logged, not asserted (#578).
-- Two specs say nothing about migration on `newrecruit-ui`: the NR Editor UI driver cannot make their
-  data edit. A setup-declared constraint is unreachable to `setFields`, and an `addEntry` under an entry
-  that has children times out. Both declare `newrecruit-ui: fail` naming #579.
 - A category change is not covered. Neither data-editor UI driver can retarget a category link, and an
   expectation the app never ran is not one this suite keeps.
 
@@ -186,7 +183,9 @@ This ADR lands with:
 - the eight `migration` specs;
 - the `battlescribe-ui` driver's answer to the data-problems dialog (`RosterActions.applyLoadedRoster`,
   with the notices logged by `BsUiRosterEngine.LoadRosterAsync`);
-- #578 (load notices) and #579 (the NR Editor UI gaps) as follow-ups;
+- #578 (load notices) as a follow-up, and #579 (two NR Editor UI driver gaps that kept
+  `migration-constraint-tightened` and `migration-mandatory-child-added` from making their data edit on
+  `newrecruit-ui`) as another, since fixed: all eight specs run on all four engines;
 - and, for #568, the `reloadRoster` hand-off, `IRosterEngine.ReloadRosterFromFiles` and its protocol
   action, the `battlescribe-ui` driver's answer to the reload prompt (`RosterActions.acceptReloadPromptAction`),
   and the four `reload` specs.

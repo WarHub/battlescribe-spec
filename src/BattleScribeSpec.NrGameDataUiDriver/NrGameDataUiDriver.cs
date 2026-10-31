@@ -143,6 +143,26 @@ public sealed class NrGameDataUiDriver
         return new GameDataActionOutputs { EntryId = token };
     }
 
+    /// <summary>Removes an entry through its tree row's "Remove" context item.</summary>
+    /// <remarks>
+    /// The removal moves NR's selection, so the driver stops claiming one: the right-click selects
+    /// the removed row, and <c>editorStore.remove()</c> then unselects. Left in place, the claim
+    /// made the next edit of the entry selected before the removal skip its click and look for a
+    /// right panel that was gone (#579).
+    /// </remarks>
+    public async Task RemoveEntryAsync(string entryId)
+    {
+        ForgetSelection();
+        await NrGameDataUiActions.RemoveEntryAsync(_page, entryId);
+        _parentOf.Remove(entryId);
+    }
+
+    /// <summary>
+    /// Drops the driver's claim about which node is selected, after something outside it moved NR's
+    /// selection; the next edit selects its node through the tree.
+    /// </summary>
+    public void ForgetSelection() => _selectedToken = null;
+
     public async Task SetFieldAsync(string entryId, string field, string? value)
     {
         await SelectAsync(entryId);
@@ -366,6 +386,12 @@ public sealed class NrGameDataUiDriver
     /// Order matters: the selection is asserted FIRST, because the panel lags it — checking the
     /// panel first can pass against the very panel we are trying to leave.
     /// </para>
+    /// <para>
+    /// The selected row must also be in the document. The store's <c>selectedItem</c> is the tree
+    /// row's component, and NR keys rows by id: after a re-id it still points at the unmounted row,
+    /// whose entry already carries the new id, so the id check alone passes before the click that
+    /// selects the remounted row has landed (see <see cref="ApplyDeclaredIdAsync"/>).
+    /// </para>
     /// </remarks>
     private async Task WaitEditorReadyAsync(string? expectedSelectedId = null)
     {
@@ -376,7 +402,8 @@ public sealed class NrGameDataUiDriver
                 (id) => {
                     const st = document.querySelector('#__nuxt')
                         ?.__vue_app__?.config?.globalProperties?.$pinia?._s?.get('editor');
-                    return st?.get_selected?.()?.id === id;
+                    return st?.selectedItem?.$el?.isConnected === true
+                        && st.get_selected?.()?.id === id;
                 }
                 """,
                 expectedSelectedId,
@@ -536,8 +563,17 @@ public sealed class NrGameDataUiDriver
     /// <summary>
     /// If a declared id is given, re-id the just-created (id-bearing) entry through the editor's
     /// "Unique ID" field so exports are byte-reproducible, and remap identity tracking. Id-less
-    /// tokens (synthetic) are left untouched. Returns the effective token.
+    /// tokens (synthetic) are left untouched. Returns the effective token, selected in the tree.
     /// </summary>
+    /// <remarks>
+    /// The re-id costs the entry its tree selection, and it is selected again before returning.
+    /// NR keys every tree row by its entry's id (<c>CatalogueEntry.key(e)</c> is <c>e.id</c>), so a
+    /// new id unmounts the selected row and mounts a fresh, unselected one in its place, while the
+    /// store's <c>selectedItem</c> keeps pointing at the unmounted row. The right panel still shows
+    /// the entry — <c>get_selected()</c> reaches it through that row — but no row in the tree is
+    /// <c>.selected</c>, so the next add under this entry right-clicked nothing and timed out waiting
+    /// for one (#579): any spec that adds a child under an entry it created with a declared id.
+    /// </remarks>
     private async Task<string> ApplyDeclaredIdAsync(string token, string? declaredId)
     {
         if (string.IsNullOrEmpty(declaredId) || declaredId == token || _idless.Contains(token))
@@ -551,6 +587,9 @@ public sealed class NrGameDataUiDriver
             _parentOf.Remove(token);
             _parentOf[declaredId] = parent;
         }
+
+        _selectedToken = null;
+        await SelectAsync(declaredId);
         return declaredId;
     }
 
