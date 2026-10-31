@@ -176,7 +176,10 @@ public sealed class BsUiDataStagingTests : IDisposable
         var past = DateTime.UtcNow.AddMinutes(-5);
         File.SetLastWriteTimeUtc(gameSystemFile, past);
         File.SetLastWriteTimeUtc(catalogueFile, past);
-        var created = Directory.GetCreationTimeUtc(directory);
+        // A directory the update leaves standing keeps what it holds: a subdirectory (the update touches files
+        // only) survives in place and vanishes with a replacement. Creation time would say the same on Windows,
+        // but .NET on Linux reports the inode's change time, which the write itself moves.
+        var marker = Directory.CreateDirectory(Path.Combine(directory, "still-here")).FullName;
 
         var edited = FilesFor("system-a");
         edited[1] = (edited[1].FileName, edited[1].Content.Replace("revision=\"1\"", "revision=\"2\"", StringComparison.Ordinal));
@@ -185,7 +188,7 @@ public sealed class BsUiDataStagingTests : IDisposable
         Assert.Equal(past, File.GetLastWriteTimeUtc(gameSystemFile));
         Assert.NotEqual(past, File.GetLastWriteTimeUtc(catalogueFile));
         Assert.Contains("revision=\"2\"", await File.ReadAllTextAsync(catalogueFile, TestContext.Current.CancellationToken), StringComparison.Ordinal);
-        Assert.Equal(created, Directory.GetCreationTimeUtc(directory));
+        Assert.True(Directory.Exists(marker), "the update replaced the directory instead of writing into it");
     }
 
     [Fact]
