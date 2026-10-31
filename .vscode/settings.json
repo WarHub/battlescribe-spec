@@ -1,5 +1,7 @@
 {
   "yaml.schemas": {
-    "./docs/spec-schema.json": "specs/roster/**/*.yaml"
+    "./docs/roster-spec-schema.json": "specs/roster/**/*.yaml",
+    "./docs/gamedata-spec-schema.json": "specs/gamedata/**/*.yaml",
+    "./docs/scenario-spec-schema.json": "specs/scenario/**/*.yaml"
   }
 }

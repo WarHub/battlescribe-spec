@@ -258,7 +258,7 @@ skipped, with that reason, when it does not.
 - **Which roster-node ids survive `openRoster`.** Expressions captured before a save still resolve
   after a reopen; whether they still name live nodes is an engine fact, and #280 records it.
 - A JSON Schema for scenario specs (#569). Gamedata specs have none either; the roster schema covers
-  roster specs only.
+  roster specs only. Since done: see "Follow-ups".
 
 ## What the first scenarios found
 
@@ -317,7 +317,11 @@ This ADR lands with its implementation:
 Follow-ups:
 
 - #568: the live reload prompt.
-- #569: a scenario schema.
+- #569: a scenario schema. Done: `docs/scenario-spec-schema.json`, beside a new
+  `docs/gamedata-spec-schema.json` and the roster schema renamed `docs/roster-spec-schema.json`. The scenario
+  schema reuses the other two by `$ref` — its setup is the GameData setup, a `data:` block's items the GameData
+  step, a `roster:` block's items the roster step — and an item is exactly one of a block or a hand-off, with
+  `file` required on `saveRoster`/`openRoster` and refused on the others.
 - #570: `bs-spec run --break` on scenarios — done. `ScenarioRunner.OnBeforeStep` fires once before
   every block step and every hand-off, with the global index, and can stop the run. The REPL reaches
   both editors over the one connection: `data state` and `roster state`, with bare `state` meaning the

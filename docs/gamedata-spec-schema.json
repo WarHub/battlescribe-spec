@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BattleScribe GameData Spec",
+  "description": "A GameData spec, specs/gamedata/{category}/{id}.yaml: steps in the data editor, which edit data files and never build a roster. Model: src/BattleScribeSpec.TestKit/GameData/GameDataSpecModels.cs.",
+  "type": "object",
+  "required": ["id", "category", "description", "setup", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "description": "Must match the file name, without .yaml." },
+    "category": { "type": "string", "description": "Must match the parent directory's name." },
+    "description": { "type": "string" },
+    "tags": { "$ref": "spec-common-schema.json#/$defs/tags" },
+    "engines": { "$ref": "spec-common-schema.json#/$defs/specEngines" },
+    "setup": { "$ref": "#/$defs/setup" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "actionName": {
+      "type": "string",
+      "description": "A data-editor action (GameDataActions.All).",
+      "enum": ["addEntry", "removeEntry", "setFields", "addLink", "openFile", "reload", "dump"]
+    },
+    "linkType": {
+      "type": "string",
+      "description": "The kind of link addLink creates (IGameDataEngine.AddLink).",
+      "enum": ["entryLink", "infoLink", "categoryLink"]
+    },
+    "stringMap": {
+      "type": "object",
+      "description": "Values keyed by name. Quote numeric and boolean values in YAML: every value is a string.",
+      "additionalProperties": { "type": ["string", "null"] }
+    },
+    "setup": {
+      "type": "object",
+      "description": "The files the data editor loads, and the one it has open.",
+      "required": ["edit", "gameSystem"],
+      "additionalProperties": false,
+      "properties": {
+        "edit": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Id of the file (the game system or a catalogue) the data editor opens for editing: the active file that mutations, reload and expectedFile apply to. Required, because engines disagree on which loaded file is active by default. An openFile step may switch it later."
+        },
+        "gameSystem": { "$ref": "spec-common-schema.json#/$defs/gameSystem" },
+        "catalogues": {
+          "type": "array",
+          "items": { "$ref": "spec-common-schema.json#/$defs/catalogue" }
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "description": "A data-editor step: an action, or an assertion (expectedState, expectedFile, or both).",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Names this step, for ${{ steps.<id>.entryId }} in later steps, or as the key of an expectedFile or openFile side-file."
+        },
+        "action": { "$ref": "#/$defs/actionName" },
+        "parentId": {
+          "type": "string",
+          "description": "addEntry, addLink: the entry or file the new node goes under."
+        },
+        "entryType": {
+          "type": "string",
+          "description": "addEntry: the kind of node to create (selectionEntry, selectionEntryGroup, profile, rule, constraint, modifier, condition, ...)."
+        },
+        "name": { "type": "string", "description": "addEntry: the new entry's name." },
+        "entryId": {
+          "type": "string",
+          "description": "removeEntry, setFields: the entry to edit. openFile: the loaded file to open. addEntry, addLink: the declared id of the node created."
+        },
+        "fields": {
+          "$ref": "#/$defs/stringMap",
+          "description": "setFields: scalar fields by name, applied first."
+        },
+        "characteristics": {
+          "$ref": "#/$defs/stringMap",
+          "description": "setFields: characteristic values by name or type id, applied last."
+        },
+        "costs": { "$ref": "#/$defs/stringMap", "description": "setFields: cost values by cost type id." },
+        "linkType": { "$ref": "#/$defs/linkType" },
+        "targetId": { "type": "string", "description": "addLink: the node the new link points to." },
+        "content": {
+          "type": "string",
+          "description": "openFile: inline BattleScribe XML to load and open; the file type comes from the root element."
+        },
+        "expectedState": { "$ref": "#/$defs/expectedState" },
+        "expectFailure": { "$ref": "spec-common-schema.json#/$defs/expectFailure" },
+        "expectedFile": { "$ref": "spec-common-schema.json#/$defs/expectedFile" }
+      },
+      "anyOf": [
+        { "required": ["action"] },
+        { "required": ["expectedState"] },
+        { "required": ["expectedFile"] }
+      ],
+      "allOf": [
+        {
+          "description": "An action step asserts nothing: expectedState and expectedFile go on a step of their own.",
+          "if": { "required": ["action"] },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["expectedState"] },
+                { "required": ["expectedFile"] }
+              ]
+            }
+          }
+        },
+        {
+          "description": "expectFailure asserts that an action was refused, so it only belongs on an action step. The validation list of a file the editor opened is expectedState.errors.",
+          "if": { "required": ["expectFailure"] },
+          "then": { "required": ["action"] }
+        },
+        {
+          "description": "An expectedFile without inline content is a side-file keyed by the step id.",
+          "if": {
+            "required": ["expectedFile"],
+            "properties": {
+              "expectedFile": {
+                "not": { "required": ["content"] }
+              }
+            }
+          },
+          "then": { "required": ["id"] }
+        }
+      ]
+    },
+    "expectedState": {
+      "type": "object",
+      "description": "Partial match: only the fields given are checked.",
+      "additionalProperties": false,
+      "properties": {
+        "catalogues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedCatalogue" }
+        },
+        "gameSystem": { "$ref": "#/$defs/expectedGameSystem" },
+        "errors": {
+          "type": "array",
+          "description": "The editor's validation list for the files it opened. Empty: no errors. Otherwise each listed error must be present.",
+          "items": { "$ref": "#/$defs/expectedError" }
+        },
+        "engines": {
+          "type": "object",
+          "description": "Per-engine overrides: an override's fields replace the base for that engine.",
+          "propertyNames": { "$ref": "spec-common-schema.json#/$defs/engineName" },
+          "additionalProperties": { "$ref": "#/$defs/expectedState" }
+        }
+      }
+    },
+    "expectedError": {
+      "type": "object",
+      "description": "message is a case-insensitive substring; the ids, when given, match exactly.",
+      "additionalProperties": false,
+      "properties": {
+        "message": { "type": "string" },
+        "entryId": { "type": "string" },
+        "constraintId": { "type": "string" }
+      }
+    },
+    "expectedCatalogue": {
+      "type": "object",
+      "description": "A catalogue, matched by id (else by name); only the fields given are checked.",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "fields": {
+          "$ref": "#/$defs/stringMap",
+          "description": "Root metadata fields (revision, library, authorName, ...)."
+        },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedSelectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedSelectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "entryLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedProfiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "forceEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "categoryEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "publications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedInfoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "catalogueLinks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedForceEntries": {
+          "type": "array",
+          "description": "NewRecruit addition.",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedAssociations": {
+          "type": "array",
+          "description": "NewRecruit addition.",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "entryCount": { "type": "integer", "description": "Entries across every container." },
+        "selectionEntryCount": { "type": "integer" },
+        "sharedSelectionEntryCount": { "type": "integer" }
+      }
+    },
+    "expectedGameSystem": {
+      "type": "object",
+      "description": "The game system; only the fields given are checked.",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "fields": {
+          "$ref": "#/$defs/stringMap",
+          "description": "Root metadata fields (revision, authorName, ...)."
+        },
+        "forceEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "categoryEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "costTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "profileTypes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "selectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedSelectionEntries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedSelectionEntryGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "sharedInfoGroups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        }
+      }
+    },
+    "expectedEntry": {
+      "type": "object",
+      "description": "One node of a file; only the fields given are checked.",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "entryType": { "type": "string" },
+        "hidden": { "type": "boolean" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/expectedEntry" }
+        },
+        "childCount": { "type": "integer" },
+        "fields": { "$ref": "#/$defs/stringMap", "description": "Type-specific fields." }
+      }
+    }
+  }
+}

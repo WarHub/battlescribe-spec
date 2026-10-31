@@ -30,8 +30,8 @@ than a cost).
 
 ## query `scope` vocabulary  — **confirmed**
 
-The scope a query resolves against. Baseline (per `docs/spec-schema.json` scopeValue): self, parent,
-ancestor, force, roster, primary-category, primary-catalogue.
+The scope a query resolves against. Baseline (per `docs/spec-common-schema.json` scopeKeyword): self,
+parent, ancestor, force, roster, primary-category, primary-catalogue — or the id of an ancestor entry.
 
 NR additions (`enums.json` → `modifier.widgets[1] Scope:` and `condition.widgets[1] query`):
 **root-entry**, and **type scopes** — `Type: Unit`, `Type: Model`, `Type: Upgrade`,

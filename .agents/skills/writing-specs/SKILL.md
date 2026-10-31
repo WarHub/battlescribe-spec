@@ -18,6 +18,13 @@ description: >
 4. Run: `pwsh -File tools/format-specs.ps1`
 5. Run: `dotnet test --project tests/BattleScribeSpec.Tests.csproj --filter "DisplayName~SpecLint"`
 
+Each domain has a JSON Schema that VS Code applies to its folder as you type (`.vscode/settings.json`):
+`docs/roster-spec-schema.json`, `docs/gamedata-spec-schema.json` and `docs/scenario-spec-schema.json`, the
+last reusing the other two by `$ref`. They refuse unknown fields and unknown actions, as the loaders do;
+`SpecSchemaTests` validates every spec against its schema. Adding a field to a spec model, or an action to
+`SpecValidator`'s table or `GameDataActions`, means adding it to the schema too — `SpecSchemaDriftTests` fails
+until you do.
+
 ## Spec structure
 
 ```yaml

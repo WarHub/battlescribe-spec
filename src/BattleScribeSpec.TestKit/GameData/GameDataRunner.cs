@@ -167,7 +167,7 @@ public sealed class GameDataRunner
     {
         try
         {
-            if (step.Action == "dump")
+            if (step.Action == GameDataActions.Dump)
             {
                 // dump is a no-op in the runner; the callback does the work
             }
@@ -198,7 +198,7 @@ public sealed class GameDataRunner
         {
             _errors.Add($"Step {stepIndex}: {ex.GetType().Name}: {ex.Message}");
             NotifyStepCompleted(stepIndex, step);
-            return step.Action is null || step.Action == "dump";
+            return step.Action is null || step.Action == GameDataActions.Dump;
         }
     }
 
@@ -340,7 +340,7 @@ public sealed class GameDataRunner
         {
             var outputs = dispatch();
             StoreOutputs(step, outputs);
-            if (step.Action == "openFile")
+            if (step.Action == GameDataActions.OpenFile)
             {
                 OpenedFileId = outputs?.EntryId;
             }
@@ -388,7 +388,7 @@ public sealed class GameDataRunner
 
         switch (step.Action)
         {
-            case "addEntry":
+            case GameDataActions.AddEntry:
                 {
                     // On addEntry, entryId (if given) is the declared id for the created entry.
                     var parent = Require(parentId, "parentId");
@@ -397,16 +397,16 @@ public sealed class GameDataRunner
                     return () => _engine.AddEntry(parent, entryType, name, entryId);
                 }
 
-            case "removeEntry":
+            case GameDataActions.RemoveEntry:
                 {
                     var target = Require(entryId, "entryId");
                     return () => Void(() => _engine.RemoveEntry(target));
                 }
 
-            case "openFile":
+            case GameDataActions.OpenFile:
                 return PrepareOpenFile(step, stepIndex, entryId);
 
-            case "setFields":
+            case GameDataActions.SetFields:
                 {
                     var target = Require(entryId, "entryId");
                     if (step.Fields is null && step.Characteristics is null && step.Costs is null)
@@ -440,7 +440,7 @@ public sealed class GameDataRunner
                     });
                 }
 
-            case "addLink":
+            case GameDataActions.AddLink:
                 {
                     // On addLink, entryId (if given) is the declared id for the created link.
                     var parent = Require(parentId, "parentId");
@@ -449,7 +449,7 @@ public sealed class GameDataRunner
                     return () => _engine.AddLink(parent, linkType, targetId, entryId);
                 }
 
-            case "reload":
+            case GameDataActions.Reload:
                 return () => Void(_engine.Reload);
 
             default:

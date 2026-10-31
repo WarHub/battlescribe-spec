@@ -1,182 +1,75 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/WarHub/battlescribe-spec/docs/spec-schema.json",
-  "title": "BattleScribe Spec",
-  "description": "Schema for BattleScribe conformance test spec YAML files.",
-  "type": "object",
-  "required": ["id", "category", "description", "setup", "steps"],
-  "additionalProperties": false,
-  "properties": {
-    "id": { "type": "string" },
-    "category": { "type": "string" },
-    "description": { "type": "string" },
+  "title": "BattleScribe Spec: shared definitions",
+  "description": "What every spec domain shares: the setup data (a game system, its catalogues and everything in them, the protocol's setup types in src/BattleScribeSpec.TestKit/Protocol/ProtocolMessages.cs), spec-level engine expectations, expectFailure and expectedFile. Referenced by roster-spec-schema.json, gamedata-spec-schema.json and scenario-spec-schema.json; it is not a spec schema itself.",
+  "$defs": {
     "tags": {
       "type": "array",
-      "items": { "type": "string" }
-    },
-    "engines": { "$ref": "#/$defs/specEngines" },
-    "setup": { "$ref": "#/$defs/setup" },
-    "steps": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/step" },
-      "minItems": 1
-    }
-  },
-  "$defs": {
-    "actionName": {
-      "type": "string",
-      "enum": [
-        "addForce",
-        "addChildForce",
-        "removeForce",
-        "selectEntry",
-        "selectChildEntry",
-        "deselectSelection",
-        "setSelectionCount",
-        "duplicateSelection",
-        "duplicateForce",
-        "setCostLimit",
-        "setCustomization",
-        "loadRoster",
-        "reload",
-        "dump"
-      ]
+      "items": { "type": "string" },
+      "description": "Known tags only (SpecLintTests.KnownTags; .agents/skills/writing-specs/references/KNOWN-TAGS.md)."
     },
     "constraintType": {
       "type": "string",
-      "comment": "min/max are original BattleScribe; exactly is a NewRecruit addition.",
-      "enum": ["min", "max", "exactly"]
+      "enum": ["min", "max", "exactly"],
+      "$comment": "min/max are original BattleScribe; exactly is a NewRecruit addition."
     },
     "conditionType": {
       "type": "string",
-      "comment": "always/never/before are NewRecruit additions (before only valid in a localConditionGroup).",
       "enum": [
-        "atLeast",
-        "atMost",
-        "equalTo",
-        "greaterThan",
-        "lessThan",
-        "notEqualTo",
-        "instanceOf",
-        "notInstanceOf",
-        "always",
-        "never",
-        "before"
-      ]
+        "atLeast", "atMost", "equalTo", "greaterThan", "lessThan", "notEqualTo", "instanceOf",
+        "notInstanceOf", "always", "never", "before"
+      ],
+      "$comment": "always/never/before are NewRecruit additions (before only valid in a localConditionGroup)."
     },
     "modifierType": {
       "type": "string",
-      "comment": "set..unset-primary are original BattleScribe; the rest are NewRecruit additions.",
       "enum": [
         "set", "add", "increment", "decrement", "append", "remove", "set-primary", "unset-primary",
-        "multiply", "divide", "modulo", "power", "exponent", "triangular", "ceil", "floor",
-        "cumulative-add", "cumulative-multiply", "cumulative-power", "prepend", "replace", "hide"
-      ]
+        "multiply", "divide", "modulo", "power", "exponent", "triangular", "ceil", "floor", "cumulative-add",
+        "cumulative-multiply", "cumulative-power", "prepend", "replace", "hide"
+      ],
+      "$comment": "set..unset-primary are original BattleScribe; the rest are NewRecruit additions."
     },
     "scopeValue": {
+      "description": "What a query counts within: a scope keyword, or the id of an ancestor entry or category to scope it to. An id that names nothing is the editor's validation error to report, so the schema does not refuse it.",
+      "anyOf": [
+        { "$ref": "#/$defs/scopeKeyword" },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "scopeKeyword": {
       "type": "string",
-      "comment": "root-entry and the type scopes (unit/model/upgrade/model-or-unit) are NewRecruit additions.",
       "enum": [
         "self", "parent", "force", "roster", "primary-category", "primary-catalogue", "ancestor",
         "root-entry", "unit", "model", "upgrade", "model-or-unit"
-      ]
+      ],
+      "$comment": "root-entry and the type scopes (unit/model/upgrade/model-or-unit) are NewRecruit additions."
     },
     "conditionGroupType": {
       "type": "string",
-      "comment": "and/or are original BattleScribe; the boolean/numeric/comparison kinds are NewRecruit additions.",
       "enum": [
-        "and", "or", "not", "count",
-        "add", "subtract", "multiply", "divide", "modulo", "power", "min", "max",
+        "and", "or", "not", "count", "add", "subtract", "multiply", "divide", "modulo", "power", "min", "max",
         "greater", "greaterOrEqual", "less", "lessOrEqual", "equal", "notEqual"
-      ]
+      ],
+      "$comment": "and/or are original BattleScribe; the boolean/numeric/comparison kinds are NewRecruit additions."
     },
     "selectionEntryType": {
       "type": "string",
-      "comment": "unit/model/upgrade are original BattleScribe; unit-group/mount/crew are NewRecruit additions.",
-      "enum": ["unit", "model", "upgrade", "unit-group", "mount", "crew"]
+      "enum": ["unit", "model", "upgrade", "unit-group", "mount", "crew"],
+      "$comment": "unit/model/upgrade are original BattleScribe; unit-group/mount/crew are NewRecruit additions."
     },
-    "entryLinkType": {
-      "type": "string",
-      "enum": ["selectionEntry", "selectionEntryGroup"]
-    },
-    "engineExpectation": {
-      "type": "string",
-      "enum": ["pass", "fail", "skip"]
-    },
-
+    "entryLinkType": { "type": "string", "enum": ["selectionEntry", "selectionEntryGroup"] },
+    "engineExpectation": { "type": "string", "enum": ["pass", "fail", "skip"] },
     "specEngines": {
       "type": "object",
+      "description": "Per-engine expectation for the whole spec. An engine not listed is expected to pass.",
       "propertyNames": { "$ref": "#/$defs/engineName" },
-      "additionalProperties": {
-        "enum": ["pass", "fail", "skip"]
-      }
+      "additionalProperties": { "$ref": "#/$defs/engineExpectation" }
     },
     "engineName": {
-      "type": "string"
+      "type": "string",
+      "description": "An engine name: battlescribe, battlescribe-ui, newrecruit, newrecruit-ui, or an external adapter's own. A UI driver inherits its base engine's entry unless it has one of its own."
     },
-    "setup": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "gameSystem": { "$ref": "#/$defs/gameSystem" },
-        "dataSource": { "type": "string" },
-        "catalogues": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/catalogue" }
-        }
-      },
-      "oneOf": [
-        { "required": ["gameSystem"] },
-        { "required": ["dataSource"] }
-      ]
-    },
-    "step": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": { "type": "string" },
-        "action": { "$ref": "#/$defs/actionName" },
-        "forceEntryId": { "type": "string" },
-        "entryId": { "type": "string" },
-        "catalogueId": { "type": "string" },
-        "forceId": { "type": "string" },
-        "selectionId": { "type": "string" },
-        "costTypeId": { "type": "string" },
-        "count": { "type": "integer" },
-        "value": { "type": "number" },
-        "customName": { "type": "string" },
-        "customNotes": { "type": "string" },
-        "categoryEntryId": { "type": "string" },
-        "content": {
-          "type": "string",
-          "description": "Inline BattleScribe .ros XML payload for loadRoster."
-        },
-        "skipEngines": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Engine names to skip this step for (e.g., [\"battlescribe\"]). Applies to any step kind — actions, expectedState and expectedFile alike — and is how a spec declares that an engine cannot do what the step asks. The runner never swallows a capability gap, so an undeclared one fails the spec. Skipped steps are reported in the run summary. Spec-level equivalent: engines: {<engine>: skip}."
-        },
-        "engines": {
-          "type": "object",
-          "additionalProperties": { "type": "object" },
-          "description": "Per-engine overrides for this step's action inputs (e.g. a different value/count per engine)."
-        },
-        "expectFailure": { "$ref": "#/$defs/expectFailure" },
-        "expectedState": { "$ref": "#/$defs/expectedState" },
-        "expectedFile": { "$ref": "#/$defs/expectedFile" }
-      },
-      "oneOf": [
-        { "required": ["action"] },
-        { "required": ["expectedState"] },
-        { "required": ["expectedFile", "id"] }
-      ],
-      "if": { "required": ["expectFailure"] },
-      "then": {
-        "required": ["action"],
-        "description": "expectFailure asserts that an action was refused, so it only belongs on an action step. The validation list of a roster the engine ACCEPTED is expectedState.errors."
-      }
-    },
-
     "expectFailure": {
       "description": "Assert that this action is refused by the engine — a parser rejecting the payload, an engine declining the edit. Satisfied ONLY by an engine refusal: a failure the adapter raised while resolving an id the spec named, a harness fault, and a failure from an adapter that sends no 'kind' all stay fatal. Distinct from expectedState.errors, which asserts the validation list of a roster the engine accepted. A refused step does not end the run, so a following expectedState can assert what the refusal left behind.",
       "oneOf": [
@@ -218,7 +111,6 @@
         }
       ]
     },
-
     "expectedFile": {
       "type": "object",
       "additionalProperties": false,
@@ -228,14 +120,22 @@
         "fileType": { "type": "string" },
         "engines": {
           "type": "object",
-          "additionalProperties": { "type": "object" }
+          "description": "Per-engine overrides: an override's content or fileType replaces the base for that engine.",
+          "propertyNames": { "$ref": "#/$defs/engineName" },
+          "additionalProperties": { "$ref": "#/$defs/expectedFileOverride" }
         }
       }
     },
-
+    "expectedFileOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content": { "type": "string" },
+        "fileType": { "type": "string" }
+      }
+    },
     "gameSystem": {
       "type": "object",
-      "required": [],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
@@ -366,6 +266,16 @@
         "forceEntries": {
           "type": "array",
           "items": { "$ref": "#/$defs/forceEntry" }
+        },
+        "sharedForceEntries": {
+          "type": "array",
+          "description": "NewRecruit addition.",
+          "items": { "$ref": "#/$defs/forceEntry" }
+        },
+        "sharedAssociations": {
+          "type": "array",
+          "description": "NewRecruit addition.",
+          "items": { "$ref": "#/$defs/association" }
         }
       }
     },
@@ -388,14 +298,32 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "kind": { "type": "string", "description": "NewRecruit addition." },
         "characteristicTypes": {
           "type": "array",
           "items": { "$ref": "#/$defs/characteristicType" }
+        },
+        "attributeTypes": {
+          "type": "array",
+          "description": "NewRecruit addition: export-only attribute types.",
+          "items": { "$ref": "#/$defs/attributeType" }
         }
       }
     },
     "characteristicType": {
       "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string", "description": "NewRecruit addition." },
+        "defaultValue": { "type": "string", "description": "NewRecruit addition." }
+      }
+    },
+    "attributeType": {
+      "type": "object",
+      "description": "NewRecruit addition: an export-only attribute type on a profile type.",
       "required": ["id", "name"],
       "additionalProperties": false,
       "properties": {
@@ -551,7 +479,27 @@
         "infoLinks": {
           "type": "array",
           "items": { "$ref": "#/$defs/infoLink" }
+        },
+        "associations": {
+          "type": "array",
+          "description": "NewRecruit addition.",
+          "items": { "$ref": "#/$defs/association" }
         }
+      }
+    },
+    "association": {
+      "type": "object",
+      "description": "NewRecruit addition: relates a selection to a min/max number of selections a query resolves.",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" },
+        "scope": { "type": "string" },
+        "childId": { "type": "string" },
+        "field": { "type": "string" }
       }
     },
     "selectionEntryGroup": {
@@ -746,7 +694,13 @@
         "shared": { "type": "boolean" },
         "includeChildSelections": { "type": "boolean" },
         "includeChildForces": { "type": "boolean" },
-        "percentValue": { "type": "boolean" }
+        "percentValue": { "type": "boolean" },
+        "negative": { "type": "boolean", "description": "NewRecruit addition." },
+        "automatic": { "type": "boolean", "description": "NewRecruit addition." },
+        "message": {
+          "type": "string",
+          "description": "NewRecruit addition: a custom constraint-violation message."
+        }
       }
     },
     "modifier": {
@@ -771,7 +725,27 @@
         "repeats": {
           "type": "array",
           "items": { "$ref": "#/$defs/repeat" }
+        },
+        "localConditionGroups": {
+          "type": "array",
+          "description": "NewRecruit addition.",
+          "items": { "$ref": "#/$defs/localConditionGroup" }
         }
+      }
+    },
+    "localConditionGroup": {
+      "type": "object",
+      "description": "NewRecruit addition: a modifier's local condition group — a query, a condition type and a repeat count.",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/conditionType" },
+        "value": { "type": "number" },
+        "field": { "type": "string" },
+        "scope": { "$ref": "#/$defs/scopeValue" },
+        "childId": { "type": "string" },
+        "includeChildSelections": { "type": "boolean" },
+        "includeChildForces": { "type": "boolean" },
+        "repeats": { "type": "integer" }
       }
     },
     "modifierGroup": {
@@ -870,7 +844,7 @@
     },
     "profile": {
       "type": "object",
-      "required": ["id", "name", "typeId", "typeName"],
+      "required": ["id", "name", "typeId"],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
@@ -985,216 +959,6 @@
         "publisher": { "type": "string" },
         "publicationDate": { "type": "string" },
         "publisherUrl": { "type": "string" }
-      }
-    },
-
-    "expectedState": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "forceCount": { "type": "integer" },
-        "selectionCount": { "type": "integer" },
-        "forces": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedForce" }
-        },
-        "costCount": { "type": "integer" },
-        "costs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedCost" }
-        },
-        "costLimits": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedCost" }
-        },
-        "costLimitCount": { "type": "integer" },
-        "gameSystemName": { "type": "string" },
-        "gameSystemId": { "type": "string" },
-        "errors": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/errorAssertion" }
-        },
-        "errorsContain": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/errorAssertion" }
-        },
-        "errorCount": { "type": "integer" },
-        "engines": {
-          "type": "object",
-          "propertyNames": { "$ref": "#/$defs/engineName" },
-          "additionalProperties": { "$ref": "#/$defs/expectedState" }
-        }
-      }
-    },
-    "errorAssertion": {
-      "type": "object",
-      "required": ["on", "from"],
-      "additionalProperties": false,
-      "properties": {
-        "on": {
-          "description": "The roster NODE the engine raised the error on. '<kind> ${{ steps.<id>.<field> }}' for force/category/selection — node ids are minted per run, so a literal id is never valid: it names a catalogue ENTRY, which is a set of nodes, not one. Written bare, those kinds match on kind alone. 'roster' and 'group' are always bare: neither has an id a spec can name.",
-          "type": "string",
-          "pattern": "^\\s*(roster|group)\\s*$|^\\s*(force|category|selection)(\\s+\\$\\{\\{.*\\}\\})?\\s*$"
-        },
-        "from": { "type": "string" },
-        "messageContains": { "type": "string" }
-      }
-    },
-    "expectedForce": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "selectionCount": { "type": "integer" },
-        "availableEntryCount": { "type": "integer" },
-        "hidden": { "type": "boolean" },
-        "childForceCount": { "type": "integer" },
-        "childForces": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedForce" }
-        },
-        "selections": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedSelection" }
-        },
-        "profiles": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedProfile" }
-        },
-        "rules": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedRule" }
-        },
-        "publicationId": { "type": "string" },
-        "page": { "type": "string" },
-        "entryId": { "type": "string" },
-        "categoryCount": { "type": "integer" },
-        "categories": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedCategory" }
-        },
-        "publications": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedPublication" }
-        },
-        "catalogueId": { "type": "string" },
-        "catalogueName": { "type": "string" },
-        "customName": { "type": "string" },
-        "customNotes": { "type": "string" }
-      }
-    },
-    "expectedSelection": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "type": { "type": "string" },
-        "number": { "type": "integer" },
-        "hidden": { "type": "boolean" },
-        "costs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedCost" }
-        },
-        "children": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedSelection" }
-        },
-        "profiles": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedProfile" }
-        },
-        "rules": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedRule" }
-        },
-        "categories": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedCategory" }
-        },
-        "page": { "type": "string" },
-        "publicationId": { "type": "string" },
-        "publicationName": { "type": "string" },
-        "entryGroupId": { "type": "string" },
-        "entryId": { "type": "string" },
-        "childCount": { "type": "integer" },
-        "customName": { "type": "string" },
-        "customNotes": { "type": "string" }
-      }
-    },
-    "expectedCost": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "typeId": { "type": "string" },
-        "value": { "type": "number" },
-        "hidden": { "type": "boolean" }
-      }
-    },
-    "expectedProfile": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "typeId": { "type": "string" },
-        "typeName": { "type": "string" },
-        "hidden": { "type": "boolean" },
-        "page": { "type": "string" },
-        "publicationId": { "type": "string" },
-        "characteristics": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedCharacteristic" }
-        }
-      }
-    },
-    "expectedCharacteristic": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "typeId": { "type": "string" },
-        "value": { "type": "string" }
-      }
-    },
-    "expectedRule": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "description": { "type": "string" },
-        "hidden": { "type": "boolean" },
-        "page": { "type": "string" },
-        "publicationId": { "type": "string" }
-      }
-    },
-    "expectedCategory": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string" },
-        "entryId": { "type": "string" },
-        "primary": { "type": "boolean" },
-        "profiles": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedProfile" }
-        },
-        "rules": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/expectedRule" }
-        },
-        "publicationId": { "type": "string" },
-        "page": { "type": "string" },
-        "customName": { "type": "string" },
-        "customNotes": { "type": "string" }
-      }
-    },
-    "expectedPublication": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" }
       }
     }
   }

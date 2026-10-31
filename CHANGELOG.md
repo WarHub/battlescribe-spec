@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **A JSON Schema for every spec domain (#569).** GameData and scenario specs had none, so an editor
+  checked nothing while one was written; now `docs/gamedata-spec-schema.json` and
+  `docs/scenario-spec-schema.json` sit beside the roster schema, renamed `docs/roster-spec-schema.json`
+  from `docs/spec-schema.json`, and `.vscode/settings.json` maps each `specs/` folder to its own. The
+  scenario schema copies nothing. Its setup is the GameData setup and its blocks' items are the GameData and
+  roster steps, all by `$ref`, and the setup data both domains share moved to
+  `docs/spec-common-schema.json`. A scenario item must be exactly one of a `data:` block, a `roster:` block
+  or a hand-off, and `file` is required on `saveRoster`/`openRoster` and refused on the others. The schemas
+  are held to the loaders. `SpecSchemaTests` validates all 528 specs and keeps broken samples each schema
+  must refuse. `SpecSchemaDriftTests` pins each action enum to its domain's one list (`SpecValidator`'s
+  table, the new `GameDataActions`, `ScenarioHandoffs`) and each model type's YAML fields to its
+  definition's properties, so an action or field added on one side and not the other fails a test. Holding
+  the schemas to the models found the setup types missing every NewRecruit addition the protocol carries
+  (`associations`, `localConditionGroups`, constraint `negative`/`automatic`/`message`, ...). It also found
+  `scope` limited to the keyword list, where BattleScribe also takes an ancestor entry's id. Before this,
+  the roster schema refused data the loader accepts.
+
 - **Scenario specs: the data editor and the roster editor in one spec (#273).** A spec under
   `specs/scenario/` follows one engine family's data editor and roster editor through a single run — edit
   data and save it, build a roster and save it, edit again, reopen the roster against the new data —
