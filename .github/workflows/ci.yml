@@ -64,6 +64,10 @@ jobs:
       # path changes that input as surely as an edit does. The script reads both paths, is unit-tested
       # on that shape, and refuses anything else — so this step and the script cannot drift apart into
       # a list that silently drops renames.
+      # The base comes from the PR's own record too, not from github.base_ref: for a PR in a GitHub-native
+      # stack (gh stack) the event context names the trunk as the base, while the PR targets the layer
+      # below it and the files API above is computed against that layer. Read from the context, a stack
+      # layer looked like a PR to main with a small diff, and skipped the thorough suites it is owed.
       - id: inputs
         if: github.event_name == 'pull_request'
         env:
@@ -71,13 +75,14 @@ jobs:
         run: |
           gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
             --paginate --slurp > pr-files.json
+          echo "base=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" --jq .base.ref)" >> "$GITHUB_OUTPUT"
       # toJSON(...) and the refs go through env, never spliced into the command line: a label or a
       # branch name is user text, and env is the one place it cannot become shell.
       - id: decide
         env:
           EVENT: ${{ github.event_name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ steps.inputs.outputs.base || github.base_ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: node scripts/thorough-inputs.mjs pr-files.json
 

@@ -1,8 +1,8 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 541 spec files — 404 roster specs,
-120 GameData specs and 17 scenario specs — covering the complete BattleScribe data model, its editing
+Any engine, in any language, can validate its behavior against 542 spec files — 404 roster specs,
+120 GameData specs and 18 scenario specs — covering the complete BattleScribe data model, its editing
 operations, and what crosses from the data editor to the roster editor.
 
 ## Quick Start
@@ -106,7 +106,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 541 declarative spec files (404 roster + 120 GameData + 17 scenario) covering all BattleScribe operations |
+| **YAML Specs** | 542 declarative spec files (404 roster + 120 GameData + 18 scenario) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -180,10 +180,11 @@ asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 | type-def | 1 | Cost types, profile types, characteristic types |
 | validation | 12 | Referential integrity and validation errors (broken links, bad scopes) |
 
-### Scenario specs — 17 across 3 categories
+### Scenario specs — 18 across 4 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
+| end-to-end | 1 | The whole lifecycle in one run: build data across both files, build and save a roster, edit the data, reopen the roster, change it, save again, edit and reopen again |
 | handoff | 5 | What crosses from the data editor to the roster editor, and when: saved and unsaved edits, an added entry, per-file saves, a saved roster reopened against edited data |
 | migration | 8 | What a saved roster becomes when its data changes under it: entries deleted, renamed or hidden, a limit tightened, a child made mandatory, a force entry deleted ([ADR 003](docs/adr/003-roster-migration.md)) |
 | reload | 4 | BattleScribe's live reload: data saved under an open roster, and YES to "A file was modified outside of BattleScribe" — a cost changed, an entry deleted, a roster never saved, the roster on screen rather than its file ([ADR 003](docs/adr/003-roster-migration.md)) |
@@ -192,7 +193,7 @@ asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 
 ```
 battlescribe-spec/
-├── specs/                          # 541 YAML spec files (404 roster + 120 gamedata + 17 scenario)
+├── specs/                          # 542 YAML spec files (404 roster + 120 gamedata + 18 scenario)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)
