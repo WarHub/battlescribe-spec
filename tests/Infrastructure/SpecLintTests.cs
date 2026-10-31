@@ -583,16 +583,8 @@ public sealed class SpecLintTests
 
     // ── Valid actions ─────────────────────────────────────────────────
 
-    private static readonly HashSet<string> KnownActions =
-    [
-        "addForce", "addChildForce", "removeForce",
-        "selectEntry", "selectChildEntry",
-        "deselectSelection", "setSelectionCount",
-        "duplicateSelection", "duplicateForce", "setCostLimit",
-        "setCustomization",
-        "loadRoster", "reload",
-        "dump"
-    ];
+    /// <summary>The loader's own list (<see cref="SpecValidator.KnownActions"/>), which the roster schema is held to.</summary>
+    private static readonly HashSet<string> KnownActions = [.. SpecValidator.KnownActions];
 
     private static IEnumerable<string> CheckKnownActions(IReadOnlyList<StepDef>? steps)
     {

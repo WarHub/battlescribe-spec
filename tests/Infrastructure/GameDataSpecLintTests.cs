@@ -245,14 +245,8 @@ public sealed class GameDataSpecLintTests
 
     // ── Valid actions ─────────────────────────────────────────────────
 
-    private static readonly HashSet<string> KnownActions =
-    [
-        "addEntry", "removeEntry",
-        "setFields", "addLink",
-        "openFile",
-        "reload",
-        "dump"
-    ];
+    /// <summary>The one list (<see cref="GameDataActions.All"/>), which the runner dispatches on and the GameData schema is held to.</summary>
+    private static readonly HashSet<string> KnownActions = [.. GameDataActions.All];
 
     private static IEnumerable<string> CheckKnownActions(IReadOnlyList<GameDataStepDef> steps)
     {
@@ -366,7 +360,7 @@ public sealed class GameDataSpecLintTests
 
             switch (step.Action)
             {
-                case "addEntry":
+                case GameDataActions.AddEntry:
                     if (step.ParentId is null)
                     {
                         yield return $"step {n}: addEntry requires 'parentId'";
@@ -378,14 +372,14 @@ public sealed class GameDataSpecLintTests
                     }
 
                     break;
-                case "removeEntry":
+                case GameDataActions.RemoveEntry:
                     if (step.EntryId is null)
                     {
                         yield return $"step {n}: removeEntry requires 'entryId'";
                     }
 
                     break;
-                case "setFields":
+                case GameDataActions.SetFields:
                     if (step.EntryId is null)
                     {
                         yield return $"step {n}: setFields requires 'entryId'";
@@ -397,7 +391,7 @@ public sealed class GameDataSpecLintTests
                     }
 
                     break;
-                case "addLink":
+                case GameDataActions.AddLink:
                     if (step.ParentId is null)
                     {
                         yield return $"step {n}: addLink requires 'parentId'";
@@ -414,7 +408,7 @@ public sealed class GameDataSpecLintTests
                     }
 
                     break;
-                case "openFile":
+                case GameDataActions.OpenFile:
                     // openFile opens a loaded file (entryId), loads inline XML (content), or loads a
                     // side-file keyed by the step id.
                     if (step.EntryId is null && step.Content is null && step.Id is not { Length: > 0 })

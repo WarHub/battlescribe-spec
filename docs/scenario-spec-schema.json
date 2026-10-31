@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BattleScribe Scenario Spec",
+  "description": "A scenario spec, specs/scenario/{category}/{id}.yaml: one engine family's data editor and roster editor in one run, joined by explicit hand-offs over a data directory. The roster editor sees data only as of the last saveData, and only when it starts or opens a roster. Model: src/BattleScribeSpec.TestKit/Scenario/ScenarioSpecModels.cs; design: docs/adr/002-scenario-specs.md.",
+  "type": "object",
+  "required": ["id", "category", "description", "setup", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "description": "Must match the file name, without .yaml." },
+    "category": { "type": "string", "description": "Must match the parent directory's name." },
+    "description": { "type": "string" },
+    "tags": { "$ref": "spec-common-schema.json#/$defs/tags" },
+    "engines": { "$ref": "spec-common-schema.json#/$defs/specEngines" },
+    "setup": { "$ref": "gamedata-spec-schema.json#/$defs/setup" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "item": {
+      "description": "Exactly one of: a data block, a roster block, or a hand-off.",
+      "oneOf": [
+        { "$ref": "#/$defs/dataBlock" },
+        { "$ref": "#/$defs/rosterBlock" },
+        { "$ref": "#/$defs/handoff" }
+      ]
+    },
+    "dataBlock": {
+      "type": "object",
+      "required": ["data"],
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "type": "array",
+          "description": "Steps in the data editor: the GameData spec vocabulary, unchanged.",
+          "minItems": 1,
+          "items": { "$ref": "gamedata-spec-schema.json#/$defs/step" }
+        }
+      }
+    },
+    "rosterBlock": {
+      "type": "object",
+      "required": ["roster"],
+      "additionalProperties": false,
+      "properties": {
+        "roster": {
+          "type": "array",
+          "description": "Steps in the roster editor: the roster spec vocabulary, unchanged. Needs a roster: a newRoster or openRoster first.",
+          "minItems": 1,
+          "items": { "$ref": "roster-spec-schema.json#/$defs/step" }
+        }
+      }
+    },
+    "handoffAction": {
+      "type": "string",
+      "description": "A hand-off between the editors (ScenarioHandoffs.All). saveData: the data editor saves its open file into the data directory. newRoster: the roster editor reads the data directory and starts an empty roster. saveRoster: the roster editor saves its roster as file. openRoster: the roster editor reads the data directory and opens the roster saved as file.",
+      "enum": ["saveData", "newRoster", "saveRoster", "openRoster"]
+    },
+    "fileHandoffAction": {
+      "type": "string",
+      "description": "The hand-offs that name a saved roster, and so require file (ScenarioHandoffs.TakesFile).",
+      "enum": ["saveRoster", "openRoster"]
+    },
+    "handoff": {
+      "type": "object",
+      "required": ["action"],
+      "additionalProperties": false,
+      "properties": {
+        "action": { "$ref": "#/$defs/handoffAction" },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "saveRoster, openRoster: the name the roster is saved under and opened by."
+        },
+        "expectFailure": { "$ref": "spec-common-schema.json#/$defs/expectFailure" }
+      },
+      "if": {
+        "properties": {
+          "action": { "$ref": "#/$defs/fileHandoffAction" }
+        }
+      },
+      "then": { "required": ["file"] },
+      "else": {
+        "not": { "required": ["file"] }
+      }
+    }
+  }
+}

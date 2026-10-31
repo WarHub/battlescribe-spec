@@ -52,6 +52,13 @@ public static class SpecValidator
     };
 
     /// <summary>
+    /// Every action a roster step can name — in a roster spec, and in a scenario's <c>roster:</c> block. The
+    /// loader refuses any other, the roster lint reads this list, and <c>docs/roster-spec-schema.json</c>'s
+    /// <c>actionName</c> enum is held to exactly this set (<c>SpecSchemaDriftTests</c>).
+    /// </summary>
+    public static IReadOnlyCollection<string> KnownActions => ActionParams.Keys;
+
+    /// <summary>
     /// Tag that opts a spec out of setup cross-reference validation.
     /// Used by specs that intentionally test engine behavior with invalid/broken data.
     /// </summary>

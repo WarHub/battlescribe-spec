@@ -218,7 +218,10 @@ battlescribe-spec/
 
 ## Documentation
 
-- [Spec YAML Schema](docs/spec-schema.json) — JSON Schema for spec YAML files (enables IDE validation and autocompletion)
+- Spec YAML Schemas — JSON Schema per spec domain, mapped to its folder in `.vscode/settings.json` for IDE
+  validation and autocompletion: [roster](docs/roster-spec-schema.json), [GameData](docs/gamedata-spec-schema.json)
+  and [scenario](docs/scenario-spec-schema.json), which reuses the other two by `$ref`; the setup data they share
+  is [spec-common-schema.json](docs/spec-common-schema.json)
 - [Adapter Protocol Specification](docs/adapter-protocol.md) — JSON-line protocol reference
 - [Adapter Implementation Guide](docs/adapter-guide.md) — Step-by-step adapter writing guide
 - [Engine-Filtered Expected State](docs/engine-filtered-expected-state.md) — Per-engine assertion overrides
