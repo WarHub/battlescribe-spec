@@ -94,6 +94,9 @@ public sealed class GameDataSpecLintTests
             violations.AddRange(CheckRequiredFields(spec));
             violations.AddRange(CheckIdMatchesFilename(spec, filename));
             violations.AddRange(CheckCategoryMatchesDirectory(spec, dirName));
+            violations.AddRange(SpecLintTests.CheckEngineExpectations(spec));
+            violations.AddRange(SpecLintTests.CheckNoRestatedFamilyEntries(spec));
+            violations.AddRange(DataStepRestatements(spec.Steps));
             violations.AddRange(CheckKnownActions(spec.Steps));
             violations.AddRange(CheckStepsAreActionOrExpectedState(spec.Steps));
             violations.AddRange(CheckSetupHasGameSystem(spec.Setup));
@@ -102,6 +105,31 @@ public sealed class GameDataSpecLintTests
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// The GameData steps' override maps restating their family's (<see cref="SpecLintTests.RestatedOverrides{T}"/>),
+    /// each named by its 1-based step number after <paramref name="prefix"/>. A scenario's data blocks call it with
+    /// the item they sit in.
+    /// </summary>
+    internal static IEnumerable<string> DataStepRestatements(IReadOnlyList<GameDataStepDef>? steps, string prefix = "")
+    {
+        if (steps is null)
+        {
+            yield break;
+        }
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var step = steps[i];
+            var at = $"{prefix}step {i + 1}";
+            foreach (var finding in SpecLintTests.RestatedOverrides(step.ExpectedState?.Engines, $"{at} expectedState")
+                .Concat(SpecLintTests.RestatedOverrides(step.ExpectFailure?.Engines, $"{at} expectFailure"))
+                .Concat(SpecLintTests.RestatedOverrides(step.ExpectedFile?.Engines, $"{at} expectedFile")))
+            {
+                yield return finding;
+            }
+        }
     }
 
     // ── No duplicate IDs (cross-spec check) ─────────────────────────
@@ -164,6 +192,15 @@ public sealed class GameDataSpecLintTests
         ("edit: cat-1", "edit: cat-2", "setup.edit 'cat-2' must be the game system id or one of the catalogue ids"),
         ("action: addLink", "action: addLinks", "unknown action 'addLinks'"),
         ("linkType: entryLink\n    targetId: sse-bolter\n", "linkType: entryLink\n", "step 1: addLink requires 'targetId'"),
+        ("description: Every rule accepts this spec\n", "description: Every rule accepts this spec\nengines:\n  newrecruit: flaky\n",
+            "engine 'newrecruit' has invalid expectation 'flaky'"),
+        ("description: Every rule accepts this spec\n",
+            "description: Every rule accepts this spec\nengines:\n  battlescribe: skip\n  battlescribe-ui: skip\n",
+            "engines: 'battlescribe-ui: skip' restates 'battlescribe: skip' — battlescribe-ui inherits its family's entry"),
+        ("                targetId: sse-bolter\n",
+            "                targetId: sse-bolter\n      engines:\n        newrecruit:\n          catalogues:\n            - id: cat-1\n"
+            + "        newrecruit-ui:\n          catalogues:\n            - id: cat-1\n",
+            "step 2 expectedState: engines 'newrecruit-ui' restates 'newrecruit'"),
     ];
 
     /// <summary>

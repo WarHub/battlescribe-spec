@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using BattleScribeSpec.Protocol;
 using BattleScribeSpec.Roster;
@@ -122,6 +123,8 @@ public sealed class SpecLintTests
             violations.AddRange(CheckKnownActions(spec.Steps));
             violations.AddRange(CheckKnownTags(spec));
             violations.AddRange(CheckEngineExpectations(spec));
+            violations.AddRange(CheckNoRestatedFamilyEntries(spec));
+            violations.AddRange(RosterStepRestatements(spec.Steps));
             violations.AddRange(CheckStepsAreActionOrExpectedState(spec.Steps));
             violations.AddRange(CheckSetSelectionCountHasSelectionId(spec.Steps));
             violations.AddRange(CheckAddForceRequiresCatalogueIdWhenMultiCatalogue(
@@ -224,6 +227,13 @@ public sealed class SpecLintTests
         ("on: category ${{ steps.add-patrol.categories.cat-troops }}", "on: category cat-troops", "names a catalogue entry, not a roster node"),
         ("            - name: Unit A\n", "            - name: Unit A\n          selectionCount: 1\n",
             "expectedState.forces[1]: 'selectionCount' is redundant when 'selections' is also asserted"),
+        ("description: Every rule accepts this spec\n",
+            "description: Every rule accepts this spec\nengines:\n  battlescribe: skip\n  battlescribe-ui: skip\n",
+            "engines: 'battlescribe-ui: skip' restates 'battlescribe: skip' — battlescribe-ui inherits its family's entry"),
+        ("              from: fe-patrol/con-min-1\n",
+            "              from: fe-patrol/con-min-1\n        newrecruit-ui:\n          errors:\n"
+            + "            - on: force ${{ steps.add-patrol.forceId }}\n              from: fe-patrol/con-min-1\n",
+            "step 2 expectedState: engines 'newrecruit-ui' restates 'newrecruit'"),
     ];
 
     /// <summary>
@@ -687,6 +697,97 @@ public sealed class SpecLintTests
             }
         }
     }
+
+    // ── No restated family entries ───────────────────────────────────
+
+    /// <summary>
+    /// <b>A UI driver's entry may not restate its family's.</b> Every runner reads a per-engine map by one rule
+    /// (<see cref="EngineIdentity"/>): the engine's own entry, else its family's. So <c>battlescribe-ui: skip</c>
+    /// beside <c>battlescribe: skip</c> says nothing the family's entry does not — and it is a second record
+    /// that drifts from the first the day one of them changes. Specs wrote them because several runners used
+    /// to read the exact name alone (#573); none does now.
+    /// <para>
+    /// A driver entry with a <em>different</em> value is the point of the rule and stays:
+    /// <c>newrecruit-ui: pass</c> under <c>newrecruit: skip</c> keeps a spec on the UI driver that its family's
+    /// store-direct adapter cannot run. Shared by all three spec lints: every domain reads the map the same way.
+    /// </para>
+    /// </summary>
+    internal static IEnumerable<string> CheckNoRestatedFamilyEntries(SpecFileBase spec)
+    {
+        if (spec.Engines is null)
+        {
+            yield break;
+        }
+
+        foreach (var (engine, expectation) in spec.Engines)
+        {
+            if (FamilyEntry(spec.Engines, engine) is { } family
+                && string.Equals(expectation, spec.Engines[family], StringComparison.OrdinalIgnoreCase))
+            {
+                yield return $"engines: '{engine}: {expectation}' restates '{family}: {spec.Engines[family]}' — {engine} " +
+                    $"inherits its family's entry (an engine's own entry, else its family's), so remove it; give {engine} " +
+                    "an entry only where its value differs";
+            }
+        }
+    }
+
+    /// <summary>
+    /// <see cref="CheckNoRestatedFamilyEntries"/> for one per-engine override map — <c>expectedState</c>,
+    /// <c>expectFailure</c>, <c>expectedFile</c> or a step's action inputs — at <paramref name="path"/>. Two
+    /// overrides are the same when they deserialized to the same values, which is all a runner merges.
+    /// </summary>
+    internal static IEnumerable<string> RestatedOverrides<T>(Dictionary<string, T>? overrides, string path)
+        where T : class
+    {
+        if (overrides is null)
+        {
+            yield break;
+        }
+
+        foreach (var (engine, value) in overrides)
+        {
+            if (FamilyEntry(overrides, engine) is { } family && SameValues(value, overrides[family]))
+            {
+                yield return $"{path}: engines '{engine}' restates '{family}' — {engine} inherits its family's override " +
+                    $"(an engine's own entry, else its family's), so remove it; give {engine} an override only where it differs";
+            }
+        }
+    }
+
+    /// <summary>
+    /// The roster steps' override maps (<see cref="RestatedOverrides{T}"/>), each named by its 1-based step
+    /// number after <paramref name="prefix"/>. A scenario's roster blocks call it with the item they sit in.
+    /// </summary>
+    internal static IEnumerable<string> RosterStepRestatements(IReadOnlyList<StepDef>? steps, string prefix = "")
+    {
+        if (steps is null)
+        {
+            yield break;
+        }
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var step = steps[i];
+            var at = $"{prefix}step {i + 1}";
+            foreach (var finding in RestatedOverrides(step.Engines, $"{at} (action inputs)")
+                .Concat(RestatedOverrides(step.ExpectedState?.Engines, $"{at} expectedState"))
+                .Concat(RestatedOverrides(step.ExpectFailure?.Engines, $"{at} expectFailure"))
+                .Concat(RestatedOverrides(step.ExpectedFile?.Engines, $"{at} expectedFile")))
+            {
+                yield return finding;
+            }
+        }
+    }
+
+    /// <summary>The family key <paramref name="engine"/> inherits from, when it is a driver and the map has one.</summary>
+    private static string? FamilyEntry<T>(Dictionary<string, T> entries, string engine)
+    {
+        var family = EngineIdentity.FamilyOf(engine);
+        return family != engine && entries.ContainsKey(family) ? family : null;
+    }
+
+    private static bool SameValues(object a, object b)
+        => JsonSerializer.Serialize(a, a.GetType()) == JsonSerializer.Serialize(b, b.GetType());
 
     // ── Steps have action or expectedState ───────────────────────────
 
