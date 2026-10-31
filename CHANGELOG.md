@@ -1012,6 +1012,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The NR UI drivers pick a row by its whole name, not by a name it contains (#567)** — on
+  `newrecruit-ui`, `real-world/wh40k-10e-space-marines-army` selected "Intercessor Squad" and got
+  "Assault Intercessor Squad", 5 points short. The spec names the shared entry; the catalogue panel's row
+  is the entryLink to it, tagged with the link's id, so `SelectEntryByNameAsync`'s id lookup missed and
+  its fallback — Playwright `HasText`, a case-insensitive substring match over the whole row — took the
+  first row containing the name. On wh40k-10e that fallback is the common path, not a rare one ("Captain"
+  had been landing on the right row out of seven by ordering alone). The row is now matched on its
+  `.name` element, whole (`NrExactText`); two rows with the same name and no id to separate them are a
+  harness fault naming the fix, not a guess; and no exact match fails as before, now saying that a looser
+  match is not the fix. The add-force, child-force and options-panel lookups had the same substring filter
+  and match whole names too. The NR Editor driver's tree-node, suggestion and field-option picks did as
+  well, but the Editor renders no element holding a name alone ("Bolter" is a text node beside
+  `[Test Catalogue]`), so there a name is read with its annotation spans removed (`NrEditorNames`), a
+  case-sensitive match beats a case-insensitive one, and the substring fallbacks are gone — measured on
+  the frozen Editor lane, "Detachment" was also matching "Sub-detachment", and the field picker's
+  "category" also "Category", each right only by order. The spec passes on `newrecruit-ui` and its
+  `fail` declaration is removed; `NrUiExactNameRegressionTests` and `NrEditorExactNameRegressionTests`
+  hold both rules on the drivers' own markup, each case proven red against the old filters.
+
 - **One engine-expectation rule for every runner: a UI driver inherits its family's entry (#573).** Whether
   `battlescribe: skip` covered `battlescribe-ui` depended on which runner read the spec. The roster lanes
   and every scenario run used the driver's own entry, else its family's; the GameData lanes, `bs-spec run`,
