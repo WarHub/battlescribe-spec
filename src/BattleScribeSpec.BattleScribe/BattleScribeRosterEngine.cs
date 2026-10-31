@@ -113,8 +113,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var parentSelection = FindSelectionById(force, parentSelectionId);
         var parentEntryId = parentSelection.getEntryId();
-        var parentEntry = Engine.GetEntryById(parentEntryId)
-            ?? Engine.GetEntryByCompositeId(parentEntryId)
+        var parentEntry = Engine.GetDataEntry(force, parentEntryId)
             ?? throw new SpecAddressingException($"Parent entry '{parentEntryId}' not found in entry lookup.");
 
         var childEntries = FlattenChildEntries(parentEntry);
@@ -150,8 +149,7 @@ public sealed class BattleScribeRosterEngine : IRosterEngine
         var force = FindForceById(forceId);
         var selection = FindSelectionById(force, selectionId);
         var entryId = selection.getEntryId();
-        var dataEntry = Engine.GetEntryById(entryId)
-            ?? Engine.GetEntryByCompositeId(entryId)
+        var dataEntry = Engine.GetDataEntry(force, entryId)
             ?? throw new SpecAddressingException(
                 $"Entry '{entryId}' not found in entry lookup for SetSelectionCount.");
         // Find the parent of this selection (the container that holds it)

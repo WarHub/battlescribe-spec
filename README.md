@@ -1,7 +1,7 @@
 # BattleScribe Spec
 
 A universal, declarative conformance test suite for BattleScribe roster engine implementations.
-Any engine, in any language, can validate its behavior against 528 spec files — 403 roster specs,
+Any engine, in any language, can validate its behavior against 529 spec files — 404 roster specs,
 120 GameData specs and 5 scenario specs — covering the complete BattleScribe data model, its editing
 operations, and what crosses from the data editor to the roster editor.
 
@@ -106,7 +106,7 @@ The spec suite is structured as layers (see [ADR 001](docs/adr/001-spec-test-kit
 
 | Layer | Description |
 |-------|-------------|
-| **YAML Specs** | 528 declarative spec files (403 roster + 120 GameData + 5 scenario) covering all BattleScribe operations |
+| **YAML Specs** | 529 declarative spec files (404 roster + 120 GameData + 5 scenario) covering all BattleScribe operations |
 | **TestKit** | .NET library: spec loader, runner, assertion engine, protocol types |
 | **bs-spec CLI** | Engine-free console app: run/probe/verify/export-xml/format/discover |
 | **bs-engine-host** | In-box adapter hosting the built-in engines (battlescribe, battlescribe-ui, newrecruit, newrecruit-ui) over the adapter protocol |
@@ -123,7 +123,7 @@ family's data editor and roster editor in a single run, joined by explicit hand-
 `newRoster`, `saveRoster`, `openRoster` — so what crosses from one editor to the other, and when, is
 asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 
-### Roster specs — 403 across 24 categories
+### Roster specs — 404 across 24 categories
 
 | Category | Specs | Description |
 |----------|------:|-------------|
@@ -141,7 +141,7 @@ asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 | entry-link | 3 | Entry links with children, collective, groups |
 | export | 1 | Byte-compare of an exported `.ros` against a per-engine snapshot |
 | force | 22 | Add/remove, nested, categories, multi-catalogue, multi-level — removing a parent takes its child forces with it |
-| gamesystem | 4 | Game system root/shared entries, rules, publications |
+| gamesystem | 5 | Game system root/shared entries and their children, rules, publications |
 | modifier | 63 | All modifier types, groups, repeats, profiles, rules, characteristics |
 | ordering | 6 | Order of forces, selections and categories — alphabetical, natural sort, definition order |
 | override | 1 | Per-engine override machinery: an action-input override composed with an expected-state override |
@@ -190,7 +190,7 @@ asserted rather than assumed ([ADR 002](docs/adr/002-scenario-specs.md)).
 
 ```
 battlescribe-spec/
-├── specs/                          # 528 YAML spec files (403 roster + 120 gamedata + 5 scenario)
+├── specs/                          # 529 YAML spec files (404 roster + 120 gamedata + 5 scenario)
 ├── src/
 │   ├── BattleScribeSpec.TestKit/   # Portable library (IRosterEngine, SpecRunner, Protocol)
 │   ├── BattleScribeSpec.BattleScribe/    # BattleScribe engine (IKVM + BattleScribe JARs)

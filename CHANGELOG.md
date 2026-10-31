@@ -959,6 +959,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **The in-process `battlescribe` adapter selects and counts children of the game system's own entries
+  (#566).** It looked up a parent entry in an index of catalogue entries, as the files declare them, so a
+  child of a root entry the `.gst` defines failed with "Parent entry … not found in entry lookup", and a
+  shared entry reached through a link from one had no children at all. It now asks the engine's own entry
+  map for the force first — where BattleScribe resolves links, whichever file defines the parent — and
+  the setup index, which now holds the game system's entries too, is the fallback.
+  `gamesystem/gamesystem-entry-children` pins it on every engine; the desktop app ran it first.
+
 - **A superseded CI run no longer leaves a red `ci-gate` on the PR** — `ci-gate` ran under `if: always()`,
   so it also ran inside a run that `cancel-in-progress` had stopped for a newer one, read every job it
   needs as `cancelled`, and failed: a red required check on the head commit beside the newer run's green

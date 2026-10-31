@@ -1693,6 +1693,18 @@ public sealed class BattleScribeEngine : IDisposable
         _setupCostTypes.AddRange(JavaListToList<CostType>(gameSystem.getCostTypes()));
         _setupForceEntries.AddRange(JavaListToList<ForceEntry>(gameSystem.getForceEntries()));
 
+        // The game system's own entries are parents too: a child selected under a root entry the
+        // .gst defines, or under a shared one it defines, resolves its parent here (#566).
+        foreach (var se in JavaListToList<SelectionEntry>(gameSystem.getSelectionEntries()))
+        {
+            IndexEntries(se);
+        }
+
+        foreach (var se in JavaListToList<SelectionEntry>(gameSystem.getSharedSelectionEntries()))
+        {
+            IndexEntries(se);
+        }
+
         foreach (var cat in catalogues)
         {
             _setupCatalogues.Add(cat);
@@ -2271,6 +2283,33 @@ public sealed class BattleScribeEngine : IDisposable
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// The data entry a selection in <paramref name="force"/> was made from, by its entry id, as the
+    /// engine's own entry map for that force holds it, else the setup lookup.
+    /// </summary>
+    /// <remarks>
+    /// The force's map is where the engine resolves links: a link's target appears under its parent
+    /// as a composite-id child, whichever file defines the parent. The setup lookup holds entries as
+    /// the files declare them, which for an entry the game system defines means a link and no child
+    /// (#566). It stays as the fallback for an entry the force's map does not know.
+    /// </remarks>
+    internal SelectionEntry? GetDataEntry(Force force, string entryId)
+    {
+        try
+        {
+            if (_engine.e(force)?.i(entryId) is { } entry)
+            {
+                return entry;
+            }
+        }
+        catch
+        {
+            // Fall through to the setup lookup, as GetResolvedEntry does.
+        }
+
+        return GetEntryById(entryId) ?? GetEntryByCompositeId(entryId);
     }
 
     internal GameSystem? GetGameSystem() => _gameSystem;
