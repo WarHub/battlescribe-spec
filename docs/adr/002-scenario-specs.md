@@ -124,6 +124,10 @@ crosses between the editors.
 | `saveRoster` | `file` | The roster editor saves its roster: `ExportRosterXml()` is kept under `file`. |
 | `openRoster` | `file` | The roster editor reads the data directory and opens the roster saved as `file`: `Cleanup()`, then `SetupFromFiles(data directory)`, then `LoadRoster(xml)`. |
 
+A fifth hand-off came later, with #568: `reloadRoster`, the roster editor accepting BattleScribe's offer to
+reload its open roster after a `saveData` changed a file under it ([ADR 003](003-roster-migration.md),
+"Live reload"). It is the one exception to the rule below, and it is BattleScribe's.
+
 The rule a spec author has to learn is one sentence: **the roster editor sees data only as of the
 last `saveData`, and only when it starts or opens a roster.** Unsaved edits stay in the data editor.
 
@@ -321,7 +325,7 @@ This ADR lands with its implementation:
 
 Follow-ups:
 
-- #568: the live reload prompt.
+- #568: the live reload prompt. Done: the `reloadRoster` hand-off ([ADR 003](003-roster-migration.md)).
 - #569: a scenario schema. Done: `docs/scenario-spec-schema.json`, beside a new
   `docs/gamedata-spec-schema.json` and the roster schema renamed `docs/roster-spec-schema.json`. The scenario
   schema reuses the other two by `$ref` — its setup is the GameData setup, a `data:` block's items the GameData

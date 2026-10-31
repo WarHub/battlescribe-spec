@@ -974,7 +974,8 @@ for a flake: a deterministic postcondition answers the same every time.
 | `duplicateForceAction` | `forceId` | Duplicates via Ctrl+D |
 | `setCostLimitAction` | `costTypeId`, `costName`, `value` | Sets cost limit via Edit Roster spinner |
 | `setCustomizationAction` | `forceId`, `selectionId?`, `categoryEntryId?`, `customName?`, `customNotes?` | Sets custom name/notes via context menu. Supports forces, categories, and selections. |
-| `loadRosterAction` | `path` | Opens a staged `.ros` through the app's own load path (see below) |
+| `loadRosterAction` | `path` | Opens a staged `.ros` through the app's own load path (see below). Answers the app's data-problems dialog DONE when every item is a data-change notice ("Some selections have been removed…", "No force entry found"), and returns them as `notices` |
+| `acceptReloadPromptAction` | — | Waits for "A file was modified outside of BattleScribe. Would you like to reload your roster?" after the C# side rewrote data under the open roster in place (`BsUiDataStaging.UpdateInPlaceAsync`), answers YES, and waits for the roster object to be replaced — the one place the prompt is answered YES (#568) |
 
 ##### `loadRosterAction`: the app's Open, minus the file chooser
 
