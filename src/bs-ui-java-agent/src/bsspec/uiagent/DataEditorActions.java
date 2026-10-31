@@ -99,7 +99,10 @@ public class DataEditorActions {
         FxExceptionMonitor.beginAction();
         dismissDataReloadPromptIfPresent();
         String result = dispatchAction(method, params);
-        if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+        // Settled first, then checked whole: the prompt answered must not hide another dialog beside it, which
+        // would otherwise outlive this action and fail the next one.
+        settleDataReloadPrompt();
+        DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
         FxExceptionMonitor.assertNone(method);
         return result;
     }
@@ -1765,18 +1768,32 @@ public class DataEditorActions {
      * "Confirm" title is shared with dialogs a spec may be asserting on.
      */
     private boolean dismissDataReloadPromptIfPresent() {
-        boolean showing = runOnFxGet(() -> {
-            for (DialogInspector.DialogInfo dialog : DialogInspector.listOpenDialogs()) {
-                if (dialog.title != null && dialog.text != null
-                        && dialog.title.contains("Confirm") && dialog.text.contains(DATA_RELOAD_PROMPT_TEXT)) {
+        // NO on that dialog alone: answerModalButton fires on every modal, and the text match exists precisely
+        // so that a "Confirm" dialog a spec may be asserting on is not answered with it.
+        return runOnFxGet(() -> {
+            for (Window w : new ArrayList<>(Window.getWindows())) {
+                if (!(w instanceof Stage)) continue;
+                Stage s = (Stage) w;
+                if (!s.isShowing() || s.getModality() == Modality.NONE) continue;
+                if (s.getTitle() == null || !s.getTitle().contains("Confirm")) continue;
+                String text = DialogInspector.scrapeText(s);
+                if (text == null || !text.contains(DATA_RELOAD_PROMPT_TEXT)) continue;
+                Node no = s.getScene() == null ? null : s.getScene().getRoot().lookup("#btnNegative");
+                if (no instanceof ButtonBase) {
+                    ((ButtonBase) no).fire();
                     return true;
                 }
             }
             return false;
         });
-        if (!showing) return false;
-        answerModalButton("btnNegative");
-        return true;
+    }
+
+    /** Answers the reload prompt until none is showing (bounded), so a check that follows sees only other dialogs. */
+    private void settleDataReloadPrompt() {
+        long deadline = System.currentTimeMillis() + 2_000;
+        while (dismissDataReloadPromptIfPresent() && System.currentTimeMillis() < deadline) {
+            sleep(POLL_MS);
+        }
     }
 
     /**
