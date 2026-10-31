@@ -13,18 +13,18 @@ description: >
   defect rather than a difference of policy, and it is why the newrecruit-ui lane stops here instead
   of at the assertion.
 
-# newrecruit-ui is opted out of this spec alone — it runs the rest of the load/ family. NR does not
-# refuse this payload, it breaks on it: the import succeeds, the editor routes to the catalogue under
-# a game system keyed "undefined" and never loads it (the open times out with nothing loaded under
-# that system), and reopening the seed catalogue afterwards times out too. Recorded here rather than
-# asserted, because there is no engine answer to assert — the session is unusable from that point.
-#
 # newrecruit (store-direct) is out for the reason it is out of every load spec: its LoadFile parses
 # the payload with a DOMParser call inside our own adapter, so what it accepts would be our parser's
 # answer and not NewRecruit's.
+#
+# newrecruit-ui inherits that skip here, and this is the one load spec where it does — the rest of the
+# load/ family keeps it with `newrecruit-ui: pass`. NR does not refuse this payload, it breaks on it:
+# the import succeeds, the editor routes to the catalogue under a game system keyed "undefined" and
+# never loads it (the open times out with nothing loaded under that system), and reopening the seed
+# catalogue afterwards times out too. Recorded here rather than asserted, because there is no engine
+# answer to assert — the session is unusable from that point.
 engines:
   newrecruit: skip
-  newrecruit-ui: skip
 
 setup:
   edit: cat-1

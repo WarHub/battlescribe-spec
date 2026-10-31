@@ -39,5 +39,3 @@ steps:
         # NR's reference validator models only dangling link targets, not condition-child resolution.
         newrecruit:
           errors: []
-        newrecruit-ui:
-          errors: []

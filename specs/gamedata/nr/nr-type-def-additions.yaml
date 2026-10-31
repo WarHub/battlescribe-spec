@@ -9,7 +9,6 @@ tags: [newrecruit-addition, attributeType, characteristicType, profileType]
 
 engines:
   battlescribe: skip
-  battlescribe-ui: skip
 
 setup:
   edit: gs-1

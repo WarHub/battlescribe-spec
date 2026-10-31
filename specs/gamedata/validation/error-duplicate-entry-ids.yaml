@@ -31,5 +31,3 @@ steps:
         # NR's reference validator models only dangling link targets, not duplicate ids.
         newrecruit:
           errors: []
-        newrecruit-ui:
-          errors: []

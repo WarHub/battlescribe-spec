@@ -42,5 +42,3 @@ steps:
         # NR's reference validator models only entry-link / catalogue-link dangling targets.
         newrecruit:
           errors: []
-        newrecruit-ui:
-          errors: []

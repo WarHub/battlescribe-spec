@@ -8,7 +8,6 @@ tags: [newrecruit-addition, conditionGroupType]
 
 engines:
   battlescribe: skip
-  battlescribe-ui: skip
 
 setup:
   edit: cat-1

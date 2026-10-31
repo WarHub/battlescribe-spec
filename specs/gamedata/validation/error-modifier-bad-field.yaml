@@ -43,5 +43,3 @@ steps:
         # NR's reference validator models only dangling link targets, not modifier-field resolution.
         newrecruit:
           errors: []
-        newrecruit-ui:
-          errors: []

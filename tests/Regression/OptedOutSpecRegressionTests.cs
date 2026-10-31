@@ -74,6 +74,18 @@ public sealed class OptedOutSpecRegressionTests
         Assert.Contains("load/load-malformed-catalogue is not applicable to the newrecruit engine", skip.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A GameData UI lane inherits its family's opt-out too. It used to read the exact name alone, so a spec that
+    /// opted <c>battlescribe</c> out ran on <c>battlescribe-ui</c> unless it restated the entry under the
+    /// driver's name (#573) — the corpus spec here no longer does.
+    /// </summary>
+    [Fact]
+    public void UiGameDataLane_ReportsItsFamilysOptOutAsSkipped()
+    {
+        var skip = SkipOf(() => new GameDataLane("battlescribe-ui").Run("nr/nr-condition-types"));
+        Assert.Contains("not applicable to the battlescribe-ui engine (the spec says engines: {battlescribe: skip})", skip.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A driver's own entry overrides its family's: <c>newrecruit-ui: pass</c> over <c>newrecruit: skip</c>.</summary>
     [Fact]
     public void UiGameDataLane_RunsASpecItsOwnEntryKeeps_ThoughItsFamilyIsOptedOut()

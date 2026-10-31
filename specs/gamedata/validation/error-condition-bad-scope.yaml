@@ -43,5 +43,3 @@ steps:
         # NR's reference validator models only dangling link targets, not query-scope resolution.
         newrecruit:
           errors: []
-        newrecruit-ui:
-          errors: []
