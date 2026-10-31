@@ -33,7 +33,7 @@ category: constraint         # MUST match parent directory name
 description: What this tests
 tags: []                     # MUST use known tags (see references/KNOWN-TAGS.md)
 engines:                     # optional: per-engine expectations
-  newrecruit: fail           # pass (default) | fail | skip
+  newrecruit: fail           # pass (default) | fail | skip — covers newrecruit-ui too (see below)
 
 setup:
   gameSystem:
@@ -173,6 +173,24 @@ contract: `docs/error-assertions.md`.
 ```
 
 Non-null fields in the engine override replace the base fields for that engine.
+
+## Which engine entry applies: its own, else its family's
+
+Every per-engine declaration — spec-level `engines:`, the `engines:` overrides on `expectedState`,
+`expectFailure`, `expectedFile` and action inputs, a step's `skipEngines`, and `expectedFile` side-files —
+is read by **one rule, in every runner and every domain**: the engine's own entry, else its family's. A
+UI driver's family is its name without `-ui`, so `battlescribe: skip` covers `battlescribe-ui`, and a
+`newrecruit:` override applies on `newrecruit-ui` unless the spec gives `newrecruit-ui` one of its own.
+
+- **Don't restate the family's entry** under the driver's name (`battlescribe-ui: skip` beside
+  `battlescribe: skip`). It says nothing, it drifts, and the spec lint refuses it.
+- **Do give the driver an entry where it differs.** `pass` is a real value here: `newrecruit-ui: pass`
+  under `newrecruit: skip` keeps a spec on the UI driver that the store-direct adapter cannot run
+  (`specs/gamedata/load/`). When a UI driver and its store-direct sibling disagree, the UI is the
+  normative answer (AGENTS.md, "What is normative") — so before writing a driver entry that records the
+  UI *failing* where the store-direct engine passes, check which of the two is wrong.
+
+The rule lives in one place, `EngineIdentity` (`src/BattleScribeSpec.TestKit/EngineIdentity.cs`).
 
 ## Scenario specs (data editor + roster editor in one spec)
 

@@ -93,7 +93,7 @@ current seed/driver path (the game-system type-def add-paths and roster runtime 
 
 The NR-superset is now modelled end-to-end (wham AST + `CatXmlGenerator` + Protocol + both NR
 engines' read paths) and exercised by specs under `specs/gamedata/nr/`, each with
-`engines: { battlescribe: skip, battlescribe-ui: skip }` and **passing on both `newrecruit` and
+`engines: { battlescribe: skip }` (which covers `battlescribe-ui`) and **passing on both `newrecruit` and
 `newrecruit-ui`**:
 
 | Spec | Additions covered |

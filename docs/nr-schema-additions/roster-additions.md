@@ -50,5 +50,5 @@ This cannot be confirmed with the existing tooling, and is **deferred** with tha
   baseline `Selection` type. Add as `bs-spec discover ros <spec>` if a path is found.
 
 If that spike confirms roster-side association state, encode it under `specs/roster/nr/` with
-`engines: { battlescribe: skip, battlescribe-ui: skip }`, both NR engines green. Until then there is
+`engines: { battlescribe: skip }` (which covers `battlescribe-ui`), both NR engines green. Until then there is
 nothing to encode: the roster runtime additions are behavioural (covered) and the format is baseline.

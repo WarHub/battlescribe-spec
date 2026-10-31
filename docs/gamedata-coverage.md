@@ -21,8 +21,9 @@ spec still runs on the NR engines and overrides just that field / error via a pe
 Beyond the BattleScribe-anchored surface above, NewRecruit **evolved** the data format with nodes,
 enum values, and attributes that original BattleScribe never had. These are catalogued in
 [`nr-schema-additions/`](nr-schema-additions/README.md) and encoded as executable specs under
-`specs/gamedata/nr/` that **invert the gate**: `engines: { battlescribe: skip, battlescribe-ui: skip }`
-(original BattleScribe can't represent them), and **both `newrecruit` and `newrecruit-ui` must pass**.
+`specs/gamedata/nr/` that **invert the gate**: `engines: { battlescribe: skip }`, which covers
+`battlescribe-ui` too (original BattleScribe can't represent them), and **both `newrecruit` and
+`newrecruit-ui` must pass**.
 The model surface (wham AST + `CatXmlGenerator` + Protocol + both NR read paths + the assertion model)
 was extended to the NR-superset to support them.
 
