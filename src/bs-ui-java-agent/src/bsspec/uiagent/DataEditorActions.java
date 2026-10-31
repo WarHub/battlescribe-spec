@@ -97,8 +97,9 @@ public class DataEditorActions {
      */
     public String dispatch(String method, String params) {
         FxExceptionMonitor.beginAction();
+        dismissDataReloadPromptIfPresent();
         String result = dispatchAction(method, params);
-        DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+        if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
         FxExceptionMonitor.assertNone(method);
         return result;
     }
@@ -380,7 +381,7 @@ public class DataEditorActions {
                 if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
                 if (newObj != null) break;
             }
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (newObj == null) {
@@ -515,7 +516,7 @@ public class DataEditorActions {
         while (System.currentTimeMillis() < panelDeadline) {
             panel = runOnFxGet(() -> findPanelController(ctrl, "ProfileTypeEditPanelController"));
             if (panel != null) break;
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (panel == null) {
@@ -536,7 +537,7 @@ public class DataEditorActions {
                 if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
                 if (newObj != null) break;
             }
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (newObj == null) {
@@ -630,7 +631,7 @@ public class DataEditorActions {
         long deadline = System.currentTimeMillis() + POLL_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
             if (!runOnFxGet(() -> subtreeIds(getTreeView(ctrl).getRoot())).contains(entryId)) return "{}";
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         throw new RuntimeException("Entry " + entryId + " not removed within " + POLL_TIMEOUT_MS + "ms");
@@ -814,7 +815,7 @@ public class DataEditorActions {
                 if (newObj == null && !after.isEmpty()) newObj = after.get(after.size() - 1);
                 if (newObj != null) break;
             }
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         if (newObj == null) {
@@ -1071,7 +1072,7 @@ public class DataEditorActions {
             for (String id : current) {
                 if (!before.contains(id)) return id;
             }
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         throw new RuntimeException("No new entry appeared in tree within " + POLL_TIMEOUT_MS + "ms");
@@ -1235,7 +1236,7 @@ public class DataEditorActions {
         while (System.currentTimeMillis() < deadline) {
             Node node = runOnFxGet(() -> pnl.lookup("#" + cssId));
             if (node != null) return node;
-            DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
+            if (!dismissDataReloadPromptIfPresent()) DialogInspector.assertNoUnexpectedModals(NO_DIALOGS_ALLOWED);
             sleep(POLL_MS);
         }
         return null;
@@ -1741,6 +1742,41 @@ public class DataEditorActions {
         } catch (Exception e) {
             return "modal-detection failed: " + e;
         }
+    }
+
+    /** The text that tells the Data Editor's external-change prompt apart from other "Confirm" dialogs. */
+    private static final String DATA_RELOAD_PROMPT_TEXT = "modified outside of BattleScribe";
+
+    /**
+     * Answers the Data Editor's "A file was modified outside of BattleScribe. Would you like to reload your
+     * data file?" with NO, wherever it appears. Reports whether it did.
+     *
+     * <p>The editor watches the file it has open with a file monitor that polls once a second, so the prompt
+     * arrives a poll after the write that provoked it — always the harness's own: {@link #saveAndReload}
+     * serializing the open file before reopening it, or a warm start staging a spec's data over the files the
+     * previous spec left open. {@code openCataloguePath}'s loop answers it when it lands there; when the reopen
+     * finishes inside that second, it lands after: on the dispatcher's post-condition, or inside the next
+     * action, which failed a scenario's {@code saveData} on CI as an "unexpected modal". So it is answered
+     * wherever the agent looks for modals, as the Roster Editor's twin is ({@code
+     * RosterActions.dismissWarmReusePromptIfPresent}).
+     *
+     * <p>NO in every case: the editor's document is either the one just written to that file or the one about
+     * to be opened from it explicitly, so a reload could only race the harness. Matched on text, because the
+     * "Confirm" title is shared with dialogs a spec may be asserting on.
+     */
+    private boolean dismissDataReloadPromptIfPresent() {
+        boolean showing = runOnFxGet(() -> {
+            for (DialogInspector.DialogInfo dialog : DialogInspector.listOpenDialogs()) {
+                if (dialog.title != null && dialog.text != null
+                        && dialog.title.contains("Confirm") && dialog.text.contains(DATA_RELOAD_PROMPT_TEXT)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        if (!showing) return false;
+        answerModalButton("btnNegative");
+        return true;
     }
 
     /**
