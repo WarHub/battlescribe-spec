@@ -1,0 +1,110 @@
+id: gamesystem-entry-children
+category: gamesystem
+description: >
+  Entries the game system defines take children like a catalogue's do. A root entry from the game
+  system is selected, then a child entry under it is selected and counted; a shared entry from the
+  game system, reached through the root entry's link, takes a child of its own. Every one of these
+  steps resolves a game-system entry as the parent, which the catalogue-entry specs never do.
+tags: [selection, number, entryLink, nested]
+
+setup:
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+    selectionEntries:
+      - id: se-gs-squad
+        name: GS Squad
+        type: unit
+        costs:
+          - name: pts
+            typeId: pts
+            value: 10
+        selectionEntries:
+          - id: se-gs-trooper
+            name: GS Trooper
+            type: model
+            costs:
+              - name: pts
+                typeId: pts
+                value: 5
+        entryLinks:
+          - id: el-gs-banner
+            name: GS Banner
+            targetId: se-gs-banner
+            type: selectionEntry
+    sharedSelectionEntries:
+      - id: se-gs-banner
+        name: GS Banner
+        type: upgrade
+        costs:
+          - name: pts
+            typeId: pts
+            value: 2
+        selectionEntries:
+          - id: se-gs-tassel
+            name: GS Tassel
+            type: upgrade
+            costs:
+              - name: pts
+                typeId: pts
+                value: 1
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+
+steps:
+  - action: addForce
+    id: add-detachment
+    forceEntryId: fe-1
+
+  - action: selectEntry
+    id: select-squad
+    forceId: ${{ steps.add-detachment.forceId }}
+    entryId: se-gs-squad
+
+  # The parent is the game system's root entry.
+  - action: selectChildEntry
+    id: select-trooper
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-gs-trooper
+
+  # Counting resolves the selection's own entry — a child the game system defines.
+  - action: setSelectionCount
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-trooper.selectionId }}
+    count: 3
+
+  - action: selectChildEntry
+    id: select-banner
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-squad.selectionId }}
+    entryId: se-gs-banner
+
+  # The parent is the game system's shared entry, reached through a link.
+  - action: selectChildEntry
+    forceId: ${{ steps.add-detachment.forceId }}
+    selectionId: ${{ steps.select-banner.selectionId }}
+    entryId: se-gs-tassel
+
+  - expectedState:
+      errors: []
+      costs:
+        - typeId: pts
+          value: 28
+      forces:
+        - selections:
+            - name: GS Squad
+              children:
+                - name: GS Banner
+                  children:
+                    - name: GS Tassel
+                - name: GS Trooper
+                  number: 3

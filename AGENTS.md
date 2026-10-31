@@ -391,7 +391,7 @@ pwsh -File tools/format-specs.ps1                                               
 
 | Path | What |
 |------|------|
-| `specs/roster/{category}/{id}.yaml` | Roster spec files (403 total, 24 categories) |
+| `specs/roster/{category}/{id}.yaml` | Roster spec files (404 total, 24 categories) |
 | `specs/gamedata/{category}/{id}.yaml` | GameData spec files (120 total, 23 categories) |
 | `specs/scenario/{category}/{id}.yaml` | Scenario spec files (5 total, 1 category): one engine family's data editor and roster editor in one spec, joined by explicit hand-offs ([ADR 002](docs/adr/002-scenario-specs.md)); lanes `BsScenario`, `FrozenNrScenario`, `FrozenNrUiScenario` (pre-push) and `BsScenarioUi` (`bs-ui-scenario`) |
 | `docs/error-assertions.md` | The two ways a spec is about something going wrong, and they are not the same: `expectedState.errors` asserts the validation list of a roster the engine **accepted**; `expectFailure` asserts an action the engine **refused** |
