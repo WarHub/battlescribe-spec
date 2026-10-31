@@ -25,6 +25,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scope` limited to the keyword list, where BattleScribe also takes an ancestor entry's id. Before this,
   the roster schema refused data the loader accepts.
 
+- **The end-to-end kitchen-sink scenario (#281).** `specs/scenario/end-to-end/end-to-end-kitchen-sink`
+  runs the whole lifecycle in one spec: the data editor adds a unit with a cost and a child and renames
+  the force entry in the game system, saving both files; the roster editor builds and saves a roster with
+  a custom name; a data edit re-prices and renames; the reopened roster shows both and takes another
+  force; it is saved again; a second edit deletes the child's entry and re-prices; the roster reopened
+  on that has lost the child. It passes on all four engines, and changes the roster after a reopen only
+  through a force added after it, because NewRecruit mints fresh force ids on load.
+
 - **BattleScribe's live reload of an open roster: the `reloadRoster` hand-off (#568).** When the data
   under an open roster changes on disk, BattleScribe's Roster Editor asks "A file was modified outside of
   BattleScribe. Would you like to reload your roster?", and on YES writes the roster as it stands to a
