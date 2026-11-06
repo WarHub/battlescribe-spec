@@ -84,7 +84,7 @@ public static class NewRecruitActions
     public static async Task<string?> AddForceByIdAsync(IPage page, string forceEntryId, string catalogueId)
     {
         var result = await page.EvaluateAsync<string?>("""
-            ({forceEntryId, catalogueId}) => {
+            async ({forceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
                     if (!spec) return 'HARNESS:No spec state — was Setup called?';
@@ -92,7 +92,7 @@ public static class NewRecruitActions
                     const books = spec.books || [spec.book];
                     const catIds = spec.bookCatalogueIds || [];
                     const book = catalogueId
-                        ? (books[catIds.indexOf(catalogueId)] || books[0])
+                        ? (books[catIds.indexOf(catalogueId)] || await spec.loadBook?.(catalogueId) || books[0])
                         : books[0];
                     if (!army || !book) return 'HARNESS:No army or book';
 
@@ -165,7 +165,7 @@ public static class NewRecruitActions
     public static async Task<string?> AddChildForceByIdAsync(IPage page, string parentForceUid, string childForceEntryId, string catalogueId)
     {
         var result = await page.EvaluateAsync<string?>("""
-            ({parentForceUid, childForceEntryId, catalogueId}) => {
+            async ({parentForceUid, childForceEntryId, catalogueId}) => {
                 try {
                     const spec = window.__bsspec;
                     if (!spec) return 'HARNESS:No spec state — was Setup called?';
@@ -173,7 +173,7 @@ public static class NewRecruitActions
                     const books = spec.books || [spec.book];
                     const catIds = spec.bookCatalogueIds || [];
                     const book = catalogueId
-                        ? (books[catIds.indexOf(catalogueId)] || books[0])
+                        ? (books[catIds.indexOf(catalogueId)] || await spec.loadBook?.(catalogueId) || books[0])
                         : books[0];
                     if (!army || !book) return 'HARNESS:No army or book';
 

@@ -842,6 +842,17 @@ things differ, and each spec carries its NewRecruit override with the reason:
 - **Nothing is said about what was dropped.** A selection whose entry is gone is dropped by both
   families; BattleScribe lists it in a dialog, NewRecruit drops it silently (#578).
 
+### A local book another book imported cannot be loaded directly once a system has patches
+
+NR applies a system's data patches (`settings.patch`, from its site or a `settings/patch*.json` beside
+local data) by walking a book's JSON as it loads, with no visited set. On a locally loaded system, a book
+another book imported has already been processed in place into a cyclic graph, and the flag that marks a
+book as patched does not reach it. Loading that book directly then fails with `RangeError: Invalid array
+length`. Read from NR's loader and reproduced through its store (`FrozenNrFileSetupPatchTests`), not
+driven through its UI, where picking that book second should reach the same load. The store-direct engine
+avoids it by loading a catalogue only when a force asks for one, so a spec that adds a force from an
+importing catalogue and then from the one it imports would still hit it.
+
 ---
 
 ## 8. Invalid and Edge-of-Range Input (#25)

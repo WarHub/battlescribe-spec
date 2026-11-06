@@ -382,6 +382,8 @@ internal static class EngineLanes
             "one contract (category node ids) on the frozen NR UI roster driver"),
         ("BattleScribeSpec.Tests.Features.FrozenNrFileSetupTests",
             "one contract (file setup, re-setup after Cleanup, reopen) on the frozen NR roster engine"),
+        ("BattleScribeSpec.Tests.Features.FrozenNrFileSetupPatchTests",
+            "one contract (file setup on a game system with data patches) on the frozen NR roster engine"),
         ("BattleScribeSpec.Tests.Features.FrozenNrUiFileSetupTests",
             "one contract (file setup, re-setup after Cleanup, reopen) on the frozen NR UI roster driver"),
         ("BattleScribeSpec.Tests.Features.FrozenNrRaisedOnNodeTests",

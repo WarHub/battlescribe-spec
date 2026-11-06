@@ -1020,6 +1020,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **NewRecruit's file setup loads a catalogue when a force asks for it, not all of them up front.**
+  `real-world/wh40k-10e-create-army` and `real-world/wh40k-10e-space-marines-army` began failing on the
+  live lane with `RangeError: Invalid array length`, first on `main`'s scheduled run of 2026-11-02, once
+  newrecruit.eu served data patches for wh40k-10e. NR applies patches by walking a book's JSON with no
+  visited set, and a book another book has imported is already a cyclic graph, so loading it directly
+  never finishes. Setup loaded all 35 playable catalogues in turn and hit that on four, one of them the
+  catalogue both specs use. It now loads the one the roster starts from and the others on demand, as the
+  app does. `FrozenNrFileSetupPatchTests` reproduces the crash offline with a `settings/patch.json` beside
+  the data, and for NR to read that file the engine now passes it a file's name without its folder.
+
 - **Every layer of a GitHub-native stack runs the thorough suites again.** The gate read the PR's base
   from `github.base_ref`, which for a PR in a `gh stack` stack names the trunk, while the PR targets the
   layer below and the files API is computed against that layer. A stack layer therefore looked like a PR

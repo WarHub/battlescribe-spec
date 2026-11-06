@@ -281,7 +281,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
             await Browser.WaitForPiniaAsync();
 
             // Build files array for loadSystemFromFs
-            var fileData = files.Select(f => new { name = f.FileName, path = $"/spec/{f.FileName}", data = f.Content }).ToArray();
+            var fileData = files.Select(f => new { name = Path.GetFileName(f.FileName), path = $"/spec/{f.FileName}", data = f.Content }).ToArray();
 
             var setupResult = await Browser.Page.EvaluateAsync<string?>("""
                 async ([fileData, rosterName]) => {
@@ -311,9 +311,7 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         const playableBooks = sys.books?.array?.filter(b => b.playable) || [];
                         if (!playableBooks.length) return 'No playable books for system: ' + sys.name;
 
-                        // Load ALL playable book data
-                        const allBooks = [];
-                        for (const pb of playableBooks) {
+                        const loadBookData = async (pb) => {
                             const bd = await sys.getBook(pb.id);
                             if (bd) {
                                 const gs = bd.catalogue.gameSystem;
@@ -323,13 +321,27 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                                         bd.catalogue.costIndex[ct.id] = ct;
                                     }
                                 }
-                                allBooks.push({ name: pb.name, bookRef: pb, bookData: bd });
+                            }
+                            return bd;
+                        };
+
+                        // Load the one book the roster starts from. The others load when a force asks
+                        // for them (loadBook below), as the app loads a book when one is picked — never
+                        // all of them at once. NR's patch walk keeps no visited set, so on a system with
+                        // data patches it cannot finish on a book another book has already imported:
+                        // loading every book in turn crashes on catalogues nothing asked for.
+                        let selectedBook = null;
+                        let primaryBook = null;
+                        for (const pb of playableBooks) {
+                            primaryBook = await loadBookData(pb);
+                            if (primaryBook) {
+                                selectedBook = pb;
+                                break;
                             }
                         }
-                        if (!allBooks.length) return 'No book data loaded';
+                        if (!primaryBook) return 'No book data loaded';
 
                         // Create roster from first book, remove auto-forces
-                        const primaryBook = allBooks[0].bookData;
                         const costs = primaryBook.getCosts();
                         const roster = primaryBook.createRoster(costs);
                         if (!roster) return 'Failed to create roster';
@@ -350,7 +362,6 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                             if (typeof f.delete === 'function') f.delete();
                         }
 
-                        const selectedBook = allBooks[0].bookRef;
                         const row = {
                             list_key: 'spec_' + Date.now(),
                             name: rosterName,
@@ -370,8 +381,16 @@ public sealed class NewRecruitRosterEngine : IRosterEngine
                         window.__bsspec = {
                             army: roster,
                             book: primaryBook,
-                            books: allBooks.map(b => b.bookData),
-                            bookCatalogueIds: allBooks.map(b => b.bookRef.bsid || ''),
+                            books: [primaryBook],
+                            bookCatalogueIds: [selectedBook.bsid || ''],
+                            loadBook: async (catalogueId) => {
+                                const pb = playableBooks.find(b => b.bsid === catalogueId);
+                                const bd = pb && await loadBookData(pb);
+                                if (!bd) return null;
+                                window.__bsspec.books.push(bd);
+                                window.__bsspec.bookCatalogueIds.push(catalogueId);
+                                return bd;
+                            },
                             row
                         };
 
