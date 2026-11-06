@@ -463,7 +463,10 @@ if (-not $Force -and -not (& $asmMismatch $asmDir)) {
     New-Item -ItemType Directory -Path $asmDir -Force | Out-Null
     Write-Host "  Downloading asm-$asmVersion.jar..." -ForegroundColor Yellow
     $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $asmUrl -OutFile $asmJar -UseBasicParsing
+    # Retried: Maven Central answers 429 ("Your ip has exceeded rate limits") to a burst of CI jobs
+    # sharing runner IPs, and one refused download used to fail the whole job in its Set up step.
+    # PowerShell 7 retries 4xx/5xx responses itself; the checksum below still guards the bytes.
+    Invoke-WebRequest -Uri $asmUrl -OutFile $asmJar -UseBasicParsing -MaximumRetryCount 5 -RetryIntervalSec 15
     $ProgressPreference = 'Continue'
     $actual = (Get-FileHash $asmJar -Algorithm SHA256).Hash
     if ($actual -ne $asmSha256) {

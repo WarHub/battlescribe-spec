@@ -25,6 +25,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scope` limited to the keyword list, where BattleScribe also takes an ancestor entry's id. Before this,
   the roster schema refused data the loader accepts.
 
+- **The end-to-end kitchen-sink scenario (#281).** `specs/scenario/end-to-end/end-to-end-kitchen-sink`
+  runs the whole lifecycle in one spec: the data editor adds a unit with a cost and a child and renames
+  the force entry in the game system, saving both files; the roster editor builds and saves a roster with
+  a custom name; a data edit re-prices and renames; the reopened roster shows both and takes another
+  force; it is saved again; a second edit deletes the child's entry and re-prices; the roster reopened
+  on that has lost the child. It passes on all four engines, and changes the roster after a reopen only
+  through a force added after it, because NewRecruit mints fresh force ids on load.
+
 - **BattleScribe's live reload of an open roster: the `reloadRoster` hand-off (#568).** When the data
   under an open roster changes on disk, BattleScribe's Roster Editor asks "A file was modified outside of
   BattleScribe. Would you like to reload your roster?", and on YES writes the roster as it stands to a
@@ -1011,6 +1019,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   bump path is a slow leak rather than a fix.
 
 ### Fixed
+
+- **NewRecruit's file setup loads a catalogue when a force asks for it, not all of them up front.**
+  `real-world/wh40k-10e-create-army` and `real-world/wh40k-10e-space-marines-army` began failing on the
+  live lane with `RangeError: Invalid array length`, first on `main`'s scheduled run of 2026-11-02, once
+  newrecruit.eu served data patches for wh40k-10e. NR applies patches by walking a book's JSON with no
+  visited set, and a book another book has imported is already a cyclic graph, so loading it directly
+  never finishes. Setup loaded all 35 playable catalogues in turn and hit that on four, one of them the
+  catalogue both specs use. It now loads the one the roster starts from and the others on demand, as the
+  app does. `FrozenNrFileSetupPatchTests` reproduces the crash offline with a `settings/patch.json` beside
+  the data, and for NR to read that file the engine now passes it a file's name without its folder.
+
+- **Every layer of a GitHub-native stack runs the thorough suites again.** The gate read the PR's base
+  from `github.base_ref`, which for a PR in a `gh stack` stack names the trunk, while the PR targets the
+  layer below and the files API is computed against that layer. A stack layer therefore looked like a PR
+  to `main` with a small diff, and skipped the thorough jobs AGENTS.md says every stack layer runs. The
+  gate now takes the base from the PR's own record. Found running the #273 follow-up stack, where every
+  layer after a restack reported `BASE_REF: main`. Also: `setup.ps1` retries the ASM download, which
+  Maven Central rate-limited (HTTP 429) when the stack's jobs started at once.
 
 - **The NR Editor UI driver makes the data edits two migration specs need (#579)** — on `newrecruit-ui`,
   `migration-constraint-tightened` and `migration-mandatory-child-added` failed in their data block and

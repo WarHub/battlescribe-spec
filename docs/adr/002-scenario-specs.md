@@ -336,4 +336,5 @@ Follow-ups:
   both editors over the one connection: `data state` and `roster state`, with bare `state` meaning the
   paused step's editor. It refuses the roster editor before the first `newRoster`/`openRoster`, and an
   unnamed editor at a hand-off.
-- #280 and #281, which this unblocks.
+- #280 and #281, which this unblocks. Both done: the `migration` scenarios ([ADR 003](003-roster-migration.md))
+  and `end-to-end/end-to-end-kitchen-sink`, which runs the whole lifecycle on all four engines.

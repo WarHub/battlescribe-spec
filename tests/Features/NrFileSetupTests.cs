@@ -225,6 +225,118 @@ public sealed class FrozenNrFileSetupTests(ITestOutputHelper output, FrozenNrRos
 }
 
 /// <summary>
+/// A file setup on a game system with data patches loads the catalogue a force asks for, and not the
+/// others. NR loads a book by walking its JSON to apply the system's patches, and the walk keeps no
+/// visited set. A book another book has imported has already been processed in place into a cyclic
+/// object graph, so loading THAT book directly never finishes: <c>RangeError: Invalid array length</c>.
+/// Setup used to load every playable book up front, so it hit this on catalogues no spec had asked for.
+/// That is how the live lane found it, when NR's site started serving patches for wh40k-10e, on the two
+/// real-world specs. The frozen client has the walk too, and only lacks the patches, so a
+/// <c>settings/patch.json</c> beside the data — NR's own way to give a local system patches — brings the
+/// live failure here.
+/// </summary>
+[Collection("FrozenNrRoster")]
+[Trait("Category", "Conformance")]
+[Trait("Engine", "FrozenNrRoster")]
+public sealed class FrozenNrFileSetupPatchTests(ITestOutputHelper output, FrozenNrRosterFixture fixture)
+{
+    private const string GameSystemId = "file-patch-gs";
+    private const string ForceEntryId = "fe-file-patch";
+    private const string ImportedCatalogueId = "cat-file-patch-imported";
+    private const string EntryId = "se-file-patch-unit";
+
+    [Fact]
+    public async Task FileSetup_WithDataPatches_LoadsOnlyTheCatalogueAForceAsksFor()
+    {
+        Assert.SkipWhen(!fixture.Available,
+            "Frozen HAR file not found (run setup.ps1) — skipping frozen NR tests");
+
+        using var handle = await fixture.AcquireAsync(TestContext.Current.CancellationToken);
+        var engine = handle.Engine;
+        engine.SetTestContext(nameof(FileSetup_WithDataPatches_LoadsOnlyTheCatalogueAForceAsksFor));
+
+        try
+        {
+            var errors = engine.SetupFromFiles(Files());
+            Assert.True(errors.Count == 0, $"file setup failed: {string.Join("; ", errors)}");
+
+            var force = engine.AddForce(ForceEntryId, ImportedCatalogueId);
+            var selected = engine.SelectEntry(force.ForceId!, EntryId);
+
+            var state = engine.GetRosterState();
+            output.WriteLine($"force catalogue={state.Forces[0].CatalogueId}");
+            Assert.Equal(ImportedCatalogueId, Assert.Single(state.Forces).CatalogueId);
+
+            // The patch's name, not the catalogue's. Without it the patches are not in play and this
+            // test proves nothing — so a client that stops reading settings/patch.json fails here,
+            // rather than passing on a walk it never made.
+            var selection = Assert.Single(state.Forces[0].Selections);
+            Assert.Equal(selected.SelectionId, selection.Id);
+            Assert.Equal("Patched Recruit", selection.Name);
+        }
+        finally
+        {
+            engine.Cleanup();
+        }
+    }
+
+    /// <summary>
+    /// Three catalogues in the order NR lists them: one the roster starts from, one that imports
+    /// another, and that other, which a force asks for. Loading all three in turn reaches the last
+    /// after the second has imported it; loading the first and the one asked for does not.
+    /// </summary>
+    private static IReadOnlyList<(string FileName, string Content)> Files()
+    {
+        var gameSystem = new ProtocolGameSystem
+        {
+            Id = GameSystemId,
+            Name = "File Patch System",
+            CostTypes = [new ProtocolCostType { Id = "pts", Name = "pts" }],
+            ForceEntries = [new ProtocolForceEntry { Id = ForceEntryId, Name = "File Patch Detachment" }],
+        };
+
+        ProtocolCatalogue[] catalogues =
+        [
+            new() { Id = "cat-file-patch-first", Name = "A First", GameSystemId = GameSystemId },
+            new()
+            {
+                Id = "cat-file-patch-importer",
+                Name = "B Importer",
+                GameSystemId = GameSystemId,
+                CatalogueLinks =
+                [
+                    new ProtocolCatalogueLink
+                    {
+                        Id = "cl-file-patch",
+                        Name = "C Imported",
+                        TargetId = ImportedCatalogueId,
+                        Type = "catalogue",
+                    },
+                ],
+            },
+            new()
+            {
+                Id = ImportedCatalogueId,
+                Name = "C Imported",
+                GameSystemId = GameSystemId,
+                SelectionEntries =
+                [
+                    new ProtocolSelectionEntry { Id = EntryId, Name = "Recruit", Type = "unit" },
+                ],
+            },
+        ];
+
+        var files = new List<(string FileName, string Content)>
+        {
+            ($"{GameSystemId}.gst", CatXmlGenerator.GenerateGameSystemXml(gameSystem)),
+        };
+        files.AddRange(CatXmlGenerator.GenerateAllCatalogueXml(gameSystem, catalogues));
+        files.Add(("settings/patch.json", """{ "name": { "Recruit": { "name": "Patched Recruit" } } }"""));
+        return files;
+    }
+}
+
+/// <summary>
 /// See <see cref="NrFileSetupContract"/> — the NewRecruit UI driver, over the frozen HAR. The engine
 /// whose file setup used to record nothing, so its first <c>addForce</c> refused to run and every
 /// entry it clicks by name had no name to click by.

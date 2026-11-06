@@ -1,0 +1,220 @@
+id: end-to-end-kitchen-sink
+category: end-to-end
+description: >
+  The whole lifecycle in one run: build data, build a roster on it, save it, edit the data, reopen the
+  roster against the edit, change the roster, save it again, edit the data again, reopen again. The
+  data editor adds a unit with a cost and a child upgrade, renames the force entry in the game system,
+  and saves both files; the roster editor builds a Patrol of a Squad and Veterans with the upgrade
+  and a custom name. The first data edit re-prices the Veterans and renames the Squad; the reopened
+  roster shows both, keeps the custom name, and takes a second Patrol. The second edit deletes the
+  upgrade's entry and re-prices the Squad; the roster reopened on it has lost the upgrade and
+  re-priced both Squads. Each reopen asserts the roster as a whole, and the roster changes after a
+  reopen go into a force added after it: NewRecruit mints fresh force ids on load, so an id captured
+  before a reopen names nothing after it there.
+tags: [end-to-end, migration, reopen]
+
+setup:
+  edit: cat-1
+  gameSystem:
+    id: gs-1
+    name: Test System
+    costTypes:
+      - id: ct-pts
+        name: pts
+    forceEntries:
+      - id: fe-1
+        name: Detachment
+  catalogues:
+    - id: cat-1
+      name: Test Catalogue
+      gameSystemId: gs-1
+      selectionEntries:
+        - id: se-squad
+          name: Squad
+          type: unit
+          costs:
+            - name: pts
+              typeId: ct-pts
+              value: 10
+
+steps:
+  # Build the data: a unit with a cost and a child, in the catalogue; the force entry renamed in the
+  # game system. Each file is saved from the data editor, the only way the roster editor sees either.
+  - data:
+      - action: addEntry
+        id: add-veterans
+        parentId: cat-1
+        entryType: selectionEntry
+        name: Veterans
+        entryId: se-veterans
+
+      - action: setFields
+        entryId: se-veterans
+        costs:
+          ct-pts: "20"
+
+      - action: addEntry
+        id: add-banner
+        parentId: se-veterans
+        entryType: selectionEntry
+        name: Banner
+        entryId: se-banner
+
+      - action: setFields
+        entryId: se-banner
+        costs:
+          ct-pts: "5"
+
+  - action: saveData
+
+  - data:
+      - action: openFile
+        entryId: gs-1
+
+      - action: setFields
+        entryId: fe-1
+        fields:
+          name: Patrol
+
+  - action: saveData
+
+  # Build the roster on it, and save it.
+  - action: newRoster
+
+  - roster:
+      - action: addForce
+        id: add-patrol
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-patrol.forceId }}
+        entryId: se-squad
+
+      - action: selectEntry
+        id: select-veterans
+        forceId: ${{ steps.add-patrol.forceId }}
+        entryId: se-veterans
+
+      - action: selectChildEntry
+        forceId: ${{ steps.add-patrol.forceId }}
+        selectionId: ${{ steps.select-veterans.selectionId }}
+        entryId: se-banner
+
+      - action: setCustomization
+        forceId: ${{ steps.add-patrol.forceId }}
+        selectionId: ${{ steps.select-veterans.selectionId }}
+        customName: Old Guard
+
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 35
+          forces:
+            - name: Patrol
+              selections:
+                - name: Squad
+                - name: Veterans
+                  customName: Old Guard
+                  children:
+                    - name: Banner
+
+  - action: saveRoster
+    file: army
+
+  # First data edit: the Veterans cost more, and the Squad is renamed.
+  - data:
+      - action: openFile
+        entryId: cat-1
+
+      - action: setFields
+        entryId: se-veterans
+        costs:
+          ct-pts: "25"
+
+      - action: setFields
+        entryId: se-squad
+        fields:
+          name: Line Squad
+
+  - action: saveData
+
+  # Reopen the roster against it, change the roster, and save it again.
+  - action: openRoster
+    file: army
+
+  - roster:
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 40
+          forces:
+            - name: Patrol
+              selections:
+                - name: Line Squad
+                - name: Veterans
+                  customName: Old Guard
+                  costs:
+                    - typeId: ct-pts
+                      value: 25
+                  children:
+                    - name: Banner
+
+      - action: addForce
+        id: add-second-patrol
+        forceEntryId: fe-1
+
+      - action: selectEntry
+        forceId: ${{ steps.add-second-patrol.forceId }}
+        entryId: se-squad
+
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 50
+          forceCount: 2
+
+  - action: saveRoster
+    file: army
+
+  # Second data edit: the Banner's entry is deleted, and the Squad costs more.
+  - data:
+      - action: removeEntry
+        entryId: se-banner
+
+      - action: setFields
+        entryId: se-squad
+        costs:
+          ct-pts: "12"
+
+  - action: saveData
+
+  # Reopen again: the Banner is gone, both Squads are re-priced, the custom name is still there.
+  - action: openRoster
+    file: army
+
+  - roster:
+      - expectedState:
+          errors: []
+          costs:
+            - typeId: ct-pts
+              value: 49
+          forceCount: 2
+          forces:
+            - name: Patrol
+              selections:
+                - name: Line Squad
+                  costs:
+                    - typeId: ct-pts
+                      value: 12
+                - name: Veterans
+                  customName: Old Guard
+                  childCount: 0
+            - name: Patrol
+              selections:
+                - name: Line Squad
+                  costs:
+                    - typeId: ct-pts
+                      value: 12
