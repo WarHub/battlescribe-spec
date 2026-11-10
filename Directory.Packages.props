@@ -23,7 +23,7 @@
     <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
     <PackageVersion Include="Grpc.Tools" Version="2.85.0" />
     <PackageVersion Include="IKVM" Version="8.16.3" />
-    <PackageVersion Include="JsonSchema.Net" Version="9.5.0" />
+    <PackageVersion Include="JsonSchema.Net" Version="9.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.64.1" />
     <PackageVersion Include="OpenTelemetry" Version="1.20.1" />
@@ -42,7 +42,7 @@
       extension too (annotations and the step summary in Actions); it is referenced directly, so it is
       pinned and watched like any other package.
     -->
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="Yaml2JsonNode" Version="3.0.2" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
