@@ -1,9 +1,9 @@
 {
   "newrecruit-har": {
     "repo": "WarHub/newrecruit-har",
-    "tag": "v37.6-20261029",
+    "tag": "v37.25-20261112",
     "sha256": {
-      "newrecruit.har": "132aa6f6bc41f97a29cbac7d62d3813080ba357ff5ba63bea22cff065c4ffb2e"
+      "newrecruit.har": "3b5a21e9f1d31ed4aa8f05c318fe05e43978dacca9434d561e2c672ac0f433b8"
     }
   },
   "nr-editor": {
